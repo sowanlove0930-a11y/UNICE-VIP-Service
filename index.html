@@ -11,11 +11,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="실손5분">
-<meta name="theme-color" content="#0E1117">
+<meta name="theme-color" content="#C17A3A">
 
 <!-- 파비콘 -->
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%231A0F00'/%3E%3Cstop offset='100%25' style='stop-color:%230E1117'/%3E%3C/linearGradient%3E%3ClinearGradient id='gold' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23E8A050'/%3E%3Cstop offset='50%25' style='stop-color:%23C17A3A'/%3E%3Cstop offset='100%25' style='stop-color:%23F0C070'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='256' cy='256' r='256' fill='url(%23bg)'/%3E%3Ccircle cx='256' cy='256' r='236' fill='none' stroke='%23C17A3A' stroke-width='4' opacity='0.5'/%3E%3Cpath d='M256 100 L340 135 L340 230 C340 290 300 340 256 360 C212 340 172 290 172 230 L172 135 Z' fill='none' stroke='%23E8A050' stroke-width='3'/%3E%3Crect x='237' y='175' width='38' height='110' rx='8' fill='%23E8A050' opacity='0.9'/%3E%3Crect x='201' y='211' width='110' height='38' rx='8' fill='%23E8A050' opacity='0.9'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Ccircle cx='256' cy='256' r='256' fill='%230E1117'/%3E%3Cpath d='M256 100 L340 135 L340 230 C340 290 300 340 256 360 C212 340 172 290 172 230 L172 135 Z' fill='none' stroke='%23E8A050' stroke-width='8'/%3E%3Crect x='237' y='175' width='38' height='110' rx='8' fill='%23E8A050'/%3E%3Crect x='201' y='211' width='110' height='38' rx='8' fill='%23E8A050'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
 
@@ -35,6 +34,11 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   html, body { overscroll-behavior-y: contain; }
+
+  /* ★ 초기 깜빡임 방지: JS 실행 전 메인 숨김 */
+  .hero, .tab-section, .panel, #ctaWrap {
+    display: none;
+  }
 
   body {
     font-family: 'Noto Sans KR', sans-serif;
@@ -1524,6 +1528,7 @@
   .reward-btn:hover { background-position: right center; transform: translateY(-2px); }
 
   /* 미션 서브페이지 */
+  #claim-page.active { display: block !important; }
   #reward-page { display: none; padding: 0 14px 48px; animation: fadeUp 0.3s ease; }
   #reward-page.active { display: block; }
   .rw-back {
@@ -1669,11 +1674,14 @@
   <div class="hero-eyebrow">VIP 고객지원 서비스 · 특별 프로그램</div>
   <div class="hero-title">실손 5분 클래스</div>
   <div class="hero-sub">
-    모르면 손해나는 핵심 실손 포인트<br>5분이면 충분합니다.
+    실손 있는데 청구 한 번도 못 해봤다면?<br>
+    매달 보험료 나가는데 뭘 보장받는지 모른다면?<br>
+    <span style="color:var(--gold);font-weight:600;">5분이면 내 실손 상태 확인할 수 있어요.</span>
   </div>
   <div class="hero-chips">
     <span class="chip chip-gold">실손 팩트 체크</span>
     <span class="chip chip-blue">5분 이내 완성</span>
+    <span class="chip chip-green">청구서류 안내</span>
     <span class="chip chip-green">세대별 맞춤 안내</span>
   </div>
 </div>
@@ -2178,9 +2186,10 @@
     <span>실손 자기부담금 계산기</span>
     <span>→</span>
   </button>
+
   <button class="reward-btn" onclick="showReward()">
     <span>🎓</span>
-    <span>동반 수강 혜택 보기</span>
+    <span>링크나눔 혜택 보기</span>
     <span>→</span>
   </button>
 </div>
@@ -2321,17 +2330,17 @@
     <!-- 액션 카드 -->
     <div class="score-actions" id="actionCards"></div>
 
-    <div class="result-help-box">
-      <div class="result-help-title">실손보험에서 꼭 알아야 할 핵심을 한 번 더 확인해보시면 좋습니다</div>
-      <div class="result-help-desc">
-        체크 결과를 바탕으로 실손 5분 클래스를 신청하실 수 있습니다.<br>
-        전화, 카카오톡, 대면, 나중에 상담 중 편한 방식을 직접 선택해주세요.
+    <!-- ★ 신청 이유 박스 (등급별 동적 변경) -->
+    <div id="applyReasonBox" style="margin:20px 0 0;padding:18px;background:rgba(193,122,58,0.08);border:1px solid rgba(193,122,58,0.25);border-radius:16px;display:none;">
+      <div style="font-size:13px;font-weight:700;color:#E8A050;margin-bottom:10px;" id="applyReasonTitle"></div>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="applyReasonItems"></div>
+      <div style="margin-top:14px;padding:12px 14px;background:rgba(255,255,255,0.04);border-radius:12px;font-size:12px;color:rgba(200,200,220,0.7);line-height:1.7;">
+        ✅ 완전 무료 &nbsp;·&nbsp; ✅ 부담 없는 카카오톡 상담 가능 &nbsp;·&nbsp; ✅ 한화생명금융서비스 소속 전문가
       </div>
     </div>
 
-    <div class="result-choice-group">
+    <div class="result-choice-group" style="margin-top:16px;">
       <button class="result-btn primary" onclick="openResultForm()">실손 5분 클래스 신청하기</button>
-      <div class="result-mini-note">전화, 카카오톡, 대면, 나중에 상담 중 편한 방식으로 선택하실 수 있습니다.</div>
       <button class="result-btn" onclick="shareChecklistLink()" style="margin-top:10px;background:linear-gradient(135deg,#7B3FAD,#9C5CDB);border-color:transparent;color:#fff;">💜 링크 나눠주기</button>
     </div>
   </div>
@@ -2393,19 +2402,13 @@
       <div class="consult-label">필요하신 자료가 있다면 함께 받아보실 수 있습니다</div>
       <div class="consult-check-list">
         <label class="consult-check">
-          <input type="checkbox" name="consultExtra" value="모르면 손해나는 실손 정리본 받고 싶어요">
+          <input type="checkbox" name="consultExtra" value="실손 정리본 받기" checked>
           <div>
-            <div class="consult-check-main">모르면 손해나는 실손 정리본 받고 싶어요</div>
-            <div class="consult-check-sub">재가입 주기, 자기부담금, 청구 기준처럼 놓치기 쉬운 내용을 짧게 정리해드립니다.</div>
+            <div class="consult-check-main">📄 실손 정리본 받기</div>
+            <div class="consult-check-sub">재가입 주기·자기부담금·청구 기준 등 핵심만 짧게 정리해드립니다.</div>
           </div>
         </label>
-        <label class="consult-check">
-          <input type="checkbox" name="consultExtra" value="보험·금융 관련 뉴스레터 받아보고 싶어요">
-          <div>
-            <div class="consult-check-main">보험·금융 관련 뉴스레터 받아보고 싶어요</div>
-            <div class="consult-check-sub">보험, 실손, 재무와 관련해 꼭 알아두면 좋은 내용을 뉴스레터로 받아보실 수 있습니다.</div>
-          </div>
-        </label>
+
       </div>
     </div>
 
@@ -2417,14 +2420,15 @@
 
 
     <div class="consult-share-box">
-      <div class="consult-share-title">링크를 나눠보시면 동반 수강 혜택을 받으실 수 있습니다</div>
+      <div class="consult-share-title">링크나눔하시면 특별 혜택을 받으실 수 있습니다</div>
       <div class="consult-share-desc">실손 체크 링크를 가족이나 지인에게 전달해보세요. 공유받은 분이 체크를 완료하고 회신해주시면 회신 인원 기준으로 혜택이 제공됩니다.</div>
       <div class="consult-share-benefits">
-        <div class="consult-share-benefit">• 2명 회신 시 : 보험사가 절대 먼저 안 알려주는 병원비 청구 꿀팁 PDF 제공</div>
+        <div class="consult-share-benefit">• 1명 회신 시 : 모르면 손해나는 실손 정리본 제공</div>
+        <div class="consult-share-benefit">• 2명 회신 시 : 병원비 꿀팁 PDF 제공</div>
         <div class="consult-share-benefit">• 3명 회신 시 : 유니스 VIP 지원서비스 제공</div>
       </div>
       <button class="consult-share-btn" type="button" onclick="shareChecklistLink()">링크 나눠주기</button>
-      <div class="consult-share-note">공유받은 분이 체크리스트를 완료하고 회신해주시면 동반 수강 혜택으로 인정됩니다.</div>
+      <div class="consult-share-note">링크를 받은 분이 체크리스트를 완료하고 회신해주시면 링크나눔 혜택으로 인정됩니다.</div>
     </div>
 
 
@@ -2711,16 +2715,123 @@
 </div>
 
 <!-- ═══ 수강인증 미션 리워드 페이지 ═══ -->
+
+<!-- ═══ 청구서류 페이지 ═══ -->
+<div id="claim-page" style="display:none;padding:0 14px 64px;animation:fadeUp 0.3s ease;">
+  <button style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:16px 0;display:flex;align-items:center;gap:6px;" onclick="hideClaim()">← 실손 5분 클래스로 돌아가기</button>
+
+  <div style="margin-bottom:24px;">
+    <div style="display:inline-block;background:rgba(42,171,219,0.15);border:1px solid rgba(42,171,219,0.3);border-radius:20px;padding:6px 14px;font-size:12px;color:#2AABDB;font-weight:700;margin-bottom:10px;">실손 청구 가이드</div>
+    <div style="font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;line-height:1.35;">청구서류 완벽 정리</div>
+    <div style="font-size:14px;color:var(--muted);line-height:1.7;">청구서류만 제대로 알아도 병원비를 돌려받을 수 있어요.<br>상황별로 필요한 서류를 정리했습니다.</div>
+  </div>
+
+  <!-- 공유 버튼 -->
+  <div style="display:flex;gap:10px;margin-bottom:28px;">
+    <button onclick="shareClaimInfo()" style="flex:1;background:linear-gradient(135deg,#185F7A,#2AABDB);color:#fff;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;">📤 이 정보 카카오로 공유</button>
+    <button onclick="shareDeductibleInfo()" style="flex:1;background:linear-gradient(135deg,#1A5A3A,#2E8A5A);color:#fff;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;">💰 자기부담금 공유</button>
+  </div>
+
+  <!-- 공통 기본 서류 -->
+  <div style="background:linear-gradient(135deg,rgba(42,171,219,0.12),rgba(24,95,122,0.08));border:1px solid rgba(42,171,219,0.25);border-radius:18px;padding:20px;margin-bottom:16px;">
+    <div style="font-size:16px;font-weight:700;color:#2AABDB;margin-bottom:14px;">📋 공통 기본 서류 (항상 필요)</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div style="min-width:28px;height:28px;background:#2AABDB;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;">1</div>
+        <div><div style="font-size:15px;font-weight:700;color:var(--text);">진료비 영수증</div><div style="font-size:13px;color:var(--muted);margin-top:3px;">병원 수납창구 또는 앱에서 발급. 급여/비급여 항목이 구분되어야 함</div></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div style="min-width:28px;height:28px;background:#2AABDB;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;">2</div>
+        <div><div style="font-size:15px;font-weight:700;color:var(--text);">진료비 세부내역서 ⭐</div><div style="font-size:13px;color:var(--muted);margin-top:3px;"><span style="color:#FFB06A;font-weight:600;">가장 중요!</span> 영수증만으로는 청구 거절될 수 있음. 반드시 세부내역서 함께 제출</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 입원 -->
+  <div style="background:var(--card);border:1px solid rgba(193,122,58,0.3);border-radius:18px;padding:20px;margin-bottom:16px;">
+    <div style="font-size:16px;font-weight:700;color:#E8A050;margin-bottom:14px;">🏥 입원 청구 서류</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(193,122,58,0.08);border-radius:10px;">
+        <span style="color:#E8A050;font-size:16px;">✓</span>
+        <div><span style="font-size:14px;font-weight:600;color:var(--text);">입퇴원확인서</span> <span style="font-size:12px;color:var(--muted);">— 입원 기간 증빙</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(193,122,58,0.08);border-radius:10px;">
+        <span style="color:#E8A050;font-size:16px;">✓</span>
+        <div><span style="font-size:14px;font-weight:600;color:var(--text);">진단서</span> <span style="font-size:12px;color:var(--muted);">— 질병명 확인용 (병명 코드 포함)</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(193,122,58,0.08);border-radius:10px;">
+        <span style="color:#E8A050;font-size:16px;">✓</span>
+        <div><span style="font-size:14px;font-weight:600;color:var(--text);">진료비 영수증 + 세부내역서</span> <span style="font-size:12px;color:var(--muted);">— 공통 기본 서류</span></div>
+      </div>
+      <div style="margin-top:6px;padding:10px 12px;background:rgba(255,176,106,0.1);border-left:3px solid #FFB06A;border-radius:0 8px 8px 0;">
+        <div style="font-size:12px;color:#FFB06A;font-weight:600;">💡 꿀팁</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;">퇴원 당일 수납창구에서 한 번에 발급 요청하세요. 나중에 재발급하면 유료인 경우 있음</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 통원 -->
+  <div style="background:var(--card);border:1px solid rgba(106,175,255,0.3);border-radius:18px;padding:20px;margin-bottom:16px;">
+    <div style="font-size:16px;font-weight:700;color:#6AAFFF;margin-bottom:14px;">🚶 통원 청구 서류</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(106,175,255,0.08);border-radius:10px;">
+        <span style="color:#6AAFFF;font-size:16px;">✓</span>
+        <div><span style="font-size:14px;font-weight:600;color:var(--text);">진료비 영수증 + 세부내역서</span> <span style="font-size:12px;color:var(--muted);">— 기본 필수</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(106,175,255,0.08);border-radius:10px;">
+        <span style="color:#6AAFFF;font-size:16px;">✓</span>
+        <div><span style="font-size:14px;font-weight:600;color:var(--text);">진료확인서</span> <span style="font-size:12px;color:var(--muted);">— 보험사 요청 시 (소액은 생략 가능)</span></div>
+      </div>
+      <div style="margin-top:6px;padding:10px 12px;background:rgba(106,175,255,0.1);border-left:3px solid #6AAFFF;border-radius:0 8px 8px 0;">
+        <div style="font-size:12px;color:#6AAFFF;font-weight:600;">💡 꿀팁</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;">3만 원 이하 소액은 영수증만으로 처리되는 보험사도 있음. 앱 청구 시 사진 찍어서 바로 제출 가능</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 약제비 -->
+  <div style="background:var(--card);border:1px solid rgba(106,219,138,0.3);border-radius:18px;padding:20px;margin-bottom:16px;">
+    <div style="font-size:16px;font-weight:700;color:#6ADB8A;margin-bottom:14px;">💊 약제비(처방전) 청구 서류</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(106,219,138,0.08);border-radius:10px;">
+        <span style="color:#6ADB8A;font-size:16px;">✓</span>
+        <div><span style="font-size:14px;font-weight:600;color:var(--text);">처방전 원본</span> <span style="font-size:12px;color:var(--muted);">— 약국에서 받은 처방전 (사진 가능)</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(106,219,138,0.08);border-radius:10px;">
+        <span style="color:#6ADB8A;font-size:16px;">✓</span>
+        <div><span style="font-size:14px;font-weight:600;color:var(--text);">약제비 영수증</span> <span style="font-size:12px;color:var(--muted);">— 약국 발급 영수증</span></div>
+      </div>
+      <div style="margin-top:6px;padding:10px 12px;background:rgba(106,219,138,0.1);border-left:3px solid #6ADB8A;border-radius:0 8px 8px 0;">
+        <div style="font-size:12px;color:#6ADB8A;font-weight:600;">💡 꿀팁</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;">처방전은 발행일로부터 3년 이내 청구 가능. 묵혀두었던 처방전도 지금 청구해보세요!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 청구 거절 대처 -->
+  <div style="background:linear-gradient(135deg,rgba(196,90,26,0.12),rgba(196,90,26,0.06));border:1px solid rgba(196,90,26,0.3);border-radius:18px;padding:20px;margin-bottom:28px;">
+    <div style="font-size:16px;font-weight:700;color:#FFB06A;margin-bottom:12px;">🚨 청구 거절됐을 때</div>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--muted);line-height:1.65;">
+      <div>• <span style="color:var(--text);font-weight:600;">세부내역서 누락</span> → 세부내역서 추가 제출하면 대부분 해결</div>
+      <div>• <span style="color:var(--text);font-weight:600;">면책 기간 해당</span> → 담당 전문가에게 면책 구조 확인 요청</div>
+      <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">• <span style="color:var(--text);font-weight:600;">보장 제외 항목</span> → 미용·성형·건강검진 전 세대 공통 제외</div>
+      <div>• <span style="color:var(--text);font-weight:600;">이의신청 가능</span> → 거절 사유 확인 후 30일 이내 이의신청</div>
+    </div>
+  </div>
+
+  <!-- 하단 신청 버튼 -->
+</div>
+
 <div id="reward-page">
   <button class="rw-back" onclick="hideReward()">← 실손 5분 클래스로 돌아가기</button>
 
   <div class="rw-header">
-    <div class="rw-header-tag">실손 5분 클래스 · 수강인증 미션</div>
-    <div class="rw-header-title">🎓 수강하면 받는 특별 혜택</div>
+    <div class="rw-header-tag">실손 5분 클래스 · 링크나눔 미션</div>
+    <div class="rw-header-title">🎓 링크나눔하면 받는 특별 혜택</div>
     <div class="rw-header-desc">
       아는 만큼 보장받습니다.<br>
       실손 5분 클래스를 통해 내 보험을 점검하고,<br>
-      소중한 분들과 나누면 특별한 혜택이 기다립니다.
+      링크를 나눠주시면 특별한 혜택이 기다립니다.
     </div>
   </div>
 
@@ -3037,6 +3148,34 @@
     if (!isOpen) step.classList.add('open');
   }
   function showReward() { pushView('reward'); }
+  function showClaim()  { pushView('claim'); }
+  function hideClaim()  { if (location.hash === '#claim') history.back(); else syncView('main'); }
+
+  // 청구서류 정보 공유
+  function shareClaimInfo() {
+    const url = (CHECKLIST_SHARE_URL || (location.origin + location.pathname)).replace(/#.*$/, '') + '#claim';
+    const text = '[실손 청구서류 완벽 정리]\n\n병원비 청구할 때 어떤 서류가 필요한지 정리했어요.\n입원 / 통원 / 약제비 별로 한눈에 확인하세요!\n\n' + url;
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile && navigator.share) {
+      navigator.share({ title: '실손 청구서류 안내', text: text, url: url }).catch(function(){});
+      return;
+    }
+    copyTextSafe(text);
+    showSharePopup_(url);
+  }
+
+  // 자기부담금 정보 공유
+  function shareDeductibleInfo() {
+    const url = (CHECKLIST_SHARE_URL || (location.origin + location.pathname)).replace(/#.*$/, '') + '#compare';
+    const text = '[내 실손 자기부담금 확인하기]\n\n1~5세대 실손 자기부담금이 다 달라요.\n내 실손 세대를 확인하고 얼마나 돌려받을 수 있는지 알아보세요!\n\n' + url;
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile && navigator.share) {
+      navigator.share({ title: '실손 자기부담금 안내', text: text, url: url }).catch(function(){});
+      return;
+    }
+    copyTextSafe(text);
+    showSharePopup_(url);
+  }
   function hideReward() { if (location.hash === '#reward') history.back(); else syncView('main'); }
 
   function toggleCard(card) {
@@ -3049,6 +3188,7 @@
   function syncView(view) {
     document.getElementById('checklist-page').classList.remove('active');
     document.getElementById('vip-checklist-page').classList.remove('active');
+    document.getElementById('claim-page').style.display = 'none';
     document.getElementById('compare-page').classList.remove('active');
     document.getElementById('calc-page').classList.remove('active');
     document.getElementById('reward-page').classList.remove('active');
@@ -3062,6 +3202,7 @@
       if (view === 'compare') document.getElementById('compare-page').classList.add('active');
       if (view === 'calc') document.getElementById('calc-page').classList.add('active');
       if (view === 'reward') document.getElementById('reward-page').classList.add('active');
+      if (view === 'claim')  { document.getElementById('claim-page').style.display = 'block'; window.scrollTo({top:0}); }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
@@ -3223,6 +3364,43 @@
         '</div>' +
       '</div>'
     ).join('');
+
+    // ★ 등급별 신청 이유 박스 업데이트
+    const reasonBox = document.getElementById('applyReasonBox');
+    const reasonTitle = document.getElementById('applyReasonTitle');
+    const reasonItems = document.getElementById('applyReasonItems');
+    if (reasonBox && reasonTitle && reasonItems) {
+      var reasons;
+      if (score >= 80) {
+        reasonTitle.textContent = '😊 이해도는 높으세요! 이런 부분만 한 번 더 확인해보세요';
+        reasons = [
+          { icon:'🔄', text:'갱신 시 보험료 변동 구조 — 모르면 손해' },
+          { icon:'📋', text:'실손 정리본으로 놓친 항목 ' + needCheck + '개 확인' },
+          { icon:'💬', text:'카카오톡으로 5분 상담 (부담 없어요)' }
+        ];
+      } else if (score >= 50) {
+        reasonTitle.textContent = '🙂 놓치고 있는 부분이 있어요 — 지금 확인하세요';
+        reasons = [
+          { icon:'⚠️', text:'추가 확인 필요 항목 ' + needCheck + '개 — 병원비 손해로 이어질 수 있어요' },
+          { icon:'📄', text:'실손 정리본 — 재가입·자기부담금 핵심 정리' },
+          { icon:'💬', text:'카카오톡 상담으로 5분이면 해결돼요' }
+        ];
+      } else {
+        reasonTitle.textContent = '📌 보장 공백 ' + needCheck + '개 — 지금 확인하지 않으면 손해예요';
+        reasons = [
+          { icon:'🚨', text:'확인 필요 항목 ' + needCheck + '개 — 실제 사고 시 보장 안 될 수 있어요' },
+          { icon:'📄', text:'실손 정리본으로 핵심만 5분에 파악하세요' },
+          { icon:'💬', text:'전화/카카오/대면 중 편한 방식으로 상담 가능' }
+        ];
+      }
+      reasonItems.innerHTML = reasons.map(function(r) {
+        return '<div style="display:flex;gap:10px;align-items:center;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:10px;font-size:13px;color:var(--text);">' +
+          '<span style="font-size:16px;flex-shrink:0;">' + r.icon + '</span>' +
+          '<span>' + r.text + '</span>' +
+          '</div>';
+      }).join('');
+      reasonBox.style.display = 'block';
+    }
   }
 
 
@@ -3369,7 +3547,7 @@
   const KAKAO_CHANNEL_URL = '';
   const PHONE_NUMBER = '';
   const RESULT_SMS_NUMBER = '';
-  const CHECKLIST_SHARE_URL = 'https://sowanlove0930-a11y.github.io/UNICE-VIP-Service/';
+  const CHECKLIST_SHARE_URL = 'https://unice-vip.co.kr/';
   const CONSULT_SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbx5izdlB_T9B-EPu7S3zTD7A8X2Wwoe66yIeIv2f4X3Az91lpDSDsNvdGvLIvSlucuz/exec';
 
   function sanitizeFpCode(value) {
@@ -3580,11 +3758,27 @@
     return buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
   }
   function buildChecklistShareText(shareUrl) {
-    return `[실손 간단 체크리스트]
-나의 실손보험 상태를 간단히 확인해보실 수 있는 체크리스트입니다.
+    // 체크리스트 완료 여부 확인 후 개인화 문구 생성
+    try {
+      const { grade, needCheck } = getChecklistSummary();
+      const answered = document.querySelectorAll('#checklist-page .cl-item.yes, #checklist-page .cl-item.no').length;
+      const total    = document.querySelectorAll('#checklist-page .cl-item').length;
+      if (answered === total && total > 0) {
+        return `[내 실손보험 점검 결과]
+저는 "${grade}" 등급이 나왔어요.
+추가 확인 필요 항목이 ${needCheck}개 있었어요.
 
-짧게 체크해보시고,
-필요하시면 실손 5분 클래스로 이어서 안내받아보세요.
+혹시 내 실손이 제대로 되어있는지 한번 확인해보세요.
+5분이면 충분해요! 👇
+
+${shareUrl}`;
+      }
+    } catch(e) {}
+    return `[실손 간단 체크리스트]
+매달 보험료 나가는데 뭘 보장받는지 알고 계신가요?
+
+5분이면 내 실손 상태 확인할 수 있어요.
+체크해보고 필요하면 무료 상담도 받아보세요! 👇
 
 ${shareUrl}`;
   }
@@ -3638,10 +3832,10 @@ ${shareUrl}`
     document.getElementById('vip-checklist-page').classList.remove('active');
   }
   function showMain() {
-    document.querySelector('.hero').style.display='';
-    document.querySelector('.tab-section').style.display='';
+    document.querySelector('.hero').style.display='block';
+    document.querySelector('.tab-section').style.display='block';
     document.querySelectorAll('.panel').forEach(p=>p.style.display='');
-    document.getElementById('ctaWrap').style.display='';
+    document.getElementById('ctaWrap').style.display='block';
     window.scrollTo({top:0,behavior:'smooth'});
   }
 
@@ -3656,11 +3850,13 @@ ${shareUrl}`
     }
 
     hideResultFormModal();
-    if (hash === 'checklist' || hash === 'vipchecklist' || hash === 'compare' || hash === 'calc' || hash === 'reward') {
+    if (hash === 'checklist' || hash === 'vipchecklist' || hash === 'compare' || hash === 'calc' || hash === 'reward' || hash === 'claim') {
       if (hash === 'compare') renderCmp(1);
       syncView(hash);
     } else {
-      syncView('main');
+      // ★ 해시 없으면 체크리스트 바로 진입 (메인화면 건너뜀)
+      history.replaceState(null, '', '#checklist');
+      syncView('checklist');
     }
   }
 
@@ -3836,6 +4032,41 @@ ${shareUrl}`
     document.getElementById('calcResult').scrollIntoView({behavior:'smooth',block:'start'});
   }
   syncViewFromLocation();
+
+  // ── FP 코드 사용중지 검사 ──
+  (function checkFpActive() {
+    const params = new URLSearchParams(location.search);
+    const fp = params.get('fp');
+    if (!fp || !'https://script.google.com/macros/s/AKfycbx5izdlB_T9B-EPu7S3zTD7A8X2Wwoe66yIeIv2f4X3Az91lpDSDsNvdGvLIvSlucuz/exec') return;
+
+    fetch('https://script.google.com/macros/s/AKfycbx5izdlB_T9B-EPu7S3zTD7A8X2Wwoe66yIeIv2f4X3Az91lpDSDsNvdGvLIvSlucuz/exec?action=validate&fp=' + encodeURIComponent(fp))
+      .then(r => r.json())
+      .then(data => {
+        if (data.active === false) showInactiveBlock_(fp);
+      })
+      .catch(() => {}); // 네트워크 오류 시 조용히 무시
+  })();
+
+  function showInactiveBlock_(fp) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);padding:20px;backdrop-filter:blur(6px)';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:linear-gradient(160deg,#1a1a2e,#0f0f1a);border:1px solid rgba(200,80,80,0.35);border-radius:24px;padding:36px 28px;max-width:320px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.7)';
+    card.innerHTML =
+      '<div style="font-size:48px;margin-bottom:16px;">🔒</div>' +
+      '<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:12px;line-height:1.4;">현재 사용할 수 없는 링크입니다</div>' +
+      '<div style="font-size:14px;color:rgba(200,200,220,0.7);line-height:1.7;">담당 전문가에게 문의해 주세요.</div>';
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    // 뒤로가기 방지 (보안 환경에서만)
+    try {
+      history.pushState(null, '', location.href);
+      window.addEventListener('popstate', function() {
+        try { history.pushState(null, '', location.href); } catch(e) {}
+      });
+    } catch(e) {}
+  }
 
   // ── PC 카카오톡 공유 팝업 ──
   function showSharePopup_(url) {
