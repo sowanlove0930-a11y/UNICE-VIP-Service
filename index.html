@@ -3852,14 +3852,12 @@
   }
 
   async function submitResultForm() {
-    // ── 1. 입력값 수집 ──────────────────────────────────
-    const name   = document.getElementById('consultName').value.trim();
-    const phone  = document.getElementById('consultPhone').value.trim();
-    const memo   = document.getElementById('consultMemo').value.trim();
+    const name = document.getElementById('consultName').value.trim();
+    const phone = document.getElementById('consultPhone').value.trim();
+    const memo = document.getElementById('consultMemo').value.trim();
     const method = document.querySelector('input[name="consultMethod"]:checked')?.value || 'phone';
     const extras = Array.from(document.querySelectorAll('input[name="consultExtra"]:checked')).map(el => el.value);
 
-    // ── 2. 유효성 검사 ──────────────────────────────────
     if (!name) {
       alert('이름을 입력해주세요.');
       document.getElementById('consultName').focus();
@@ -3871,17 +3869,13 @@
       return;
     }
 
-    // ── 3. 체크리스트 결과 수집 ─────────────────────────
-    const { summary, needCheck, checkItems } = getChecklistSummary();
+    const { summary } = getChecklistSummary();
     const fpCode = getActiveFpCode();
-    const methodLabel = getConsultMethodLabel(method);
-
-    // 원문 텍스트 (스프레드시트 원문 컬럼용)
     const payloadText = [
       '[실손 5분 클래스 신청 접수]',
       '이름: ' + name,
       '휴대폰 번호: ' + phone,
-      '신청 방식: ' + methodLabel,
+      '신청 방식: ' + getConsultMethodLabel(method),
       'FP 링크 코드: ' + (fpCode || '미설정'),
       '추가 요청: ' + (extras.length ? extras.join(', ') : '없음'),
       memo ? '추가 메모: ' + memo : '',
@@ -3889,29 +3883,22 @@
       summary
     ].filter(Boolean).join('\n');
 
-    // ── 4. 구글 스프레드시트 전송 ──────────────────────
-    // text/plain → CORS preflight 없음 (GitHub Pages에서 바로 전송 가능)
     if (CONSULT_SUBMIT_ENDPOINT) {
+      const { needCheck, checkItems } = getChecklistSummary();
       const payload = {
-        name,
-        phone,
-        method,
-        methodLabel,
+        name, phone, method,
+        methodLabel : getConsultMethodLabel(method),
         fpCode      : fpCode || '',
-        extras,
-        memo,
+        extras, memo,
         checkCount  : needCheck || 0,
         checkKeywords: (checkItems || []).join(', '),
         summary     : payloadText,
         createdAt   : new Date().toISOString()
       };
-
-      // 버튼 비활성화 (중복 클릭 방지)
       const submitBtn = document.querySelector('.consult-submit');
       if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '접수 중...'; }
-
       try {
-        // no-cors + text/plain = CORS 문제 없이 Apps Script doPost 도달
+        // text/plain + no-cors: GitHub Pages → Apps Script CORS 문제 없음
         await fetch(CONSULT_SUBMIT_ENDPOINT, {
           method  : 'POST',
           mode    : 'no-cors',
@@ -3919,19 +3906,15 @@
           body    : JSON.stringify(payload)
         });
       } catch (e) {
-        // no-cors 는 네트워크 오류만 catch 됨 (정상 응답도 여기 안 옴)
         console.warn('fetch 오류(무시):', e);
       } finally {
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
       }
-
-      // no-cors 는 응답을 읽을 수 없으므로 전송 후 즉시 성공 안내
       hideResultFormModal();
       alert('✅ 신청이 접수되었습니다!\n\n담당 선생님이 확인 후 연락드리겠습니다.\n잠시만 기다려 주세요 😊');
       return;
     }
 
-    // ── 5. 엔드포인트 미설정 시 복사 fallback ─────────
     await copyTextSafe(payloadText);
     hideResultFormModal();
     alert('신청 내용이 클립보드에 복사되었습니다.\n담당 선생님께 전달해 주세요.');
@@ -3953,7 +3936,7 @@ ${shareUrl}`;
 
   async function shareDirectChecklistLink(type) {
     const isVip = type === 'vip';
-    const targetHash = isVip ? '#vipchecklist' : (CHECKLIST_SHARE_URL ? '' : '#checklist');
+    const targetHash = isVip ? '#vipchecklist' : '#checklist'; // ★ 수정: 항상 해시 포함
     const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), targetHash);
     const shareText = isVip
       ? `VIP 점검 체크리스트를 보내드립니다.
@@ -3962,48 +3945,51 @@ ${shareUrl}`;
 ${shareUrl}`
       : buildChecklistShareText(shareUrl);
 
-    if (navigator.share) {
-      try {
-        await navigator.share({ text: shareText });
-        return;
-      } catch (e) {}
-    }
-
-    const copied = await copyTextSafe(shareText);
-    if (copied) {
-      alert(`공유 문구가 복사되었습니다.
-카카오톡에 붙여넣어 전달해 주세요.
-
-깃허브 페이지 링크가 함께 복사되었습니다. 카카오톡이나 문자에 붙여넣어 바로 전달해 주세요.`);
-      return;
-    }
-    window.prompt('아래 문구를 복사해서 전달해 주세요.', shareText);
+    await doKakaoShare_(shareText, shareUrl);
   }
 
   async function shareChecklistInfo() {
-    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), CHECKLIST_SHARE_URL ? '' : '#checklist');
+    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '#checklist'); // ★ 수정: 항상 #checklist 포함
     const shareText = buildChecklistShareText(shareUrl);
 
-    if (navigator.share) {
-      try {
-        await navigator.share({ text: shareText });
-        return;
-      } catch (e) {}
-    }
-
-    const copied = await copyTextSafe(shareText);
-    if (copied) {
-      alert(`공유 문구가 복사되었습니다.
-카카오톡에 붙여넣어 전달해 주세요.
-
-깃허브 페이지 링크가 함께 복사되었습니다. 카카오톡이나 문자에 붙여넣어 바로 전달해 주세요.`);
-      return;
-    }
-    window.prompt('아래 문구를 복사해서 전달해 주세요.', shareText);
+    await doKakaoShare_(shareText, shareUrl);
   }
 
   async function shareChecklistLink() {
     return shareChecklistInfo();
+  }
+
+  // ★ 카카오톡 공유 통합 처리 (모바일: 네이티브 공유시트 / PC: 클립보드 복사)
+  async function doKakaoShare_(shareText, shareUrl) {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: '내 실손보험 5분 점검', text: shareText, url: shareUrl });
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+    const copied = await copyTextSafe(shareText);
+    if (copied) {
+      showShareToast_();
+    } else {
+      window.prompt('아래 링크를 복사해서 카카오톡으로 전달해 주세요.', shareUrl);
+    }
+  }
+
+  // ★ 복사 완료 토스트 (alert 대신 부드러운 알림)
+  function showShareToast_() {
+    let t = document.getElementById('_shareToast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = '_shareToast';
+      t.style.cssText = 'position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.92);color:#fff;padding:13px 22px;border-radius:24px;font-size:14px;font-weight:500;z-index:99999;pointer-events:none;transition:opacity 0.3s;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.25)';
+      document.body.appendChild(t);
+    }
+    t.textContent = '✅ 링크 복사 완료! 카카오톡에 붙여넣기 해주세요 💛';
+    t.style.opacity = '1';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3000);
   }
 
 
