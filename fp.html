@@ -3610,19 +3610,23 @@
 '' +
     buildFpSignature();
 
+    const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    if ((isMobile || isStandalone) && navigator.share) {
-      navigator.share({ title: '실손 청구서류 정리', text: text })
-        .then(function(){ /* 성공 */ })
-        .catch(function(e){
-          if (e.name !== 'AbortError') {
-            copyTextSafe(text);
-            showTextCopiedToast_();
-          }
-        });
+    // PWA 앱 설치 모드: 클립보드 복사 + 토스트 (navigator.share 불안정)
+    if (isStandalone) {
+      copyTextSafe(text).then(function(){ showTextCopiedToast_(); }).catch(function(){ showTextCopiedToast_(); });
       return;
     }
+    // 모바일 브라우저: navigator.share 시도
+    if (isMobile && navigator.share) {
+      try {
+        navigator.share({ title: '실손 청구서류 정리', text: text })
+          .then(function(){})
+          .catch(function(e){ if (e.name !== 'AbortError') { copyTextSafe(text); showTextCopiedToast_(); } });
+      } catch(e) { copyTextSafe(text); showTextCopiedToast_(); }
+      return;
+    }
+    // PC: 팝업
     copyTextSafe(text);
     showSharePopup_(text);
   }
@@ -4751,17 +4755,20 @@ ${shareUrl}`
       '\n\n※ 본 계산 결과는 참고용이며, 실제 보험금은 가입 조건·약관에 따라 다를 수 있습니다.' +
       buildFpSignature();
 
+    const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    if ((isMobile || isStandalone) && navigator.share) {
-      navigator.share({ title: '실손 자기부담금 계산 결과', text: text })
-        .then(function(){ /* 성공 */ })
-        .catch(function(e){
-          if (e.name !== 'AbortError') {
-            copyTextSafe(text);
-            showTextCopiedToast_();
-          }
-        });
+    // PWA 앱 설치 모드: 클립보드 복사 + 토스트
+    if (isStandalone) {
+      copyTextSafe(text).then(function(){ showTextCopiedToast_(); }).catch(function(){ showTextCopiedToast_(); });
+      return;
+    }
+    // 모바일 브라우저
+    if (isMobile && navigator.share) {
+      try {
+        navigator.share({ title: '실손 자기부담금 계산 결과', text: text })
+          .then(function(){})
+          .catch(function(e){ if (e.name !== 'AbortError') { copyTextSafe(text); showTextCopiedToast_(); } });
+      } catch(e) { copyTextSafe(text); showTextCopiedToast_(); }
       return;
     }
     copyTextSafe(text);
