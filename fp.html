@@ -19,7 +19,7 @@
 <!-- 카카오톡 / SNS 링크 미리보기 -->
 <meta property="og:type"        content="website">
 <meta property="og:site_name"   content="유니스 VIP · 한화생명금융서비스">
-<meta property="og:title"       content="실손 5분 클래스 | FP 전용">
+<meta property="og:title"       content="10초 체크 → 내 실손 등급 바로 확인">
 <meta property="og:description" content="1~5세대 중 내가 어디인지&#10;자기부담금은 얼마인지&#10;지금 바로 알 수 있어요 📋">
 <meta property="og:image"       content="https://unice-vip.co.kr/og-image.jpg">
 <meta property="og:url"         content="https://unice-vip.co.kr/">
@@ -27,7 +27,7 @@
 <meta name="keywords"           content="실손보험, 자기부담금, 실손 세대, 보험 점검, 유니스">
 <!-- 트위터/기타 -->
 <meta name="twitter:card"        content="summary">
-<meta name="twitter:title"       content="실손 5분 클래스 | FP 전용">
+<meta name="twitter:title"       content="10초 체크 → 내 실손 등급 바로 확인">
 <meta name="twitter:description" content="1~5세대 중 내가 어디인지, 자기부담금은 얼마인지 지금 바로 알 수 있어요.">
 <meta name="twitter:image"       content="https://unice-vip.co.kr/og-image.jpg">
 
@@ -1963,6 +1963,15 @@
     font-size: 16px !important;
     -webkit-text-size-adjust: 100%;
   }
+
+  /* ── iOS PWA 추가 패치 ── */
+  * { -webkit-touch-callout: none; }
+  input, textarea, select { -webkit-user-select: text !important; user-select: text !important; }
+  button { -webkit-appearance: none; }
+  /* iOS 스크롤 관성 */
+  .sub-page, #checklist-page, #vip-checklist-page, #reward-page, #compare-page, #calc-page {
+    -webkit-overflow-scrolling: touch;
+  }
 </style>
 </head>
 <body>
@@ -3564,7 +3573,6 @@
   function hideClaim()  { if (location.hash === '#claim') history.back(); else syncView('main'); }
 
   function shareClaimInfo() {
-    // 링크 대신 실제 정리된 텍스트를 카카오/문자로 전송
     const text =
 '━━━━━━━━━━━━━━━━━\n' +
 '📋  실손 청구서류 완벽 정리\n' +
@@ -3599,17 +3607,24 @@
 '　　 → 거절 사유 확인 후 30일 이내\n' +
 '━━━━━━━━━━━━━━━━━\n' +
 '\n' +
-'📞  더 자세한 안내는\n' +
-'　　담당 전문가에게 문의하세요';
+'' +
+    buildFpSignature();
 
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && navigator.share) {
-      navigator.share({ url: shareUrl })
-        .catch(function(e){ if(e.name !== 'AbortError') { copyTextSafe(url); showTextCopiedToast_(); } });
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if ((isMobile || isStandalone) && navigator.share) {
+      navigator.share({ title: '실손 청구서류 정리', text: text })
+        .then(function(){ /* 성공 */ })
+        .catch(function(e){
+          if (e.name !== 'AbortError') {
+            copyTextSafe(text);
+            showTextCopiedToast_();
+          }
+        });
       return;
     }
-    copyTextSafe(url);
-    showTextCopiedToast_();
+    copyTextSafe(text);
+    showSharePopup_(text);
   }
 
   function showTextCopiedToast_() {
@@ -3636,7 +3651,8 @@
     const url  = base.replace(/#.*$/, '') + '#compare';
     const text = '[내 실손 자기부담금 확인하기]\n\n1~5세대 실손 자기부담금이 다 달라요.\n내 세대를 확인하고 얼마나 돌려받을 수 있는지 알아보세요!\n\n' + url;
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && navigator.share) {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
+    if ((isMobile || isStandalone) && navigator.share) {
       navigator.share({ url: shareUrl }).catch(function(){});
       return;
     }
@@ -3978,7 +3994,7 @@
   const PHONE_NUMBER = '';
   const RESULT_SMS_NUMBER = '';
   const CHECKLIST_SHARE_URL = 'https://unice-vip.co.kr/';
-  const CONSULT_SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbz_gRmRNBnGDhns6IMeMS3MfZrX4F0e1MjHRRjMQer4U7GR1twEHpun8FDhMwziYyUq/exec';
+  const CONSULT_SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbylkpouZe8XqjuBmuuYCWCsdC2OOvcQHAhhJIctFQaEFQrEHpqW8kZDg9afvcReF7gi/exec';
 
   const FP_CODE_STORAGE_KEY = 'unice_fp_code_v1';
   let fpModalForcedOnce = false;
@@ -4001,6 +4017,24 @@
     } catch (e) {
       return '';
     }
+  }
+
+  function getFpName()  { try { return localStorage.getItem('unice_fp_name')  || ''; } catch(e) { return ''; } }
+  function getFpPhone() { try { return localStorage.getItem('unice_fp_phone') || ''; } catch(e) { return ''; } }
+  function getFpTitle() { try { return localStorage.getItem('unice_fp_title') || 'FP'; } catch(e) { return 'FP'; } }
+
+  function buildFpSignature() {
+    var name  = getFpName();
+    var phone = getFpPhone();
+    var title = getFpTitle();
+    if (!name) return '';
+    // 지점장/대표 여부 판별
+    var isFp = (title === 'FP');
+    var line3 = isFp ? (name + ' FP') : (name + ' ' + title);
+    var sig = '\n─────────────────\n한화금융 VIP사업부 유니스\n보상청구 담당\n' + line3;
+    if (phone) sig += '\n' + phone;
+    sig += '\n─────────────────';
+    return sig;
   }
 
   function getActiveFpCode() {
@@ -4076,13 +4110,23 @@
           if (input) { input.disabled = false; input.value = ''; input.focus(); }
         } else {
           persistFpCode(code);
+          // FP 이름·전화번호·직함 저장
+          try {
+            localStorage.setItem('unice_fp_name',  json.name  || '');
+            localStorage.setItem('unice_fp_phone', json.phone || '');
+            localStorage.setItem('unice_fp_title', json.title || 'FP');
+          } catch(e) {}
           closeFpCodeModal();
           if (input) input.disabled = false;
         }
       })
       .catch(function(){
-        // 네트워크 오류 시 일단 저장 허용
+        // 네트워크 오류 - 코드만 저장, 앱스스크립트 재연결 시 정보 갱신
         persistFpCode(code);
+        // FP 이름은 코드에서 추정 불가하므로 빈값 유지
+        try { localStorage.removeItem('unice_fp_name'); } catch(e) {}
+        try { localStorage.removeItem('unice_fp_phone'); } catch(e) {}
+        try { localStorage.removeItem('unice_fp_title'); } catch(e) {}
         closeFpCodeModal();
         if (input) input.disabled = false;
       });
@@ -4112,10 +4156,52 @@
     const queryCode = getQueryFpCode();
     if (queryCode) persistFpCode(queryCode);
     updateFpCodeUi();
-    if (!getActiveFpCode() && !fpModalForcedOnce) {
+    const code = getActiveFpCode();
+    if (!code && !fpModalForcedOnce) {
       fpModalForcedOnce = true;
       setTimeout(() => openFpCodeModal(false), 250);
+      return;
     }
+    if (!code) return;
+    // 페이지 로드 시 저장된 FP코드 유효성 검사 (N 차단 포함)
+    const validateUrl = CONSULT_SUBMIT_ENDPOINT + '?action=validate&fp=' + encodeURIComponent(code);
+    fetch(validateUrl, { mode: 'cors' })
+      .then(function(res){ return res.json(); })
+      .then(function(json){
+        if (json.active === false) {
+          // N 처리된 FP - 저장된 코드 삭제 후 차단 화면
+          try {
+            localStorage.removeItem(FP_CODE_STORAGE_KEY);
+            localStorage.removeItem('unice_fp_name');
+            localStorage.removeItem('unice_fp_phone');
+            localStorage.removeItem('unice_fp_title');
+          } catch(e) {}
+          showInactiveOverlay_();
+          return;
+        }
+        // 이름/전화번호 항상 최신으로 저장
+        try {
+          localStorage.setItem('unice_fp_name',  json.name  || '');
+          localStorage.setItem('unice_fp_phone', json.phone || '');
+          localStorage.setItem('unice_fp_title', json.title || 'FP');
+        } catch(e) {}
+      })
+      .catch(function(){
+        // 네트워크 오류 시 기존 저장값 유지 (차단 안함)
+      });
+  }
+
+  function showInactiveOverlay_() {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.9);padding:20px;';
+    overlay.innerHTML = '<div style="background:linear-gradient(160deg,#1a1a2e,#0f0f1a);border:1px solid rgba(200,80,80,0.4);border-radius:24px;padding:36px 28px;max-width:320px;width:100%;text-align:center;">' +
+      '<div style="font-size:44px;margin-bottom:16px;">🔒</div>' +
+      '<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:12px;">사용이 중지된 링크입니다</div>' +
+      '<div style="font-size:14px;color:rgba(200,200,220,0.7);line-height:1.7;">관리자에게 문의해 주세요.</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    try { history.pushState(null,'',location.href); } catch(e) {}
+    window.addEventListener('popstate', function(){ history.pushState(null,'',location.href); });
   }
 
 
@@ -4340,7 +4426,8 @@ ${shareUrl}`
 
     // 모바일: 네이티브 공유 시트(카카오 포함) / PC: 클립보드 복사 + 팝업
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && navigator.share) {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
+    if ((isMobile || isStandalone) && navigator.share) {
       try { await navigator.share({ url: shareUrl }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
@@ -4660,24 +4747,41 @@ ${shareUrl}`
       '📌  상세 내역\n' +
       detLines +
       warnLines + '\n\n' +
-      '📞  정확한 보장 확인은\n' +
-      '　　담당 전문가에게 문의하세요';
+      '' +
+      '\n\n※ 본 계산 결과는 참고용이며, 실제 보험금은 가입 조건·약관에 따라 다를 수 있습니다.' +
+      buildFpSignature();
 
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && navigator.share) {
-      navigator.share({ url: shareUrl })
-        .catch(function(e){ if(e.name!=='AbortError'){ copyTextSafe(url); showTextCopiedToast_(); } });
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if ((isMobile || isStandalone) && navigator.share) {
+      navigator.share({ title: '실손 자기부담금 계산 결과', text: text })
+        .then(function(){ /* 성공 */ })
+        .catch(function(e){
+          if (e.name !== 'AbortError') {
+            copyTextSafe(text);
+            showTextCopiedToast_();
+          }
+        });
       return;
     }
-    copyTextSafe(url);
+    copyTextSafe(text);
     showTextCopiedToast_();
   }
   syncViewFromLocation();
 
   // ── PC 카카오톡 공유 팝업 ──
-  function showSharePopup_(url) {
+  function showSharePopup_(content) {
     const old = document.getElementById('_sharePopup');
     if (old) old.remove();
+
+    const isLink = /^https?:\/\//.test(String(content || ''));
+    const displayText = isLink ? content : content;
+    // 텍스트는 XSS 방지 후 줄바꿈 처리
+    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    const preview = isLink
+      ? '<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:11px 14px;font-size:12px;color:#88aaff;word-break:break-all;margin-bottom:20px;text-align:left;line-height:1.5;">' + escHtml(content) + '</div>'
+      : '<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 14px;font-size:11px;color:rgba(200,220,255,0.75);margin-bottom:20px;text-align:left;line-height:1.65;white-space:pre-wrap;max-height:180px;overflow-y:auto;">' + escHtml(content) + '</div>';
+
     const overlay = document.createElement('div');
     overlay.id = '_sharePopup';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);padding:20px;backdrop-filter:blur(4px)';
@@ -4685,9 +4789,9 @@ ${shareUrl}`
     card.style.cssText = 'background:linear-gradient(160deg,#1e1b35,#14121f);border:1px solid rgba(150,100,220,0.35);border-radius:24px;padding:32px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.6)';
     card.innerHTML =
       '<div style="width:56px;height:56px;background:linear-gradient(135deg,#FEE500,#F5C400);border-radius:16px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 4px 16px rgba(254,229,0,0.3);">&#x1F4CB;</div>' +
-      '<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:8px;line-height:1.35;">링크가 복사되었습니다!</div>' +
-      '<div style="font-size:13px;color:rgba(200,200,220,0.75);margin-bottom:20px;line-height:1.6;">카카오톡을 열고<br><strong style=\"color:#FEE500;\">Ctrl+V</strong> (붙여넣기) 해주세요</div>' +
-      '<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:11px 14px;font-size:12px;color:#88aaff;word-break:break-all;margin-bottom:20px;text-align:left;line-height:1.5;">' + url + '</div>' +
+      '<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:8px;line-height:1.35;">' + (isLink ? '링크가' : '내용이') + ' 복사되었습니다!</div>' +
+      '<div style="font-size:13px;color:rgba(200,200,220,0.75);margin-bottom:20px;line-height:1.6;">카카오톡을 열고<br><strong style="color:#FEE500;">Ctrl+V</strong> (붙여넣기) 해주세요</div>' +
+      preview +
       '<button onclick="document.getElementById(\'_sharePopup\').remove()" style="background:linear-gradient(135deg,#FEE500,#F5C400);color:#3C1E1E;border:none;border-radius:14px;padding:14px 32px;font-size:15px;font-weight:700;cursor:pointer;width:100%;letter-spacing:0.3px;">확인</button>' +
       '<div style="margin-top:14px;font-size:12px;color:rgba(200,200,220,0.45);">화면 밖을 클릭하면 닫힙니다</div>';
     overlay.appendChild(card);
