@@ -3572,6 +3572,24 @@
   function showClaim()  { pushView('claim'); }
   function hideClaim()  { if (location.hash === '#claim') history.back(); else syncView('main'); }
 
+  function syncCopy_(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(function(){});
+        return;
+      }
+    } catch(e) {}
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch(e) {}
+  }
+
   function shareClaimInfo() {
     const text =
 '━━━━━━━━━━━━━━━━━\n' +
@@ -3610,25 +3628,15 @@
 '' +
     buildFpSignature();
 
-    const isStandalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    // PWA 앱 모드: navigator.share text 공유 불안정 → 클립보드 직접 복사
-    if (isStandalone) {
+    try {
+      var isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       syncCopy_(text);
-      showTextCopiedToast_();
-      return;
-    }
-    // 모바일 브라우저
-    if (isMobile && navigator.share) {
-      try {
-        navigator.share({ title: '실손 청구서류 정리', text: text })
-          .catch(function(){ syncCopy_(text); showTextCopiedToast_(); });
-      } catch(e) { syncCopy_(text); showTextCopiedToast_(); }
-      return;
-    }
-    // PC
-    syncCopy_(text);
-    showSharePopup_(text);
+      if (isMob) {
+        showTextCopiedToast_();
+      } else {
+        showSharePopup_(text);
+      }
+    } catch(e) { alert('복사 중 오류: ' + e.message); }
   }
 
   function showTextCopiedToast_() {
@@ -4228,25 +4236,6 @@
     return { prepared: metrics.prepared, needCheck: metrics.needCheck, score: metrics.score, checkItems: metrics.checkItems, summary, grade };
   }
 
-  // 동기 클립보드 복사 (PWA/구형 브라우저 호환)
-  function syncCopy_(text) {
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).catch(function(){});
-        return;
-      }
-    } catch(e) {}
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
-      document.body.appendChild(ta);
-      ta.focus(); ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    } catch(e) {}
-  }
-
   async function copyTextSafe(text) {
     try {
       if (navigator.clipboard && window.isSecureContext) {
@@ -4774,25 +4763,11 @@ ${shareUrl}`
       '\n\n※ 본 계산 결과는 참고용이며, 실제 보험금은 가입 조건·약관에 따라 다를 수 있습니다.' +
       buildFpSignature();
 
-    const isStandalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || !!window.navigator.standalone;
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    // PWA 앱 모드: 클립보드 직접 복사
-    if (isStandalone) {
+    try {
+      var isMob2 = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       syncCopy_(text);
       showTextCopiedToast_();
-      return;
-    }
-    // 모바일 브라우저
-    if (isMobile && navigator.share) {
-      try {
-        navigator.share({ title: '실손 자기부담금 계산 결과', text: text })
-          .catch(function(){ syncCopy_(text); showTextCopiedToast_(); });
-      } catch(e) { syncCopy_(text); showTextCopiedToast_(); }
-      return;
-    }
-    // PC
-    syncCopy_(text);
-    showTextCopiedToast_();
+    } catch(e) { alert('복사 중 오류: ' + e.message); }
   }
   syncViewFromLocation();
 
