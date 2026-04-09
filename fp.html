@@ -1799,9 +1799,6 @@
   }
   .lock-input:focus { border-color: #C17A3A; }
   .lock-btn {
-    -webkit-appearance: none;
-    cursor: pointer;
-    touch-action: manipulation;
     width: 100%; padding: 16px;
     border-radius: 12px; border: none;
     background: linear-gradient(135deg, #C17A3A, #E8A050);
@@ -1987,8 +1984,8 @@
       <div class="lock-title">실손 5분 클래스</div>
       <div class="lock-sub">한화생명금융서비스 유니스지사<br>전용 자료입니다. 비밀번호를 입력해주세요.</div>
       <input class="lock-input" type="password" id="pwInput" placeholder="비밀번호" maxlength="20"
-        >
-      <button class="lock-btn" id="lockBtn" type="button">입장하기</button>
+        onkeydown="if(event.key==='Enter')checkPw()">
+      <button class="lock-btn" onclick="checkPw()">입장하기</button>
       <div class="lock-error" id="pwError">❌ 비밀번호가 틀렸습니다.<br>담당자에게 문의해주세요.</div>
     </div>
     <div id="expiredSection" style="display:none;">
@@ -3420,8 +3417,9 @@
 
 <div class="footer">
   한화생명금융서비스 VIP금융사업부 유니스지사<br>
-  본 자료는 고객 교육 목적으로 제작되었습니다.<br>
-  © 유니스지사 · 무단 복제 및 배포를 금합니다.
+  본 자료는 판매 목적이 아닌 고객 교육 및 정보 제공을 위해 제작되었습니다.<br>
+  실손보험 관련 최신 정보는 가입 약관 및 담당 FP를 통해 확인하세요.
+  © 유니스지사 · 한화생명금융서비스 VIP금융사업부 &nbsp;|&nbsp; 이 자료는 유니스지사의 지적 재산입니다. 무단 복제 및 무단 배포를 금합니다.
 </div>
 
 <script>
@@ -3486,22 +3484,6 @@
       setTimeout(() => { err.style.display = 'none'; }, 3000);
     }
   }
-
-  // iOS Safari - 즉시 이벤트 리스너 등록 (DOMContentLoaded 이미 지난 후 실행)
-  (function() {
-    var btn = document.getElementById('lockBtn');
-    var inp = document.getElementById('pwInput');
-    if (btn) {
-      btn.addEventListener('click', function(e) { checkPw(); });
-      btn.addEventListener('touchstart', function(e) { e.stopPropagation(); });
-      btn.addEventListener('touchend', function(e) { e.preventDefault(); checkPw(); });
-    }
-    if (inp) {
-      inp.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); checkPw(); }
-      });
-    }
-  })();
 
   /* ─── PWA 서비스워커 등록 ─── */
   if ('serviceWorker' in navigator) {
@@ -3610,13 +3592,14 @@
 
   function shareClaimInfo() {
     const text =
+'━━━━━━━━━━━━━━━━━\n' +
 '📋  실손 청구서류 완벽 정리\n' +
-'━━━━━━━━━━━━━━━\n' +
+'━━━━━━━━━━━━━━━━━\n' +
 '\n' +
 '📌  공통 기본 서류  (항상 필요)\n' +
 '　①  진료비 영수증\n' +
 '　②  진료비 세부내역서  ⭐\n' +
-'   　← 영수증만으론 거절될 수 있어요\n' +
+'　　　← 영수증만으론 거절될 수 있어요\n' +
 '\n' +
 '🏥  입원 청구 시 추가 서류\n' +
 '　•  입퇴원확인서\n' +
@@ -3627,26 +3610,27 @@
 '🚶  통원 청구 시\n' +
 '　•  진료비 영수증 + 세부내역서\n' +
 '　•  진료확인서  (보험사 요청 시)\n' +
-'　💡 3만원 이하는 영수증만으로 가능한\n' +
-'          경우도 있음\n' +
+'　💡 3만원 이하는 영수증만으로 가능한 경우도 있음\n' +
 '\n' +
 '💊  약제비 · 처방전 청구 시\n' +
 '　•  처방전 원본\n' +
 '　•  약제비 영수증\n' +
 '　💡 처방전은 발행일로부터 3년 이내 청구 가능!\n' +
 '\n' +
-'━━━━━━━━━━━━━━\n' +
+'━━━━━━━━━━━━━━━━━\n' +
 '🚨  청구 거절됐을 때\n' +
 '　•  세부내역서 누락\n' +
 '　　 → 추가 제출하면 대부분 해결\n' +
 '　•  이의신청 가능\n' +
 '　　 → 거절 사유 확인 후 30일 이내\n' +
-'━━━━━━━━━━━━━━━\n' +
+'━━━━━━━━━━━━━━━━━\n' +
+'\n' +
+'' +
     buildFpSignature();
 
     var isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isMob && navigator.share) {
-      navigator.share({ text: text })
+      navigator.share({ title: '실손 청구서류 정리', text: text })
         .catch(function(){ syncCopy_(text); showTextCopiedToast_(); });
       return;
     }
@@ -3773,7 +3757,7 @@
         prepared += 1;
       } else {
         needCheck += 1;
-        const text = function(){ var _el=item.querySelector('.cl-item-main'); return _el?(_el.textContent||'').trim():''; }();
+        const text = item.querySelector('.cl-item-main')?.textContent?.trim();
         if (text) checkItems.push('• ' + text);
       }
     });
@@ -4068,14 +4052,15 @@
     var title = getFpTitle();
     if (!name) return '';
     var line3 = name + ' ' + title;
-    var sig = '\n───────────────\n한화금융 VIP사업부 유니스\n보상청구 담당\n' + line3;
+    var sig = '\n─────────────────\n한화금융 VIP사업부 유니스\n보상청구 담당\n' + line3;
     if (phone) sig += '\n' + phone;
-    sig += '\n───────────────';
+    sig += '\n─────────────────';
     return sig;
   }
 
   function getActiveFpCode() {
-    return getQueryFpCode() || getSavedFpCode();
+    // 저장된 코드(FP 본인 설정) 우선 — URL 파라미터는 저장값 없을 때만 사용
+    return getSavedFpCode() || getQueryFpCode();
   }
 
   function persistFpCode(code) {
@@ -4191,7 +4176,9 @@
 
   function initFpCodeSetting() {
     const queryCode = getQueryFpCode();
-    if (queryCode) persistFpCode(queryCode);
+    const savedCode = getSavedFpCode();
+    // 저장된 코드가 없을 때만 URL 파라미터 저장 (다른 FP 링크 클릭해도 본인 코드 유지)
+    if (queryCode && !savedCode) persistFpCode(queryCode);
     updateFpCodeUi();
     const code = getActiveFpCode();
     if (!code && !fpModalForcedOnce) {
@@ -4343,7 +4330,7 @@
     const name = document.getElementById('consultName').value.trim();
     const phone = document.getElementById('consultPhone').value.trim();
     const memo = '';
-    const method = (function(){ var _c=document.querySelector('input[name="consultMethod"]:checked'); return _c?_c.value:'phone'; })();
+    const method = document.querySelector('input[name="consultMethod"]:checked')?.value || 'phone';
     const extras = Array.from(document.querySelectorAll('input[name="consultExtra"]:checked')).map(el => el.value);
 
     if (!name) {
@@ -4771,25 +4758,26 @@ ${shareUrl}`
 
     const text =
       '💰 실손 자기부담금 계산 결과\n' +
-      '\n' +
-      '━━━━━━━━━━━━━━━\n' +
+      '━━━━━━━━━━━━━━━━━\n' +
       '📋  ' + r.gen + ' 실손  ·  ' + r.type + '\n' +
       '💊  총 치료비  ' + r.total + '\n' +
-      '━━━━━━━━━━━━━━━\n' +
+      '━━━━━━━━━━━━━━━━━\n' +
       '❗  내가 내는 금액\n' +
       '　　' + r.self + '  (' + r.selfPct + ')\n' +
+      '\n' +
       '✅  보험사가 내는 금액\n' +
       '　　' + r.ins + '  (' + r.insPct + ')\n' +
-      '━━━━━━━━━━━━━━━\n' +
+      '━━━━━━━━━━━━━━━━━\n' +
       '📌  상세 내역\n' +
       detLines +
       warnLines + '\n\n' +
-      '※ 본 계산 결과는 참고용이며, 실제 보험금은\n가입 조건·약관에 따라 다를 수 있습니다.' +
+      '' +
+      '\n\n※ 본 계산 결과는 참고용이며, 실제 보험금은 가입 조건·약관에 따라 다를 수 있습니다.' +
       buildFpSignature();
 
     var isMob2 = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isMob2 && navigator.share) {
-      navigator.share({ text: text })
+      navigator.share({ title: '실손 자기부담금 계산 결과', text: text })
         .catch(function(){ syncCopy_(text); showTextCopiedToast_(); });
       return;
     }
