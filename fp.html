@@ -4326,7 +4326,13 @@
     return '결과만 보내고 나중에 상담받기';
   }
 
+  let _isSubmitting = false; // 중복 제출 방지 플래그
+
   async function submitResultForm() {
+    if (_isSubmitting) return;
+
+    const submitBtn = document.querySelector('.consult-submit');
+
     const name = document.getElementById('consultName').value.trim();
     const phone = document.getElementById('consultPhone').value.trim();
     const memo = '';
@@ -4342,6 +4348,12 @@
       alert('휴대폰 번호를 정확히 입력해주세요.');
       document.getElementById('consultPhone').focus();
       return;
+    }
+
+    _isSubmitting = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '접수 중...';
     }
 
     const { summary } = getChecklistSummary();
@@ -4381,6 +4393,8 @@
           body   : payload
         });
       } catch (e) { console.warn('전송 오류(무시):', e); }
+      _isSubmitting = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
       hideResultFormModal();
       showSuccessPopup_();
       return;
@@ -4389,6 +4403,8 @@
     await copyTextSafe(payloadText);
 
     if (method === 'kakao' && KAKAO_CHANNEL_URL) {
+      _isSubmitting = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
       hideResultFormModal();
       window.open(KAKAO_CHANNEL_URL, '_blank');
       alert('신청 내용이 복사되었습니다. 카카오톡 채널 채팅창에 붙여넣어 전송해 주세요.');
@@ -4396,11 +4412,15 @@
     }
 
     if (method === 'phone' && RESULT_SMS_NUMBER) {
+      _isSubmitting = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
       hideResultFormModal();
       location.href = 'sms:' + RESULT_SMS_NUMBER + '?body=' + encodeURIComponent(payloadText);
       return;
     }
 
+    _isSubmitting = false;
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
     hideResultFormModal();
     alert('신청 내용이 복사되었습니다.\n\n현재 파일만으로는 자동 접수가 되지 않아 복사된 내용을 전달하는 방식으로 동작합니다.\n카카오톡 채널 주소, 문자 수신 번호 또는 접수용 연동 주소를 연결하면 더 편하게 운영할 수 있습니다.');
   }
@@ -4544,7 +4564,7 @@ ${shareUrl}`
       ],
       note:'💚 도수·체외충격파 치료 중이라면 절대 5세대로 바꾸지 마세요. 2013.03 이전 가입자는 황금 실손입니다.'},
     3:{l:'3세대',p:'2017년 4월 ~ 2021년 6월',s:'급여/비급여 분리 · 자기부담 20~30% · 15년 재가입 · 연 200만원 상한제 마지막 세대',
-      rows:[{c:'입원',d:'급여: 의원 10%\n병원급 이상 20%\n비급여 20%',lm:'급여·비급여 각 연 5,000만원',n:'병원 종류에 따라 급여 자기부담 다름'},{c:'통원',d:'의원 1만원 또는 10%\n병원 1.5만원 또는 20%\n종합 2만원 또는 20%\n상급종합 3만원 또는 20%\n(각 큰 금액 기준)',lm:'급여·비급여 각 회당 30만원',n:'병원 종류별 자기부담 다름'},{c:'처방',d:'급여 8,000원\n비급여 30%',lm:'급여 회당 10만원',n:'비급여 처방 30% 부담 시작'}],
+      rows:[{c:'입원',d:'급여 20% / 비급여 20%',lm:'급여·비급여 각 연 5,000만원',n:'급여·비급여 분리 청구'},{c:'통원',d:'2만원/2.5만원/3만원\n또는 20% 중 큰 금액',lm:'급여·비급여 각 회당 30만원',n:'급여·비급여 별도 청구'},{c:'처방',d:'급여 8,000원\n비급여 30%',lm:'급여 회당 10만원',n:'비급여 처방 30% 부담 시작'}],
       cap:'급여+비급여 합산 연 200만원 초과 시 100% 보험사 부담 (3세대가 마지막!)',re:'15년 후 강제 전환 (예: 2018년 가입 → 2033년)',su:'없음',
       ex:[
         {k:'입원 면책구조',v:'최초 입원일로부터 365일 보장 → 90일 면책 → 365일 보장 반복\n(2016.01 이후: 5천만원 소진 후 90일 면책으로 기준 변경)'},
