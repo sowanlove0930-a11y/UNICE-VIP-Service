@@ -3061,8 +3061,9 @@
 
 <div class="footer">
   한화생명금융서비스 VIP금융사업부 유니스지사<br>
-  본 자료는 고객 교육 목적으로 제작되었습니다.<br>
-  © 유니스지사 · 무단 복제 및 배포를 금합니다.
+  본 자료는 판매 목적이 아닌 고객 교육 및 정보 제공을 위해 제작되었습니다.<br>
+  실손보험 관련 최신 정보는 가입 약관 및 담당 FP를 통해 확인하세요.
+  © 유니스지사 · 한화생명금융서비스 VIP금융사업부 &nbsp;|&nbsp; 이 자료는 유니스지사의 지적 재산입니다. 무단 복제 및 무단 배포를 금합니다.
 </div>
 
 <script>
@@ -3720,7 +3721,14 @@
     return '결과만 보내고 나중에 상담받기';
   }
 
+  let _isSubmitting = false; // 중복 제출 방지 플래그
+
   async function submitResultForm() {
+    // ① 중복 클릭 원천 차단
+    if (_isSubmitting) return;
+
+    const submitBtn = document.querySelector('.consult-submit');
+
     const name = document.getElementById('consultName').value.trim();
     const phone = document.getElementById('consultPhone').value.trim();
     const memo = '';
@@ -3736,6 +3744,13 @@
       alert('휴대폰 번호를 정확히 입력해주세요.');
       document.getElementById('consultPhone').focus();
       return;
+    }
+
+    // ② 유효성 통과 후 버튼 즉시 비활성화
+    _isSubmitting = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '접수 중...';
     }
 
     const { summary } = getChecklistSummary();
@@ -3777,6 +3792,8 @@
       } catch (e) {
         console.warn('전송 오류(무시):', e);
       }
+      _isSubmitting = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
       hideResultFormModal();
       showSuccessPopup_();
       return;
@@ -3785,6 +3802,8 @@
     await copyTextSafe(payloadText);
 
     if (method === 'kakao' && KAKAO_CHANNEL_URL) {
+      _isSubmitting = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
       hideResultFormModal();
       window.open(KAKAO_CHANNEL_URL, '_blank');
       alert('신청 내용이 복사되었습니다. 카카오톡 채널 채팅창에 붙여넣어 전송해 주세요.');
@@ -3792,11 +3811,15 @@
     }
 
     if (method === 'phone' && RESULT_SMS_NUMBER) {
+      _isSubmitting = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
       hideResultFormModal();
       location.href = 'sms:' + RESULT_SMS_NUMBER + '?body=' + encodeURIComponent(payloadText);
       return;
     }
 
+    _isSubmitting = false;
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
     hideResultFormModal();
     alert('신청 내용이 복사되었습니다.\n\n현재 파일만으로는 자동 접수가 되지 않아 복사된 내용을 전달하는 방식으로 동작합니다.\n카카오톡 채널 주소, 문자 수신 번호 또는 접수용 연동 주소를 연결하면 더 편하게 운영할 수 있습니다.');
   }
