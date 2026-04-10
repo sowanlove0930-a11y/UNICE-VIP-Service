@@ -3078,7 +3078,7 @@
     try {
       if (DIRECT_ENTRY_CHECKLIST_ONLY) {
         syncView('checklist');
-        if (location.hash !== '#checklist') history.replaceState({ view: 'checklist' }, '', '#checklist');
+        // 해시 추가 안 함 (Samsung 브라우저 navigator.share 호환성)
       }
     } catch (e) {}
   }
@@ -3202,12 +3202,13 @@
   function shareClaimInfo() {
     const url = (CHECKLIST_SHARE_URL || (location.origin + location.pathname)).replace(/#.*$/, '') + '#claim';
     const text = '[실손 청구서류 완벽 정리]\n\n병원비 청구할 때 어떤 서류가 필요한지 정리했어요.\n입원 / 통원 / 약제비 별로 한눈에 확인하세요!\n\n' + url;
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && navigator.share) {
-      navigator.share({ url: shareUrl }).catch(function(){});
+    const isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isSA  = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if ((isMob || isSA) && navigator.share) {
+      navigator.share({ title: '실손 자료', text: text }).catch(function(e){ if(e.name!=='AbortError'){ copyTextSafe(text); } });
       return;
     }
-    copyTextSafe(url);
+    copyTextSafe(text);
     showSharePopup_(url);
   }
 
@@ -3215,12 +3216,13 @@
   function shareDeductibleInfo() {
     const url = (CHECKLIST_SHARE_URL || (location.origin + location.pathname)).replace(/#.*$/, '') + '#compare';
     const text = '[내 실손 자기부담금 확인하기]\n\n1~5세대 실손 자기부담금이 다 달라요.\n내 실손 세대를 확인하고 얼마나 돌려받을 수 있는지 알아보세요!\n\n' + url;
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && navigator.share) {
-      navigator.share({ url: shareUrl }).catch(function(){});
+    const isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isSA  = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if ((isMob || isSA) && navigator.share) {
+      navigator.share({ title: '실손 자료', text: text }).catch(function(e){ if(e.name!=='AbortError'){ copyTextSafe(text); } });
       return;
     }
-    copyTextSafe(url);
+    copyTextSafe(text);
     showSharePopup_(url);
   }
   function hideReward() { if (location.hash === '#reward') history.back(); else syncView('main'); }
@@ -3255,6 +3257,12 @@
   }
 
   function pushView(view) {
+    // checklist/vipchecklist는 URL 해시 없이 처리 (삼성브라우저 카톡 공유 호환)
+    if (view === 'checklist' || view === 'vipchecklist') {
+      history.replaceState({ view }, '', location.pathname + location.search);
+      syncView(view);
+      return;
+    }
     const hash = '#' + view;
     if (location.hash !== hash) history.pushState({ view }, '', hash);
     syncView(view);
@@ -3597,7 +3605,7 @@
   const CHECKLIST_SHARE_URL = 'https://unice-vip.co.kr/';
   const CONSULT_SUBMIT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbylkpouZe8XqjuBmuuYCWCsdC2OOvcQHAhhJIctFQaEFQrEHpqW8kZDg9afvcReF7gi/exec';
 
-  // ── CID 방문 추적 초기화 ──
+  // ── CID 방문 추적 초기화 (링크나눔 카운트) ──
   (function() {
     try {
       const params = new URLSearchParams(location.search);
@@ -3616,9 +3624,7 @@
   function getActiveFpCode() {
     try {
       return sanitizeFpCode(new URLSearchParams(location.search).get('fp') || '');
-    } catch (e) {
-      return '';
-    }
+    } catch (e) { return ''; }
   }
 
   function buildTrackedUrl(baseUrl, hashValue) {
@@ -3809,6 +3815,7 @@
       }
       _isSubmitting = false;
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '실손 5분 클래스 신청'; }
+      // cid 저장 (링크나눔 추적용 — 이 사람이 나중에 공유할 때 cid로 사용)
       try { localStorage.setItem('unice_my_cid', name); } catch(e) {}
       hideResultFormModal();
       showSuccessPopup_();
@@ -3877,30 +3884,39 @@ ${shareUrl}`;
     const shareText = isVip
       ? 'VIP 점검 체크리스트를 보내드립니다.\n체크 후 필요하시면 상담으로 이어서 안내받아보세요.\n\n' + shareUrl
       : buildChecklistShareText(shareUrl);
-    uniceDoShare_(shareUrl, shareText);
+    doShare_(shareUrl, shareText);
   }
 
   function shareChecklistInfo() {
     const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
     const shareText = buildChecklistShareText(shareUrl);
-    uniceDoShare_(shareUrl, shareText);
+    doShare_(shareUrl, shareText);
   }
 
   function shareChecklistLink() {
-    shareChecklistInfo();
+    return shareChecklistInfo();
   }
 
-  function uniceDoShare_(shareUrl, shareText) {
-    if (navigator.share) {
-      navigator.share({ title: '실손 5분 클래스', text: shareText, url: shareUrl })
-        .then(function(){})
-        .catch(function(e) {
-          if (e.name === 'AbortError') return;
-          copyTextSafe(shareText || shareUrl).then(function(){ showSharePopup_(shareUrl); });
-        });
-    } else {
+  // ── 공통 공유 함수 (삼성/크롬/iOS 통합 대응) ──
+  function doShare_(shareUrl, shareText) {
+    if (!navigator.share) {
+      // PC 환경
       copyTextSafe(shareText || shareUrl).then(function(){ showSharePopup_(shareUrl); });
+      return;
     }
+    // 삼성 브라우저: url 필드 반드시 포함해야 작동
+    var shareData = { title: '실손 5분 클래스', text: shareText, url: shareUrl };
+    navigator.share(shareData).then(function() {
+      // 성공
+    }).catch(function(e) {
+      if (e.name === 'AbortError') return; // 사용자가 취소
+      // share 실패 → 삼성 브라우저 구버전 등 → url만으로 재시도
+      navigator.share({ url: shareUrl }).catch(function(e2) {
+        if (e2.name === 'AbortError') return;
+        // 최종 폴백 → 클립보드 복사
+        copyTextSafe(shareText || shareUrl).then(function(){ showSharePopup_(shareUrl); });
+      });
+    });
   }
 
 
@@ -3937,7 +3953,7 @@ ${shareUrl}`;
       syncView(hash);
     } else {
       // ★ 해시 없으면 체크리스트 바로 진입 (메인화면 건너뜀)
-      history.replaceState(null, '', '#checklist');
+      // history.replaceState(null, '', '#checklist'); // 해시 제거
       syncView('checklist');
     }
   }
