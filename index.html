@@ -3874,57 +3874,44 @@ ${shareUrl}`;
   }
 
 
-  async function shareDirectChecklistLink(type) {
+  function shareDirectChecklistLink(type) {
     const isVip = type === 'vip';
-    const targetHash = isVip ? '#vipchecklist' : '';
-    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), targetHash);
+    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
     const shareText = isVip
-      ? `VIP 점검 체크리스트를 보내드립니다.
-체크 후 필요하시면 상담으로 이어서 안내받아보세요.
-
-${shareUrl}`
+      ? 'VIP 점검 체크리스트를 보내드립니다.\n체크 후 필요하시면 상담으로 이어서 안내받아보세요.\n\n' + shareUrl
       : buildChecklistShareText(shareUrl);
 
-    // 모바일: 네이티브 공유 시트 / PC: 클립보드 복사 + 팝업
-    const isMob3 = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isSA3  = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    if ((isMob3 || isSA3) && navigator.share && shareText) {
-      // Samsung 브라우저 등에서 #hash 있을 때 share 실패 → 해시 임시 제거
-      const prevHash = location.hash;
-      try {
-        if (prevHash) history.replaceState(null, '', location.pathname + location.search);
-        await navigator.share({ title: '실손 5분 클래스', text: shareText });
-        return;
-      } catch (e) {
-        if (prevHash) history.replaceState(null, '', location.pathname + location.search + prevHash);
-        if (e.name === 'AbortError') return;
-      }
+    // 삼성 브라우저 호환 — async 없이 동기 방식으로 직접 호출
+    if (navigator.share && shareText) {
+      navigator.share({ title: '실손 5분 클래스', text: shareText })
+        .catch(function(e) {
+          if (e.name !== 'AbortError') {
+            copyTextSafe(shareText).then(function(){ showSharePopup_(shareUrl); });
+          }
+        });
+      return;
     }
-    await copyTextSafe(shareText || shareUrl);
-    showSharePopup_(shareUrl);
+    copyTextSafe(shareText || shareUrl).then(function(){ showSharePopup_(shareUrl); });
   }
 
-  async function shareChecklistInfo() {
+  function shareChecklistInfo() {
     const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
     const shareText = buildChecklistShareText(shareUrl);
-    const isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    if ((isMob || isStandalone) && navigator.share && shareText) {
-      const prevHash2 = location.hash;
-      try {
-        if (prevHash2) history.replaceState(null, '', location.pathname + location.search);
-        await navigator.share({ title: '실손 5분 클래스', text: shareText });
-        return;
-      } catch (e) {
-        if (prevHash2) history.replaceState(null, '', location.pathname + location.search + prevHash2);
-        if (e.name === 'AbortError') return;
-      }
+
+    // 삼성 브라우저 호환 — async 없이 동기 방식으로 직접 호출
+    if (navigator.share && shareText) {
+      navigator.share({ title: '실손 5분 클래스', text: shareText })
+        .catch(function(e) {
+          if (e.name !== 'AbortError') {
+            copyTextSafe(shareText).then(function(){ showSharePopup_(shareUrl); });
+          }
+        });
+      return;
     }
-    await copyTextSafe(shareText || shareUrl);
-    showSharePopup_(shareUrl);
+    copyTextSafe(shareText || shareUrl).then(function(){ showSharePopup_(shareUrl); });
   }
 
-  async function shareChecklistLink() {
+  function shareChecklistLink() {
     return shareChecklistInfo();
   }
 
