@@ -3603,8 +3603,9 @@
   (function() {
     try {
       const params = new URLSearchParams(location.search);
-      const cid = params.get('cid') || '';
-      const fp  = params.get('fp')  || '';
+      const hashParams2 = new URLSearchParams(location.hash.replace(/^#/,''));
+      const cid = params.get('cid') || hashParams2.get('cid') || '';
+      const fp  = params.get('fp')  || hashParams2.get('fp')  || '';
       if (cid && fp && CONSULT_SUBMIT_ENDPOINT) {
         fetch(CONSULT_SUBMIT_ENDPOINT + '?action=logVisit&cid=' + encodeURIComponent(cid) + '&fp=' + encodeURIComponent(fp), { mode: 'cors' }).catch(function(){});
       }
@@ -3617,27 +3618,25 @@
 
   function getActiveFpCode() {
     try {
-      return sanitizeFpCode(new URLSearchParams(location.search).get('fp') || '');
-    } catch (e) {
-      return '';
-    }
+      // 쿼리스트링(?fp=) 또는 해시(#fp=) 둘 다 지원
+      var fromSearch = new URLSearchParams(location.search).get('fp') || '';
+      if (fromSearch) return sanitizeFpCode(fromSearch);
+      var fromHash = new URLSearchParams(location.hash.replace(/^#/,'')).get('fp') || '';
+      return sanitizeFpCode(fromHash);
+    } catch (e) { return ''; }
   }
 
   function buildTrackedUrl(baseUrl, hashValue) {
     const base = baseUrl || (location.origin + location.pathname);
     const url = new URL(base, location.href);
+    // fp, cid를 해시로 전달 (삼성브라우저 navigator.share 호환)
     const code = getActiveFpCode();
-    if (code) url.searchParams.set('fp', code);
-    // cid 자동 포함 (링크나눔 추적)
-    try {
-      const myCid = localStorage.getItem('unice_my_cid') || '';
-      if (myCid) url.searchParams.set('cid', myCid);
-    } catch(e) {}
-    if (hashValue === '') {
-      url.hash = '';
-    } else if (hashValue) {
-      url.hash = String(hashValue).replace(/^#/, '');
-    }
+    const myCid = (() => { try { return localStorage.getItem('unice_my_cid') || ''; } catch(e) { return ''; } })();
+    const hashParams = new URLSearchParams();
+    if (code) hashParams.set('fp', code);
+    if (myCid) hashParams.set('cid', myCid);
+    url.search = ''; // 쿼리스트링 제거
+    url.hash = hashParams.toString();
     return url.toString();
   }
 
@@ -4144,7 +4143,8 @@ ${shareUrl}`
   // ── FP 코드 사용중지 검사 ──
   (function checkFpActive() {
     const params = new URLSearchParams(location.search);
-    const fp = params.get('fp');
+    const hashP = new URLSearchParams(location.hash.replace(/^#/,''));
+    const fp = params.get('fp') || hashP.get('fp');
     if (!fp || !'https://script.google.com/macros/s/AKfycbylkpouZe8XqjuBmuuYCWCsdC2OOvcQHAhhJIctFQaEFQrEHpqW8kZDg9afvcReF7gi/exec') return;
 
     fetch('https://script.google.com/macros/s/AKfycbylkpouZe8XqjuBmuuYCWCsdC2OOvcQHAhhJIctFQaEFQrEHpqW8kZDg9afvcReF7gi/exec?action=validate&fp=' + encodeURIComponent(fp))
