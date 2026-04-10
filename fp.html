@@ -4196,10 +4196,7 @@
 
   function getQueryFpCode() {
     try {
-      var fromSearch = new URLSearchParams(location.search).get('fp') || '';
-      if (fromSearch) return sanitizeFpCode(fromSearch);
-      var fromHash = new URLSearchParams(location.hash.replace(/^#/,'')).get('fp') || '';
-      return sanitizeFpCode(fromHash);
+      return sanitizeFpCode(new URLSearchParams(location.search).get('fp') || '');
     } catch (e) { return ''; }
   }
 
@@ -4250,11 +4247,7 @@
     try { localStorage.setItem(FP_CODE_STORAGE_KEY, normalized); } catch (e) {}
     try {
       const current = new URL(location.href);
-      // fp를 해시로 저장
-      const hParams = new URLSearchParams(current.hash.replace(/^#/,''));
-      hParams.set('fp', normalized);
-      current.search = '';
-      current.hash = hParams.toString();
+      current.searchParams.set('fp', normalized);
       history.replaceState(history.state, '', current.toString());
     } catch (e) {}
     updateFpCodeUi();
@@ -4350,12 +4343,12 @@
     const base = baseUrl || (location.origin + location.pathname);
     const url = new URL(base, location.href);
     const code = getActiveFpCode();
-    const myCid = (() => { try { return localStorage.getItem('unice_my_cid') || ''; } catch(e) { return ''; } })();
-    const hashParams = new URLSearchParams();
-    if (code) hashParams.set('fp', code);
-    if (myCid) hashParams.set('cid', myCid);
-    url.search = '';
-    url.hash = hashParams.toString();
+    if (code) url.searchParams.set('fp', code);
+    if (hashValue === '') {
+      url.hash = '';
+    } else if (hashValue) {
+      url.hash = String(hashValue).replace(/^#/, '');
+    }
     return url.toString();
   }
 
@@ -5215,7 +5208,7 @@ function uniceSharePdf(type) {
   var title  = UNICE_PDF_TITLES[type] || 'VIP 자료';
   var url    = UNICE_PDF_URLS[type]   || location.href;
   var fpCode = (typeof getActiveFpCode === 'function') ? getActiveFpCode() : '';
-  if (fpCode) { try { var u=new URL(url); var hp=new URLSearchParams(u.hash.replace(/^#/,'')); hp.set('fp',fpCode); u.search=''; u.hash=hp.toString(); url=u.toString(); } catch(e){} }
+  if (fpCode) { try { var u=new URL(url); u.searchParams.set('fp',fpCode); url=u.toString(); } catch(e){} }
   var rewardLabel = (type === 'secret') ? '실손클래스 체크리스트 리워드' : '실손클래스 링크나눔 리워드';
   var shareText = '🎁 ' + rewardLabel + '\n' + title + '\n' + url;
   // 모바일만 네이티브 공유 (PC Edge도 navigator.share 지원하므로 UA 체크 필수)
