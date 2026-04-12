@@ -16,8 +16,6 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#C17A3A">
-<!-- 카카오 JavaScript SDK -->
-<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" crossorigin="anonymous"></script>
 <!-- 카카오톡 / SNS 링크 미리보기 -->
 <meta property="og:type"        content="website">
 <meta property="og:site_name"   content="유니스 VIP · 한화생명금융서비스">
@@ -3879,89 +3877,39 @@ ${shareUrl}`;
 ${shareUrl}`;
   }
 
-  // ── 카카오 SDK 초기화 ──
-  (function() {
-    if (window.Kakao && !Kakao.isInitialized()) {
-      Kakao.init('b66c73bc8400ddeda061de32d220ba02');
-    }
-  })();
-
-  // ── 카카오 웹 공유 (webUrl만 사용 → 웹 카드로 강제) ──
-  function kakaoShareWeb(shareUrl) {
-    if (!window.Kakao || !Kakao.isInitialized()) return false;
-    try {
-      // 카카오는 # 해시를 인식 못함 → 해시 제거한 클린 URL 사용
-      const cleanUrl = shareUrl.replace(/#.*$/, '');
-      Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title: '10초 체크 → 내 실손 등급 바로 확인',
-          description: '1~5세대 중 내가 어디인지, 자기부담금은 얼마인지 지금 바로 알 수 있어요',
-          imageUrl: 'https://unice-vip.co.kr/og-image.jpg',
-          link: {
-            webUrl: cleanUrl,
-            mobileWebUrl: cleanUrl
-          }
-        },
-        buttons: [{
-          title: '체크리스트 바로가기',
-          link: {
-            webUrl: cleanUrl,
-            mobileWebUrl: cleanUrl
-          }
-        }]
-      });
-      return true;
-    } catch(e) { return false; }
-  }
-
   async function shareDirectChecklistLink(type) {
     const isVip = type === 'vip';
-    const targetHash = isVip ? '#vipchecklist' : '#checklist';
-    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), targetHash);
+    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
     const isKakao  = /KAKAOTALK/i.test(navigator.userAgent);
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // 카카오 인앱: SDK로 공유 시도
     if (isKakao) {
-      if (kakaoShareWeb(shareUrl)) return;
-      // SDK 실패 시 클립보드 복사
       await copyTextSafe(shareUrl);
-      showSharePopup_(shareUrl);
+      showKakaoGuidePopup_();
       return;
     }
-
-    // 일반 모바일: Web Share API
     if (isMobile && navigator.share) {
       try { await navigator.share({ url: shareUrl }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
-
-    // PC / fallback
     await copyTextSafe(shareUrl);
     showSharePopup_(shareUrl);
   }
 
   async function shareChecklistInfo() {
-    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '#checklist');
+    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
     const isKakao  = /KAKAOTALK/i.test(navigator.userAgent);
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // 카카오 인앱: SDK로 공유 시도
     if (isKakao) {
-      if (kakaoShareWeb(shareUrl)) return;
       await copyTextSafe(shareUrl);
-      showSharePopup_(shareUrl);
+      showKakaoGuidePopup_();
       return;
     }
-
-    // 일반 모바일: Web Share API
     if (isMobile && navigator.share) {
       try { await navigator.share({ url: shareUrl }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
-
-    // PC / fallback
     await copyTextSafe(shareUrl);
     showSharePopup_(shareUrl);
   }
@@ -4217,7 +4165,41 @@ ${shareUrl}`;
     } catch(e) {}
   }
 
-  // ── PC 카카오톡 공유 팝업 ──
+  // ── 카카오 인앱 3단계 안내 팝업 ──
+  function showKakaoGuidePopup_() {
+    const old = document.getElementById('_kakaoGuidePopup');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = '_kakaoGuidePopup';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);padding:20px;backdrop-filter:blur(4px)';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:linear-gradient(160deg,#1e1b35,#14121f);border:1px solid rgba(150,100,220,0.35);border-radius:24px;padding:28px 24px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.6)';
+    card.innerHTML =
+      '<div style="font-size:38px;margin-bottom:10px;">📋</div>' +
+      '<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px;">링크가 복사됐어요!</div>' +
+      '<div style="font-size:13px;color:rgba(200,200,220,0.55);margin-bottom:18px;line-height:1.5;">아래 순서대로 하시면 바로 전달돼요</div>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;text-align:left;">' +
+        '<div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:11px 14px;">' +
+          '<div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#FEE500,#F5C400);color:#3C1E1E;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(254,229,0,0.25);">1</div>' +
+          '<div style="font-size:13px;color:rgba(240,237,232,0.85);line-height:1.45;">카카오톡 <span style="color:#FEE500;font-weight:600;">채팅창</span>으로 이동하세요</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:11px 14px;">' +
+          '<div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#FEE500,#F5C400);color:#3C1E1E;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(254,229,0,0.25);">2</div>' +
+          '<div style="font-size:13px;color:rgba(240,237,232,0.85);line-height:1.45;">입력창을 <span style="color:#FEE500;font-weight:600;">길게 눌러</span> 붙여넣기 선택</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:11px 14px;">' +
+          '<div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#FEE500,#F5C400);color:#3C1E1E;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(254,229,0,0.25);">3</div>' +
+          '<div style="font-size:13px;color:rgba(240,237,232,0.85);line-height:1.45;">전송하면 <span style="color:#FEE500;font-weight:600;">미리보기 카드</span>가 자동 생성!</div>' +
+        '</div>' +
+      '</div>' +
+      '<button onclick="document.getElementById(\'_kakaoGuidePopup\').remove()" style="background:linear-gradient(135deg,#FEE500,#F5C400);color:#3C1E1E;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;width:100%;font-family:inherit;letter-spacing:0.3px;">확인</button>' +
+      '<div style="margin-top:12px;font-size:12px;color:rgba(200,200,220,0.35);">화면 밖을 클릭하면 닫힙니다</div>';
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+  }
+
+  // ── PC 공유 팝업 ──
   function showSharePopup_(url) {
     const old = document.getElementById('_sharePopup');
     if (old) old.remove();
