@@ -16,6 +16,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#C17A3A">
+<!-- 카카오 JavaScript SDK -->
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" crossorigin="anonymous"></script>
 <!-- 카카오톡 / SNS 링크 미리보기 -->
 <meta property="og:type"        content="website">
 <meta property="og:site_name"   content="유니스 VIP · 한화생명금융서비스">
@@ -4635,38 +4637,69 @@ ${shareUrl}`;
   }
 
 
+  // ── 카카오 SDK 초기화 ──
+  (function initKakao() {
+    if (window.Kakao && !Kakao.isInitialized()) {
+      Kakao.init('b66c73bc8400ddeda061de32d220ba02');
+    }
+  })();
+
+  // ── 카카오 공유 공통 함수 ──
+  function kakaoShare(shareUrl) {
+    if (!window.Kakao || !Kakao.isInitialized()) return false;
+    try {
+      Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: '10초 체크 → 내 실손 등급 바로 확인',
+          description: '1~5세대 중 내가 어디인지, 자기부담금은 얼마인지\n지금 바로 알 수 있어요 📋',
+          imageUrl: 'https://unice-vip.co.kr/og-image.jpg',
+          link: { mobileWebUrl: shareUrl, webUrl: shareUrl }
+        },
+        buttons: [{
+          title: '체크리스트 열기',
+          link: { mobileWebUrl: shareUrl, webUrl: shareUrl }
+        }]
+      });
+      return true;
+    } catch(e) { return false; }
+  }
+
   async function shareDirectChecklistLink(type) {
     const isVip = type === 'vip';
     const targetHash = isVip ? '#vipchecklist' : (CHECKLIST_SHARE_URL ? '' : '#checklist');
     const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), targetHash);
-    const shareText = isVip
-      ? `VIP 점검 체크리스트를 보내드립니다.
-체크 후 필요하시면 상담으로 이어서 안내받아보세요.
-
-${shareUrl}`
-      : buildChecklistShareText(shareUrl);
-
-    // 모바일: 네이티브 공유 시트(카카오 포함) / PC: 클립보드 복사 + 팝업
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
+
+    // 1순위: 카카오 SDK → 공유창 + OG 미리보기 카드
+    if (kakaoShare(shareUrl)) return;
+
+    // 2순위: Web Share API
     if ((isMobile || isStandalone) && navigator.share) {
       try { await navigator.share({ url: shareUrl }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
+
+    // 3순위: 클립보드 복사
     await copyTextSafe(shareUrl);
     showSharePopup_(shareUrl);
   }
 
   async function shareChecklistInfo() {
-    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), CHECKLIST_SHARE_URL ? '' : '#checklist');
-    const shareText = buildChecklistShareText(shareUrl);
-
-    // 모바일: 네이티브 공유 시트(카카오 포함) / PC: 클립보드 복사 + 팝업
+    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
     const isMobile2 = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    // 1순위: 카카오 SDK → 공유창 + OG 미리보기 카드
+    if (kakaoShare(shareUrl)) return;
+
+    // 2순위: Web Share API
     if (isMobile2 && navigator.share) {
       try { await navigator.share({ url: shareUrl }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
+
+    // 3순위: 클립보드 복사
     await copyTextSafe(shareUrl);
     showSharePopup_(shareUrl);
   }
