@@ -4638,58 +4638,51 @@ ${shareUrl}`;
 
 
   // ── 카카오 SDK 초기화 ──
-  (function initKakao() {
-    if (window.Kakao && !Kakao.isInitialized()) {
-      Kakao.init('b66c73bc8400ddeda061de32d220ba02');
-    }
-  })();
-
-  // ── 카카오 공유 공통 함수 (sendScrap: OG태그 자동 긁어서 카드 생성) ──
-  function kakaoShare(shareUrl) {
-    if (!window.Kakao || !Kakao.isInitialized()) return false;
-    try {
-      Kakao.Share.sendScrap({
-        requestUrl: shareUrl,
-      });
-      return true;
-    } catch(e) { return false; }
-  }
-
   async function shareDirectChecklistLink(type) {
     const isVip = type === 'vip';
     const targetHash = isVip ? '#vipchecklist' : (CHECKLIST_SHARE_URL ? '' : '#checklist');
     const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), targetHash);
+    const isKakao  = /KAKAOTALK/i.test(navigator.userAgent);
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
 
-    // 1순위: 카카오 SDK → 공유창 + OG 미리보기 카드
-    if (kakaoShare(shareUrl)) return;
+    // 카카오 인앱: URL 복사 + 붙여넣기 안내
+    if (isKakao) {
+      await copyTextSafe(shareUrl);
+      alert('링크가 복사되었습니다! 👇\n채팅창에 붙여넣기 하시면\n미리보기 카드가 자동으로 생성됩니다.');
+      return;
+    }
 
-    // 2순위: Web Share API
+    // 일반 모바일: Web Share API
     if ((isMobile || isStandalone) && navigator.share) {
       try { await navigator.share({ url: shareUrl }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
 
-    // 3순위: 클립보드 복사
+    // PC / fallback
     await copyTextSafe(shareUrl);
     showSharePopup_(shareUrl);
   }
 
   async function shareChecklistInfo() {
     const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
-    const isMobile2 = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isKakao  = /KAKAOTALK/i.test(navigator.userAgent);
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // 1순위: 카카오 SDK → 공유창 + OG 미리보기 카드
-    if (kakaoShare(shareUrl)) return;
+    // 카카오 인앱: URL 복사 + 붙여넣기 안내
+    if (isKakao) {
+      await copyTextSafe(shareUrl);
+      alert('링크가 복사되었습니다! 👇\n채팅창에 붙여넣기 하시면\n미리보기 카드가 자동으로 생성됩니다.');
+      return;
+    }
 
-    // 2순위: Web Share API
-    if (isMobile2 && navigator.share) {
+    // 일반 모바일: Web Share API
+    if (isMobile && navigator.share) {
       try { await navigator.share({ url: shareUrl }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
 
-    // 3순위: 클립보드 복사
+    // PC / fallback
     await copyTextSafe(shareUrl);
     showSharePopup_(shareUrl);
   }
