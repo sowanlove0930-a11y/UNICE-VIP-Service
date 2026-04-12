@@ -3879,8 +3879,42 @@ ${shareUrl}`;
 ${shareUrl}`;
   }
 
-
   // ── 카카오 SDK 초기화 ──
+  (function() {
+    if (window.Kakao && !Kakao.isInitialized()) {
+      Kakao.init('b66c73bc8400ddeda061de32d220ba02');
+    }
+  })();
+
+  // ── 카카오 웹 공유 (webUrl만 사용 → 웹 카드로 강제) ──
+  function kakaoShareWeb(shareUrl) {
+    if (!window.Kakao || !Kakao.isInitialized()) return false;
+    try {
+      // baseUrl은 파라미터 없는 클린 URL (OG 스크랩용)
+      const baseUrl = 'https://unice-vip.co.kr/';
+      Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: '10초 체크 → 내 실손 등급 바로 확인',
+          description: '1~5세대 중 내가 어디인지, 자기부담금은 얼마인지 지금 바로 알 수 있어요',
+          imageUrl: 'https://unice-vip.co.kr/og-image.jpg',
+          link: {
+            webUrl: shareUrl,       // 클릭 시 열리는 URL (fp 파라미터 포함)
+            mobileWebUrl: shareUrl  // 모바일에서 열리는 URL
+          }
+        },
+        buttons: [{
+          title: '체크리스트 바로가기',
+          link: {
+            webUrl: shareUrl,
+            mobileWebUrl: shareUrl
+          }
+        }]
+      });
+      return true;
+    } catch(e) { return false; }
+  }
+
   async function shareDirectChecklistLink(type) {
     const isVip = type === 'vip';
     const targetHash = isVip ? '#vipchecklist' : '#checklist';
@@ -3888,10 +3922,12 @@ ${shareUrl}`;
     const isKakao  = /KAKAOTALK/i.test(navigator.userAgent);
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // 카카오 인앱: URL 복사 + 붙여넣기 안내 (붙여넣으면 OG 미리보기 카드 자동 생성)
+    // 카카오 인앱: SDK로 공유 시도
     if (isKakao) {
+      if (kakaoShareWeb(shareUrl)) return;
+      // SDK 실패 시 클립보드 복사
       await copyTextSafe(shareUrl);
-      alert('링크가 복사되었습니다! 👇\n채팅창에 붙여넣기 하시면\n미리보기 카드가 자동으로 생성됩니다.');
+      showSharePopup_(shareUrl);
       return;
     }
 
@@ -3907,14 +3943,15 @@ ${shareUrl}`;
   }
 
   async function shareChecklistInfo() {
-    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '');
+    const shareUrl = buildTrackedUrl(CHECKLIST_SHARE_URL || (location.origin + location.pathname), '#checklist');
     const isKakao  = /KAKAOTALK/i.test(navigator.userAgent);
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // 카카오 인앱: URL 복사 + 붙여넣기 안내
+    // 카카오 인앱: SDK로 공유 시도
     if (isKakao) {
+      if (kakaoShareWeb(shareUrl)) return;
       await copyTextSafe(shareUrl);
-      alert('링크가 복사되었습니다! 👇\n채팅창에 붙여넣기 하시면\n미리보기 카드가 자동으로 생성됩니다.');
+      showSharePopup_(shareUrl);
       return;
     }
 
