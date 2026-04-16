@@ -3657,6 +3657,17 @@ html, body {
             </div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr 1.3fr; border-bottom:1px solid var(--border);">
+            <div style="padding:16px 20px; font-size:17px; font-weight:700; color:var(--text); display:flex; align-items:center;">납입면제</div>
+            <div style="padding:16px 20px; text-align:center; border-left:1px solid var(--border); display:flex; flex-direction:column; justify-content:center; gap:5px;">
+              <div style="font-size:28px; color:var(--red); line-height:1;">✗</div>
+              <div style="font-size:13px; color:var(--muted);">해당 없음</div>
+            </div>
+            <div style="padding:16px 20px; text-align:center; border-left:1px solid rgba(232,160,32,0.3); background:rgba(232,160,32,0.07); display:flex; flex-direction:column; justify-content:center; gap:5px;">
+              <div style="font-size:28px; color:var(--green); line-height:1;">✓</div>
+              <div style="font-size:13px; color:rgba(232,160,32,0.8);">암·뇌·심 발병 시<br>보험료 회사가 대납</div>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1.3fr; border-bottom:1px solid var(--border);">
             <div style="padding:16px 20px; font-size:17px; font-weight:700; color:var(--text); display:flex; align-items:center;">비용 구조</div>
             <div style="padding:16px 20px; text-align:center; border-left:1px solid var(--border); display:flex; flex-direction:column; justify-content:center; gap:5px;">
               <div style="font-size:17px; font-weight:800; color:var(--red);">연금 + 리스크</div>
@@ -4584,7 +4595,7 @@ function updateNav() {
     12:'',
     13:'상담 랩업 →',
     14:'상담 랩업 →',
-    15:'결과 저장 →',
+    15:'다음으로 →',
     16:''
   };
   const btn=document.getElementById('btnNext');
@@ -5203,12 +5214,14 @@ const MONTHLY_PRODUCTS = {
   'CMA':         {label:'단기', bucket:'short', color:'#4A90D9'},
   'ETF·펀드(월적립)':{label:'중기', bucket:'mid', color:'#52B788'},
   '저축보험':    {label:'중기', bucket:'mid',   color:'#52B788'},
-  '단기납종신':  {label:'중기', bucket:'mid',   color:'#52B788', isAnnuity:true, rate:0.025, annuityLabel:'납입완료 후 복리 적립'},
+  '단기납종신':  {label:'중기', bucket:'mid',   color:'#52B788', isAnnuity:true, rate:0.025, annuityLabel:'납입완료 후 복리 적립', paymentOptions:[5,7,10]},
+  '달러종신':    {label:'중기', bucket:'mid',   color:'#52B788', isAnnuity:true, rate:0.030, annuityLabel:'단기납 달러 종신 · 환율 헤지 + 복리 적립', paymentOptions:[5,7,10]},
   'IRP·퇴직연금':{label:'장기', bucket:'long',  color:'#E8A020'},
   '연금저축':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.03, taxNote:'세액공제 16.5% 혜택 · 수령 시 연금소득세 3.3~5.5% 적용'},
   '달러보험':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.03, annuityLabel:'납입완료 후 달러 복리 적립'},
   '연금보험':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.025},
   '변액연금':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.030},
+  '종신보험(연금전환)':{label:'장기', bucket:'long', color:'#E8A020', isAnnuity:true, rate:0.025, annuityLabel:'종신보험 연금전환 특약 활용 · 사망보장 → 연금으로 전환'},
   '종신보험':    {label:'리스크관리', bucket:'risk', color:'#9B59B6'},
   '건강보험':    {label:'리스크관리', bucket:'risk', color:'#9B59B6'},
   '상해보험':    {label:'리스크관리', bucket:'risk', color:'#9B59B6'},
@@ -5230,6 +5243,8 @@ const ASSET_PRODUCTS = {
   '달러보험 (환급금)': {label:'보유자산', color:'#888'},
   'IRP·퇴직연금 (적립금)':{label:'보유자산', color:'#888'},
   '단기납종신 (환급금)':{label:'보유자산', color:'#888'},
+  '달러종신 (환급금)': {label:'보유자산', color:'#888'},
+  '종신보험(연금전환) (환급금)':{label:'보유자산', color:'#888'},
   'ETF·펀드 (평가금)': {label:'보유자산', color:'#888'},
 };
 const PRODUCT_MAP = {...MONTHLY_PRODUCTS, ...ASSET_PRODUCTS};
@@ -5379,7 +5394,7 @@ function makeRow(row, container) {
         <div>
           <div style="font-size:13px; color:var(--muted); margin-bottom:6px; font-weight:600;">납입기간</div>
           <select style="width:100%; background:var(--card2); border:1.5px solid rgba(232,160,32,0.35); border-radius:9px; color:var(--amber); font-family:inherit; font-size:17px; font-weight:800; padding:9px 12px; cursor:pointer;" onchange="onAnnuityChange(${row.id}, 'paymentYears', this.value)">
-            ${[5,10,15,20,25,30].map(y=>`<option value="${y}" ${(row.paymentYears||20)==y?'selected':''}>${y}년납</option>`).join('')}
+            ${(info.paymentOptions||[5,10,15,20,25,30]).map(y=>`<option value="${y}" ${(row.paymentYears||((info.paymentOptions||[])[0]||20))==y?'selected':''}>${y}년납</option>`).join('')}
           </select>
         </div>
         <div>
@@ -6945,7 +6960,7 @@ function buildShareScreen() {
   });
   const touchEl = document.getElementById('share-touched');
   if(touchEl){ touchEl.style.textAlign='right'; touchEl.style.lineHeight='1.8'; touchEl.textContent = touchItems.length ? touchItems.join('\n') : '—'; }
-  saveConsultation(name, monthly, pension, gap, lp, products, saving, meetingStr);
+  // saveConsultation 제거 — 메일 발송은 최종 저장 버튼(manualSave)에서만 실행
 }
 
 function getShareText(){
@@ -7006,11 +7021,15 @@ function getShareText(){
   const score = document.getElementById('check-score-num')?.textContent || '—';
   const grade = document.getElementById('check-grade-label')?.textContent || '';
 
+  // 노후파이 점수 (저축 구성 점수)
+  const pieScore = document.getElementById('scoreTotal')?.textContent || '—';
+
   const lines = [
     `📊 노후파이 클래스 진단 결과`,
     `${name ? name+' 고객님' : ''}`,
     `현재 ${currentAge}세 · 은퇴 희망 ${retireAge}세`,
-    `노후 준비도 점수: ${score}점 ${grade}`,
+    `📋 노후 체크리스트 점수: ${score}점 ${grade}`,
+    `🥧 노후파이 점수: ${pieScore}점`,
     `──────────────`,
     `희망 노후: ${state.lifeNames[state.lifeType]}`,
     `월 생활비: ${monthly}만원`,
