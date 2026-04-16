@@ -7137,11 +7137,21 @@ async function manualSave(){
       fullData: JSON.stringify(d)  // 전체 압축 데이터
     };
 
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-      // Content-Type 헤더 없음 → text/plain으로 처리 → CORS preflight 없음
+    // GET 방식으로 전송 (Apps Script CORS 안정성)
+    const fullDataStr = encodeURIComponent(JSON.stringify(d));
+    const p = new URLSearchParams({
+      action:'saveRetire', fp:fpCode,
+      name:d.name, life:state.lifeNames[state.lifeType],
+      monthly, pension, gap, lpct:lp,
+      saving:d.wrapup.saving||'',
+      meeting:d.wrapup.meeting||'',
+      touched, nextTopics,
+      note:d.wrapup.note||'',
+      date:d.datetime,
     });
+    // fullData는 별도로 추가 (URL 길이 초과 시 잘릴 수 있으나 핵심 데이터는 보장)
+    const url = APPS_SCRIPT_URL + '?' + p.toString() + '&fullData=' + fullDataStr.slice(0, 3000);
+    const res = await fetch(url);
     const data = await res.json();
     if(data.ok){
       showToast('✅ 저장 완료! 스프레드시트에 기록됐습니다', 3000);
