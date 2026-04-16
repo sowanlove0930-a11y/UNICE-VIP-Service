@@ -4213,7 +4213,18 @@ function showScreen(idx) {
   // rv-hint: 순차공개 페이지(4,5,6)에서만 표시
   const hintEl = document.getElementById('rv-hint');
   if(hintEl && ![4,5,6].includes(idx)) hintEl.style.display='none';
-  if(idx===1) initCheckList();
+  if(idx===1) {
+    initCheckList();
+    // 불러오기로 복원된 체크리스트 적용
+    if(window._pendingChecklist) {
+      setTimeout(() => {
+        window._pendingChecklist.forEach((ans, i) => {
+          if(ans) setCheckAnswer(i, ans);
+        });
+        window._pendingChecklist = null;
+      }, 150);
+    }
+  }
   if(idx===3) {
     updateLifeCards();
     const sel=document.getElementById('lifeSelectStage');
@@ -7063,15 +7074,9 @@ function restoreAllData(d) {
     syncProductToBuckets && syncProductToBuckets();
   }
 
-  // 체크리스트 복원
+  // 체크리스트 복원 — 화면 열릴 때 적용 (showScreen idx=1에서 처리)
   if(d.checklist && Array.isArray(d.checklist)) {
-    initCheckScreen && initCheckScreen();
-    // initCheckScreen이 비동기일 수 있어 딜레이
-    setTimeout(() => {
-      d.checklist.forEach((ans, i) => {
-        if(ans) setCheckAnswer(i, ans);
-      });
-    }, 100);
+    window._pendingChecklist = d.checklist;
   }
 
   // 랩업 복원
@@ -7138,7 +7143,6 @@ async function manualSave(){
     };
 
     // GET 방식으로 전송 (Apps Script CORS 안정성)
-    const fullDataStr = encodeURIComponent(JSON.stringify(d));
     const p = new URLSearchParams({
       action:'saveRetire', fp:fpCode,
       name:d.name, life:state.lifeNames[state.lifeType],
@@ -7149,11 +7153,16 @@ async function manualSave(){
       note:d.wrapup.note||'',
       date:d.datetime,
     });
-    // fullData는 별도로 추가 (URL 길이 초과 시 잘릴 수 있으나 핵심 데이터는 보장)
-    const url = APPS_SCRIPT_URL + '?' + p.toString() + '&fullData=' + fullDataStr.slice(0, 3000);
-    const res = await fetch(url);
+    const res = await fetch(APPS_SCRIPT_URL + '?' + p.toString());
     const data = await res.json();
-    if(data.ok){
+
+    // fullData 별도 저장 (상품/체크리스트 포함)
+    if(data.ok) {
+      const p2 = new URLSearchParams({
+        action:'saveFullData', fp:fpCode, name:d.name,
+        fullData: JSON.stringify(d)
+      });
+      fetch(APPS_SCRIPT_URL + '?' + p2.toString()).catch(()=>{});
       showToast('✅ 저장 완료! 스프레드시트에 기록됐습니다', 3000);
       if(btn){ btn.innerHTML='<span style="font-size:22px;">✅</span> 저장 완료'; btn.style.borderColor='rgba(82,183,136,0.9)'; btn.disabled=false; }
     } else { throw new Error(data.msg || '저장 실패'); }
@@ -7210,18 +7219,24 @@ async function loadCustomer(){
 
 function applyLoadedData(d) {
   if(!d) return;
-  // fullData가 있으면 전체 복원, 없으면 기본 복원
-  if(d.fullData) {
-    try {
-      const full = typeof d.fullData === 'string' ? JSON.parse(d.fullData) : d.fullData;
-      restoreAllData(full);
-    } catch(e) { restoreAllData(d); }
-  } else {
-    restoreAllData(d);
+  try {
+    // fullData가 있으면 전체 복원, 없으면 기본 복원
+    if(d.fullData) {
+      try {
+        const full = typeof d.fullData === 'string' ? JSON.parse(d.fullData) : d.fullData;
+        restoreAllData(full);
+      } catch(e) { restoreAllData(d); }
+    } else {
+      restoreAllData(d);
+    }
+    const box = document.getElementById('fpLoadBox');
+    if(box) box.style.display = 'none';
+    const res = document.getElementById('loadResult');
+    if(res) res.style.display = 'none';
+    goNext();
+  } catch(err) {
+    showToast('⚠️ 불러오기 중 오류: ' + err.message.slice(0,30), 4000);
   }
-  document.getElementById('fpLoadBox').style.display = 'none';
-  document.getElementById('loadResult').style.display = 'none';
-  goNext();
 }
 
 function updateRiskSeedMsg() {
