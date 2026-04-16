@@ -719,15 +719,21 @@ html, body {
 #screen-5a .right-panel > div:first-child > div:last-child {
   min-height: 0 !important;
   height: 100% !important;
-  position: sticky !important;
-  top: 0 !important;
-  align-self: start !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  align-self: stretch !important;
 }
 #screen-5a #rv5a-pie {
   height: 100% !important;
   max-height: calc(100vh - 164px) !important;
-  overflow: hidden !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(232,160,32,0.65) rgba(255,255,255,0.08) !important;
 }
+#screen-5a #rv5a-pie::-webkit-scrollbar { width: 6px; }
+#screen-5a #rv5a-pie::-webkit-scrollbar-track { background: rgba(255,255,255,0.06); border-radius:999px; }
+#screen-5a #rv5a-pie::-webkit-scrollbar-thumb { background: rgba(232,160,32,0.65); border-radius:999px; }
 #screen-5a .right-panel > div:first-child > div:first-child::-webkit-scrollbar {
   width: 10px;
 }
@@ -1028,8 +1034,10 @@ html, body {
             <div style="font-size:28px; font-weight:900; color:var(--red); letter-spacing:-1px; line-height:1;">한국 <span style="color:var(--red);">1위</span></div>
             <div style="font-size:13px; color:var(--muted); margin-top:4px;">OECD 평균(14.8%)의 약 3배</div>
           </div>
-          <div style="font-size:13px; color:var(--muted); text-align:right; line-height:1.7;">
-            <span style="color:var(--amber);">👉</span> 지금 내 갭은<br>얼마인지 확인해보세요
+          <div style="font-size:13px; color:var(--muted); text-align:right; line-height:1.8;">
+            <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:4px;">준비된 노후자금</div>
+            <div style="font-size:18px; font-weight:900; color:var(--red);">평균 11년이면 바닥</div>
+            <div style="font-size:12px; color:rgba(224,90,64,0.7); margin-top:3px;">나머지 19년은?</div>
           </div>
         </div>
       </div>
@@ -2163,36 +2171,49 @@ html, body {
         </div>
 
         <!-- ── 오른쪽: 내 노후파이 (자동표시) ── -->
-        <div id="rv5a-pie" class="rv5a-item" style="background:var(--card); border-radius:16px; padding:14px 16px; display:flex; flex-direction:column; overflow:hidden;">
+        <div id="rv5a-pie" class="rv5a-item" style="background:var(--card); border-radius:16px; padding:14px 16px; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden;">
           <!-- 제목 + 저축액 -->
           <div style="flex-shrink:0; margin-bottom:4px;">
             <div style="font-size:30px; font-weight:900; color:var(--text); letter-spacing:-1px; margin-bottom:8px;">🥧 나의 노후파이 점수</div>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:17px; color:var(--muted);">월 저축 총액</span>
-              <span id="pieMonthlyTotal" style="font-size:32px; font-weight:900; color:var(--amber); letter-spacing:-1px; line-height:1;">—</span>
-              <span style="font-size:17px; color:var(--muted);">만원 / 월</span>
+            <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
+              <span style="font-size:17px; color:var(--muted); font-weight:600;">월 저축 총액</span>
+              <span id="pieMonthlyTotal" style="font-size:44px; font-weight:900; color:var(--amber); letter-spacing:-2px; line-height:1;">—</span>
+              <span style="font-size:17px; color:var(--muted); font-weight:600;">만원 / 월</span>
             </div>
+            <div id="pieRiskNote" style="font-size:12px; color:rgba(155,89,182,0.8); margin-top:2px; display:none;"></div>
           </div>
           <!-- 파이 + 레전드 -->
           <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; min-height:0; position:relative;">
             <canvas id="myPieChart" width="420" height="420" style="flex-shrink:0; max-width:100%; max-height:84%;"></canvas>
             <div id="myPieLegend" style="display:flex; gap:22px; margin-top:10px; flex-wrap:wrap; justify-content:center; flex-shrink:0;"></div>
+          <div id="riskBadge" style="display:none; margin-top:10px; padding:8px 16px; background:rgba(155,89,182,0.1); border:1px solid rgba(155,89,182,0.3); border-radius:10px; align-items:center; gap:10px; flex-shrink:0;">
+            <span style="font-size:15px;">🛡️</span>
+            <span style="font-size:13px; color:rgba(155,89,182,0.9); font-weight:600;">리스크 관리 (보험료)</span>
+            <span id="riskBadgeAmt" style="font-size:16px; font-weight:900; color:#9B59B6;">—</span>
+            <span style="font-size:13px; color:var(--muted);">만원 / 월</span>
+          </div>
+
           </div>
           <!-- 점수 근거 -->
           <div style="flex-shrink:0; margin-top:10px; padding:12px 16px; background:rgba(255,255,255,0.04); border-radius:10px; border:1px solid rgba(255,255,255,0.07);">
             <div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:8px; letter-spacing:0.3px;">📋 노후파이 점수 산정 기준</div>
             <div style="display:flex; flex-direction:column; gap:5px;">
               <div style="display:flex; justify-content:space-between; font-size:12px;">
-                <span style="color:var(--muted);">구성 점수 (장기≥20% + 단기≤50% 동시 충족)</span>
+                <span style="color:var(--muted);">구성 점수 (장기25 + 중기10 + 균형10 + 리스크5)</span>
                 <span style="color:var(--amber); font-weight:700;">최대 50점</span>
               </div>
               <div style="display:flex; justify-content:space-between; font-size:12px;">
                 <span style="color:var(--muted);">준비율 점수 (100% 기준 · 130% 초과 시 보너스)</span>
                 <span style="color:var(--amber); font-weight:700;">최대 60점</span>
               </div>
-              <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:5px; display:flex; justify-content:space-between; font-size:12px;">
-                <span style="color:var(--muted);">80점↑ 우수 · 60점↑ 양호 · 40점↑ 보통 · 40점↓ 위험</span>
+
+              <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:5px; font-size:11px; color:var(--muted2); line-height:1.8;">
+                단기 1.5% 단리 · 중기 3.0% 복리 · 장기 3.5% 복리 적용<br>
+                물가상승률 2.5% 반영 · 보유자산 성격별 차등 반영<br>
+                단기 과집중 시 커버율 보정 (31~50%→85% / 51~70%→70% / 71%↑→55%)<br>
+                80점↑ 우수 · 60점↑ 양호 · 40점↑ 보통 · 40점↓ 위험
               </div>
+
             </div>
           </div>
         </div>
@@ -4030,14 +4051,14 @@ html, body {
             <div style="flex:1;">
               <div style="font-size:11px; color:var(--muted); font-weight:600; margin-bottom:6px;">시간</div>
               <div style="display:flex; align-items:center; gap:4px;">
-                <select id="wu-ampm" style="background:var(--card); border:none; outline:none; color:var(--amber); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; padding:0;">
+                <select id="wu-ampm" style="background:transparent; border:none; outline:none; color:var(--amber); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; padding:0;">
                   <option value="오전">오전</option>
                   <option value="오후" selected>오후</option>
                 </select>
-                <select id="wu-hour" style="background:var(--card); border:none; outline:none; color:var(--amber); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; padding:0; margin-left:4px;">
+                <select id="wu-hour" style="background:transparent; border:none; outline:none; color:var(--amber); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; padding:0; margin-left:4px;">
                 </select>
                 <span style="color:var(--amber); font-size:16px; font-weight:900;">:</span>
-                <select id="wu-min" style="background:var(--card); border:none; outline:none; color:var(--amber); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; padding:0;">
+                <select id="wu-min" style="background:transparent; border:none; outline:none; color:var(--amber); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; padding:0;">
                 </select>
               </div>
             </div>
@@ -5217,11 +5238,11 @@ const MONTHLY_PRODUCTS = {
   '단기납종신':  {label:'중기', bucket:'mid',   color:'#52B788', isAnnuity:true, rate:0.025, annuityLabel:'납입완료 후 복리 적립', paymentOptions:[5,7,10]},
   '달러종신':    {label:'중기', bucket:'mid',   color:'#52B788', isAnnuity:true, rate:0.030, annuityLabel:'단기납 달러 종신 · 환율 헤지 + 복리 적립', paymentOptions:[5,7,10]},
   'IRP·퇴직연금':{label:'장기', bucket:'long',  color:'#E8A020'},
-  '연금저축':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.03, taxNote:'세액공제 16.5% 혜택 · 수령 시 연금소득세 3.3~5.5% 적용'},
-  '달러보험':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.03, annuityLabel:'납입완료 후 달러 복리 적립'},
-  '연금보험':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.025},
-  '변액연금':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.030},
-  '종신보험(연금전환)':{label:'장기', bucket:'long', color:'#E8A020', isAnnuity:true, rate:0.025, annuityLabel:'종신보험 연금전환 특약 활용 · 사망보장 → 연금으로 전환'},
+  '연금저축':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.028, taxNote:'세액공제 16.5% 혜택 · 수령 시 연금소득세 3.3~5.5% 적용 (세후 2.8% 적용)'},
+  '달러보험':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.030, annuityLabel:'납입완료 후 달러 3.0% 복리 적립'},
+  '연금보험':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.025, annuityLabel:'공시이율 기반 2.5% 복리'},
+  '변액연금':    {label:'장기', bucket:'long',  color:'#E8A020', isAnnuity:true, rate:0.040, annuityLabel:'실적 배당형 4.0% 복리 (추정)'},
+  '종신보험(연금전환)':{label:'장기', bucket:'long', color:'#E8A020', isAnnuity:true, rate:0.025, annuityLabel:'종신보험 연금전환 특약 · 사망보장 → 연금 (2.5% 적용)'},
   '종신보험':    {label:'리스크관리', bucket:'risk', color:'#9B59B6'},
   '건강보험':    {label:'리스크관리', bucket:'risk', color:'#9B59B6'},
   '상해보험':    {label:'리스크관리', bucket:'risk', color:'#9B59B6'},
@@ -5474,8 +5495,25 @@ function syncProductToBuckets() {
   const retireAge = +document.getElementById('retireAge')?.value||60;
   const retireYears = Math.max(5, (state.gender === 'M' ? 86 : 90) - retireAge);
 
+  // 보유자산 성격별 반영률 (노후 준비율 계산용)
+  const ASSET_RATES = {
+    '예금': 0.60, '주식잔고': 0.40, 'ETF잔고': 0.45,
+    '퇴직금(예상)': 0.65, '부동산(투자)': 0.10,
+    '적금 (만기/해지금)': 0.65, '파킹통장 (적립금)': 0.60,
+    'CMA (평가금)': 0.60, '저축보험 (환급금)': 0.55,
+    '종신보험 (환급금)': 0.40, '달러보험 (환급금)': 0.45,
+    'IRP·퇴직연금 (적립금)': 0.65, '단기납종신 (환급금)': 0.45,
+    '달러종신 (환급금)': 0.45, '종신보험(연금전환) (환급금)': 0.45,
+    'ETF·펀드 (평가금)': 0.45,
+  };
+  let assetWeighted = 0; // 성격 반영 가중 자산
   productRows.forEach(r => {
-    if(r.type === 'asset'){ assetTotal += r.amount||0; return; }
+    if(r.type === 'asset'){
+      assetTotal += r.amount||0;
+      const rate = ASSET_RATES[r.name] ?? 0.30;
+      assetWeighted += (r.amount||0) * rate;
+      return;
+    }
     const info = MONTHLY_PRODUCTS[r.name];
     if(info) {
       sums[info.bucket] = (sums[info.bucket]||0) + (r.amount||0);
@@ -5507,6 +5545,7 @@ function syncProductToBuckets() {
   const assetEl = document.getElementById('prodAssetTotal');
   if(assetEl) assetEl.textContent = assetTotal > 0 ? assetTotal.toLocaleString()+'만원' : '—';
   window._extraAsset = assetTotal;
+  window._extraAssetWeighted = assetWeighted;
   // 리스크 관리 진단 업데이트
   const income = +(document.getElementById('monthlyIncome')?.value)||350;
   const idealMin = Math.round(income * 0.08);
@@ -5557,11 +5596,25 @@ function updatePie() {
   const lp=savTotal?100-sp-mp:0;
   window._lastPiePcts=[sp,mp,lp,0];
   window._pieAmounts=[s,m,l]; // 슬라이스별 실제 만원 금액
+  drawPie('myPieChart',[sp,mp,lp],['#4A90D9','#52B788','#E8A020'],['단기','중기','장기']);
 
   const monthlyTotalEl=document.getElementById('pieMonthlyTotal');
+  const savingOnly = s+m+l;
   if(monthlyTotalEl) monthlyTotalEl.textContent=total>0?total:'—';
+  const riskNote = document.getElementById('pieRiskNote');
+  if(riskNote){ riskNote.style.display='none'; }
+  const riskBadge = document.getElementById('riskBadge');
+  const riskBadgeAmt = document.getElementById('riskBadgeAmt');
+  if(riskBadge){ riskBadge.style.display = r>0 ? 'flex' : 'none'; }
+  if(riskBadgeAmt){ riskBadgeAmt.textContent = r>0 ? r : '—'; }
 
-  drawPie('myPieChart',[sp,mp,lp],['#4A90D9','#52B788','#E8A020'],['단기','중기','장기']);
+  // 파이: 리스크(보험료)도 별도 슬라이스로 표시
+  const rTotal = s+m+l+r;
+  const rp = rTotal ? Math.round(r/rTotal*100) : 0;
+  const spR = rTotal ? Math.round(s/rTotal*100) : 0;
+  const mpR = rTotal ? Math.round(m/rTotal*100) : 0;
+  const lpR = rTotal ? 100-spR-mpR-rp : 0;
+
 
   const leg=document.getElementById('myPieLegend');
   if(leg) leg.innerHTML=`
@@ -5590,10 +5643,26 @@ function updatePie() {
   // ① 점수판 업데이트
   const warn=document.getElementById('pieWarning');
   if(warn && total>0){
-    // ── 구성 점수: 장기≥20% + 단기≤50% 동시 조건 ──
-    const longScore  = Math.min(35, Math.round((lp/20)*35));   // 장기 기여 최대 35점
-    const shortPenalty = sp>50 ? Math.round(((sp-50)/50)*15) : 0; // 단기 과집중 페널티
-    const compScore  = Math.max(0, Math.min(50, longScore - shortPenalty));
+    // ── 구성 점수: 장기≥20% + 단기≤50% + 중기 존재 + 리스크 관리 동시 조건 ──
+    // ── 구성 점수 계산 ──
+    const _rawIncome = +(document.getElementById('monthlyIncome')?.value)||0;
+    // 소득 미입력 시 직업 유형 + 나이대 기반 평균값 자동 보완
+    const _jobType   = state.jobType ?? 0;
+    const _age       = +(document.getElementById('currentAge')?.value)||42;
+    const AVG_INCOME = {
+      0: _age<30?220:_age<40?320:_age<50?400:_age<60?430:350, // 직장인
+      1: _age<30?180:_age<40?280:_age<50?360:_age<60?380:300, // 자영업자
+      2: 100,  // 전업주부 (임의가입 기준)
+      3: _age<30?200:_age<40?280:_age<50?320:_age<60?300:250, // 프리랜서
+    };
+    const income = _rawIncome > 0 ? _rawIncome : (AVG_INCOME[_jobType]||300);
+    const _incomeAutoFilled = _rawIncome === 0;
+    const longScore    = Math.min(25, Math.round((lp/30)*25));         // 장기 기여 최대 25점 (30% 이상 만점)
+    const midBonus     = mp>0 ? 10 : 0;                                // 중기 존재 시 +10점
+    const riskBonus    = (income>0 && r>0 && (r/income)*100>=8) ? 5 : 0; // 소득 대비 보험료 8% 이상 +5점
+    const balanceBonus = (s>0 && m>0 && l>0) ? 10 : 0;               // 단기·중기·장기 모두 있을 때 균형 보너스 +10점
+    const shortPenalty = sp>50 ? Math.round(((sp-50)/50)*15) : 0;     // 단기 과집중 페널티
+    const compScore    = Math.max(0, Math.min(50, longScore + midBonus + riskBonus + balanceBonus - shortPenalty));
     const compBarW   = Math.min(100, compScore*2); // 0~50 → 0~100%
     let gradeColor, gradeIcon, grade, gradeMsg;
     if(lp===0){
@@ -5605,7 +5674,7 @@ function updatePie() {
     } else if(sp>50){
       grade='단기 과집중'; gradeColor='var(--amber)'; gradeIcon='⚠️';
       gradeMsg='단기 비중이 너무 높아 복리 효과가 줄어듭니다';
-    } else if(lp>=20 && lp<=35 && sp<=50){
+    } else if(lp>=20 && lp<=35 && sp<=50 && mp>0){
       grade='균형'; gradeColor='var(--green)'; gradeIcon='✅';
       gradeMsg='권장 비율 달성 — 좋은 구조입니다';
     } else {
@@ -5621,7 +5690,7 @@ function updatePie() {
       </div>
       <div style="margin-bottom:10px;margin-top:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-          <span style="font-size:13px;color:var(--muted);">구성 점수 (장기 비중)</span>
+          <span style="font-size:13px;color:var(--muted);">구성 점수 (장기·중기·균형·리스크 보너스)</span>
           <span style="font-size:14px;font-weight:700;color:${gradeColor};">${compScore}/50</span>
         </div>
         <div style="height:8px;background:rgba(255,255,255,0.07);border-radius:4px;overflow:hidden;">
@@ -5639,6 +5708,8 @@ function updatePie() {
       </div>
       <div style="font-size:13px;color:var(--muted2);margin-top:10px;">${gradeMsg}</div>
       <div id="diagnosisMsg" style="margin-top:10px; padding:10px 12px; border-radius:9px; font-size:13px; line-height:1.6; font-weight:600;"></div>`;
+
+
   } else if(warn && total===0){
     warn.innerHTML=`
       <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.5px;margin-bottom:8px;">노후파이 점수</div>
@@ -5686,23 +5757,38 @@ function updatePie() {
     const retireYears=Math.max(5, (state.gender === 'M' ? 86 : 90)-retireAge);
     const workYears=Math.max(1, retireAge-currentAge);
 
-    // 총 노후 필요 자금 (생활비 기준)
-    const totalNeeded=Math.round(monthly*12*retireYears*1.25);
+    // 총 노후 필요 자금 — 물가상승률 2.5% 반영
+    const inflationFactor = Math.pow(1.025, workYears); // 은퇴 시점 물가 보정
+    const totalNeeded = Math.round(monthly * inflationFactor * 12 * retireYears);
     // 국민연금 총 커버
     const pensionTotal=Math.round(pension*12*retireYears);
     // 저축 예상 자산 (보험료 제외한 저축 부분만)
     const n=workYears*12;
-    const r=3.5/100/12;
     const curS2=+document.getElementById('bucket-short').value||0;
     const curM2=+document.getElementById('bucket-mid').value||0;
     const curL2=+document.getElementById('bucket-long').value||0;
     const PMT=curS2+curM2+curL2;
-    const savedTotal=Math.round(PMT*((Math.pow(1+r,n)-1)/r)) + Math.round((window._extraAsset||0)*0.65*Math.pow(1.035,workYears));
+
+    // 단기 1.5% 단리 / 중기 3.0% 복리 / 장기 3.5% 복리 분리 계산
+    const rS = 0.015; // 단기 연 1.5% 단리
+    const rM = 0.030/12; // 중기 연 3.0% 복리
+    const rL = 0.035/12; // 장기 연 3.5% 복리
+    const fvShort = curS2 > 0 ? Math.round(curS2 * n * (1 + rS * (n+1) / 24)) : 0; // 단리
+    const fvMid   = curM2 > 0 ? Math.round(curM2 * ((Math.pow(1+rM, n)-1)/rM)) : 0;
+    const fvLong  = curL2 > 0 ? Math.round(curL2 * ((Math.pow(1+rL, n)-1)/rL)) : 0;
+    const savedTotal = fvShort + fvMid + fvLong + Math.round((window._extraAssetWeighted||0)*Math.pow(1.035,workYears));
+
+    // 단기 과집중 커버율 보정 계수
+    const shortRatio = PMT > 0 ? curS2/PMT : 0;
+    const coverAdj = shortRatio > 0.70 ? 0.55
+                   : shortRatio > 0.50 ? 0.70
+                   : shortRatio > 0.30 ? 0.85
+                   : 1.00;
 
     // 개인연금 추정 총액
     const annuityMonthly = window._annuityMonthlyEst || 0;
     const annuityTotal = Math.round(annuityMonthly * 12 * retireYears);
-    const combinedTotal = savedTotal + pensionTotal + annuityTotal;
+    const combinedTotal = Math.round((savedTotal + annuityTotal) * coverAdj) + pensionTotal;
     const coverage = totalNeeded > 0 ? Math.round(combinedTotal / totalNeeded * 100) : 100;
     const savPct=totalNeeded>0?Math.round(savedTotal/totalNeeded*100):0;
     const penPct=totalNeeded>0?Math.round(pensionTotal/totalNeeded*100):0;
@@ -5772,9 +5858,17 @@ function updatePie() {
     const scoreBarColor = coverage>=80?'var(--green)':coverage>=50?'var(--amber)':'var(--red)';
     // 구성 점수 재계산 (동일 로직으로)
     const _lp2 = lp, _sp2 = sp;
-    const _longS = Math.min(35, Math.round((_lp2/20)*35));
-    const _shortP = _sp2>50 ? Math.round(((_sp2-50)/50)*15) : 0;
-    const _compS = Math.max(0, Math.min(50, _longS - _shortP));
+    const _rawInc2  = +(document.getElementById('monthlyIncome')?.value)||0;
+    const _jt2      = state.jobType ?? 0;
+    const _ag2      = +(document.getElementById('currentAge')?.value)||42;
+    const AVG_INC2  = {0:_ag2<30?220:_ag2<40?320:_ag2<50?400:_ag2<60?430:350, 1:_ag2<30?180:_ag2<40?280:_ag2<50?360:_ag2<60?380:300, 2:100, 3:_ag2<30?200:_ag2<40?280:_ag2<50?320:_ag2<60?300:250};
+    const _income   = _rawInc2 > 0 ? _rawInc2 : (AVG_INC2[_jt2]||300);
+    const _longS   = Math.min(25, Math.round((_lp2/30)*25));
+    const _midB    = mp>0 ? 10 : 0;
+    const _riskB   = (_income>0 && r>0 && (r/_income)*100>=8) ? 5 : 0;
+    const _balB    = (s>0 && m>0 && l>0) ? 10 : 0;
+    const _shortP  = _sp2>50 ? Math.round(((_sp2-50)/50)*15) : 0;
+    const _compS   = Math.max(0, Math.min(50, _longS + _midB + _riskB + _balB - _shortP));
     const totalScore = Math.min(100, _compS + coverScore);
 
     const coverLabel=document.getElementById('coverScoreLabel');
@@ -5785,7 +5879,7 @@ function updatePie() {
     if(scoreTotalEl){ scoreTotalEl.textContent=totalScore; scoreTotalEl.style.color=totalScore>=80?'var(--green)':totalScore>=60?'var(--amber)':totalScore>=40?'#F5C060':'var(--red)'; }
 
     if(window._lastPiePcts){
-      drawPie('myPieChart', window._lastPiePcts, ['#4A90D9','#52B788','#E8A020','#9B59B6'], ['단기','중기','장기','리스크']);
+      drawPie('myPieChart', window._lastPiePcts.slice(0,3), ['#4A90D9','#52B788','#E8A020'], ['단기','중기','장기']);
     }
 
     // ── 개인화 진단 문구 ──
@@ -6146,9 +6240,9 @@ function initScoreScreen() {
   set('sc-long-desc','비중 '+lPct+'% · 연금·종신보험');
   // 30년 후 개별
   const fv=(m,rate,yrs,simple)=>{ const mo=yrs*12; return simple? Math.round(m*mo*(1+rate*(mo+1)/24)) : Math.round(m*((Math.pow(1+rate/12,mo)-1)/(rate/12))); };
-  set('sc-short-30y','20년 후 '+fmtAmt(fv(curS,0.015,30,true)));
-  set('sc-mid-30y','20년 후 '+fmtAmt(fv(curM,0.03,30,false)));
-  set('sc-long-30y','20년 후 '+fmtAmt(fv(curL,0.04,30,false)));
+  set('sc-short-30y','20년 후 '+fmtAmt(fv(curS,0.015,30,true)));   // 단기 1.5% 단리
+  set('sc-mid-30y','20년 후 '+fmtAmt(fv(curM,0.030,30,false)));   // 중기 3.0% 복리
+  set('sc-long-30y','20년 후 '+fmtAmt(fv(curL,0.035,30,false)));  // 장기 3.5% 복리
 
   // 하단 가운데: 국민연금
   set('sc-pension-monthly', pension+'만원');
@@ -7289,7 +7383,7 @@ async function manualSave(){
         fullData: JSON.stringify(d)
       });
       fetch(APPS_SCRIPT_URL + '?' + p2.toString()).catch(()=>{});
-      showToast('✅ 저장 완료! 스프레드시트에 기록됐습니다', 3000);
+      showToast('✅ 저장 완료! 언제든 다시 꺼내볼 수 있어요', 3000);
       if(btn){ btn.innerHTML='<span style="font-size:22px;">✅</span> 저장 완료'; btn.style.borderColor='rgba(82,183,136,0.9)'; btn.disabled=false; }
     } else { throw new Error(data.msg || '저장 실패'); }
   }catch(e){
@@ -7733,13 +7827,15 @@ function rvPrev() {
 
 // ── 통합 키보드 핸들러 ──
 document.addEventListener('keydown', e => {
-  if(e.repeat) return;
+  // Enter/Backspace는 홀드 시 연속 입력 허용
+  if(e.repeat && e.key !== 'Enter' && e.key !== 'Backspace') return;
   // 비밀번호 게이트가 활성화 상태면 메인 키 핸들러 무시
   const pwGate = document.getElementById('pwGate');
   if(pwGate && pwGate.style.display !== 'none') return;
   // FP 코드 모달이 열려있으면 메인 키 핸들러 무시
   const fpModal = document.getElementById('fpCodeModal');
   if(fpModal && fpModal.classList.contains('show')) return;
+  // FP 코드 모달이 열려있으면 메인 키 핸들러 무시
   const tag = document.activeElement.tagName;
   const isInput = ['INPUT','TEXTAREA','SELECT'].includes(tag);
   const overlay = document.getElementById('transitionOverlay');
@@ -7750,6 +7846,10 @@ document.addEventListener('keydown', e => {
     const target = pageMap[e.key];
     if(target !== undefined) {
       e.preventDefault();
+      // 현재 위치 히스토리에 저장 (Backspace로 돌아오기 위해)
+      if(screenHistory[screenHistory.length - 1] !== currentIdx) {
+        screenHistory.push(currentIdx);
+      }
       screenHistory.push(target);
       showScreen(target);
       showToast(`📄 ${e.key}번 페이지로 이동`, 1500);
@@ -7761,6 +7861,10 @@ document.addEventListener('keydown', e => {
   if(e.key === 'Tab' && !isInput) {
     e.preventDefault();
     const lastIdx = SCREENS.length - 1;
+    // 현재 위치가 히스토리 마지막과 다르면 현재 위치를 먼저 저장 (Backspace로 돌아오기 위해)
+    if(screenHistory[screenHistory.length - 1] !== currentIdx) {
+      screenHistory.push(currentIdx);
+    }
     screenHistory.push(lastIdx);
     showScreen(lastIdx);
     return;
@@ -7914,6 +8018,28 @@ document.addEventListener('keydown', e => {
       else goBack();
       return;
     }
+    return;
+  }
+
+  // ── 마지막 화면(완료)에서 Backspace → 항상 바로 전 화면으로 ──
+  if(currentIdx === SCREENS.length - 1 && e.key === 'Backspace') {
+    if(isInput) return;
+    e.preventDefault();
+    if(screenHistory.length > 1) {
+      screenHistory.pop();
+      showScreen(screenHistory[screenHistory.length - 1]);
+    } else {
+      // 히스토리 없으면 wrapup(15)으로
+      showScreen(SCREENS.length - 2);
+    }
+    return;
+  }
+
+  // ── 마지막 화면(완료)에서 Backspace → 히스토리 기반 바로 전 화면 ──
+  if(currentIdx === SCREENS.length - 1 && e.key === 'Backspace') {
+    if(isInput) return;
+    e.preventDefault();
+    goBack();
     return;
   }
 
