@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>노후파이 클래스 PC | 유니스 VIP</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0C1628">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
 
@@ -500,6 +506,7 @@ input[type=range]::-webkit-slider-thumb {
 .fp-btn { border:none; border-radius:12px; padding:13px 20px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; }
 .fp-btn.secondary { background:rgba(255,255,255,0.06); color:var(--muted); border:1px solid rgba(255,255,255,0.1); }
 .fp-btn.primary { background:linear-gradient(135deg,var(--amber),var(--amber2)); color:#0C1628; }
+#currentAge::placeholder { font-size:15px; font-weight:400; color:var(--muted); }
 @media (max-width: 1280px) {
   body { font-size: 16px; }
   .two-col { grid-template-columns: 320px 1fr; }
@@ -762,6 +769,103 @@ html, body {
 </head>
 <body>
 
+<!-- ═══ 비밀번호 / 만료 게이트 ═══ -->
+<div id="pwGate" style="
+  position:fixed; inset:0; z-index:99999;
+  background:#0C1628;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:0; padding:32px;
+">
+  <div style="font-size:64px; margin-bottom:12px;">🥧</div>
+  <div style="font-size:28px; font-weight:900; color:#F5F0E8; letter-spacing:-1px; margin-bottom:6px;">노후파이 클래스</div>
+  <div style="font-size:14px; color:rgba(245,240,232,0.45); margin-bottom:40px;">유니스 VIP 금융사업부</div>
+
+  <!-- 만료 메시지 (기본 숨김) -->
+  <div id="pwExpiredBox" style="display:none; flex-direction:column; align-items:center; gap:14px; max-width:360px; text-align:center;">
+    <div style="font-size:48px;">🔒</div>
+    <div style="font-size:20px; font-weight:900; color:#F5F0E8;">사용 기간이 만료되었습니다</div>
+    <div style="font-size:14px; color:rgba(245,240,232,0.5); line-height:1.8;">
+      이 도구는 <strong style="color:#E8A020;">2026년 5월 1일</strong>까지 운영되었습니다.<br>
+      연장이 필요하시면 대표에게 문의해 주세요.
+    </div>
+    <div style="font-size:13px; color:rgba(245,240,232,0.35); margin-top:8px;">📞 김태규 대표 · 010-2049-0093</div>
+  </div>
+
+  <!-- 비밀번호 입력 폼 -->
+  <div id="pwForm" style="display:flex; flex-direction:column; align-items:center; gap:16px; width:100%; max-width:340px;">
+    <div style="width:100%;">
+      <input id="pwInput" type="password"
+        placeholder="비밀번호를 입력해 주세요"
+        autocomplete="off"
+        onkeydown="if(event.key==='Enter') checkPw()"
+        style="
+          width:100%; padding:16px 20px; border-radius:14px;
+          border:1.5px solid rgba(255,255,255,0.12);
+          background:rgba(255,255,255,0.05);
+          color:#F5F0E8; font-size:18px; font-weight:600;
+          font-family:inherit; outline:none; text-align:center;
+          letter-spacing:3px; box-sizing:border-box;
+          transition:border-color 0.2s;
+        "
+        onfocus="this.style.borderColor='rgba(232,160,32,0.5)'"
+        onblur="this.style.borderColor='rgba(255,255,255,0.12)'"
+      >
+    </div>
+    <div id="pwError" style="display:none; font-size:13px; color:#E05A40; font-weight:600;">
+      ⚠️ 비밀번호가 올바르지 않습니다
+    </div>
+    <button onclick="checkPw()" style="
+      width:100%; padding:16px; border-radius:14px; border:none;
+      background:linear-gradient(135deg,#E8A020,#F5C060);
+      color:#0C1628; font-family:inherit; font-size:17px;
+      font-weight:900; cursor:pointer; letter-spacing:0.3px;
+    ">입장하기 →</button>
+    <div style="font-size:12px; color:rgba(245,240,232,0.25); margin-top:4px;">
+      유효 기간 · ~2026년 5월 1일
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const PW     = 'nohupie2026';
+  const EXPIRY = new Date('2026-05-02T00:00:00+09:00');
+  const SK     = 'unice_nohupie_auth_v1';
+  const gate   = document.getElementById('pwGate');
+  const form   = document.getElementById('pwForm');
+  const expBox = document.getElementById('pwExpiredBox');
+  const now    = new Date();
+
+  if(now >= EXPIRY){
+    form.style.display   = 'none';
+    expBox.style.display = 'flex';
+    return;
+  }
+
+  try{
+    if(sessionStorage.getItem(SK) === 'ok'){
+      gate.style.display = 'none';
+      return;
+    }
+  }catch(e){}
+
+  window.checkPw = function(){
+    const input = document.getElementById('pwInput');
+    const err   = document.getElementById('pwError');
+    if(!input) return;
+    if(input.value === PW){
+      try{ sessionStorage.setItem(SK,'ok'); }catch(e){}
+      gate.style.display = 'none';
+    } else {
+      err.style.display = 'block';
+      input.value = '';
+      input.focus();
+      setTimeout(()=>{ err.style.display='none'; }, 2500);
+    }
+  };
+})();
+</script>
+
 <!-- FP 코드 모달 -->
 <div class="fp-modal" id="fpCodeModal" aria-hidden="true">
   <div class="fp-modal-card" role="dialog" aria-modal="true" aria-labelledby="fpModalTitle">
@@ -856,7 +960,7 @@ html, body {
       <!-- FP 전용 불러오기 -->
       <div>
         <button onclick="document.getElementById('fpLoadBox').style.display=document.getElementById('fpLoadBox').style.display==='none'?'flex':'none'"
-          style="background:none; border:none; color:rgba(255,255,255,0.15); font-size:12px; cursor:pointer; padding:0; font-family:inherit;">🔑 이전 상담 불러오기</button>
+          style="display:none; background:none; border:none; color:rgba(255,255,255,0.15); font-size:12px; cursor:pointer; padding:0; font-family:inherit;">🔑 이전 상담 불러오기</button>
         <div id="fpLoadBox" style="display:none; flex-direction:row; gap:8px; margin-top:8px; max-width:400px;">
           <input id="searchName" type="text" placeholder="고객님 성함 입력" style="flex:1; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-family:inherit; font-size:14px; outline:none;">
           <button onclick="loadCustomer()" style="padding:10px 18px; border-radius:10px; border:1px solid var(--border); background:var(--card2); color:var(--muted); font-family:inherit; font-size:14px; cursor:pointer;">불러오기</button>
@@ -1079,7 +1183,7 @@ html, body {
             <div class="input-row">
               <span style="font-size:18px;">🎂</span>
               <input class="input-field" type="number" id="currentAge" placeholder="나이 입력" min="25" max="70" oninput="calcPension()"
-                style="font-size:26px; font-weight:700; text-align:right; color:var(--text);">
+                style="font-size:26px; font-weight:700; text-align:right; color:var(--text);" class="age-input">
               <span style="font-size:15px; color:var(--muted);">세</span>
             </div>
           </div>
@@ -4326,7 +4430,7 @@ const TRANSITION_MSGS = {
     sub: '암 · 심혈관 · 장기요양 · 사망 · 인플레이션\n실제로 얼마나 자주 일어나는지 확인해봐요'
   },
   '11_12': {
-    step: 'STEP 7 · 2026 노후 전략',
+    step: 'STEP 7 · 26년 노후준비 트렌드',
     msg: '2026년,\n노후 준비의 판이 바뀌었습니다',
     sub: '리스크를 대비하면서 자산도 만드는\n두 가지 방법을 소개합니다'
   },
@@ -4464,16 +4568,16 @@ function updateNav() {
   const labels={
     0:'노후 준비도 확인하기 →',
     1:'기본 정보 입력 →',
-    2:'국민연금 부족액 확인 →',
-    3:'저축 3구간 개념 →',
-    4:'노후파이 진단 →',
-    5:'통합 성적표 →',
-    6:'저축 구조 분석 →',
+    2:'노후 라이프스타일 선택 →',
+    3:'노후자금 부족액 진단 →',
+    4:'재테크 기본개념 →',
+    5:'노후파이 진단 →',
+    6:'노후파이 성적표 →',
     7:'세로·가로저축 비교 →',
     8:'저축 구조 재설계 →',
-    9:'리스크 진단 →',
-    10:'리스크 진단 →',
-    11:'2026 노후 전략 →',
+    9:'저축 구조 재설계 →',
+    10:'저축을 위협하는 리스크 →',
+    11:'26년 노후준비 트렌드 →',
     12:'',
     13:'상담 랩업 →',
     14:'상담 랩업 →',
@@ -6920,14 +7024,14 @@ function getShareText(){
     `📅 다음 미팅: ${meetingStr || '—'}`,
     `📍 장소: ${place}`,
     `──────────────`,
-    `유니스 VIP 금융사업부`
+    `한화생명 VIP사업부 유니스`
   ];
 
   // FP 서명 추가
   const fpInfo = window._fpInfo;
   if(fpInfo && fpInfo.name) {
-    const title = fpInfo.title || '설계사';
-    lines.push(`담당: ${fpInfo.name} ${title} 📞 ${fpInfo.phone}`);
+    const title = fpInfo.title || 'FP';
+    lines.push(`${fpInfo.name} ${title} 📞 ${fpInfo.phone}`);
   }
   return lines.join('\n');
 }
@@ -7294,7 +7398,7 @@ function updateFpCodeUi(){
   const fpInfo = window._fpInfo;
   if(code){
     pill.classList.remove('is-empty');
-    const title = fpInfo && fpInfo.title ? fpInfo.title : '설계사';
+    const title = fpInfo && fpInfo.title ? fpInfo.title : 'FP';
     val.textContent = fpInfo && fpInfo.name ? fpInfo.name + ' ' + title : code;
     val.style.color = 'var(--amber)';
   } else {
@@ -7606,6 +7710,28 @@ document.addEventListener('keydown', e => {
   const tag = document.activeElement.tagName;
   const isInput = ['INPUT','TEXTAREA','SELECT'].includes(tag);
   const overlay = document.getElementById('transitionOverlay');
+
+  // 숫자 키 → 페이지 바로 이동 (입력창 포커스 아닐 때)
+  if(!isInput && e.key >= '1' && e.key <= '9') {
+    const pageMap = {'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':10};
+    const target = pageMap[e.key];
+    if(target !== undefined) {
+      e.preventDefault();
+      screenHistory.push(target);
+      showScreen(target);
+      showToast(`📄 ${e.key}번 페이지로 이동`, 1500);
+      return;
+    }
+  }
+
+  // Tab 키 → 마지막 화면(완료)으로 이동
+  if(e.key === 'Tab' && !isInput) {
+    e.preventDefault();
+    const lastIdx = SCREENS.length - 1;
+    screenHistory.push(lastIdx);
+    showScreen(lastIdx);
+    return;
+  }
 
   // 전환 오버레이 — 최우선 처리
   if(overlay && overlay.classList.contains('show')) {
