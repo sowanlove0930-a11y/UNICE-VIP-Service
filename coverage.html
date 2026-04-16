@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>유니스지사 보장분석기</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background: #f0f2f5; min-height: 100vh; }
+  #app { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+
+  /* 헤더 */
+  .logo-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 2rem; }
+  .logo-mark { width: 42px; height: 42px; background: #1a2744; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; font-weight: 700; }
+  .logo-text { font-size: 20px; font-weight: 700; color: #1a2744; }
+  .logo-sub { font-size: 12px; color: #888; margin-top: 2px; }
+
+  /* 업로드 화면 */
+  .upload-card { background: white; border-radius: 16px; padding: 3rem 2rem; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.07); }
+  .upload-icon { width: 72px; height: 72px; background: #1a2744; border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; }
+  .upload-icon svg { width: 36px; height: 36px; fill: white; }
+  .upload-title { font-size: 18px; font-weight: 700; color: #1a2744; margin-bottom: 8px; }
+  .upload-desc { font-size: 14px; color: #888; line-height: 1.7; }
+  .upload-btn-label { display: inline-block; margin-top: 1.5rem; padding: 12px 36px; background: #1a2744; color: white; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  .upload-btn-label:hover { background: #253360; }
+  #file-input { display: none; }
+  .tip-box { margin-top: 1.5rem; background: #f8f9fc; border-radius: 10px; padding: 1rem 1.25rem; text-align: left; }
+  .tip-box p { font-size: 13px; color: #666; line-height: 1.9; }
+
+  /* 로딩 */
+  #loading-screen { display: none; background: white; border-radius: 16px; padding: 4rem 2rem; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.07); }
+  .spinner { width: 52px; height: 52px; border: 4px solid #e8eaf0; border-top-color: #1a2744; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1.5rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-title { font-size: 17px; font-weight: 700; color: #1a2744; margin-bottom: 6px; }
+  .loading-sub { font-size: 13px; color: #888; }
+  .step-list { margin-top: 1.5rem; text-align: left; display: inline-block; }
+  .step-item { font-size: 13px; color: #999; padding: 5px 0; display: flex; align-items: center; gap: 10px; }
+  .step-dot { width: 9px; height: 9px; border-radius: 50%; background: #ddd; flex-shrink: 0; transition: background 0.3s; }
+  .step-dot.active { background: #e8610a; }
+  .step-dot.done { background: #0a7c4e; }
+
+  /* 결과 */
+  #result-screen { display: none; }
+  .result-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px; }
+  .result-title { font-size: 22px; font-weight: 700; color: #1a2744; }
+  .topbar-btns { display: flex; gap: 8px; }
+  .btn { padding: 9px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-navy { background: #1a2744; color: white; }
+  .btn-navy:hover { background: #253360; }
+  .btn-gray { background: white; color: #555; border: 1px solid #ddd; }
+  .btn-gray:hover { background: #f5f5f5; }
+
+  /* 섹션 카드 */
+  .section-card { background: white; border-radius: 14px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1.2rem; padding-bottom: 1rem; border-bottom: 1.5px solid #f0f2f5; }
+  .section-num { width: 28px; height: 28px; border-radius: 7px; background: #1a2744; color: white; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .section-title { font-size: 15px; font-weight: 700; color: #1a2744; }
+
+  /* 고객 정보 */
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .info-item { background: #f8f9fc; border-radius: 10px; padding: 12px 14px; }
+  .info-label { font-size: 11px; color: #999; margin-bottom: 4px; }
+  .info-value { font-size: 15px; font-weight: 700; color: #1a2744; }
+
+  /* 납입 요약 */
+  .pay-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .pay-card { border-radius: 10px; padding: 14px; text-align: center; }
+  .pay-card.paid { background: #e8f5ee; }
+  .pay-card.remain { background: #fff3ec; }
+  .pay-card.total { background: #f0f2f8; }
+  .pay-label { font-size: 11px; color: #888; margin-bottom: 5px; }
+  .pay-amount { font-size: 17px; font-weight: 700; color: #1a2744; }
+  .pay-sub { font-size: 11px; color: #aaa; margin-top: 3px; }
+
+  /* 계약 테이블 */
+  .tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #eee; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: #f8f9fc; padding: 9px 11px; text-align: left; font-weight: 700; color: #555; border-bottom: 1px solid #eee; white-space: nowrap; }
+  td { padding: 9px 11px; border-bottom: 1px solid #f0f0f0; color: #333; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr.sum-row td { font-weight: 700; background: #f8f9fc; }
+
+  /* 배지 */
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 700; }
+  .badge-ok { background: #e8f5ee; color: #0a7c4e; }
+  .badge-lack { background: #fdf0ee; color: #c0392b; }
+  .badge-none { background: #f0f0f0; color: #888; }
+  .badge-renew { background: #fff3ec; color: #e8610a; }
+
+  /* 보장 카드 */
+  .cov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .cov-item { border: 1.5px solid #eee; border-radius: 10px; padding: 12px 14px; }
+  .cov-cat { font-size: 10px; color: #aaa; margin-bottom: 2px; }
+  .cov-name { font-size: 12px; font-weight: 700; color: #333; margin-bottom: 8px; }
+  .cov-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; flex-wrap: wrap; gap: 4px; }
+  .cov-std { color: #aaa; }
+  .cov-amount { font-size: 13px; font-weight: 700; margin-top: 4px; }
+  .cov-amount.ok { color: #0a7c4e; }
+  .cov-amount.lack { color: #c0392b; }
+  .cov-amount.none { color: #aaa; }
+
+  /* 청구 케어맵 */
+  .claim-list { display: grid; gap: 10px; }
+  .claim-item { border-left: 4px solid #1a2744; padding: 12px 14px; background: #f8f9fc; border-radius: 0 10px 10px 0; }
+  .claim-situation { font-size: 13px; font-weight: 700; color: #1a2744; margin-bottom: 5px; }
+  .claim-detail { font-size: 12px; color: #666; line-height: 1.7; }
+
+  /* 갱신 */
+  .renewal-item { border: 1.5px solid #ffe8d6; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; background: #fffaf7; }
+  .renewal-item:last-child { margin-bottom: 0; }
+  .renewal-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; flex-wrap: wrap; gap: 6px; }
+  .renewal-name { font-size: 13px; font-weight: 700; color: #333; }
+  .renewal-comment { font-size: 12px; color: #888; margin-top: 3px; line-height: 1.6; }
+
+  /* 보완 필요 */
+  .def-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .def-tag { background: #fdf0ee; color: #c0392b; border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 700; }
+
+  /* 에러 */
+  .error-box { background: #fdf0ee; border: 1.5px solid #f5b7b1; border-radius: 10px; padding: 1rem 1.25rem; margin-top: 1rem; font-size: 13px; color: #c0392b; line-height: 1.7; display: none; }
+
+  /* 인쇄 */
+  @media print {
+    body { background: white; }
+    .topbar-btns { display: none !important; }
+    .section-card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+    #upload-screen, #loading-screen { display: none !important; }
+    #result-screen { display: block !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 헤더 -->
+  <div class="logo-bar">
+    <div class="logo-mark">U</div>
+    <div>
+      <div class="logo-text">유니스지사 보장분석기</div>
+      <div class="logo-sub">한화생명금융서비스 VIP금융사업부</div>
+    </div>
+  </div>
+
+  <!-- 업로드 화면 -->
+  <div id="upload-screen">
+    <div class="upload-card">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11zm-7-7l-3 3h2v3h2v-3h2l-3-3z"/></svg>
+      </div>
+      <div class="upload-title">보험 PDF를 업로드하면 AI가 자동 분석합니다</div>
+      <div class="upload-desc">
+        신용정보원 보장분석 PDF · 보험사 증권 PDF 모두 가능<br>
+        파일은 서버에 저장되지 않으며 분석 후 즉시 삭제됩니다
+      </div>
+      <label class="upload-btn-label" for="file-input">📂 PDF 파일 선택</label>
+      <input type="file" id="file-input" accept=".pdf">
+      <div class="tip-box">
+        <p>
+          <strong>📋 분석 결과 포함 항목</strong><br>
+          ① 고객 기본정보 &nbsp; ② 보유계약 + 납입현황 &nbsp; ③ 보장 한눈에 보기<br>
+          ④ 납입현황 요약 &nbsp; ⑤ 보완 필요 보장 &nbsp; ⑥ 청구 케어맵 &nbsp; ⑦ 갱신 알림
+        </p>
+      </div>
+    </div>
+    <div class="error-box" id="upload-error"></div>
+  </div>
+
+  <!-- 로딩 화면 -->
+  <div id="loading-screen">
+    <div class="spinner"></div>
+    <div class="loading-title">AI가 보장 내용을 분석하고 있습니다</div>
+    <div class="loading-sub">PDF 분량에 따라 30~60초 소요될 수 있습니다</div>
+    <div class="step-list">
+      <div class="step-item"><div class="step-dot" id="dot1"></div> PDF 파일 읽는 중</div>
+      <div class="step-item"><div class="step-dot" id="dot2"></div> 계약 정보 추출 중</div>
+      <div class="step-item"><div class="step-dot" id="dot3"></div> 보장 항목 분석 중</div>
+      <div class="step-item"><div class="step-dot" id="dot4"></div> 청구케어맵 · 갱신정보 구성 중</div>
+    </div>
+  </div>
+
+  <!-- 결과 화면 -->
+  <div id="result-screen">
+    <div class="result-topbar">
+      <div class="result-title" id="result-title">보장분석 리포트</div>
+      <div class="topbar-btns">
+        <button class="btn btn-gray" onclick="resetApp()">↩ 다시 분석</button>
+        <button class="btn btn-navy" onclick="window.print()">🖨 인쇄</button>
+      </div>
+    </div>
+    <div id="result-content"></div>
+  </div>
+
+</div>
+
+<script>
+const SYSTEM_PROMPT = `당신은 한국 보험 전문 분석가입니다. 업로드된 PDF에서 보험 가입 정보를 추출하여 반드시 아래 JSON 형식으로만 응답하세요. 설명 텍스트나 마크다운 없이 순수 JSON만 출력하세요.
+
+{
+  "customer": {
+    "name": "고객명(없으면 고객님)",
+    "insurance_age": "보험나이",
+    "analysis_date": "분석일자",
+    "fp": "FP명(없으면 빈문자열)"
+  },
+  "contracts": [
+    {
+      "no": 1,
+      "company": "보험사명",
+      "product": "상품명",
+      "period": "보장기간(예:2001.03~2039.03)",
+      "payment_period": "납입기간(예:10년납)",
+      "payment_count": "경과/전체(예:120/120)",
+      "monthly_premium": 숫자,
+      "paid_total": 숫자,
+      "remaining_total": 숫자,
+      "completion_date": "납입완료일(예:2027.10 또는 납입완료)",
+      "is_renewal": false,
+      "renewal_cycle": "갱신주기(없으면 빈문자열)"
+    }
+  ],
+  "payment_summary": {
+    "monthly_total": 숫자,
+    "paid_total": 숫자,
+    "remaining_total": 숫자,
+    "grand_total": 숫자
+  },
+  "coverage": [
+    {
+      "category": "카테고리(사망/진단/실손/수술비/입원비/요양치매/기타)",
+      "item": "세부항목명",
+      "standard": 숫자(만원단위권장금액),
+      "current": 숫자(만원단위현재가입금액없으면0),
+      "status": "충분 또는 부족 또는 미가입"
+    }
+  ],
+  "claims_map": [
+    {
+      "situation": "상황(예:암 진단 시)",
+      "items": ["청구항목1","청구항목2"],
+      "companies": ["보험사1","보험사2"]
+    }
+  ],
+  "renewal_alerts": [
+    {
+      "product": "상품명",
+      "company": "보험사",
+      "renewal_date": "갱신예정일",
+      "cycle": "갱신주기",
+      "comment": "갱신 리스크 코멘트"
+    }
+  ],
+  "deficient_items": ["부족하거나미가입된주요항목"],
+  "fp_comment": "FP추천코멘트1~2문장"
+}
+
+표준권장금액(만원):
+- 사망(질병):10000, 사망(상해):20000
+- 일반암:5000, 유사암:1000, 전이/소액암:1000
+- 뇌혈관:1000, 뇌졸중:2000, 뇌출혈:1000
+- 허혈성심장:1000, 급성심근경색:2000, 심장수술:1000
+- 후유장해(질병3%):3000, 후유장해(상해3%):5000
+- 질병수술비:300, 상해수술비:100
+- 질병입원일당:10, 상해입원일당:10
+- 치매/장기요양:2000, 간병:1000
+
+PDF에서 데이터를 찾을 수 없는 항목은 0으로 처리하세요.`;
+
+function fmt(n) {
+  if (!n || n === 0) return '-';
+  const uk = Math.floor(n / 10000);
+  const man = n % 10000;
+  if (uk > 0 && man > 0) return uk + '억 ' + man.toLocaleString() + '만';
+  if (uk > 0) return uk + '억';
+  return n.toLocaleString() + '만';
+}
+function fmtP(n) { return n ? n.toLocaleString() + '원' : '-'; }
+
+function badge(s) {
+  if (s === '충분') return '<span class="badge badge-ok">충분</span>';
+  if (s === '부족') return '<span class="badge badge-lack">부족</span>';
+  return '<span class="badge badge-none">미가입</span>';
+}
+
+function statusClass(s) {
+  if (s === '충분') return 'ok';
+  if (s === '부족') return 'lack';
+  return 'none';
+}
+
+async function analyzePDF(b64) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      system: SYSTEM_PROMPT,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
+          { type: 'text', text: '이 PDF에서 보험 정보를 추출하여 지정된 JSON 형식으로 분석해주세요.' }
+        ]
+      }]
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error('API 오류 (' + res.status + '): ' + errText.slice(0, 300));
+  }
+
+  const data = await res.json();
+  const text = data.content.map(b => b.text || '').join('');
+  const clean = text.replace(/```json|```/g, '').trim();
+  try {
+    return JSON.parse(clean);
+  } catch(e) {
+    throw new Error('JSON 파싱 오류. AI 응답: ' + clean.slice(0, 200));
+  }
+}
+
+function renderResult(d) {
+  const c = d.customer || {};
+  const ps = d.payment_summary || {};
+  const contracts = d.contracts || [];
+  const coverage = d.coverage || [];
+  const claims = d.claims_map || [];
+  const renewals = d.renewal_alerts || [];
+  const deficient = d.deficient_items || [];
+
+  document.getElementById('result-title').textContent = (c.name || '고객님') + ' 보장분석 리포트';
+
+  let html = '';
+
+  // 섹션 1
+  html += `<div class="section-card">
+    <div class="section-header"><div class="section-num">1</div><div class="section-title">고객 기본정보</div></div>
+    <div class="info-grid">
+      <div class="info-item"><div class="info-label">고객명</div><div class="info-value">${c.name || '-'}</div></div>
+      <div class="info-item"><div class="info-label">보험나이</div><div class="info-value">${c.insurance_age || '-'}</div></div>
+      <div class="info-item"><div class="info-label">분석일자</div><div class="info-value">${c.analysis_date || '-'}</div></div>
+      <div class="info-item"><div class="info-label">담당 FP</div><div class="info-value">${c.fp || '-'}</div></div>
+    </div>
+  </div>`;
+
+  // 섹션 2
+  const ctRows = contracts.map(ct => `<tr>
+    <td>${ct.no}</td>
+    <td>${ct.company || '-'}</td>
+    <td>${ct.product || '-'}</td>
+    <td>${ct.period || '-'}</td>
+    <td>${ct.payment_period || '-'}</td>
+    <td>${ct.payment_count || '-'}</td>
+    <td style="text-align:right">${fmtP(ct.monthly_premium)}</td>
+    <td style="text-align:right">${fmt(ct.paid_total)}</td>
+    <td style="text-align:right">${fmt(ct.remaining_total)}</td>
+    <td>${ct.is_renewal ? `<span class="badge badge-renew">갱신형 ${ct.renewal_cycle || ''}</span>` : (ct.completion_date || '-')}</td>
+  </tr>`).join('');
+
+  html += `<div class="section-card">
+    <div class="section-header"><div class="section-num">2</div><div class="section-title">보유계약 현황</div></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>No</th><th>보험사</th><th>상품명</th><th>보장기간</th><th>납입기간</th>
+          <th>납입횟수</th><th>월보험료</th><th>납입완료액</th><th>잔여납입액</th><th>완료/갱신</th>
+        </tr></thead>
+        <tbody>
+          ${ctRows}
+          <tr class="sum-row">
+            <td colspan="6">합 계</td>
+            <td style="text-align:right">${fmtP(ps.monthly_total)}</td>
+            <td style="text-align:right">${fmt(ps.paid_total)}</td>
+            <td style="text-align:right">${fmt(ps.remaining_total)}</td>
+            <td>-</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+
+  // 섹션 3
+  const covCards = coverage.map(cv => `
+    <div class="cov-item">
+      <div class="cov-cat">${cv.category || ''}</div>
+      <div class="cov-name">${cv.item || ''}</div>
+      <div class="cov-row">
+        <span class="cov-std">권장 ${cv.standard ? cv.standard.toLocaleString() + '만' : '-'}</span>
+        ${badge(cv.status)}
+      </div>
+      <div class="cov-amount ${statusClass(cv.status)}">${cv.current ? cv.current.toLocaleString() + '만원' : '미가입'}</div>
+    </div>`).join('');
+
+  html += `<div class="section-card">
+    <div class="section-header"><div class="section-num">3</div><div class="section-title">보장 한눈에 보기</div></div>
+    <div class="cov-grid">${covCards || '<p style="color:#aaa;font-size:13px">보장 정보를 추출할 수 없습니다</p>'}</div>
+  </div>`;
+
+  // 섹션 4
+  html += `<div class="section-card">
+    <div class="section-header"><div class="section-num">4</div><div class="section-title">납입현황 요약</div></div>
+    <div class="pay-grid">
+      <div class="pay-card paid">
+        <div class="pay-label">✅ 지금까지 납입한 금액</div>
+        <div class="pay-amount">${fmt(ps.paid_total)}</div>
+        <div class="pay-sub">이미 완료된 납입</div>
+      </div>
+      <div class="pay-card remain">
+        <div class="pay-label">⏳ 앞으로 더 내야 할 금액</div>
+        <div class="pay-amount">${fmt(ps.remaining_total)}</div>
+        <div class="pay-sub">월 ${fmtP(ps.monthly_total)}</div>
+      </div>
+      <div class="pay-card total">
+        <div class="pay-label">💰 총 납입 예정 금액</div>
+        <div class="pay-amount">${fmt(ps.grand_total)}</div>
+        <div class="pay-sub">완납 시 보장 확정</div>
+      </div>
+    </div>
+  </div>`;
+
+  // 섹션 5
+  html += `<div class="section-card">
+    <div class="section-header"><div class="section-num">5</div><div class="section-title">보완 필요 보장</div></div>
+    <div class="def-list">
+      ${deficient.length > 0
+        ? deficient.map(i => `<span class="def-tag">⚠ ${i}</span>`).join('')
+        : '<p style="color:#aaa;font-size:13px">보완 필요 항목이 없습니다</p>'
+      }
+    </div>
+    ${d.fp_comment ? `<p style="margin-top:14px;font-size:13px;color:#666;background:#f8f9fc;padding:12px 14px;border-radius:9px;line-height:1.8;border-left:3px solid #1a2744">💬 ${d.fp_comment}</p>` : ''}
+  </div>`;
+
+  // 섹션 6
+  const claimItems = claims.map(cl => `
+    <div class="claim-item">
+      <div class="claim-situation">📌 ${cl.situation}</div>
+      <div class="claim-detail">
+        <strong>청구항목:</strong> ${cl.items.join(', ')}<br>
+        <strong>해당보험사:</strong> ${cl.companies.join(', ')}
+      </div>
+    </div>`).join('');
+
+  html += `<div class="section-card">
+    <div class="section-header"><div class="section-num">6</div><div class="section-title">보험청구 케어맵</div></div>
+    <div class="claim-list">
+      ${claimItems || '<p style="color:#aaa;font-size:13px">청구 항목 정보를 찾을 수 없습니다</p>'}
+    </div>
+  </div>`;
+
+  // 섹션 7
+  const renewalItems = renewals.map(r => `
+    <div class="renewal-item">
+      <div class="renewal-top">
+        <span class="renewal-name">${r.company || ''} ${r.product || ''}</span>
+        <span class="badge badge-renew">갱신예정 ${r.renewal_date || ''}</span>
+      </div>
+      <div class="renewal-comment">🔁 갱신주기: ${r.cycle || '-'} &nbsp;|&nbsp; ${r.comment || ''}</div>
+    </div>`).join('');
+
+  html += `<div class="section-card">
+    <div class="section-header"><div class="section-num">7</div><div class="section-title">갱신 알림</div></div>
+    ${renewals.length > 0
+      ? renewalItems
+      : '<p style="color:#aaa;font-size:13px">갱신형 계약이 없거나 갱신 정보를 찾을 수 없습니다</p>'
+    }
+  </div>`;
+
+  // 면책 안내
+  html += `<div style="margin-top:1rem;padding:1rem 1.25rem;font-size:11px;color:#aaa;line-height:1.8;background:white;border-radius:10px">
+    ※ 본 분석표는 PDF 내용을 AI로 해석한 참고자료이며, 실제 보험금 지급 근거가 될 수 없습니다.<br>
+    ※ 정확한 보장 내용은 해당 약관 및 증권을 반드시 확인하시기 바랍니다.<br>
+    ※ 분석일: ${new Date().toLocaleDateString('ko-KR')} &nbsp;|&nbsp; 유니스지사 한화생명금융서비스 VIP금융사업부
+  </div>`;
+
+  document.getElementById('result-content').innerHTML = html;
+}
+
+function setStep(s) {
+  for (let i = 1; i <= 4; i++) {
+    const dot = document.getElementById('dot' + i);
+    if (i < s) dot.className = 'step-dot done';
+    else if (i === s) dot.className = 'step-dot active';
+    else dot.className = 'step-dot';
+  }
+}
+
+function showScreen(name) {
+  document.getElementById('upload-screen').style.display = name === 'upload-screen' ? 'block' : 'none';
+  document.getElementById('loading-screen').style.display = name === 'loading-screen' ? 'block' : 'none';
+  document.getElementById('result-screen').style.display = name === 'result-screen' ? 'block' : 'none';
+}
+
+function resetApp() {
+  showScreen('upload-screen');
+  document.getElementById('file-input').value = '';
+  document.getElementById('upload-error').style.display = 'none';
+}
+
+document.getElementById('file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const errBox = document.getElementById('upload-error');
+  errBox.style.display = 'none';
+
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    errBox.innerHTML = 'PDF 파일만 업로드 가능합니다.';
+    errBox.style.display = 'block';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const b64 = ev.target.result.split(',')[1];
+    showScreen('loading-screen');
+    setStep(1);
+
+    let step = 1;
+    const si = setInterval(() => {
+      step = Math.min(step + 1, 4);
+      setStep(step);
+    }, 12000);
+
+    try {
+      setStep(2);
+      const data = await analyzePDF(b64);
+      clearInterval(si);
+      setStep(4);
+      setTimeout(() => {
+        showScreen('result-screen');
+        renderResult(data);
+      }, 400);
+    } catch (err) {
+      clearInterval(si);
+      showScreen('upload-screen');
+      errBox.innerHTML = '<strong>분석 오류</strong><br>' + err.message +
+        '<br><br>💡 해결 방법: 파일 크기가 크면 분할해서 시도하거나, PDF가 텍스트 기반인지 확인해주세요.';
+      errBox.style.display = 'block';
+    }
+  };
+  reader.readAsDataURL(file);
+});
+</script>
+</body>
+</html>
