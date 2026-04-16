@@ -287,13 +287,12 @@ function statusClass(s) {
   return 'none';
 }
 
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxscbjJaQpKPExAShWwD9qmAE8Iylw04TNt7RPrs0AP_LiTf-M54bCgiTcCzQL3W4sL/exec';
+
 async function analyzePDF(b64) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
@@ -314,6 +313,7 @@ async function analyzePDF(b64) {
   }
 
   const data = await res.json();
+  if (data.error) throw new Error('서버 오류: ' + data.error);
   const text = data.content.map(b => b.text || '').join('');
   const clean = text.replace(/```json|```/g, '').trim();
   try {
