@@ -5251,9 +5251,9 @@ function formatEok(val){
 
 // 금융상품 분류표
 const MONTHLY_PRODUCTS = {
-  '적금':        {label:'단기', bucket:'short', color:'#4A90D9'},
-  '파킹통장':    {label:'단기', bucket:'short', color:'#4A90D9'},
-  'CMA':         {label:'단기', bucket:'short', color:'#4A90D9'},
+  '적금':        {label:'단기', bucket:'short', color:'#4A90D9', isShort:true},
+  '파킹통장':    {label:'단기', bucket:'short', color:'#4A90D9', isShort:true},
+  'CMA':         {label:'단기', bucket:'short', color:'#4A90D9', isShort:true},
   'ETF·펀드(월적립)':{label:'중기', bucket:'mid', color:'#52B788'},
   '저축보험':    {label:'중기', bucket:'mid',   color:'#52B788', isAnnuity:true, rate:0.025, annuityLabel:'납입 완료 후 2.5% 복리 거치', paymentOptions:[5,7,10,15,20]},
   '단기납종신':  {label:'중기', bucket:'mid',   color:'#52B788', isAnnuity:true, rate:0.025, annuityLabel:'납입완료 후 복리 적립', paymentOptions:[5,7,10]},
@@ -5432,7 +5432,7 @@ function makeRow(row, container) {
         <span style="font-size:14px; color:var(--muted); font-weight:700; flex-shrink:0; white-space:nowrap;">${isAsset ? '만(일시)' : '만/월'}</span>
       </div>
       ${isAnnuity ? `
-      <!-- 행 3: 납입 조건 -->
+      <!-- 행 3: 납입 조건 (중기/장기) -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
         <div>
           <div style="font-size:13px; color:var(--muted); margin-bottom:6px; font-weight:600;">납입기간</div>
@@ -5453,6 +5453,32 @@ function makeRow(row, container) {
       ${annuityEstimate}
       ${info.annuityLabel ? `<div style="font-size:13px; color:rgba(74,144,217,0.9); margin-top:7px; padding:7px 12px; background:rgba(74,144,217,0.08); border-radius:8px; font-weight:600;">ℹ️ ${info.annuityLabel}</div>` : ''}
       ${info.taxNote ? `<div style="font-size:13px; color:rgba(155,89,182,0.9); margin-top:6px; padding:7px 12px; background:rgba(155,89,182,0.1); border-radius:8px; font-weight:600;">💡 ${info.taxNote}</div>` : ''}
+      ` : ''}
+      ${info.isShort ? `
+      <!-- 행 3: 단기 납입 기간 -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+        <div>
+          <div style="font-size:13px; color:#4A90D9; margin-bottom:6px; font-weight:600;">납입 시작 나이</div>
+          <div style="display:flex; align-items:center; gap:6px; background:var(--card2); border:1.5px solid rgba(74,144,217,0.35); border-radius:9px; padding:9px 14px;">
+            <input type="number" value="${row.shortStartAge||0}" min="20" max="70" placeholder="현재"
+              style="background:none; border:none; outline:none; font-family:inherit; font-size:17px; font-weight:800; color:#4A90D9; width:52px; text-align:right; -moz-appearance:textfield;"
+              onchange="onAnnuityChange(${row.id}, 'shortStartAge', this.value)">
+            <span style="font-size:15px; color:var(--muted); font-weight:600;">세</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:13px; color:#4A90D9; margin-bottom:6px; font-weight:600;">납입 종료 나이</div>
+          <div style="display:flex; align-items:center; gap:6px; background:var(--card2); border:1.5px solid rgba(74,144,217,0.35); border-radius:9px; padding:9px 14px;">
+            <input type="number" value="${row.shortEndAge||0}" min="20" max="80" placeholder="은퇴"
+              style="background:none; border:none; outline:none; font-family:inherit; font-size:17px; font-weight:800; color:#4A90D9; width:52px; text-align:right; -moz-appearance:textfield;"
+              onchange="onAnnuityChange(${row.id}, 'shortEndAge', this.value)">
+            <span style="font-size:15px; color:var(--muted); font-weight:600;">세</span>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:12px; color:rgba(74,144,217,0.7); margin-top:6px; padding:6px 10px; background:rgba(74,144,217,0.06); border-radius:8px;">
+        📌 미입력 시 현재 나이~은퇴 나이까지 적용 · 납입 완료 후 1.0% 단리 거치
+      </div>
       ` : ''}`;
     container.appendChild(div);
 }
@@ -5812,7 +5838,34 @@ function updatePie() {
     const rS = 0.015; // 단기 연 1.5% 단리
     const rM = 0.030/12; // 중기 연 3.0% 복리
     const rL = 0.035/12; // 장기 연 3.5% 복리
-    const fvShort = curS2 > 0 ? Math.round(curS2 * n * (1 + rS * (n+1) / 24)) : 0; // 단리
+
+    // 단기: 납입 시작~종료 나이 반영
+    function calcShortFv(monthlyAmt, curAge, retireAge) {
+      if(monthlyAmt <= 0) return 0;
+      // productRows에서 단기 상품 시작/종료 나이 가져오기
+      const shortRows = window.productRows ? window.productRows.filter(r => {
+        const inf = MONTHLY_PRODUCTS[r.name]; return inf && inf.bucket==='short' && r.amount>0;
+      }) : [];
+      if(shortRows.length === 0) {
+        const nn = (retireAge - curAge) * 12;
+        return Math.round(monthlyAmt * nn * (1 + rS * (nn+1) / 24));
+      }
+      let total = 0;
+      shortRows.forEach(r => {
+        const startAge = r.shortStartAge > 0 ? r.shortStartAge : curAge;
+        const endAge   = r.shortEndAge   > 0 ? r.shortEndAge   : retireAge;
+        const payYrs   = Math.max(0, Math.min(endAge, retireAge) - Math.max(startAge, curAge));
+        const deferYrs = Math.max(0, retireAge - Math.max(endAge, curAge));
+        const nn = payYrs * 12;
+        let fvPay = nn > 0 ? r.amount * nn * (1 + rS * (nn+1) / 24) : 0;
+        // 납입 완료 후 거치: 1.0% 단리
+        if(deferYrs > 0) fvPay = fvPay * (1 + 0.01 * deferYrs);
+        total += fvPay;
+      });
+      return Math.round(total);
+    }
+
+    const fvShort = calcShortFv(curS2, currentAge, retireAge);
     const fvMid   = curM2 > 0 ? Math.round(curM2 * ((Math.pow(1+rM, n)-1)/rM)) : 0;
     const fvLong  = curL2 > 0 ? Math.round(curL2 * ((Math.pow(1+rL, n)-1)/rL)) : 0;
     const savedTotal = fvShort + fvMid + fvLong + Math.round(window._extraAssetWeighted||0); // 납입완료 자산은 이미 거치복리 반영됨
