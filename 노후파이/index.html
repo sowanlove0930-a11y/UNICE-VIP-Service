@@ -5540,6 +5540,8 @@ function syncProductToBuckets() {
   const sums = {short:0, mid:0, long:0, risk:0};
   let assetTotal = 0;
   let annuityMonthlyTotal = 0;
+  window._annuityMonthlyLong = 0; // 장기 전용 개인연금 (성적표 표시용)
+  window._annuityMonthlyLong = 0; // 장기 전용 개인연금 (성적표 표시용)
   const retireAge = +document.getElementById('retireAge')?.value||60;
   const retireYears = Math.max(5, (state.gender === 'M' ? 86 : 90) - retireAge);
 
@@ -5583,7 +5585,9 @@ function syncProductToBuckets() {
       // 연금 상품: 월 수령 추정 합산
       const _startAge = r.annuityStartAge > 0 ? r.annuityStartAge : (+document.getElementById('currentAge')?.value||42);
       if(info.isAnnuity && r.amount > 0) {
-        annuityMonthlyTotal += calcAnnuityMonthly(r.amount, r.paymentYears||20, _startAge, info.rate||0.025, retireAge, retireYears);
+        const _annuityAmt = calcAnnuityMonthly(r.amount, r.paymentYears||20, _startAge, info.rate||0.025, retireAge, retireYears);
+        annuityMonthlyTotal += _annuityAmt; // 전체 커버율용 (중기+장기 모두)
+        if(info.bucket === 'long') window._annuityMonthlyLong = (window._annuityMonthlyLong||0) + _annuityAmt; // 성적표 개인연금용
       }
     }
   });
@@ -6334,8 +6338,10 @@ function initScoreScreen() {
   const _fvL_sc = _curL_sc > 0 ? Math.round(_curL_sc * ((Math.pow(1+_rL_sc,n)-1)/_rL_sc)) : 0;
   const savedTotal = _fvS_sc + _fvM_sc + _fvL_sc + Math.round(window._extraAssetWeighted||0);
   // 개인연금 총액
-  const annuityMonthlyEst = window._annuityMonthlyEst || 0;
-  const annuityTotal = Math.round(annuityMonthlyEst * 12 * retireYears);
+  const annuityMonthlyEst = window._annuityMonthlyLong || 0; // 장기 개인연금만 표시
+  const annuityMonthlyAll = window._annuityMonthlyEst || 0;  // 커버율 계산엔 전체 사용
+  const annuityTotal    = Math.round(annuityMonthlyEst * 12 * retireYears);    // 성적표 표시용 (장기만)
+  const annuityTotalAll = Math.round(annuityMonthlyAll * 12 * retireYears);  // 커버율 계산용 (중기+장기)
 
   // 단기 과집중 커버율 보정 (노후파이 진단과 동일 기준)
   const _scPMT = _curS_sc + _curM_sc + _curL_sc;
@@ -6344,7 +6350,7 @@ function initScoreScreen() {
                     : _scShortRatio > 0.50 ? 0.70
                     : _scShortRatio > 0.30 ? 0.85
                     : 1.00;
-  const adjustedSaved = Math.round((savedTotal + annuityTotal) * _scCoverAdj);
+  const adjustedSaved = Math.round((savedTotal + annuityTotalAll) * _scCoverAdj);
   const annPct = totalNeeded>0?Math.round(annuityTotal*_scCoverAdj/totalNeeded*100):0;
 
   // 비율 (개인연금 포함)
@@ -6369,7 +6375,7 @@ function initScoreScreen() {
   if(annEl){ annEl.textContent = annuityMonthlyEst>0 ? fmt(annuityTotal) : '—'; }
   setW('sc-annuity-bar', Math.min(100, annPct));
   const covEl=sc('sc-coverage'); if(covEl){ covEl.textContent=totalCov+'%'; covEl.style.color=totalCov>=80?'var(--green)':totalCov>=50?'var(--amber)':'var(--red)'; }
-  set('sc-shortage', fmt(Math.max(0,totalNeeded-adjustedSaved-pensionTotal))+' 부족');
+  set('sc-shortage', fmt(Math.max(0,totalNeeded-Math.round((savedTotal+annuityTotalAll)*_scCoverAdj)-pensionTotal))+' 부족');
 
   setW('sc-pension-bar', Math.min(100,penPct));
   setW('sc-saving-bar', Math.min(100,savPct));
@@ -8117,6 +8123,18 @@ document.addEventListener('keydown', e => {
       return;
     }
     if(e.key === 'Backspace') {
+      // 섹션 열려있으면 페이지 이동 차단 (입력 중이면 타이핑은 허용)
+      const arrowIds = ['sec-short-arrow','sec-mid-arrow','sec-long-arrow','sec-risk-arrow'];
+      const anyOpenArrow = arrowIds.some(id => {
+        const el = document.getElementById(id);
+        return el && el.textContent.includes('접기');
+      });
+      const assetArrow = document.getElementById('sec-asset-arrow');
+      const assetOpen = assetArrow && assetArrow.textContent.includes('접기');
+      if(anyOpenArrow || assetOpen) {
+        if(!isInput) e.preventDefault();
+        return;
+      }
       if(isInput) return;
       e.preventDefault();
       if(rv5aStep >= 0) { rv5aPrev(); } else { goBack(); }
@@ -8319,6 +8337,20 @@ document.addEventListener('keydown', e => {
     if(btn && btn.style.display !== 'none' && parseFloat(btn.style.opacity||1) > 0.4) goNext();
   }
   if(e.key === 'Backspace') {
+    // screen-5a (노후파이 진단): 섹션 열려있으면 페이지 이동 차단
+    const is5aActive = document.getElementById('screen-5a')?.classList.contains('active');
+    if(is5aActive) {
+      const anyOpen = Object.values(sectionOpen).some(v => v)
+                   || assetSectionOpen
+                   || ['sec-short-arrow','sec-mid-arrow','sec-long-arrow','sec-risk-arrow'].some(id => {
+                        const el = document.getElementById(id);
+                        return el && el.textContent.includes('접기');
+                      });
+      if(anyOpen) {
+        if(!isInput) e.preventDefault();
+        return;
+      }
+    }
     if(isInput) return;
     e.preventDefault();
     const backBtn = document.getElementById('btnBack');
