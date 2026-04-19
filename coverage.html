@@ -3,553 +3,2178 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>유니스지사 보장분석기</title>
+<title>보험청구 케어맵 | 유니스 VIP</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background: #f0f2f5; min-height: 100vh; }
-  #app { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+:root {
+  --navy: #1F3864;
+  --mid-navy: #2E4A7C;
+  --light-navy: #3A5FA0;
+  --gold: #C9A84C;
+  --gold2: #E8C87A;
+  --bg: #F4F6FA;
+  --white: #FFFFFF;
+  --text: #1A2740;
+  --muted: #6B7A99;
+  --border: #D0D8E8;
+  --light-blue: #D6E4F0;
+  --light-green: #E8F5E9;
+  --danger: #E05A40;
+  --success: #2E7D32;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); font-size: 15px; }
 
-  /* 헤더 */
-  .logo-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 2rem; }
-  .logo-mark { width: 42px; height: 42px; background: #1a2744; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; font-weight: 700; }
-  .logo-text { font-size: 20px; font-weight: 700; color: #1a2744; }
-  .logo-sub { font-size: 12px; color: #888; margin-top: 2px; }
 
-  /* 업로드 화면 */
-  .upload-card { background: white; border-radius: 16px; padding: 3rem 2rem; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.07); }
-  .upload-icon { width: 72px; height: 72px; background: #1a2744; border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; }
-  .upload-icon svg { width: 36px; height: 36px; fill: white; }
-  .upload-title { font-size: 18px; font-weight: 700; color: #1a2744; margin-bottom: 8px; }
-  .upload-desc { font-size: 14px; color: #888; line-height: 1.7; }
-  .upload-btn-label { display: inline-block; margin-top: 1.5rem; padding: 12px 36px; background: #1a2744; color: white; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-  .upload-btn-label:hover { background: #253360; }
-  #file-input { display: none; }
-  .tip-box { margin-top: 1.5rem; background: #f8f9fc; border-radius: 10px; padding: 1rem 1.25rem; text-align: left; }
-  .tip-box p { font-size: 13px; color: #666; line-height: 1.9; }
 
-  /* 로딩 */
-  #loading-screen { display: none; background: white; border-radius: 16px; padding: 4rem 2rem; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.07); }
-  .spinner { width: 52px; height: 52px; border: 4px solid #e8eaf0; border-top-color: #1a2744; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1.5rem; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .loading-title { font-size: 17px; font-weight: 700; color: #1a2744; margin-bottom: 6px; }
-  .loading-sub { font-size: 13px; color: #888; }
-  .step-list { margin-top: 1.5rem; text-align: left; display: inline-block; }
-  .step-item { font-size: 13px; color: #999; padding: 5px 0; display: flex; align-items: center; gap: 10px; }
-  .step-dot { width: 9px; height: 9px; border-radius: 50%; background: #ddd; flex-shrink: 0; transition: background 0.3s; }
-  .step-dot.active { background: #e8610a; }
-  .step-dot.done { background: #0a7c4e; }
 
-  /* 결과 */
-  #result-screen { display: none; }
-  .result-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px; }
-  .result-title { font-size: 22px; font-weight: 700; color: #1a2744; }
-  .topbar-btns { display: flex; gap: 8px; }
-  .btn { padding: 9px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
-  .btn-navy { background: #1a2744; color: white; }
-  .btn-navy:hover { background: #253360; }
-  .btn-gray { background: white; color: #555; border: 1px solid #ddd; }
-  .btn-gray:hover { background: #f5f5f5; }
+/* ── 동기부여 메시지 ── */
+#moti-overlay {
+  position: fixed; inset: 0; background: rgba(15,25,50,0.8);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 8500; backdrop-filter: blur(6px);
+}
+#moti-overlay.hidden { display: none !important; }
+.moti-card {
+  background: linear-gradient(145deg, #1F3864 0%, #2E4A7C 100%);
+  border-radius: 22px; padding: 44px 40px;
+  max-width: 420px; width: 90%; text-align: center;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+  animation: motiIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes motiIn {
+  from { opacity:0; transform: scale(0.85) translateY(20px); }
+  to   { opacity:1; transform: scale(1) translateY(0); }
+}
+.moti-date {
+  font-size: 12px; color: rgba(255,255,255,0.45);
+  letter-spacing: 1.5px; margin-bottom: 20px;
+}
+.moti-greeting {
+  font-size: 15px; color: #C9A84C; font-weight: 600;
+  margin-bottom: 10px; letter-spacing: 0.5px;
+}
+.moti-name {
+  font-size: 26px; font-weight: 900; color: white;
+  margin-bottom: 24px; line-height: 1.3;
+}
+.moti-message {
+  font-size: 15px; color: rgba(255,255,255,0.82);
+  line-height: 1.8; margin-bottom: 32px;
+}
+.moti-message strong { color: #E8C87A; }
+.moti-btn {
+  background: linear-gradient(135deg, #C9A84C, #E8C87A);
+  color: #1F3864; border: none; border-radius: 12px;
+  padding: 14px 40px; font-size: 15px; font-weight: 900;
+  font-family: inherit; cursor: pointer; width: 100%;
+  transition: all 0.2s; letter-spacing: 0.5px;
+}
+.moti-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(201,168,76,0.4); }
+.moti-emoji { font-size: 44px; margin-bottom: 16px; display: block; }
 
-  /* 섹션 카드 */
-  .section-card { background: white; border-radius: 14px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1.2rem; padding-bottom: 1rem; border-bottom: 1.5px solid #f0f2f5; }
-  .section-num { width: 28px; height: 28px; border-radius: 7px; background: #1a2744; color: white; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .section-title { font-size: 15px; font-weight: 700; color: #1a2744; }
+/* ── FP 사번 모달 ── */
+#fp-modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,25,50,0.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9000; backdrop-filter: blur(6px);
+}
+#fp-modal-overlay.hidden { display: none !important; }
+.fp-modal {
+  background: white; border-radius: 18px;
+  padding: 44px 40px; max-width: 400px; width: 90%;
+  text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.3);
+}
+.fp-modal-logo {
+  font-size: 13px; font-weight: 900; letter-spacing: 2px;
+  color: var(--gold); margin-bottom: 20px;
+}
+.fp-modal-title {
+  font-size: 18px; font-weight: 700; color: var(--navy);
+  margin-bottom: 8px;
+}
+.fp-modal-sub {
+  font-size: 13px; color: var(--muted); margin-bottom: 28px;
+}
+.fp-modal input {
+  width: 100%; padding: 13px 16px; border: 2px solid var(--border);
+  border-radius: 10px; font-size: 16px; font-family: inherit;
+  text-align: center; letter-spacing: 2px; margin-bottom: 16px;
+  transition: border-color 0.2s;
+}
+.fp-modal input:focus { outline: none; border-color: var(--mid-navy); }
+.fp-modal-btn {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  background: linear-gradient(135deg, var(--navy), var(--mid-navy));
+  color: white; font-size: 15px; font-weight: 700;
+  font-family: inherit; cursor: pointer; transition: all 0.2s;
+}
+.fp-modal-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(31,56,100,0.3); }
+.fp-modal-error {
+  color: #E05A40; font-size: 13px; margin-top: 10px; min-height: 18px;
+}
 
-  /* 고객 정보 */
-  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-  .info-item { background: #f8f9fc; border-radius: 10px; padding: 12px 14px; }
-  .info-label { font-size: 11px; color: #999; margin-bottom: 4px; }
-  .info-value { font-size: 15px; font-weight: 700; color: #1a2744; }
+/* ── 비활성 FP 잠금 ── */
+#block-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, var(--navy) 0%, #0a1428 100%);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+#block-overlay.hidden { display: none !important; }
+.block-card {
+  text-align: center; color: white; padding: 40px;
+}
+.block-icon { font-size: 52px; margin-bottom: 20px; }
+.block-title { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+.block-sub { font-size: 14px; opacity: 0.6; line-height: 1.8; }
 
-  /* 납입 요약 */
-  .pay-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .pay-card { border-radius: 10px; padding: 14px; text-align: center; }
-  .pay-card.paid { background: #e8f5ee; }
-  .pay-card.remain { background: #fff3ec; }
-  .pay-card.total { background: #f0f2f8; }
-  .pay-label { font-size: 11px; color: #888; margin-bottom: 5px; }
-  .pay-amount { font-size: 17px; font-weight: 700; color: #1a2744; }
-  .pay-sub { font-size: 11px; color: #aaa; margin-top: 3px; }
+/* ── JENIUS INTRO ── */
+#intro-section {
+  min-height: calc(100vh - 58px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px 20px;
+}
+#intro-section.hidden { display: none !important; }
+.intro-card {
+  background: white; border-radius: 20px;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 40px rgba(31,56,100,0.12);
+  padding: 52px 48px; max-width: 520px; width: 100%;
+  text-align: center;
+}
+.jenius-logo {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: linear-gradient(135deg, var(--navy), var(--mid-navy));
+  color: white; border-radius: 14px;
+  padding: 10px 22px; margin-bottom: 32px;
+}
+.jenius-logo-text {
+  font-size: 22px; font-weight: 900; letter-spacing: 2px;
+  background: linear-gradient(135deg, #C9A84C, #E8C87A);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.jenius-logo-sub { font-size: 11px; opacity: 0.7; font-weight: 400; letter-spacing: 0.5px; }
+.intro-greeting {
+  font-size: 22px; font-weight: 700; color: var(--navy);
+  margin-bottom: 16px; line-height: 1.4;
+}
+.intro-desc {
+  font-size: 15px; color: var(--muted); line-height: 1.8;
+  margin-bottom: 32px;
+}
+.intro-desc strong { color: var(--navy); font-weight: 700; }
+.intro-badges {
+  display: flex; gap: 10px; justify-content: center;
+  flex-wrap: wrap; margin-bottom: 36px;
+}
+.intro-badge {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 20px; padding: 7px 16px;
+  font-size: 13px; color: var(--navy); font-weight: 500;
+}
+.btn-start {
+  background: linear-gradient(135deg, var(--navy), var(--mid-navy));
+  color: white; border: none; border-radius: 12px;
+  padding: 16px 48px; font-size: 16px; font-weight: 700;
+  font-family: inherit; cursor: pointer; width: 100%;
+  transition: all 0.2s; letter-spacing: 0.5px;
+}
+.btn-start:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(31,56,100,0.3); }
+.intro-footer {
+  margin-top: 24px; font-size: 12px; color: var(--muted);
+}
 
-  /* 계약 테이블 */
-  .tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #eee; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { background: #f8f9fc; padding: 9px 11px; text-align: left; font-weight: 700; color: #555; border-bottom: 1px solid #eee; white-space: nowrap; }
-  td { padding: 9px 11px; border-bottom: 1px solid #f0f0f0; color: #333; vertical-align: middle; }
-  tr:last-child td { border-bottom: none; }
-  tr.sum-row td { font-weight: 700; background: #f8f9fc; }
+/* ── HEADER ── */
+.header {
+  background: var(--navy); color: white;
+  padding: 0 40px; height: 58px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-badge {
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: var(--navy); font-weight: 900; font-size: 13px;
+  padding: 5px 14px; border-radius: 20px; letter-spacing: 0.5px;
+}
+.logo-title { font-size: 15px; font-weight: 500; opacity: 0.85; }
+.fp-info { font-size: 13px; opacity: 0.6; }
 
-  /* 배지 */
-  .badge { display: inline-block; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 700; }
-  .badge-ok { background: #e8f5ee; color: #0a7c4e; }
-  .badge-lack { background: #fdf0ee; color: #c0392b; }
-  .badge-none { background: #f0f0f0; color: #888; }
-  .badge-renew { background: #fff3ec; color: #e8610a; }
+/* ── MAIN ── */
+.main { max-width: 860px; margin: 0 auto; padding: 32px 20px 60px; }
 
-  /* 보장 카드 */
-  .cov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
-  .cov-item { border: 1.5px solid #eee; border-radius: 10px; padding: 12px 14px; }
-  .cov-cat { font-size: 10px; color: #aaa; margin-bottom: 2px; }
-  .cov-name { font-size: 12px; font-weight: 700; color: #333; margin-bottom: 8px; }
-  .cov-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; flex-wrap: wrap; gap: 4px; }
-  .cov-std { color: #aaa; }
-  .cov-amount { font-size: 13px; font-weight: 700; margin-top: 4px; }
-  .cov-amount.ok { color: #0a7c4e; }
-  .cov-amount.lack { color: #c0392b; }
-  .cov-amount.none { color: #aaa; }
+/* ── CARD ── */
+.card {
+  background: var(--white); border-radius: 14px;
+  border: 1px solid var(--border); padding: 28px 32px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(31,56,100,0.06);
+}
+.card-title {
+  font-size: 16px; font-weight: 700; color: var(--navy);
+  margin-bottom: 18px; padding-bottom: 12px;
+  border-bottom: 2px solid var(--light-blue);
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title .icon { font-size: 18px; }
 
-  /* 청구 케어맵 */
-  .claim-list { display: grid; gap: 10px; }
-  .claim-item { border-left: 4px solid #1a2744; padding: 12px 14px; background: #f8f9fc; border-radius: 0 10px 10px 0; }
-  .claim-situation { font-size: 13px; font-weight: 700; color: #1a2744; margin-bottom: 5px; }
-  .claim-detail { font-size: 12px; color: #666; line-height: 1.7; }
+/* ── CUSTOMER INFO ── */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.info-field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.5px; }
+.info-field input {
+  width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 14px; font-family: inherit;
+  transition: border-color 0.2s;
+}
+.info-field input:focus { outline: none; border-color: var(--mid-navy); }
 
-  /* 갱신 */
-  .renewal-item { border: 1.5px solid #ffe8d6; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; background: #fffaf7; }
-  .renewal-item:last-child { margin-bottom: 0; }
-  .renewal-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; flex-wrap: wrap; gap: 6px; }
-  .renewal-name { font-size: 13px; font-weight: 700; color: #333; }
-  .renewal-comment { font-size: 12px; color: #888; margin-top: 3px; line-height: 1.6; }
+/* ── UPLOAD ZONE ── */
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: 12px;
+  padding: 32px 24px; text-align: center; cursor: pointer;
+  transition: all 0.2s; background: #FAFBFF;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--mid-navy); background: var(--light-blue);
+}
+.upload-icon { font-size: 36px; margin-bottom: 10px; }
+.upload-text { font-size: 15px; font-weight: 600; color: var(--navy); margin-bottom: 6px; }
+.upload-sub { font-size: 13px; color: var(--muted); }
+.upload-zone input[type=file] { display: none; }
 
-  /* 보완 필요 */
-  .def-list { display: flex; flex-wrap: wrap; gap: 8px; }
-  .def-tag { background: #fdf0ee; color: #c0392b; border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 700; }
+.file-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.file-item {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--light-blue); border-radius: 8px; padding: 10px 14px;
+}
+.file-name { font-size: 13px; font-weight: 500; color: var(--navy); }
+.file-remove { cursor: pointer; color: var(--muted); font-size: 16px; }
+.file-remove:hover { color: var(--danger); }
 
-  /* 에러 */
-  .error-box { background: #fdf0ee; border: 1.5px solid #f5b7b1; border-radius: 10px; padding: 1rem 1.25rem; margin-top: 1rem; font-size: 13px; color: #c0392b; line-height: 1.7; display: none; }
+/* ── BUTTON ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 13px 28px; border-radius: 10px; font-size: 15px;
+  font-weight: 700; font-family: inherit; cursor: pointer;
+  border: none; transition: all 0.2s;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--navy), var(--mid-navy));
+  color: white; width: 100%;
+  justify-content: center; margin-top: 20px;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(31,56,100,0.3); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-download {
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: var(--navy); width: 100%; justify-content: center;
+  font-size: 16px; padding: 15px;
+}
+.btn-download:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(201,168,76,0.4); }
+.btn-reset {
+  background: transparent; color: var(--muted); border: 1.5px solid var(--border);
+  width: 100%; justify-content: center; margin-top: 10px;
+}
 
-  /* 인쇄 */
-  @media print {
-    body { background: white; }
-    .topbar-btns { display: none !important; }
-    .section-card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
-    #upload-screen, #loading-screen { display: none !important; }
-    #result-screen { display: block !important; }
-  }
+/* ── LOADING ── */
+#loading-section { text-align: center; padding: 40px 0; }
+.spinner {
+  width: 48px; height: 48px; border: 4px solid var(--light-blue);
+  border-top-color: var(--navy); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 0 auto 20px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 16px; font-weight: 600; color: var(--navy); margin-bottom: 8px; }
+.loading-sub { font-size: 13px; color: var(--muted); }
+
+/* ── RESULT PREVIEW ── */
+.caremap-table-wrap { overflow-x: auto; margin-top: 4px; }
+.caremap-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+  min-width: 800px;
+}
+.caremap-table th {
+  background: var(--navy); color: white; padding: 7px 5px;
+  text-align: center; font-weight: 600; border: 1px solid rgba(255,255,255,0.15);
+  white-space: nowrap; font-size: 11px;
+}
+.caremap-table th.mid { background: var(--mid-navy); }
+.caremap-table td {
+  padding: 8px 6px; border: 1px solid var(--border);
+  text-align: center; font-size: 12px;
+}
+.caremap-table td.left { text-align: left; }
+.caremap-table td.val { color: var(--navy); font-weight: 600; }
+.caremap-table td.treat { background: var(--light-green); color: var(--success); font-weight: 700; }
+.caremap-table tr:nth-child(odd) td { background: #FAFBFF; }
+.caremap-table tr:nth-child(even) td { background: white; }
+.caremap-table .subtotal td { background: var(--navy) !important; color: white !important; font-weight: 700; }
+.caremap-table .category-tag {
+  display: inline-block; font-size: 10px; padding: 2px 7px;
+  border-radius: 10px; background: var(--light-blue); color: var(--navy); font-weight: 600;
+}
+
+/* ── SUMMARY BOXES ── */
+.summary-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+.summary-box {
+  text-align: center; padding: 16px; border-radius: 10px;
+  border: 1.5px solid var(--border);
+}
+.summary-box .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.summary-box .amount { font-size: 18px; font-weight: 900; color: var(--navy); }
+.summary-box.paid { border-color: #90CAF9; background: #E3F2FD; }
+.summary-box.future { border-color: #FFD54F; background: #FFFDE7; }
+.summary-box.total { border-color: var(--gold); background: #FFF8E1; }
+
+/* ── RENEWAL TABLE ── */
+.renewal-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.renewal-table th { background: var(--mid-navy); color: white; padding: 9px 10px; text-align: center; font-size: 12px; }
+.renewal-table td { padding: 10px; border: 1px solid var(--border); }
+.renewal-table .warn { color: var(--danger); font-weight: 700; }
+
+/* ── GAPS TABLE ── */
+.gaps-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.gaps-table th { background: var(--mid-navy); color: white; padding: 9px 10px; text-align: center; font-size: 12px; }
+.gaps-table td { padding: 10px; border: 1px solid var(--border); }
+.gaps-table .shortfall { color: var(--danger); font-weight: 700; }
+.gaps-table .ok { color: var(--success); font-weight: 600; }
+
+/* ── SPECIAL NOTES ── */
+.special-note {
+  background: #FFF3E0; border: 1.5px solid #FFB74D;
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+}
+.special-note .title { font-weight: 700; color: #E65100; font-size: 14px; margin-bottom: 4px; }
+.special-note .desc { font-size: 13px; color: #5D4037; }
+
+/* ── HIDDEN ── */
+.hidden { display: none !important; }
+
+/* ── ERROR ── */
+.error-msg {
+  background: #FFEBEE; border: 1.5px solid var(--danger);
+  border-radius: 10px; padding: 16px; color: #C62828;
+  font-size: 14px; margin-top: 16px;
+}
 </style>
 </head>
 <body>
-<div id="app">
 
-  <!-- 헤더 -->
-  <div class="logo-bar">
-    <div class="logo-mark">U</div>
-    <div>
-      <div class="logo-text">유니스지사 보장분석기</div>
-      <div class="logo-sub">한화생명금융서비스 VIP금융사업부</div>
+<header class="header">
+  <div class="logo">
+    <div class="logo-badge">UNICE VIP</div>
+    <div class="logo-title">보험청구 케어맵 <span style="color:rgba(201,168,76,0.8);font-size:13px;font-weight:700;margin-left:6px">by 제니스</span></div>
+  </div>
+  <div class="fp-info" id="fp-info-header"></div>
+</header>
+
+
+
+  <!-- 동기부여 메시지 -->
+  <div id="moti-overlay" class="hidden">
+    <div class="moti-card">
+      <div class="moti-date" id="moti-date"></div>
+      <span class="moti-emoji" id="moti-emoji">💪</span>
+      <div class="moti-greeting" id="moti-greeting"></div>
+      <div class="moti-name" id="moti-name"></div>
+      <div class="moti-message" id="moti-message"></div>
+      <button class="moti-btn" onclick="closeMoti()">케어맵 시작하기 →</button>
     </div>
   </div>
 
-  <!-- 업로드 화면 -->
-  <div id="upload-screen">
-    <div class="upload-card">
-      <div class="upload-icon">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11zm-7-7l-3 3h2v3h2v-3h2l-3-3z"/></svg>
-      </div>
-      <div class="upload-title">보험 PDF를 업로드하면 AI가 자동 분석합니다</div>
-      <div class="upload-desc">
-        신용정보원 보장분석 PDF · 보험사 증권 PDF 모두 가능<br>
-        파일은 서버에 저장되지 않으며 분석 후 즉시 삭제됩니다
-      </div>
-      <label class="upload-btn-label" for="file-input">📂 PDF 파일 선택</label>
-      <input type="file" id="file-input" accept=".pdf">
-      <div class="tip-box">
-        <p>
-          <strong>📋 분석 결과 포함 항목</strong><br>
-          ① 고객 기본정보 &nbsp; ② 보유계약 + 납입현황 &nbsp; ③ 보장 한눈에 보기<br>
-          ④ 납입현황 요약 &nbsp; ⑤ 보완 필요 보장 &nbsp; ⑥ 청구 케어맵 &nbsp; ⑦ 갱신 알림
-        </p>
-      </div>
-    </div>
-    <div class="error-box" id="upload-error"></div>
-  </div>
-
-  <!-- 로딩 화면 -->
-  <div id="loading-screen">
-    <div class="spinner"></div>
-    <div class="loading-title">AI가 보장 내용을 분석하고 있습니다</div>
-    <div class="loading-sub">PDF 분량에 따라 30~60초 소요될 수 있습니다</div>
-    <div class="step-list">
-      <div class="step-item"><div class="step-dot" id="dot1"></div> PDF 파일 읽는 중</div>
-      <div class="step-item"><div class="step-dot" id="dot2"></div> 계약 정보 추출 중</div>
-      <div class="step-item"><div class="step-dot" id="dot3"></div> 보장 항목 분석 중</div>
-      <div class="step-item"><div class="step-dot" id="dot4"></div> 청구케어맵 · 갱신정보 구성 중</div>
+  <!-- FP 사번 모달 -->
+  <div id="fp-modal-overlay">
+    <div class="fp-modal">
+      <div class="fp-modal-logo">제니스 · JENIUS</div>
+      <div class="fp-modal-title">사번을 입력해주세요</div>
+      <div class="fp-modal-sub">보험청구 케어맵 사용을 위해<br>본인 사번을 입력해주세요</div>
+      <input type="text" id="fp-sabun-input" placeholder="예: H2502969"
+        maxlength="10" oninput="this.value=this.value.toUpperCase()"
+        onkeydown="if(event.key==='Enter') submitFpSabun()">
+      <button class="fp-modal-btn" onclick="submitFpSabun()">확인</button>
+      <div class="fp-modal-error" id="fp-modal-error"></div>
     </div>
   </div>
 
-  <!-- 결과 화면 -->
-  <div id="result-screen">
-    <div class="result-topbar">
-      <div class="result-title" id="result-title">보장분석 리포트</div>
-      <div class="topbar-btns">
-        <button class="btn btn-gray" onclick="resetApp()">↩ 다시 분석</button>
-        <button class="btn btn-navy" onclick="window.print()">🖨 인쇄</button>
-      </div>
+  <!-- 비활성 FP 잠금 -->
+  <div id="block-overlay" class="hidden">
+    <div class="block-card">
+      <div class="block-icon">🔒</div>
+      <div class="block-title">사용이 제한되었습니다</div>
+      <div class="block-sub">해당 계정은 현재 비활성 상태입니다.<br>지사 담당자에게 문의해주세요.</div>
     </div>
-    <div id="result-content"></div>
   </div>
 
-</div>
+<main class="main">
+
+  <!-- JENIUS 인트로 -->
+  <div id="intro-section">
+    <div class="intro-card">
+      <div class="jenius-logo">
+        <span class="jenius-logo-text">제니스</span>
+        <span class="jenius-logo-sub">AI</span>
+      </div>
+      <div class="intro-greeting">
+        안녕하세요! 👋<br>저는 유니스 전담 AI<br><strong style="color:var(--navy)">제니스</strong>입니다.
+      </div>
+      <div class="intro-desc">
+        보험증권이나 보장분석서를 올려주시면<br>
+        <strong>보험청구 케어맵</strong>을 자동으로 만들어 드릴게요.<br><br>
+        PDF 파일은 물론, <strong>사진으로 찍어서</strong> 올려도 괜찮아요 😊
+      </div>
+      <div class="intro-badges">
+        <span class="intro-badge">📄 보장분석 PDF</span>
+        <span class="intro-badge">🖼 보험증권 사진</span>
+        <span class="intro-badge">📋 가입설계서</span>
+        <span class="intro-badge">✨ 보완 설계 상품</span>
+      </div>
+      <button class="btn-start" onclick="startIntro()">시작하기 →</button>
+      <div class="intro-footer">한화생명금융서비스 VIP금융사업부 유니스지사</div>
+    </div>
+  </div>
+
+  <!-- ① 업로드 섹션 -->
+  <div id="upload-section" class="hidden">
+
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📄</span> 기존 보험 PDF 업로드</div>
+      <div class="upload-zone" id="upload-zone-existing" onclick="document.getElementById('pdf-input-existing').click()">
+        <input type="file" id="pdf-input-existing" accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,.webp" multiple>
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">클릭하거나 파일을 드래그해서 올려주세요</div>
+        <div class="upload-sub">📄 보장분석 PDF &nbsp;|&nbsp; 🖼 보험증권 사진 (JPG · PNG · HEIC)<br>여러 개 동시 업로드 가능 &nbsp;·&nbsp; 사진은 정면에서 밝게 찍을수록 정확해요</div>
+      </div>
+      <div class="file-list" id="file-list-existing"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">✨</span> 보완 설계 상품 PDF 업로드 <span style="font-size:12px;font-weight:400;color:#6B7A99;margin-left:8px">(선택)</span></div>
+      <div class="upload-zone" id="upload-zone-new" onclick="document.getElementById('pdf-input-new').click()">
+        <input type="file" id="pdf-input-new" accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,.webp" multiple>
+        <div class="upload-icon">📋</div>
+        <div class="upload-text">클릭하거나 파일을 드래그해서 올려주세요</div>
+        <div class="upload-sub">📄 가입제안서 PDF &nbsp;|&nbsp; 🖼 가입설계서 사진 (JPG · PNG · HEIC)<br>사진 찍어서 올려도 돼요 &nbsp;·&nbsp; 여러 상품 동시 업로드 가능</div>
+      </div>
+      <div class="file-list" id="file-list-new"></div>
+    </div>
+
+    <div id="error-box" class="error-msg hidden"></div>
+
+    <button class="btn btn-primary" id="analyze-btn" onclick="startAnalysis()">
+      🔍 AI 보장분석 시작
+    </button>
+  </div>
+
+  <!-- ② 로딩 -->
+  <div id="loading-section" class="hidden">
+    <div class="card">
+      <div id="loading-section-inner">
+        <div class="spinner"></div>
+        <div class="loading-text">PDF 분석 중입니다...</div>
+        <div class="loading-sub">AI가 특약 항목을 하나씩 확인하고 있어요. 잠시만 기다려 주세요.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 결과 -->
+  <div id="result-section" class="hidden">
+
+    <div class="gauge-wrap hidden" id="gauge-section">
+      <div class="gauge-top">
+        <div class="gauge-title">📊 보장 충족률 분석</div>
+        <div style="font-size:12px;color:var(--muted)">권장금액 기준 충족 여부</div>
+      </div>
+      <div class="gauge-body">
+        <div class="gauge-donut-wrap">
+          <svg width="110" height="110" viewBox="0 0 110 110">
+            <circle class="gauge-donut-track" cx="55" cy="55" r="45"/>
+            <circle class="gauge-donut-fill" id="donut-fill" cx="55" cy="55" r="45"
+              stroke="#1F3864" stroke-dasharray="283" stroke-dashoffset="283"/>
+          </svg>
+          <div class="gauge-score-center" id="gauge-score-num" style="color:var(--navy)">0%</div>
+          <div class="gauge-score-label">종합 충족률</div>
+          <div class="gauge-comment" id="gauge-comment" style="min-width:180px;margin-top:12px"></div>
+        </div>
+        <div class="gauge-bars" id="gauge-bars"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> 건강보험 현황</div>
+      <div class="caremap-table-wrap">
+        <table class="caremap-table" id="caremap-table">
+          <thead>
+            <tr>
+              <th rowspan="3">구분</th>
+              <th rowspan="3">No</th>
+              <th rowspan="3">회사명</th>
+              <th rowspan="3">상품명</th>
+              <th rowspan="3">월보험료</th>
+              <th rowspan="3">보장기간</th>
+              <th colspan="2">사망보험</th>
+              <th colspan="4">암</th>
+              <th colspan="4" class="mid">뇌혈관 질환</th>
+              <th colspan="4">심장 질환</th>
+              <th colspan="2">수술·입원</th>
+              <th rowspan="3">치매</th>
+              <th rowspan="3">재가</th>
+              <th rowspan="3">간병인</th>
+              <th rowspan="3">실손</th>
+              <th rowspan="3">비고</th>
+            </tr>
+            <tr>
+              <th rowspan="2">질병사망</th>
+              <th rowspan="2">상해사망</th>
+              <th colspan="2">진단</th>
+              <th rowspan="2">통원치료당★</th>
+              <th rowspan="2">치료비★</th>
+              <th colspan="2" class="mid">진단</th>
+              <th rowspan="2" class="mid">약제비★</th>
+              <th rowspan="2" class="mid">치료비★</th>
+              <th rowspan="2">허혈성심장</th>
+              <th rowspan="2">급성심근경색</th>
+              <th rowspan="2">약제비★</th>
+              <th rowspan="2">치료비★</th>
+              <th rowspan="2">수술비(질+상)</th>
+              <th rowspan="2">입원일당(질+상)</th>
+            </tr>
+            <tr>
+              <th>일반암</th>
+              <th>유사암</th>
+              <th class="mid">뇌졸중(뇌혈관포함)</th>
+              <th class="mid">뇌출혈</th>
+            </tr>
+          </thead>
+          <tbody id="caremap-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">💰</span> 납입현황</div>
+      <div class="summary-row" id="payment-summary"></div>
+    </div>
+
+    <div id="special-notes-card" class="card hidden">
+      <div class="card-title"><span class="icon">⚠️</span> 특수 치료비 특약 (비고 별도 표기)</div>
+      <div id="special-notes-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⚠</span> C. 갱신 알림</div>
+      <table class="renewal-table" id="renewal-table">
+        <thead>
+          <tr>
+            <th>보험사 / 상품</th>
+            <th>현재 보험료</th>
+            <th>갱신 예정일</th>
+            <th>갱신 주기</th>
+            <th>갱신 후 예상</th>
+            <th>유의사항</th>
+          </tr>
+        </thead>
+        <tbody id="renewal-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">❌</span> D. 보완 필요 보장</div>
+      <table class="gaps-table" id="gaps-table">
+        <thead>
+          <tr>
+            <th>보장항목</th>
+            <th>현재가입</th>
+            <th>권장금액</th>
+            <th>부족금액</th>
+            <th>추가가입 권고사항</th>
+          </tr>
+        </thead>
+        <tbody id="gaps-body"></tbody>
+      </table>
+    </div>
+
+    <div class="action-btns" id="result-capture">
+      <button class="btn-action btn-excel" onclick="downloadExcel()">
+        📥 엑셀 다운로드
+      </button>
+      <button class="btn-action btn-image" onclick="saveImage()">
+        🖼 이미지 저장
+      </button>
+      <button class="btn-action btn-kakao" onclick="shareKakao()">
+        💬 카카오톡 공유
+      </button>
+    </div>
+    <button class="btn btn-reset" onclick="resetAll()" style="margin-top:10px">
+      ↩ 새 고객 분석하기
+    </button>
+  </div>
+
+</main>
 
 <script>
-const SYSTEM_PROMPT = `당신은 한국 보험 전문 분석가입니다. 업로드된 PDF에서 보험 가입 정보를 추출하여 반드시 아래 JSON 형식으로만 응답하세요. 설명 텍스트나 마크다운 없이 순수 JSON만 출력하세요.
 
-중요: 이 PDF는 특정 보험사(예: 롯데손해보험, let: 등)가 만든 분석 리포트일 수 있습니다. 리포트를 만든 회사가 아니라, 고객이 실제로 가입한 보험의 보험사명을 추출하세요. 예를 들어 삼성생명, 교보생명, 현대해상, 새마을금고 등 실제 계약 보험사를 정확히 기재하세요.
 
+
+// ============================================================
+// 동기부여 메시지 시스템
+// ============================================================
+const MOTI_MESSAGES = {
+  대표: [
+    { emoji: '👑', msg: '대표님이 직접 사용하시는 제니스,<br>오늘도 <strong>유니스의 방향</strong>을 이끌어 주세요!' },
+    { emoji: '🏆', msg: '50명 FP들의 나침반,<br><strong>대표님의 오늘</strong>이 지사 전체의 내일입니다.' },
+    { emoji: '🔥', msg: '현장을 아는 대표가<br><strong>가장 강한 대표</strong>입니다. 오늘도 파이팅!' },
+    { emoji: '💎', msg: '유니스의 시작과 끝,<br><strong>대표님의 열정</strong>이 팀원들에게 전해집니다.' },
+    { emoji: '🚀', msg: '목표는 크게, 실행은 지금.<br><strong>오늘의 대표님</strong>을 응원합니다!' },
+    { emoji: '🌟', msg: '리더가 움직이면 팀이 따릅니다.<br><strong>오늘도 앞장서는 유니스 대표님!</strong>' },
+    { emoji: '⭐', msg: '제니스를 만든 주인공,<br>오늘도 <strong>최고의 상담</strong> 되세요!' },
+  ],
+  지점장: [
+    { emoji: '🌟', msg: '지점장님의 한 마디가 오늘 팀원들의 하루를 바꿉니다.<br><strong>오늘도 든든한 리더십</strong> 부탁드려요!' },
+    { emoji: '🏆', msg: '<strong>지점의 첫 번째 케어맵</strong>은 언제나 지점장님의 것이어야죠.<br>오늘 하루도 기대합니다!' },
+    { emoji: '🔥', msg: '팀원들이 보고 있어요.<br><strong>지점장님의 열정</strong>이 그대로 전달됩니다. 파이팅!' },
+    { emoji: '💎', msg: '최고의 팀에는 <strong>최고의 리더</strong>가 있습니다.<br>오늘도 유니스를 빛내주세요!' },
+    { emoji: '🌈', msg: '지점장님이 만드는 케어맵 하나가 고객의 미래를 바꿉니다.<br><strong>오늘도 의미 있는 하루</strong> 되세요!' },
+    { emoji: '⭐', msg: '<strong>유니스의 중심</strong>에서 오늘도 든든하게 이끌어주세요.<br>팀원들이 함께합니다!' },
+    { emoji: '🚀', msg: '월말 목표까지 함께 달려요!<br><strong>지점장님의 추진력</strong>이 팀 전체를 이끕니다.' },
+  ],
+  매니저: [
+    { emoji: '💪', msg: '매니저님이 있어 팀이 더 단단해집니다.<br><strong>오늘도 든든한 한 분</strong>이 되어주세요!' },
+    { emoji: '🎯', msg: '<strong>목표는 명확하게,</strong> 행동은 지금 당장!<br>오늘 매니저님의 케어맵을 기대합니다.' },
+    { emoji: '🌟', msg: '팀원들의 롤모델,<br><strong>매니저님의 오늘</strong>을 응원합니다! 좋은 성과 만들어가요!' },
+    { emoji: '🔑', msg: '<strong>좋은 질문 하나</strong>가 고객의 마음을 엽니다.<br>케어맵으로 오늘도 도전해요!' },
+    { emoji: '🏅', msg: '매니저님의 경험이 <strong>팀의 자산</strong>입니다.<br>오늘도 멋진 상담 응원해요!' },
+    { emoji: '✨', msg: '<strong>작은 준비 하나</strong>가 큰 계약을 만듭니다.<br>케어맵으로 오늘을 시작해요!' },
+    { emoji: '🌿', msg: '꾸준함이 최고의 전략입니다.<br><strong>매니저님의 오늘</strong>이 내일의 성과로 돌아와요!' },
+  ],
+  FP: [
+    { emoji: '🍀', msg: '오늘 만들 케어맵 하나가<br><strong>좋은 인연의 시작</strong>이 될 거예요. 오늘도 파이팅!' },
+    { emoji: '💫', msg: '<strong>준비된 설계사</strong>만이 고객의 신뢰를 얻습니다.<br>오늘도 제니스와 함께해요!' },
+    { emoji: '🌸', msg: '오늘 상담할 고객이 평생 감사하게 될 수도 있어요.<br><strong>그만큼 소중한 오늘</strong>입니다!' },
+    { emoji: '🔥', msg: '작은 시작이 큰 변화를 만듭니다.<br><strong>케어맵 하나</strong>로 오늘 하루를 열어보세요!' },
+    { emoji: '🎵', msg: '오늘 하루도 <strong>고객의 든든한 보호자</strong>로<br>활약해주세요! 응원합니다!' },
+    { emoji: '🌺', msg: '좋은 정보를 드리는 것,<br>그게 바로 <strong>진짜 영업</strong>입니다. 오늘도 최고의 상담 되세요!' },
+    { emoji: '⚡', msg: '월요일이든 금요일이든<br><strong>최선은 항상 오늘</strong>입니다. 제니스가 응원해요!' },
+  ]
+};
+const DAYS_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+const MONTHS  = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+function showMotiMessage(fpData) {
+  const now   = new Date();
+  const day   = now.getDay();   // 0~6
+  const date  = now.getDate();
+  const month = now.getMonth();
+
+  const role = fpData.role || 'FP';
+  const msgs = MOTI_MESSAGES[role] || MOTI_MESSAGES['FP'];
+  const idx  = date % msgs.length;   // 날짜 기반 순환
+  const { emoji, msg } = msgs[idx];
+
+  // 호칭
+  const title = role === '대표'   ? '대표님'
+              : role === '지점장' ? '지점장님'
+              : role === '매니저' ? '매니저님'
+              : 'FP님';
+
+  document.getElementById('moti-date').textContent =
+    `${MONTHS[month]} ${date}일 ${DAYS_KO[day]}`;
+  document.getElementById('moti-emoji').textContent = emoji;
+  document.getElementById('moti-greeting').textContent =
+    `${fpData.branch}지점 ${title}`;
+  document.getElementById('moti-name').textContent = `${fpData.name} ${title}, 안녕하세요!`;
+  document.getElementById('moti-message').innerHTML = msg;
+
+  document.getElementById('moti-overlay').classList.remove('hidden');
+}
+
+function closeMoti() {
+  document.getElementById('moti-overlay').classList.add('hidden');
+}
+
+// ============================================================
+// FP 사번 관리
+// ============================================================
+let currentFp = { sabun: '', name: '', branch: '', managerEmail: '' };
+
+// FP 로컬 테이블 (GAS 배포 전 로컬 검증용)
+const FP_LOCAL = {
+  'H2502969': { name: '전소영', branch: '알파',   role: '지점장', active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502965': { name: '이수아', branch: '브라보', role: '지점장', active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2502953': { name: '허영민', branch: '알파',   role: '매니저',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502970': { name: '정윤주', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502956': { name: '강민경', branch: '알파',   role: '매니저',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2503663': { name: '박주미', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2503695': { name: '추희진', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502984': { name: '문희영', branch: '알파',   role: '매니저',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502976': { name: '강현주', branch: '알파',   role: '매니저',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502962': { name: '옥서윤', branch: '알파',   role: '매니저',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2605005': { name: '박자연', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502955': { name: '최나헬', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2605053': { name: '정연미', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2605144': { name: '박미옥', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2605024': { name: '김윤미', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2605022': { name: '박성미', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2503207': { name: '김유경', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502988': { name: '유지예', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2504707': { name: '김희연', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502966': { name: '이윤희', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2605021': { name: '이정원', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502980': { name: '김려원', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502961': { name: '서일선', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502992': { name: '전선희', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502975': { name: '반민주', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2503173': { name: '성형희', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502990': { name: '이강애', branch: '알파',   role: '매니저',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2503839': { name: '김현주', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2503658': { name: '이정희', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502972': { name: '김명옥', branch: '알파',   role: '매니저',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502987': { name: '유순남', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502959': { name: '박경화', branch: '알파',   role: 'FP',     active: true,  managerEmail: 'jjutsso@nate.com' },
+  'H2502957': { name: '고혜영', branch: '브라보', role: '매니저',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2502997': { name: '조윤서', branch: '브라보', role: '매니저',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2502985': { name: '박혜윤', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2502989': { name: '윤선정', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2605017': { name: '한송이', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2503698': { name: '김윤희', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2504847': { name: '고은채', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2502993': { name: '최영주', branch: '브라보', role: '매니저',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2502952': { name: '최은희', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2502982': { name: '김진영', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2505077': { name: '노유경', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2605023': { name: '박지온', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2503188': { name: '서누리', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2503600': { name: '강아름', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'H2605244': { name: '손진이', branch: '브라보', role: 'FP',     active: true,  managerEmail: 'suriya79@naver.com' },
+  'KTK01':    { name: '김태규', branch: '유니스', role: '대표',   active: true,  managerEmail: '' },
+  'H2503162': { name: '최성경', branch: '교육',   role: '지점장', active: true,  managerEmail: '' },
+};
+
+function submitFpSabun() {
+  const sabun = document.getElementById('fp-sabun-input').value.trim().toUpperCase();
+  const errEl = document.getElementById('fp-modal-error');
+  errEl.textContent = '';
+
+  if (!sabun) { errEl.textContent = '사번을 입력해주세요.'; return; }
+
+  const fp = FP_LOCAL[sabun];
+
+  if (!fp) {
+    errEl.textContent = '등록되지 않은 사번입니다. 다시 확인해주세요.';
+    return;
+  }
+
+  if (!fp.active) {
+    document.getElementById('fp-modal-overlay').classList.add('hidden');
+    document.getElementById('block-overlay').classList.remove('hidden');
+    return;
+  }
+
+  // 로그인 성공
+  currentFp = { sabun: sabun, name: fp.name, branch: fp.branch, role: fp.role, managerEmail: fp.managerEmail, active: fp.active };
+  document.getElementById('fp-modal-overlay').classList.add('hidden');
+  document.getElementById('fp-info-header').textContent = fp.name + ' · ' + fp.branch;
+  showMotiMessage(fp);
+}
+
+function startIntro() {
+  document.getElementById('intro-section').classList.add('hidden');
+  document.getElementById('upload-section').classList.remove('hidden');
+}
+
+
+// ============================================================
+// 보장 충족률 게이지
+// ============================================================
+const COVERAGE_TARGETS = [
+  { key: 'high_cancer',       label: '고액암 진단비',   target: 5000,  unit: '만원' },
+  { key: 'cancer_diagnosis',  label: '일반암 진단비',   target: 10000, unit: '만원' },
+  { key: 'similar_cancer',    label: '유사암 (소액암)', target: 1000,  unit: '만원' },
+  { key: 'brain_vessel',      label: '뇌혈관 진단비',   target: 3000,  unit: '만원' },
+  { key: 'brain_stroke',      label: '뇌졸중 진단비',   target: 5000,  unit: '만원' },
+  { key: 'brain_bleed',       label: '뇌출혈 진단비',   target: 3000,  unit: '만원' },
+  { key: 'heart_ischemic',    label: '허혈성심장질환',  target: 3000,  unit: '만원' },
+  { key: 'heart_mi',          label: '급성심근경색',    target: 5000,  unit: '만원' },
+  { key: 'arrhythmia',        label: '부정맥 진단비',   target: 1000,  unit: '만원' },
+  { key: 'cancer_treatment',  label: '암 치료비★',      target: 10000, unit: '만원', treat: true },
+  { key: 'brain_treatment',   label: '뇌 치료비★',      target: 3000,  unit: '만원', treat: true },
+  { key: 'heart_treatment',   label: '심장 치료비★',    target: 3000,  unit: '만원', treat: true },
+  { key: 'surgery',           label: '수술비',           target: 1000,  unit: '만원' },
+  { key: 'hospitalization',   label: '입원일당',         target: 10,    unit: '만원/일' },
+  { key: 'dementia',          label: '치매 진단비',      target: 3000,  unit: '만원' },
+  { key: 'caregiver',         label: '간병인지원',       target: 15,    unit: '만원/일' },
+];
+
+function calcTotalsFromContracts(contracts) {
+  const totals = {};
+  COVERAGE_TARGETS.forEach(t => {
+    totals[t.key] = contracts
+      .filter(c => c.category !== '보완설계')
+      .reduce((sum, c) => sum + (Number(c[t.key]) || 0), 0);
+  });
+  return totals;
+}
+
+function renderGauge(contracts) {
+  const totals = calcTotalsFromContracts(contracts);
+  let totalScore = 0;
+  const barsHtml = [];
+
+  COVERAGE_TARGETS.forEach(t => {
+    const current = totals[t.key] || 0;
+    const pct = Math.min(100, Math.round((current / t.target) * 100));
+    if (pct >= 100) totalScore += 1;
+    else if (pct >= 70) totalScore += 0.7;
+    else if (pct >= 30) totalScore += 0.3;
+
+    const colorClass = pct >= 100 ? 'bar-great' : pct >= 70 ? 'bar-good' : pct >= 30 ? 'bar-warn' : 'bar-danger';
+    const currentStr = current > 0 ? current.toLocaleString() + t.unit : '미가입';
+    const tag = t.treat ? ' <span style="color:#2E7D32;font-size:10px">★</span>' : '';
+
+    barsHtml.push(`
+      <div class="gauge-bar-row">
+        <div class="gauge-bar-meta">
+          <span class="gauge-bar-name">${t.label}${tag}</span>
+          <span class="gauge-bar-vals">${currentStr} / ${t.target.toLocaleString()}${t.unit}</span>
+        </div>
+        <div class="gauge-bar-bg">
+          <div class="gauge-bar-fill ${colorClass}" style="width:0%" data-pct="${pct}"></div>
+        </div>
+      </div>`);
+  });
+
+  const scoreRate = Math.round((totalScore / COVERAGE_TARGETS.length) * 100);
+  const circumference = 283;
+  const offset = circumference - (circumference * scoreRate / 100);
+
+  // 색상
+  const color = scoreRate >= 80 ? '#2E7D32' : scoreRate >= 60 ? '#1565C0' : scoreRate >= 40 ? '#E65100' : '#C62828';
+  const comment = scoreRate >= 80
+    ? '✅ <strong>전반적으로 양호</strong>해요.<br>일부 치료비 보완 시 완벽해집니다.'
+    : scoreRate >= 60
+    ? '🔵 <strong>보통 수준</strong>이에요.<br>치료비★ 항목 보완이 필요합니다.'
+    : scoreRate >= 40
+    ? '🟠 <strong>보장 공백</strong>이 있어요.<br>주요 항목 추가 가입을 검토하세요.'
+    : '🔴 <strong>보장이 많이 부족</strong>해요.<br>전반적인 재설계를 권장합니다.';
+
+  document.getElementById('gauge-section').classList.remove('hidden');
+  document.getElementById('gauge-bars').innerHTML = barsHtml.join('');
+  document.getElementById('gauge-score-num').textContent = scoreRate + '%';
+  document.getElementById('gauge-score-num').style.color = color;
+  document.getElementById('gauge-comment').innerHTML = comment;
+
+  const donut = document.getElementById('donut-fill');
+  donut.style.stroke = color;
+  setTimeout(() => {
+    donut.style.strokeDashoffset = offset;
+    document.querySelectorAll('.gauge-bar-fill').forEach(bar => {
+      bar.style.width = bar.dataset.pct + '%';
+    });
+  }, 100);
+}
+
+// ============================================================
+// 이미지 저장
+// ============================================================
+async function saveImage() {
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '저장 중...';
+  try {
+    const target = document.getElementById('result-section');
+    const canvas = await html2canvas(target, {
+      scale: 2, useCORS: true, backgroundColor: '#F4F6FA',
+      ignoreElements: el => el.classList.contains('action-btns') || el.classList.contains('btn-reset')
+    });
+    const link = document.createElement('a');
+    const name = analysisResult ? (analysisResult._extractedName || '고객') : '고객';
+    link.download = name + '님_보험청구케어맵.jpg';
+    link.href = canvas.toDataURL('image/jpeg', 0.92);
+    link.click();
+  } catch(e) {
+    alert('이미지 저장 중 오류가 발생했습니다: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = '🖼 이미지 저장';
+}
+
+// ============================================================
+// 카카오톡 공유 (이미지)
+// ============================================================
+async function shareKakao() {
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '준비 중...';
+  try {
+    const target = document.getElementById('result-section');
+    const canvas = await html2canvas(target, {
+      scale: 2, useCORS: true, backgroundColor: '#F4F6FA',
+      ignoreElements: el => el.classList.contains('action-btns') || el.classList.contains('btn-reset')
+    });
+    canvas.toBlob(async blob => {
+      const name = analysisResult ? (analysisResult._extractedName || '고객') : '고객';
+      const file = new File([blob], name + '님_케어맵.jpg', { type: 'image/jpeg' });
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: name + '님 보험청구 케어맵',
+          text: '유니스 VIP 보험청구 케어맵입니다.',
+          files: [file]
+        });
+      } else {
+        // 파일 공유 불가 시 이미지 다운로드로 대체
+        const link = document.createElement('a');
+        link.download = name + '님_케어맵.jpg';
+        link.href = canvas.toDataURL('image/jpeg', 0.92);
+        link.click();
+        alert('카카오톡 공유가 지원되지 않는 환경이에요.\n이미지를 저장 후 카카오톡에서 직접 공유해주세요.');
+      }
+      btn.disabled = false; btn.textContent = '💬 카카오톡 공유';
+    }, 'image/jpeg', 0.92);
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '💬 카카오톡 공유';
+    if (e.name !== 'AbortError') alert('공유 중 오류: ' + e.message);
+  }
+}
+
+// ============================================================
+// 설정
+// ============================================================
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbycKi8BTyDR7_TQJYgVcyxUe-dE1ycjjvCFvpAYV3cT9vXEZ9y_WHuloNYaxMJ3ZHjC/exec';
+
+let uploadedFilesExisting = [];
+let uploadedFilesNew = [];
+let analysisResult = null;
+
+// ============================================================
+// AI 시스템 프롬프트 (치료비 특약 규칙 전체 반영)
+// ============================================================
+const SYSTEM_PROMPT = `당신은 한화생명금융서비스 유니스지사의 보장분석 전문 AI입니다.
+업로드된 보험 PDF를 분석하여 정확한 JSON만 출력하세요. JSON 외 다른 텍스트, 마크다운 코드블록(\`\`\`)은 절대 출력하지 마세요.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 1] 보험사명 구분
+━━━━━━━━━━━━━━━━━━━━━━━━━
+- PDF 발행기관(롯데손보 let:, KB손보 Let: 등)과 실제 계약 보험사를 반드시 구분
+- company 필드에는 실제 계약 보험사명만 기재
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 2] 보험 분류 기준
+━━━━━━━━━━━━━━━━━━━━━━━━━
+category 필드:
+- "건강보험": 질병·상해 보장 중심 상품
+- "저축성": 만기환급형 저축보험 / 단기납 종신보험(5·7·10년납, 특약 2개 이하) / 연금보험
+- "기타": 실손의료비, 운전자보험 등
+- "실손": 실손의료비 전용
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 3] 암 통원치료당★ (cancer_tongwon 필드)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+아래 키워드 특약이 있으면 → cancer_tongwon에 회당 금액 기재:
+
+  ✅ 현대해상 특화 (우선 인식):
+     - 암통원치료당 / 통원치료당 / 암통원치료비(통원)
+     - 표적항암약물통원 / 방사선통원 / 항암통원치료
+     - 암통원의료비(통원 1회당) 등 통원 횟수 기준 지급 특약
+
+  ✅ 일반 암통원 치료비 (타사 포함):
+     - 암통원치료비 / 암통원의료비 / 통원암치료비
+     - 항암통원 / 암외래치료비
+
+  → 금액 표기: "10만원/회" 형식의 문자열로 기재
+  → 예: "10만원/회", "5만원/회", "20만원/회"
+  → 회당 금액이 명시되지 않은 경우 보험증권 기재 금액 기준으로 추출
+  → 현대해상 암통원치료당 특약: 표적항암·방사선·항암약물 치료 시 통원 1회당 지급
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 4] 암 치료비★ (cancer_treatment 필드)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+아래 특약 금액 모두 합산 → cancer_treatment:
+  ✅ 항암약물치료비 / 항암화학치료비
+  ✅ 방사선치료비 / 방사선조사치료비
+  ✅ 표적치료비 / 표적항암약물치료비
+  ✅ 중입자치료비 / 중입자선치료비    ← 합산 포함 (이전과 다름)
+  ✅ 양성자치료비 / 양성자선치료비    ← 합산 포함
+  ✅ 입자선치료비
+  ✅ 호르몬요법치료비
+  ✅ 암수술비 (진단비·입원비와 별도인 경우)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 4-0] 뇌혈관 포괄 진단비 (brain_vessel 필드)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+아래 키워드 특약 → brain_vessel에 합산:
+  ✅ 뇌혈관질환진단비 / 뇌혈관진단비 / 뇌혈관질환특약
+  ✅ 뇌졸중·뇌출혈 통합 진단비 (뇌졸중+뇌출혈 구분 없는 포괄 특약)
+  → 뇌졸중(brain_stroke)·뇌출혈(brain_bleed)과 별도 기재
+  → 포괄 특약이면 brain_vessel에, 개별 구분되면 각 필드에 기재
+
+[핵심 규칙 5] 뇌 약제비★ (brain_drug 필드)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+아래 키워드 특약 → brain_drug에 합산:
+  ✅ 뇌심약제비 / 뇌심혈관약제비
+  ✅ 뇌혈관약제비 / 뇌질환약제비 / 뇌혈관질환약제비
+  ✅ 뇌심주요치료비 특약 내 약제비 항목
+  ✅ 항혈전제약제비 / 혈전용해제약제비
+  ✅ 뇌혈관치료약제비 / 뇌졸중약제비
+  ✅ 최신 통합특약 내 '뇌' 관련 약제비 항목 (뇌심케어, 뇌심플러스, 뇌심보장 등)
+  → 뇌+심장 통합 약제비 특약인 경우: 전액 brain_drug에 기재 후 memo에 "뇌심약제비 통합" 표기
+  → 뇌심주요치료비 특약에 약제비가 포함된 경우: 약제비 금액만 분리하여 brain_drug에 기재
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 6] 뇌 치료비★ (brain_treatment 필드)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+아래 특약 합산 → brain_treatment:
+  ✅ 혈전용해치료비 / 뇌혈전용해술치료비
+  ✅ 뇌수술비 / 뇌혈관수술비
+  ✅ 뇌혈관중재시술비 / 뇌혈관성형술비
+  ✅ 뇌혈관질환치료비 (통합특약)
+  ✅ 뇌심주요치료비 (뇌 관련 금액)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 6-1] 부정맥 진단비 (arrhythmia 필드)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+아래 키워드 특약 → arrhythmia에 합산:
+  ✅ 부정맥진단비 / 부정맥특약 / 심방세동진단비
+  ✅ 중증부정맥 / 생명위협부정맥 / 부정맥치료비
+  ✅ 심실세동 / 심실빈맥 관련 진단 특약
+  → heart_ischemic·heart_mi와 별도 기재
+
+[핵심 규칙 7] 심장 약제비★ (heart_drug 필드)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+아래 키워드 특약 → heart_drug에 합산:
+  ✅ 뇌심약제비 / 뇌심혈관약제비 (심장 관련 금액)
+  ✅ 심장약제비 / 심질환약제비 / 심혈관약제비
+  ✅ 뇌심주요치료비 특약 내 약제비 항목
+  ✅ 항혈소판제약제비 / 항응고제약제비
+  ✅ 심장치료약제비 / 심근경색약제비 / 관상동맥약제비
+  ✅ 최신 통합특약 내 '심장' 관련 약제비 항목 (뇌심케어, 뇌심플러스, 뇌심보장 등)
+  → 뇌+심장 통합 약제비 특약인 경우:
+     - 특약명에 뇌·심 구분이 있으면 각각 분리 기재
+     - 통합 금액만 있으면 전액 brain_drug에 기재하고 memo에 "뇌심약제비 통합, 심장도 포함" 표기
+  → 뇌심주요치료비 특약에 약제비가 포함된 경우: 약제비 금액만 분리하여 heart_drug에 기재
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 8] 심장 치료비★ (heart_treatment 필드)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+아래 특약 합산 → heart_treatment:
+  ✅ 심장수술비
+  ✅ 관상동맥중재시술비 / 관상동맥성형술비
+  ✅ 심장재활치료비
+  ✅ 뇌심주요치료비 (심장 관련 금액)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 9] 재가 항목
+━━━━━━━━━━━━━━━━━━━━━━━━━
+- PDF에 재가서비스 항목 없음 → homecare 항상 null
+- FP가 수기 기입하는 칸
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[핵심 규칙 10] 금액 단위
+━━━━━━━━━━━━━━━━━━━━━━━━━
+- 모든 보장금액: 만원 단위 숫자 (예: 1000)
+- cancer_tongwon만 예외: "10만원/회" 문자열
+- 입원일당: 만원/일 단위 (예: 1만원/일 → 1)
+- 금액 불명확 시: null + memo에 "금액확인필요"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+[출력 JSON 형식]
+━━━━━━━━━━━━━━━━━━━━━━━━━
 {
-  "customer": {
-    "name": "고객명(없으면 고객님)",
-    "insurance_age": "보험나이",
-    "analysis_date": "분석일자",
-    "fp": "FP명(없으면 빈문자열)"
-  },
   "contracts": [
+    {
+      "category": "건강보험",
+      "no": 1,
+      "company": "보험사명",
+      "product": "상품명",
+      "monthly_premium": "35,300",
+      "coverage_period": "2001.03~2039.03\\n(80세만기/10년납)",
+      "disease_death": null,
+      "accident_death": null,
+      "high_cancer": null,
+      "cancer_diagnosis": null,
+      "similar_cancer": null,
+      "cancer_tongwon": null,
+      "cancer_treatment": null,
+      "brain_vessel": null,
+      "brain_stroke": null,
+      "brain_bleed": null,
+      "brain_drug": null,
+      "brain_treatment": null,
+      "heart_ischemic": null,
+      "heart_mi": null,
+      "arrhythmia": null,
+      "heart_drug": null,
+      "heart_treatment": null,
+      "surgery": null,
+      "hospitalization": null,
+      "dementia": null,
+      "homecare": null,
+      "caregiver": null,
+      "silson": false,
+      "memo": ""
+    }
+  ],
+  "savings_contracts": [
     {
       "no": 1,
       "company": "보험사명",
       "product": "상품명",
-      "period": "보장기간(예:2001.03~2039.03)",
-      "payment_period": "납입기간(예:10년납)",
-      "payment_count": "경과/전체(예:120/120)",
-      "monthly_premium": 숫자,
-      "paid_total": 숫자,
-      "remaining_total": 숫자,
-      "completion_date": "납입완료일(예:2027.10 또는 납입완료)",
-      "is_renewal": false,
-      "renewal_cycle": "갱신주기(없으면 빈문자열)"
+      "monthly_premium": "100,000",
+      "payment_period": "20년납",
+      "payment_method": "월납",
+      "maturity_date": "2045.03",
+      "payment_summary": "납입중",
+      "memo": ""
+    }
+  ],
+  "other_contracts": [
+    {
+      "no": 1,
+      "company": "현대해상",
+      "product": "실손의료비보장보험(Hi2104)",
+      "monthly_premium": "갱신형",
+      "payment_period": "매년갱신",
+      "payment_method": "월납",
+      "maturity_date": "매년갱신",
+      "payment_summary": "갱신중",
+      "memo": "4세대 실손 / 매년갱신"
     }
   ],
   "payment_summary": {
-    "monthly_total": 숫자,
-    "paid_total": 숫자,
-    "remaining_total": 숫자,
-    "grand_total": 숫자
+    "paid_so_far": "5,257만원",
+    "remaining": "2,906만원",
+    "total_expected": "8,163만원"
   },
-  "coverage": [
-    {
-      "category": "카테고리(사망/진단/실손/수술비/입원비/요양치매/기타)",
-      "item": "세부항목명",
-      "standard": 숫자(만원단위권장금액),
-      "current": 숫자(만원단위현재가입금액없으면0),
-      "status": "충분 또는 부족 또는 미가입"
-    }
-  ],
-  "claims_map": [
-    {
-      "situation": "상황(예:암 진단 시)",
-      "items": ["청구항목1","청구항목2"],
-      "companies": ["보험사1","보험사2"]
-    }
-  ],
   "renewal_alerts": [
     {
-      "product": "상품명",
-      "company": "보험사",
-      "renewal_date": "갱신예정일",
-      "cycle": "갱신주기",
-      "comment": "갱신 리스크 코멘트"
+      "company": "교보생명",
+      "product": "간편마이플랜건강보험[2409]",
+      "current_premium": "67,880원/월 (19/240납)",
+      "renewal_date": "2044.10 (갱신시 87세)",
+      "renewal_cycle": "20년",
+      "expected_premium": "약 20~30만원/월 (3~4배 추정)",
+      "increase_multiple": "약 3~4배",
+      "caution": "고령갱신→보험료 급등 비갱신 상품 검토 권고"
     }
   ],
-  "deficient_items": ["부족하거나미가입된주요항목"],
-  "fp_comment": "FP추천코멘트1~2문장"
+  "coverage_gaps": [
+    {
+      "item": "질병사망",
+      "current": "5,100만",
+      "recommended": "10,000만",
+      "shortfall": "△ 4,900만",
+      "recommendation": "종신보험 or 정기보험 추가 검토"
+    }
+  ],
+  "claim_guide": [
+    {
+      "situation": "🎗 암 진단 시",
+      "claimable": "일반암진단비 / 암수술비 / 실손의료비",
+      "insurers_and_amount": "삼성 1,000만 + 교보 4,000만 = 5,000만 | 현대해상 실손"
+    }
+  ]
+}`;
+
+
+// ============================================================
+// 파일 업로드
+// ============================================================
+// ── 기존 보험 PDF ──
+document.getElementById('pdf-input-existing').addEventListener('change', (e) => {
+  addFiles(Array.from(e.target.files), 'existing');
+  e.target.value = '';
+});
+const zoneEx = document.getElementById('upload-zone-existing');
+zoneEx.addEventListener('dragover', (e) => { e.preventDefault(); zoneEx.classList.add('dragover'); });
+zoneEx.addEventListener('dragleave', () => zoneEx.classList.remove('dragover'));
+zoneEx.addEventListener('drop', (e) => {
+  e.preventDefault(); zoneEx.classList.remove('dragover');
+  addFiles(Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf'), 'existing');
+});
+
+// ── 보완 설계 상품 PDF ──
+document.getElementById('pdf-input-new').addEventListener('change', (e) => {
+  addFiles(Array.from(e.target.files), 'new');
+  e.target.value = '';
+});
+const zoneNew = document.getElementById('upload-zone-new');
+zoneNew.addEventListener('dragover', (e) => { e.preventDefault(); zoneNew.classList.add('dragover'); });
+zoneNew.addEventListener('dragleave', () => zoneNew.classList.remove('dragover'));
+zoneNew.addEventListener('drop', (e) => {
+  e.preventDefault(); zoneNew.classList.remove('dragover');
+  addFiles(Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf'), 'new');
+});
+
+function addFiles(files, type) {
+  const arr = type === 'existing' ? uploadedFilesExisting : uploadedFilesNew;
+  files.forEach(f => {
+    if (!arr.find(u => u.name === f.name)) arr.push(f);
+  });
+  renderFileList(type);
 }
 
-표준권장금액(만원):
-- 사망(질병):10000, 사망(상해):20000
-- 일반암:5000, 유사암:1000, 전이/소액암:1000
-- 뇌혈관:1000, 뇌졸중:2000, 뇌출혈:1000
-- 허혈성심장:1000, 급성심근경색:2000, 심장수술:1000
-- 후유장해(질병3%):3000, 후유장해(상해3%):5000
-- 질병수술비:300, 상해수술비:100
-- 질병입원일당:10, 상해입원일당:10
-- 치매/장기요양:2000, 간병:1000
-
-PDF에서 데이터를 찾을 수 없는 항목은 0으로 처리하세요.`;
-
-function fmt(n) {
-  if (!n || n === 0) return '-';
-  const uk = Math.floor(n / 10000);
-  const man = n % 10000;
-  if (uk > 0 && man > 0) return uk + '억 ' + man.toLocaleString() + '만';
-  if (uk > 0) return uk + '억';
-  return n.toLocaleString() + '만';
-}
-function fmtP(n) { return n ? n.toLocaleString() + '원' : '-'; }
-
-function badge(s) {
-  if (s === '충분') return '<span class="badge badge-ok">충분</span>';
-  if (s === '부족') return '<span class="badge badge-lack">부족</span>';
-  return '<span class="badge badge-none">미가입</span>';
+function renderFileList(type) {
+  const arr = type === 'existing' ? uploadedFilesExisting : uploadedFilesNew;
+  const listId = type === 'existing' ? 'file-list-existing' : 'file-list-new';
+  document.getElementById(listId).innerHTML = arr.map((f, i) => {
+    const icon = f.type && f.type.startsWith('image/') ? '🖼' : '📄';
+    return '<div class="file-item">'
+      + '<span class="file-name">' + icon + ' ' + f.name + '</span>'
+      + '<span class="file-remove" onclick="removeFile(' + i + ', \'' + type + '\')">✕</span>'
+      + '</div>';
+  }).join('');
 }
 
-function statusClass(s) {
-  if (s === '충분') return 'ok';
-  if (s === '부족') return 'lack';
-  return 'none';
+function removeFile(idx, type) {
+  if (type === 'existing') uploadedFilesExisting.splice(idx, 1);
+  else uploadedFilesNew.splice(idx, 1);
+  renderFileList(type);
 }
 
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxscbjJaQpKPExAShWwD9qmAE8Iylw04TNt7RPrs0AP_LiTf-M54bCgiTcCzQL3W4sL/exec';
+// ============================================================
+// PDF → Base64
+// ============================================================
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
 
-async function analyzePDF(b64) {
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
+// ============================================================
+// 분석 시작
+// ============================================================
+async function startAnalysis() {
+  // 고객명/나이는 PDF에서 자동 추출
+  const name  = '';
+  const age   = '';
+  const anniv = '';
+
+  document.getElementById('error-box').classList.add('hidden');
+  if (uploadedFilesExisting.length === 0) return showError('기존 보험 PDF를 업로드해주세요.');
+
+  document.getElementById('upload-section').classList.add('hidden');
+  document.getElementById('loading-section').classList.remove('hidden');
+
+  try {
+    // PDF → base64 변환
+    const [existingPdfs, newPdfs] = await Promise.all([
+      Promise.all(uploadedFilesExisting.map(async f => ({ name: f.name, data: await fileToBase64(f), mimeType: f.type || 'application/pdf', type: 'existing' }))),
+      Promise.all(uploadedFilesNew.map(async f => ({ name: f.name, data: await fileToBase64(f), mimeType: f.type || 'application/pdf', type: 'new' })))
+    ]);
+
+    // GAS 프록시 호출
+    const payload = {
+      action: 'analyzeInsurance',
       system: SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
-          { type: 'text', text: '이 PDF에서 보험 정보를 추출하여 지정된 JSON 형식으로 분석해주세요.' }
-        ]
-      }]
-    })
+      customerName: name,
+      insuranceAge: age,
+      anniversaryDate: anniv,
+      existingPdfs: existingPdfs,
+      newPdfs: newPdfs
+    };
+
+    const resp = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) throw new Error(`서버 오류: ${resp.status}`);
+
+    const raw = await resp.json();
+    const text = raw.result || raw.text || raw.content || '';
+
+    // JSON 파싱
+    let json;
+    try {
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      json = JSON.parse(cleaned);
+    } catch {
+      throw new Error('AI 응답을 JSON으로 파싱할 수 없습니다.\n' + text.substring(0, 200));
+    }
+
+    json._customerName = name;
+    json._insuranceAge = age;
+    json._anniversaryDate = anniv;
+    analysisResult = json;
+  analysisResult._extractedName = (json.customer_info && json.customer_info.name) || '고객';
+
+    renderResults(json);
+
+    // 사용 로그 기록 (고객 개인정보 제외 - 건수만)
+    const extractedName = (json.customer_info && json.customer_info.name) ? '(자동추출)' : '(미확인)';
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'logCareMap',
+        fpSabun: currentFp.sabun,
+        fpName: currentFp.name,
+        branch: currentFp.branch,
+        timestamp: new Date().toISOString()
+      })
+    }).catch(() => {});
+
+    document.getElementById('loading-section').classList.add('hidden');
+    document.getElementById('result-section').classList.remove('hidden');
+
+  } catch (err) {
+    document.getElementById('loading-section').classList.add('hidden');
+    document.getElementById('upload-section').classList.remove('hidden');
+    showError('분석 중 오류가 발생했습니다: ' + err.message);
+  }
+}
+
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  box.textContent = '⚠ ' + msg;
+  box.classList.remove('hidden');
+}
+
+// ============================================================
+// 결과 렌더링
+// ============================================================
+function renderResults(json) {
+  renderGauge(json.contracts || []);
+  renderCareMap(json.contracts || []);
+  renderPaymentSummary(json.payment_summary || {});
+  renderSpecialNotes(json.special_treatment_notes || []);
+  renderRenewal(json.renewal_alerts || []);
+  renderGaps(json.coverage_gaps || []);
+}
+
+function val(v) {
+  if (v === null || v === undefined || v === '') return '';
+  return `<span class="val">${v}</span>`;
+}
+function treatVal(v) {
+  if (!v) return '';
+  return `<span class="val" style="color:#2E7D32;font-weight:700">${v}</span>`;
+}
+
+function renderCareMap(contracts) {
+  const health = contracts.filter(c => c.category === '건강보험' || !c.category);
+  const other = contracts.filter(c => c.category === '기타' || c.category === '실손');
+  const tbody = document.getElementById('caremap-body');
+
+  let rows = '';
+
+  // 건강보험 행
+  health.forEach(c => {
+    rows += `<tr>
+      <td><span class="category-tag">건강</span></td>
+      <td>${c.no}</td>
+      <td class="left">${c.company}</td>
+      <td class="left">${c.product}</td>
+      <td style="text-align:right">${c.monthly_premium || ''}</td>
+      <td class="left" style="font-size:11px">${(c.coverage_period||'').replace(/\\n/g,'<br>')}</td>
+      <td>${val(c.disease_death)}</td>
+      <td>${val(c.accident_death)}</td>
+      <td>${val(c.cancer_diagnosis)}</td>
+      <td>${val(c.similar_cancer)}</td>
+      <td style="background:#F1F8E9;font-size:11px">${treatVal(c.cancer_tongwon)}</td>
+      <td style="background:#F1F8E9">${treatVal(c.cancer_treatment)}</td>
+      <td>${val(c.brain_stroke)}</td>
+      <td>${val(c.brain_bleed)}</td>
+      <td style="background:#F1F8E9">${treatVal(c.brain_drug)}</td>
+      <td style="background:#F1F8E9">${treatVal(c.brain_treatment)}</td>
+      <td>${val(c.heart_ischemic)}</td>
+      <td>${val(c.heart_mi)}</td>
+      <td style="background:#F1F8E9">${treatVal(c.heart_drug)}</td>
+      <td>${val(c.surgery)}</td>
+      <td>${val(c.hospitalization)}</td>
+      <td>${val(c.dementia)}</td>
+      <td></td>
+      <td>${val(c.caregiver)}</td>
+      <td>${c.silson ? '○' : ''}</td>
+      <td class="left" style="font-size:11px">${c.memo||''}</td>
+    </tr>`;
   });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error('API 오류 (' + res.status + '): ' + errText.slice(0, 300));
-  }
+  // 건강보험 소계
+  const totals = calcTotals(health);
+  rows += `<tr class="subtotal">
+    <td colspan="6">건강보험 소계</td>
+    <td>${totals.disease_death||''}</td>
+    <td>${totals.accident_death||''}</td>
+    <td>${totals.cancer_diagnosis||''}</td>
+    <td>${totals.similar_cancer||''}</td>
+    <td>${totals.cancer_treatment||''}</td>
+    <td>${totals.brain_stroke||''}</td>
+    <td>${totals.brain_bleed||''}</td>
+    <td>${totals.brain_treatment||''}</td>
+    <td>${totals.heart_ischemic||''}</td>
+    <td>${totals.heart_mi||''}</td>
+    <td>${totals.surgery||''}</td>
+    <td>${totals.hospitalization||''}</td>
+    <td>${totals.dementia||''}</td>
+    <td></td>
+    <td>${totals.caregiver||''}</td>
+    <td></td>
+    <td></td>
+  </tr>`;
 
-  const rawText = await res.text();
-  let data;
-  try { data = JSON.parse(rawText); }
-  catch(e) { throw new Error('응답 파싱 오류: ' + rawText.slice(0, 200)); }
-  if (data.error) throw new Error('서버 오류: ' + JSON.stringify(data.error));
-  if (!data.content) throw new Error('응답 형식 오류: ' + JSON.stringify(data).slice(0, 200));
-  const text = data.content.map(b => b.text || '').join('');
-  const clean = text.replace(/```json|```/g, '').trim();
-  try {
-    return JSON.parse(clean);
-  } catch(e) {
-    throw new Error('JSON 파싱 오류: ' + clean.slice(0, 200));
-  }
+  // 기타(실손 등)
+  other.forEach(c => {
+    rows += `<tr>
+      <td><span class="category-tag" style="background:#FFF3E0;color:#E65100">기타</span></td>
+      <td>${c.no}</td>
+      <td class="left">${c.company}</td>
+      <td class="left">${c.product}</td>
+      <td style="text-align:right">${c.monthly_premium||''}</td>
+      <td class="left" style="font-size:11px">${(c.coverage_period||'').replace(/\\n/g,'<br>')}</td>
+      <td colspan="15"></td>
+      <td>${c.silson ? '○' : ''}</td>
+      <td class="left" style="font-size:11px">${c.memo||''}</td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = rows;
 }
 
-function renderResult(d) {
-  const c = d.customer || {};
-  const ps = d.payment_summary || {};
-  const contracts = d.contracts || [];
-  const coverage = d.coverage || [];
-  const claims = d.claims_map || [];
-  const renewals = d.renewal_alerts || [];
-  const deficient = d.deficient_items || [];
+function calcTotals(contracts) {
+  const keys = ['disease_death','accident_death','cancer_diagnosis','similar_cancer','cancer_treatment',
+    'brain_stroke','brain_bleed','brain_treatment','heart_ischemic','heart_mi',
+    'surgery','hospitalization','dementia','caregiver'];
+  const totals = {};
+  keys.forEach(k => {
+    const sum = contracts.reduce((acc, c) => acc + (Number(c[k]) || 0), 0);
+    totals[k] = sum > 0 ? sum.toLocaleString() : '';
+  });
+  return totals;
+}
 
-  document.getElementById('result-title').textContent = (c.name || '고객님') + ' 보장분석 리포트';
-
-  let html = '';
-
-  // 섹션 1
-  html += `<div class="section-card">
-    <div class="section-header"><div class="section-num">1</div><div class="section-title">고객 기본정보</div></div>
-    <div class="info-grid">
-      <div class="info-item"><div class="info-label">고객명</div><div class="info-value">${c.name || '-'}</div></div>
-      <div class="info-item"><div class="info-label">보험나이</div><div class="info-value">${c.insurance_age || '-'}</div></div>
-      <div class="info-item"><div class="info-label">분석일자</div><div class="info-value">${c.analysis_date || '-'}</div></div>
-      <div class="info-item"><div class="info-label">담당 FP</div><div class="info-value">${c.fp || '-'}</div></div>
+function renderPaymentSummary(ps) {
+  document.getElementById('payment-summary').innerHTML = `
+    <div class="summary-box paid">
+      <div class="label">✅ 지금까지 납입</div>
+      <div class="amount">${ps.paid_so_far || '-'}</div>
     </div>
-  </div>`;
-
-  // 섹션 2
-  const ctRows = contracts.map(ct => `<tr>
-    <td>${ct.no}</td>
-    <td>${ct.company || '-'}</td>
-    <td>${ct.product || '-'}</td>
-    <td>${ct.period || '-'}</td>
-    <td>${ct.payment_period || '-'}</td>
-    <td>${ct.payment_count || '-'}</td>
-    <td style="text-align:right">${fmtP(ct.monthly_premium)}</td>
-    <td style="text-align:right">${fmt(ct.paid_total)}</td>
-    <td style="text-align:right">${fmt(ct.remaining_total)}</td>
-    <td>${ct.is_renewal ? `<span class="badge badge-renew">갱신형 ${ct.renewal_cycle || ''}</span>` : (ct.completion_date || '-')}</td>
-  </tr>`).join('');
-
-  html += `<div class="section-card">
-    <div class="section-header"><div class="section-num">2</div><div class="section-title">보유계약 현황</div></div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr>
-          <th>No</th><th>보험사</th><th>상품명</th><th>보장기간</th><th>납입기간</th>
-          <th>납입횟수</th><th>월보험료</th><th>납입완료액</th><th>잔여납입액</th><th>완료/갱신</th>
-        </tr></thead>
-        <tbody>
-          ${ctRows}
-          <tr class="sum-row">
-            <td colspan="6">합 계</td>
-            <td style="text-align:right">${fmtP(ps.monthly_total)}</td>
-            <td style="text-align:right">${fmt(ps.paid_total)}</td>
-            <td style="text-align:right">${fmt(ps.remaining_total)}</td>
-            <td>-</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="summary-box future">
+      <div class="label">⏳ 앞으로 납입예정</div>
+      <div class="amount">${ps.remaining || '-'}</div>
     </div>
-  </div>`;
+    <div class="summary-box total">
+      <div class="label">💰 총 납입예정</div>
+      <div class="amount">${ps.total_expected || '-'}</div>
+    </div>`;
+}
 
-  // 섹션 3
-  const covCards = coverage.map(cv => `
-    <div class="cov-item">
-      <div class="cov-cat">${cv.category || ''}</div>
-      <div class="cov-name">${cv.item || ''}</div>
-      <div class="cov-row">
-        <span class="cov-std">권장 ${cv.standard ? cv.standard.toLocaleString() + '만' : '-'}</span>
-        ${badge(cv.status)}
-      </div>
-      <div class="cov-amount ${statusClass(cv.status)}">${cv.current ? cv.current.toLocaleString() + '만원' : '미가입'}</div>
+function renderSpecialNotes(notes) {
+  if (!notes || notes.length === 0) return;
+  document.getElementById('special-notes-card').classList.remove('hidden');
+  document.getElementById('special-notes-list').innerHTML = notes.map(n => `
+    <div class="special-note">
+      <div class="title">⚡ ${n.type} — ${n.company} ${n.product}</div>
+      <div class="desc">${n.memo}</div>
     </div>`).join('');
+}
 
-  html += `<div class="section-card">
-    <div class="section-header"><div class="section-num">3</div><div class="section-title">보장 한눈에 보기</div></div>
-    <div class="cov-grid">${covCards || '<p style="color:#aaa;font-size:13px">보장 정보를 추출할 수 없습니다</p>'}</div>
-  </div>`;
+function renderRenewal(alerts) {
+  document.getElementById('renewal-body').innerHTML = alerts.map(a => `
+    <tr>
+      <td><strong>${a.company}</strong><br><span style="font-size:12px;color:#666">${a.product}</span></td>
+      <td style="text-align:center">${a.current_premium}</td>
+      <td style="text-align:center">${a.renewal_date}</td>
+      <td style="text-align:center">${a.renewal_cycle}</td>
+      <td class="warn" style="text-align:center">${a.expected_premium}</td>
+      <td style="font-size:12px">${a.caution}</td>
+    </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#999">갱신 항목 없음</td></tr>';
+}
 
-  // 섹션 4
-  html += `<div class="section-card">
-    <div class="section-header"><div class="section-num">4</div><div class="section-title">납입현황 요약</div></div>
-    <div class="pay-grid">
-      <div class="pay-card paid">
-        <div class="pay-label">✅ 지금까지 납입한 금액</div>
-        <div class="pay-amount">${fmt(ps.paid_total)}</div>
-        <div class="pay-sub">이미 완료된 납입</div>
-      </div>
-      <div class="pay-card remain">
-        <div class="pay-label">⏳ 앞으로 더 내야 할 금액</div>
-        <div class="pay-amount">${fmt(ps.remaining_total)}</div>
-        <div class="pay-sub">월 ${fmtP(ps.monthly_total)}</div>
-      </div>
-      <div class="pay-card total">
-        <div class="pay-label">💰 총 납입 예정 금액</div>
-        <div class="pay-amount">${fmt(ps.grand_total)}</div>
-        <div class="pay-sub">완납 시 보장 확정</div>
-      </div>
-    </div>
-  </div>`;
+function renderGaps(gaps) {
+  document.getElementById('gaps-body').innerHTML = gaps.map(g => `
+    <tr>
+      <td><strong>${g.item}</strong></td>
+      <td style="text-align:center">${g.current}</td>
+      <td style="text-align:center">${g.recommended}</td>
+      <td class="${g.shortfall.includes('△') ? 'shortfall' : 'ok'}" style="text-align:center">${g.shortfall}</td>
+      <td style="font-size:12px">${g.recommendation}</td>
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#999">보완 항목 없음</td></tr>';
+}
 
-  // 섹션 5
-  html += `<div class="section-card">
-    <div class="section-header"><div class="section-num">5</div><div class="section-title">보완 필요 보장</div></div>
-    <div class="def-list">
-      ${deficient.length > 0
-        ? deficient.map(i => `<span class="def-tag">⚠ ${i}</span>`).join('')
-        : '<p style="color:#aaa;font-size:13px">보완 필요 항목이 없습니다</p>'
-      }
-    </div>
-    ${d.fp_comment ? `<p style="margin-top:14px;font-size:13px;color:#666;background:#f8f9fc;padding:12px 14px;border-radius:9px;line-height:1.8;border-left:3px solid #1a2744">💬 ${d.fp_comment}</p>` : ''}
-  </div>`;
+// ============================================================
+// Excel 생성 (ExcelJS — v17 케어맵 형식)
+// ============================================================
+async function downloadExcel() {
+  if (!analysisResult) return;
+  const json = analysisResult;
+  const customerName = json._customerName || '고객';
 
-  // 섹션 6
-  const claimItems = claims.map(cl => `
-    <div class="claim-item">
-      <div class="claim-situation">📌 ${cl.situation}</div>
-      <div class="claim-detail">
-        <strong>청구항목:</strong> ${cl.items.join(', ')}<br>
-        <strong>해당보험사:</strong> ${cl.companies.join(', ')}
-      </div>
-    </div>`).join('');
+  const wb = new ExcelJS.Workbook();
+  wb.creator = '유니스지사 보장분석기';
 
-  html += `<div class="section-card">
-    <div class="section-header"><div class="section-num">6</div><div class="section-title">보험청구 케어맵</div></div>
-    <div class="claim-list">
-      ${claimItems || '<p style="color:#aaa;font-size:13px">청구 항목 정보를 찾을 수 없습니다</p>'}
-    </div>
-  </div>`;
+  const ws = wb.addWorksheet(`${customerName}님`);
 
-  // 섹션 7
-  const renewalItems = renewals.map(r => `
-    <div class="renewal-item">
-      <div class="renewal-top">
-        <span class="renewal-name">${r.company || ''} ${r.product || ''}</span>
-        <span class="badge badge-renew">갱신예정 ${r.renewal_date || ''}</span>
-      </div>
-      <div class="renewal-comment">🔁 갱신주기: ${r.cycle || '-'} &nbsp;|&nbsp; ${r.comment || ''}</div>
-    </div>`).join('');
+  // 열 너비 설정 (v17 기준)
+  ws.columns = [
+    { width: 8 },   // A 구분
+    { width: 3.5 }, // B No
+    { width: 10 },  // C 회사명
+    { width: 15 },  // D 상품명
+    { width: 9 },   // E 월보험료
+    { width: 18 },  // F  보장기간
+    { width: 6.5 }, // G  질병사망
+    { width: 6.5 }, // H  상해사망
+    { width: 6.5 }, // I  고액암
+    { width: 6.5 }, // J  일반암
+    { width: 6 },   // K  유사암
+    { width: 7 },   // L  통원치료당★
+    { width: 7 },   // M  암치료비★
+    { width: 6.5 }, // N  뇌혈관(포괄)
+    { width: 7 },   // O  뇌졸중
+    { width: 6.5 }, // P  뇌출혈
+    { width: 6 },   // Q  뇌약제비★
+    { width: 6.5 }, // R  뇌치료비★
+    { width: 6.5 }, // S  허혈심장
+    { width: 7 },   // T  급성심근경색
+    { width: 6.5 }, // U  부정맥
+    { width: 6 },   // V  심장약제비★
+    { width: 6.5 }, // W  심장치료비★
+    { width: 6 },   // X  수술비
+    { width: 6.5 }, // Y  입원일당
+    { width: 6 },   // Z  치매
+    { width: 6 },   // AA 재가
+    { width: 6 },   // AB 간병인
+    { width: 5 },   // AC 실손
+    { width: 11 },  // AD 비고
+  ];
 
-  html += `<div class="section-card">
-    <div class="section-header"><div class="section-num">7</div><div class="section-title">갱신 알림</div></div>
-    ${renewals.length > 0
-      ? renewalItems
-      : '<p style="color:#aaa;font-size:13px">갱신형 계약이 없거나 갱신 정보를 찾을 수 없습니다</p>'
+  // 색상 상수
+  const C_NAVY    = { argb: 'FF1F3864' };
+  const C_MIDNAVY = { argb: 'FF2E4A7C' };
+  const C_WHITE   = { argb: 'FFFFFFFF' };
+  const C_GOLD    = { argb: 'FFC9A84C' };
+  const C_LBLUE   = { argb: 'FFD6E4F0' };
+  const C_LGREEN  = { argb: 'FFE8F5E9' };
+  const C_LGREEN_HDR = { argb: 'FF2E7D32' }; // 치료비★ 헤더용 진초록
+  const C_F8      = { argb: 'FFF8F9FA' };
+
+  // 헬퍼: 셀 스타일
+  function style(cell, opts = {}) {
+    const { bg, fg, bold, sz, align, valign, wrap, border } = opts;
+    if (bg) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: bg };
+    cell.font = { name: 'Malgun Gothic', bold: !!bold, size: sz || 10, color: fg || C_NAVY };
+    cell.alignment = {
+      horizontal: align || 'center',
+      vertical: valign || 'middle',
+      wrapText: wrap !== false
+    };
+    if (border !== false) {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+      };
     }
-  </div>`;
-
-  // 면책 안내
-  html += `<div style="margin-top:1rem;padding:1rem 1.25rem;font-size:11px;color:#aaa;line-height:1.8;background:white;border-radius:10px">
-    ※ 본 분석표는 PDF 내용을 AI로 해석한 참고자료이며, 실제 보험금 지급 근거가 될 수 없습니다.<br>
-    ※ 정확한 보장 내용은 해당 약관 및 증권을 반드시 확인하시기 바랍니다.<br>
-    ※ 분석일: ${new Date().toLocaleDateString('ko-KR')} &nbsp;|&nbsp; 유니스지사 한화생명금융서비스 VIP금융사업부
-  </div>`;
-
-  document.getElementById('result-content').innerHTML = html;
-}
-
-function setStep(s) {
-  for (let i = 1; i <= 4; i++) {
-    const dot = document.getElementById('dot' + i);
-    if (i < s) dot.className = 'step-dot done';
-    else if (i === s) dot.className = 'step-dot active';
-    else dot.className = 'step-dot';
-  }
-}
-
-function showScreen(name) {
-  document.getElementById('upload-screen').style.display = name === 'upload-screen' ? 'block' : 'none';
-  document.getElementById('loading-screen').style.display = name === 'loading-screen' ? 'block' : 'none';
-  document.getElementById('result-screen').style.display = name === 'result-screen' ? 'block' : 'none';
-}
-
-function resetApp() {
-  showScreen('upload-screen');
-  document.getElementById('file-input').value = '';
-  document.getElementById('upload-error').style.display = 'none';
-}
-
-document.getElementById('file-input').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const errBox = document.getElementById('upload-error');
-  errBox.style.display = 'none';
-
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    errBox.innerHTML = 'PDF 파일만 업로드 가능합니다.';
-    errBox.style.display = 'block';
-    return;
   }
 
-  const reader = new FileReader();
-  reader.onload = async (ev) => {
-    const b64 = ev.target.result.split(',')[1];
-    showScreen('loading-screen');
-    setStep(1);
+  function headerStyle(cell, bg = C_NAVY) {
+    style(cell, { bg, fg: C_WHITE, bold: true, sz: 9, align: 'center', wrap: true });
+  }
 
-    let step = 1;
-    const si = setInterval(() => {
-      step = Math.min(step + 1, 4);
-      setStep(step);
-    }, 12000);
+  function merge(from, to) { ws.mergeCells(`${from}:${to}`); }
 
-    try {
-      setStep(2);
-      const data = await analyzePDF(b64);
-      clearInterval(si);
-      setStep(4);
-      setTimeout(() => {
-        showScreen('result-screen');
-        renderResult(data);
-      }, 400);
-    } catch (err) {
-      clearInterval(si);
-      showScreen('upload-screen');
-      errBox.innerHTML = '<strong>분석 오류</strong><br>' + err.message +
-        '<br><br>💡 해결 방법: 파일 크기가 크면 분할해서 시도하거나, PDF가 텍스트 기반인지 확인해주세요.';
-      errBox.style.display = 'block';
-    }
-  };
-  reader.readAsDataURL(file);
-});
+  let r = 1; // 현재 행
+
+  // ── Row 1: 제목 ──
+  ws.getRow(r).height = 34;
+  const titleCell = ws.getCell(`A${r}`);
+  titleCell.value = `${customerName}님  보험청구 케어맵`;
+  style(titleCell, { bold: true, sz: 16, align: 'center', bg: C_WHITE });
+  merge(`A${r}`, `W${r}`);
+  r++;
+
+  // ── Row 2: 보험나이, 상령일 ──
+  ws.getRow(r).height = 20;
+  ws.getCell(`A${r}`).value = '보험나이';
+  style(ws.getCell(`A${r}`), { bold: true, sz: 10, align: 'center' });
+  merge(`A${r}`, `B${r}`);
+  ws.getCell(`C${r}`).value = json._insuranceAge || '';
+  style(ws.getCell(`C${r}`), { bold: true, sz: 11, align: 'center' });
+  ws.getCell(`F${r}`).value = '상 령 일';
+  style(ws.getCell(`F${r}`), { bold: true, sz: 10, align: 'center' });
+  merge(`F${r}`, `H${r}`);
+  ws.getCell(`I${r}`).value = json._anniversaryDate || '';
+  style(ws.getCell(`I${r}`), { sz: 10, align: 'center' });
+  merge(`I${r}`, `L${r}`);
+  ws.getCell(`M${r}`).value = '※ 단위: 만원';
+  style(ws.getCell(`M${r}`), { sz: 9, align: 'left', fg: { argb: 'FF666666' } });
+  merge(`M${r}`, `W${r}`);
+  r++;
+
+  // ── Row 3: 작성일 + 담당 FP ──
+  ws.getRow(r).height = 20;
+  ws.getCell(`A${r}`).value = '작 성 일';
+  style(ws.getCell(`A${r}`), { bold: true, sz: 10, align: 'center' });
+  merge(`A${r}`, `B${r}`);
+  ws.getCell(`C${r}`).value = new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'2-digit',day:'2-digit'}).replace(/\. /g,'.').replace('.','');
+  style(ws.getCell(`C${r}`), { sz: 10, align: 'center' });
+  merge(`C${r}`, `E${r}`);
+  ws.getCell(`F${r}`).value = '담당 FP';
+  style(ws.getCell(`F${r}`), { bold: true, sz: 10, align: 'center' });
+  merge(`F${r}`, `H${r}`);
+  // 직함 포함한 FP명 (currentFp는 전역 변수)
+  const fpTitle = (typeof currentFp !== 'undefined' && currentFp.name)
+    ? currentFp.name + ' ' + (currentFp.role === '대표' ? '대표' : currentFp.role === '지점장' ? '지점장' : currentFp.role === '매니저' ? '매니저' : 'FP')
+    : '';
+  ws.getCell(`I${r}`).value = fpTitle;
+  style(ws.getCell(`I${r}`), { bold: true, sz: 10, align: 'center', fg: C_NAVY });
+  merge(`I${r}`, `L${r}`);
+  r++;
+
+  // ── Row 4: 공백 ──
+  ws.getRow(r).height = 8;
+  r++;
+
+  // ── Row 4: 건강보험 현황 섹션 제목 ──
+  ws.getRow(r).height = 24;
+  const secCell = ws.getCell(`A${r}`);
+  secCell.value = '◆  건강보험 현황';
+  style(secCell, { bg: { argb: 'FFEEEEEE' }, bold: true, sz: 14, align: 'center', fg: C_NAVY });
+  secCell.border = { bottom: { style: 'medium', color: C_NAVY } };
+  merge(`A${r}`, `W${r}`);
+  r++;
+
+  // ── Rows 5-7: 헤더 3단 ──
+  const hdrRows = [r, r+1, r+2];
+  ws.getRow(r).height = 18;
+  ws.getRow(r+1).height = 18;
+  ws.getRow(r+2).height = 30;
+
+  const HDR = (cell, val, bg) => { cell.value = val; headerStyle(cell, bg); };
+
+  // Row 5 (그룹 헤더)
+  HDR(ws.getCell(`A${r}`), '구분', C_NAVY); merge(`A${r}`, `A${r+2}`);
+  HDR(ws.getCell(`B${r}`), 'No', C_NAVY); merge(`B${r}`, `B${r+2}`);
+  HDR(ws.getCell(`C${r}`), '회사명', C_NAVY); merge(`C${r}`, `C${r+2}`);
+  HDR(ws.getCell(`D${r}`), '상품명', C_NAVY); merge(`D${r}`, `D${r+2}`);
+  HDR(ws.getCell(`E${r}`), '월보험료', C_NAVY); merge(`E${r}`, `E${r+2}`);
+  HDR(ws.getCell(`F${r}`), '보장기간', C_NAVY); merge(`F${r}`, `F${r+2}`);
+  HDR(ws.getCell(`G${r}`), '사망보험', C_NAVY); merge(`G${r}`, `H${r}`);
+  HDR(ws.getCell(`I${r}`), '암', C_NAVY); merge(`I${r}`, `M${r}`);
+  HDR(ws.getCell(`N${r}`), '뇌혈관 질환', C_MIDNAVY); merge(`N${r}`, `R${r}`);
+  HDR(ws.getCell(`S${r}`), '심장 질환', C_NAVY); merge(`S${r}`, `W${r}`);
+  HDR(ws.getCell(`X${r}`), '수술·입원', C_NAVY); merge(`X${r}`, `Y${r}`);
+  HDR(ws.getCell(`Z${r}`), '요양·간병', C_NAVY); merge(`Z${r}`, `AB${r}`);
+  HDR(ws.getCell(`AC${r}`), '실손', C_NAVY); merge(`AC${r}`, `AC${r+2}`);
+  HDR(ws.getCell(`AD${r}`), '비  고', C_NAVY); merge(`AD${r}`, `AD${r+2}`);
+
+  // Row 6 (서브 헤더)
+  r++;
+  HDR(ws.getCell(`G${r}`), '질병\n사망', C_NAVY); merge(`G${r}`, `G${r+1}`);
+  HDR(ws.getCell(`H${r}`), '상해\n사망', C_NAVY); merge(`H${r}`, `H${r+1}`);
+  HDR(ws.getCell(`I${r}`), '진  단', C_NAVY); merge(`I${r}`, `K${r}`);
+  HDR(ws.getCell(`L${r}`), '통원\n치료당★', C_NAVY); merge(`L${r}`, `L${r+1}`);
+  HDR(ws.getCell(`M${r}`), '치료비★', C_LGREEN_HDR); merge(`M${r}`, `M${r+1}`);
+  HDR(ws.getCell(`N${r}`), '진  단', C_MIDNAVY); merge(`N${r}`, `P${r}`);
+  HDR(ws.getCell(`Q${r}`), '약제비★', C_NAVY); merge(`Q${r}`, `Q${r+1}`);
+  HDR(ws.getCell(`R${r}`), '치료비★', C_LGREEN_HDR); merge(`R${r}`, `R${r+1}`);
+  HDR(ws.getCell(`S${r}`), '진  단', C_NAVY); merge(`S${r}`, `U${r}`);
+  HDR(ws.getCell(`V${r}`), '약제비★', C_NAVY); merge(`V${r}`, `V${r+1}`);
+  HDR(ws.getCell(`W${r}`), '치료비★', C_LGREEN_HDR); merge(`W${r}`, `W${r+1}`);
+  HDR(ws.getCell(`X${r}`), '수술비\n(질+상)', C_NAVY); merge(`X${r}`, `X${r+1}`);
+  HDR(ws.getCell(`Y${r}`), '입원일당\n(질+상)', C_NAVY); merge(`Y${r}`, `Y${r+1}`);
+  HDR(ws.getCell(`Z${r}`), '치매', C_NAVY); merge(`Z${r}`, `Z${r+1}`);
+  HDR(ws.getCell(`AA${r}`), '재  가', C_NAVY); merge(`AA${r}`, `AA${r+1}`);
+  HDR(ws.getCell(`AB${r}`), '간병인', C_MIDNAVY); merge(`AB${r}`, `AB${r+1}`);
+
+  // Row 7 (세부 헤더)
+  r++;
+  HDR(ws.getCell(`I${r}`), '고액암', C_NAVY);
+  HDR(ws.getCell(`J${r}`), '일반암', C_NAVY);
+  HDR(ws.getCell(`K${r}`), '유사암', C_NAVY);
+  HDR(ws.getCell(`N${r}`), '뇌혈관', C_MIDNAVY);
+  HDR(ws.getCell(`O${r}`), '뇌졸중', C_MIDNAVY);
+  HDR(ws.getCell(`P${r}`), '뇌출혈', C_MIDNAVY);
+  HDR(ws.getCell(`S${r}`), '허혈성\n심장', C_NAVY);
+  HDR(ws.getCell(`T${r}`), '급성\n심근경색', C_NAVY);
+  HDR(ws.getCell(`U${r}`), '부정맥', C_NAVY);
+  r++;
+
+  // ── 데이터 행 ──
+  const health = (json.contracts || []).filter(c => c.category !== '기타' && c.category !== '실손');
+  const others = (json.contracts || []).filter(c => c.category === '기타' || c.category === '실손');
+
+  function writeDataRow(ws, r, c, isOdd, memo) {
+    ws.getRow(r).height = 29;
+    const bg = isOdd ? C_WHITE : C_F8;
+    const cells = {
+      A: c.category || '건강보험', B: c.no, C: c.company, D: c.product,
+      E: c.monthly_premium, F: c.coverage_period,
+      G: c.disease_death, H: c.accident_death,
+      I: c.high_cancer, J: c.cancer_diagnosis, K: c.similar_cancer,
+      L: c.cancer_tongwon, M: c.cancer_treatment,
+      N: c.brain_vessel, O: c.brain_stroke, P: c.brain_bleed,
+      Q: c.brain_drug, R: c.brain_treatment,
+      S: c.heart_ischemic, T: c.heart_mi, U: c.arrhythmia,
+      V: c.heart_drug, W: c.heart_treatment,
+      X: c.surgery, Y: c.hospitalization,
+      Z: c.dementia, AA: null, AB: c.caregiver,
+      AC: c.silson ? '○' : '', AD: memo || c.memo || ''
+    };
+    const leftCols = ['A','C','D','F','AD'];
+    const treatCols = ['M','R','W'];
+
+    Object.entries(cells).forEach(([col, val]) => {
+      const cell = ws.getCell(`${col}${r}`);
+      cell.value = val !== null && val !== undefined ? val : null;
+      const isLeft = leftCols.includes(col);
+      const isTreat = treatCols.includes(col);
+      cell.fill = { type: 'pattern', pattern: 'solid',
+        fgColor: isTreat ? C_LGREEN : (col === 'T' ? bg : bg) };
+      cell.font = { name: 'Malgun Gothic', sz: 10, color: C_NAVY,
+        bold: isTreat && val ? true : false,
+        italic: isTreat && val ? false : false };
+      cell.alignment = { horizontal: isLeft ? 'left' : 'center', vertical: 'middle', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+        bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+        left: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+        right: { style: 'thin', color: { argb: 'FFDDDDDD' } }
+      };
+    });
+  }
+
+  // special_treatment_notes를 회사+상품별로 memo에 반영
+  const notesMap = {};
+  (json.special_treatment_notes || []).forEach(n => {
+    const key = `${n.company}__${n.product}`;
+    if (!notesMap[key]) notesMap[key] = [];
+    notesMap[key].push(n.memo);
+  });
+
+  health.forEach((c, idx) => {
+    const key = `${c.company}__${c.product}`;
+    const extraMemo = notesMap[key] ? (c.memo || '') + '\n' + notesMap[key].join(' / ') : (c.memo || '');
+    writeDataRow(ws, r, c, idx % 2 === 0, extraMemo.trim());
+    r++;
+  });
+
+  // 건강보험 소계 행
+  ws.getRow(r).height = 18;
+  const totals = calcTotalsExcel(health);
+  const subtotalCols = { A: '건강보험 소계', G: totals.disease_death, H: totals.accident_death,
+    I: totals.cancer_diagnosis, J: totals.similar_cancer, K: totals.cancer_treatment,
+    L: totals.brain_stroke, M: totals.brain_bleed, N: totals.brain_treatment,
+    O: totals.heart_ischemic, P: totals.heart_mi, Q: totals.surgery,
+    R: totals.hospitalization, S: totals.dementia, U: totals.caregiver };
+
+  'ABCDEFGHIJKLMNOPQRSTUVW'.split('').forEach(col => {
+    const cell = ws.getCell(`${col}${r}`);
+    cell.value = subtotalCols[col] !== undefined ? subtotalCols[col] : null;
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: C_NAVY };
+    cell.font = { name: 'Malgun Gothic', bold: true, sz: 10, color: C_WHITE };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = { top: { style: 'thin', color: C_MIDNAVY }, bottom: { style: 'thin', color: C_MIDNAVY } };
+  });
+  ws.getCell(`A${r}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  merge(`A${r}`, `F${r}`);
+  merge(`T${r}`, `V${r}`);
+  r++;
+
+  // 기타 행 (실손 등)
+  others.forEach((c, idx) => {
+    ws.getRow(r).height = 29;
+    const bg = C_WHITE;
+    ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W'].forEach(col => {
+      const cell = ws.getCell(`${col}${r}`);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: bg };
+      cell.font = { name: 'Malgun Gothic', sz: 10, color: C_NAVY };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = { top: { style: 'thin', color: { argb: 'FFDDDDDD' } }, bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+    });
+    ws.getCell(`A${r}`).value = c.category || '기타';
+    ws.getCell(`B${r}`).value = c.no;
+    ws.getCell(`C${r}`).value = c.company; ws.getCell(`C${r}`).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    ws.getCell(`D${r}`).value = c.product; ws.getCell(`D${r}`).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    ws.getCell(`E${r}`).value = c.monthly_premium;
+    ws.getCell(`F${r}`).value = c.coverage_period; ws.getCell(`F${r}`).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    ws.getCell(`V${r}`).value = c.silson ? '○' : '';
+    ws.getCell(`W${r}`).value = c.memo || '';
+    ws.getCell(`W${r}`).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    r++;
+  });
+
+  // ── 공백 ──
+  ws.getRow(r).height = 8; r++;
+
+  // ── 납입현황 ──
+  ws.getRow(r).height = 22;
+  const ps = json.payment_summary || {};
+  ws.getCell(`A${r}`).value = '납입현황';
+  style(ws.getCell(`A${r}`), { bg: C_NAVY, fg: C_WHITE, bold: true, sz: 10 });
+  merge(`A${r}`, `C${r}`);
+  ws.getCell(`D${r}`).value = `✅  지금까지 납입:  ${ps.paid_so_far || '-'}`;
+  style(ws.getCell(`D${r}`), { bold: true, sz: 10, align: 'left' });
+  merge(`D${r}`, `I${r}`);
+  ws.getCell(`J${r}`).value = `⏳  앞으로 납입예정:  ${ps.remaining || '-'}`;
+  style(ws.getCell(`J${r}`), { bold: true, sz: 10, align: 'left' });
+  merge(`J${r}`, `P${r}`);
+  ws.getCell(`Q${r}`).value = `💰  총 납입예정:  ${ps.total_expected || '-'}`;
+  style(ws.getCell(`Q${r}`), { bold: true, sz: 10, align: 'left', fg: C_GOLD });
+  merge(`Q${r}`, `W${r}`);
+  r++;
+
+  // ── 공백 ──
+  ws.getRow(r).height = 8; r++;
+
+  // ── 보완 설계 상품 섹션 ──
+  ws.getRow(r).height = 24;
+  const sec2 = ws.getCell(`A${r}`);
+  sec2.value = '◆  보완 설계 상품';
+  style(sec2, { bg: { argb: 'FFEEEEEE' }, bold: true, sz: 14, align: 'center', fg: C_NAVY });
+  merge(`A${r}`, `W${r}`);
+  r++;
+
+  // 보완설계 헤더 (건강보험 현황과 동일)
+  const addHdrStart = r;
+  ws.getRow(r).height = 18; ws.getRow(r+1).height = 18; ws.getRow(r+2).height = 30;
+  HDR(ws.getCell(`A${r}`), '구분', C_NAVY); merge(`A${r}`, `A${r+2}`);
+  HDR(ws.getCell(`B${r}`), 'No', C_NAVY); merge(`B${r}`, `B${r+2}`);
+  HDR(ws.getCell(`C${r}`), '회사명', C_NAVY); merge(`C${r}`, `C${r+2}`);
+  HDR(ws.getCell(`D${r}`), '상품명', C_NAVY); merge(`D${r}`, `D${r+2}`);
+  HDR(ws.getCell(`E${r}`), '월보험료', C_NAVY); merge(`E${r}`, `E${r+2}`);
+  HDR(ws.getCell(`F${r}`), '보장기간', C_NAVY); merge(`F${r}`, `F${r+2}`);
+  HDR(ws.getCell(`G${r}`), '사망보험', C_NAVY); merge(`G${r}`, `H${r}`);
+  HDR(ws.getCell(`I${r}`), '암', C_NAVY); merge(`I${r}`, `K${r}`);
+  HDR(ws.getCell(`L${r}`), '뇌혈관 질환', C_MIDNAVY); merge(`L${r}`, `N${r}`);
+  HDR(ws.getCell(`O${r}`), '심장 질환', C_NAVY); merge(`O${r}`, `P${r}`);
+  HDR(ws.getCell(`Q${r}`), '수술·입원', C_NAVY); merge(`Q${r}`, `R${r}`);
+  HDR(ws.getCell(`S${r}`), '요양·간병', C_NAVY); merge(`S${r}`, `U${r}`);
+  HDR(ws.getCell(`V${r}`), '실손입원', C_NAVY); merge(`V${r}`, `V${r+2}`);
+  HDR(ws.getCell(`W${r}`), '비  고', C_NAVY); merge(`W${r}`, `W${r+2}`);
+  r++;
+  HDR(ws.getCell(`G${r}`), '질병사망', C_NAVY); merge(`G${r}`, `G${r+1}`);
+  HDR(ws.getCell(`H${r}`), '상해사망', C_NAVY); merge(`H${r}`, `H${r+1}`);
+  HDR(ws.getCell(`I${r}`), '진  단', C_NAVY); merge(`I${r}`, `J${r}`);
+  HDR(ws.getCell(`K${r}`), '치료비★', C_NAVY); merge(`K${r}`, `K${r+1}`);
+  HDR(ws.getCell(`L${r}`), '진  단', C_MIDNAVY); merge(`L${r}`, `M${r}`);
+  HDR(ws.getCell(`N${r}`), '치료비★', C_MIDNAVY); merge(`N${r}`, `N${r+1}`);
+  HDR(ws.getCell(`O${r}`), '허혈성\n심장', C_NAVY); merge(`O${r}`, `O${r+1}`);
+  HDR(ws.getCell(`P${r}`), '급성심근\n경색', C_NAVY); merge(`P${r}`, `P${r+1}`);
+  HDR(ws.getCell(`Q${r}`), '수술비\n(질+상)', C_NAVY); merge(`Q${r}`, `Q${r+1}`);
+  HDR(ws.getCell(`R${r}`), '입원일당\n(질+상)', C_NAVY); merge(`R${r}`, `R${r+1}`);
+  HDR(ws.getCell(`S${r}`), '치매', C_NAVY); merge(`S${r}`, `S${r+1}`);
+  const tCell2 = ws.getCell(`T${r}`);
+  tCell2.value = '재  가'; tCell2.font = { name: 'Malgun Gothic', bold: true, sz: 9, color: C_GOLD };
+  tCell2.fill = { type: 'pattern', pattern: 'solid', fgColor: C_NAVY };
+  tCell2.alignment = { horizontal: 'center', vertical: 'middle' };
+  merge(`T${r}`, `T${r+1}`);
+  HDR(ws.getCell(`U${r}`), '간병인', C_MIDNAVY); merge(`U${r}`, `U${r+1}`);
+  r++;
+  HDR(ws.getCell(`I${r}`), '일반암', C_NAVY);
+  HDR(ws.getCell(`J${r}`), '유사암', C_NAVY);
+  HDR(ws.getCell(`L${r}`), '뇌졸중\n뇌혈관포함', C_MIDNAVY);
+  HDR(ws.getCell(`M${r}`), '뇌출혈', C_MIDNAVY);
+  r++;
+
+  // 보완설계 빈 행 3개
+  for (let i = 0; i < 3; i++) {
+    ws.getRow(r).height = 28;
+    ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W'].forEach(col => {
+      const cell = ws.getCell(`${col}${r}`);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: i % 2 === 0 ? C_WHITE : { argb: 'FFEBF5FB' } };
+      cell.border = { top: { style: 'thin', color: { argb: 'FFDDDDDD' } }, bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+    });
+    r++;
+  }
+
+  // 보완설계 합계
+  ws.getRow(r).height = 18;
+  'ABCDEFGHIJKLMNOPQRSTUVW'.split('').forEach(col => {
+    const cell = ws.getCell(`${col}${r}`);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: C_MIDNAVY };
+    cell.font = { name: 'Malgun Gothic', bold: true, sz: 10, color: C_WHITE };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+  ws.getCell(`A${r}`).value = '보완 설계 합계';
+  merge(`A${r}`, `F${r}`);
+  r++;
+
+  // 기존+추가 합계
+  ws.getRow(r).height = 20;
+  'ABCDEFGHIJKLMNOPQRSTUVW'.split('').forEach(col => {
+    const cell = ws.getCell(`${col}${r}`);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: C_NAVY };
+    cell.font = { name: 'Malgun Gothic', bold: true, sz: 10, color: C_WHITE };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+  ws.getCell(`A${r}`).value = '기존 + 보완 설계 합계';
+  merge(`A${r}`, `F${r}`);
+  // 기존 건강보험 소계 값 재기재
+  Object.entries(subtotalCols).forEach(([col, val]) => {
+    if (col !== 'A') ws.getCell(`${col}${r}`).value = val || null;
+  });
+  ws.getCell(`V${r}`).value = '충분';
+  r++;
+
+  // ── 공백 ──
+  ws.getRow(r).height = 8; r++;
+
+  // ── 저축성 보험 현황 ──
+  ws.getRow(r).height = 24;
+  const savSec = ws.getCell(`A${r}`);
+  savSec.value = '◆  저축성 보험 현황';
+  style(savSec, { bg: { argb: 'FFEEEEEE' }, bold: true, sz: 14, align: 'center', fg: C_NAVY });
+  merge(`A${r}`, `W${r}`); r++;
+
+  ws.getRow(r).height = 14;
+  ws.getCell(`A${r}`).value = '※ 단기납 종신보험 (5·7·10년납, 특약 2개 이하) 포함';
+  style(ws.getCell(`A${r}`), { sz: 9, align: 'left', fg: { argb: 'FF666666' } });
+  merge(`A${r}`, `W${r}`); r++;
+
+  // 저축성 헤더
+  ws.getRow(r).height = 17;
+  const savHdrs = [['A','B','구분'],['C','E','No'],['F','I','회사명'],['J','M','상품명'],['N','N','월보험료'],['O','Q','납입기간'],['R','S','납입방법'],['T','U','만기/종료일'],['V','W','납입현황 요약']];
+  // 저축성 헤더 간소화
+  const savHeader = {A:'구분',C:'No',F:'회사명',J:'상품명',N:'월보험료',O:'납입기간',R:'납입방법',T:'만기/종료일',V:'납입현황 요약'};
+  const savMerge = {A:'B',C:'E',F:'I',J:'M',O:'Q',R:'S',T:'U'};
+
+  Object.entries(savHeader).forEach(([col, label]) => {
+    const cell = ws.getCell(`${col}${r}`);
+    cell.value = label; headerStyle(cell, C_MIDNAVY);
+    if (savMerge[col]) merge(`${col}${r}`, `${savMerge[col]}${r}`);
+  });
+  r++;
+
+  // 저축성 데이터
+  const savings = json.savings_contracts || [];
+  for (let i = 0; i < Math.max(savings.length, 3); i++) {
+    ws.getRow(r).height = 24;
+    const s = savings[i] || {};
+    const bg = i % 2 === 0 ? C_WHITE : C_F8;
+    'ABCDEFGHIJKLMNOPQRSTUVW'.split('').forEach(col => {
+      const cell = ws.getCell(`${col}${r}`);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: bg };
+      cell.border = { top: { style: 'thin', color: { argb: 'FFDDDDDD' } }, bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    ws.getCell(`A${r}`).value = '저축성'; merge(`A${r}`, `B${r}`);
+    ws.getCell(`C${r}`).value = s.no || null; merge(`C${r}`, `E${r}`);
+    ws.getCell(`F${r}`).value = s.company || null; merge(`F${r}`, `I${r}`); ws.getCell(`F${r}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    ws.getCell(`J${r}`).value = s.product || null; merge(`J${r}`, `M${r}`); ws.getCell(`J${r}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    ws.getCell(`N${r}`).value = s.monthly_premium || null;
+    ws.getCell(`O${r}`).value = s.payment_period || null; merge(`O${r}`, `Q${r}`);
+    ws.getCell(`R${r}`).value = s.payment_method || null; merge(`R${r}`, `S${r}`);
+    ws.getCell(`T${r}`).value = s.maturity_date || null; merge(`T${r}`, `U${r}`);
+    ws.getCell(`V${r}`).value = s.payment_summary || null; merge(`V${r}`, `W${r}`);
+    r++;
+  }
+
+  // 저축성 합계
+  ws.getRow(r).height = 17;
+  const savTot = ws.getCell(`A${r}`);
+  savTot.value = '저축성 합계'; style(savTot, { bg: C_NAVY, fg: C_WHITE, bold: true, sz: 10 });
+  merge(`A${r}`, `W${r}`); r++;
+
+  ws.getRow(r).height = 8; r++; // 공백
+
+  // ── 기타 보험 현황 ──
+  ws.getRow(r).height = 24;
+  const othSec = ws.getCell(`A${r}`);
+  othSec.value = '◆  기타 보험 현황';
+  style(othSec, { bg: { argb: 'FFEEEEEE' }, bold: true, sz: 14, align: 'center', fg: C_NAVY });
+  merge(`A${r}`, `W${r}`); r++;
+
+  ws.getRow(r).height = 17;
+  Object.entries(savHeader).forEach(([col, label]) => {
+    const cell = ws.getCell(`${col}${r}`);
+    cell.value = label; headerStyle(cell, C_MIDNAVY);
+    if (savMerge[col]) merge(`${col}${r}`, `${savMerge[col]}${r}`);
+  });
+  r++;
+
+  const otherContracts = json.other_contracts || [];
+  for (let i = 0; i < Math.max(otherContracts.length, 3); i++) {
+    ws.getRow(r).height = 24;
+    const o = otherContracts[i] || {};
+    const bg = i % 2 === 0 ? C_WHITE : C_F8;
+    'ABCDEFGHIJKLMNOPQRSTUVW'.split('').forEach(col => {
+      const cell = ws.getCell(`${col}${r}`);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: bg };
+      cell.border = { top: { style: 'thin', color: { argb: 'FFDDDDDD' } }, bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    ws.getCell(`A${r}`).value = '기타'; merge(`A${r}`, `B${r}`);
+    ws.getCell(`C${r}`).value = o.no || null; merge(`C${r}`, `E${r}`);
+    ws.getCell(`F${r}`).value = o.company || null; merge(`F${r}`, `I${r}`); ws.getCell(`F${r}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    ws.getCell(`J${r}`).value = o.product || null; merge(`J${r}`, `M${r}`); ws.getCell(`J${r}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    ws.getCell(`N${r}`).value = o.monthly_premium || null;
+    ws.getCell(`O${r}`).value = o.payment_period || null; merge(`O${r}`, `Q${r}`);
+    ws.getCell(`R${r}`).value = o.payment_method || null; merge(`R${r}`, `S${r}`);
+    ws.getCell(`T${r}`).value = o.maturity_date || null; merge(`T${r}`, `U${r}`);
+    ws.getCell(`V${r}`).value = o.memo || o.payment_summary || null; merge(`V${r}`, `W${r}`);
+    r++;
+  }
+
+  ws.getRow(r).height = 17;
+  const othTot = ws.getCell(`A${r}`);
+  othTot.value = '기타 합계'; style(othTot, { bg: C_NAVY, fg: C_WHITE, bold: true, sz: 10 });
+  merge(`A${r}`, `W${r}`); r++;
+
+  ws.getRow(r).height = 8; r++; // 공백
+
+  // ── A. 보험청구 케어맵 ──
+  ws.getRow(r).height = 24;
+  const claimSec = ws.getCell(`A${r}`);
+  claimSec.value = '📋  A. 보험청구 케어맵';
+  style(claimSec, { bg: { argb: 'FFEEEEEE' }, bold: true, sz: 14, align: 'center', fg: C_NAVY });
+  merge(`A${r}`, `W${r}`); r++;
+
+  ws.getRow(r).height = 17;
+  ws.getCell(`A${r}`).value = '상황'; headerStyle(ws.getCell(`A${r}`)); merge(`A${r}`, `E${r}`);
+  ws.getCell(`F${r}`).value = '청구 가능 항목'; headerStyle(ws.getCell(`F${r}`)); merge(`F${r}`, `M${r}`);
+  ws.getCell(`N${r}`).value = '해당 보험사 & 수령 금액 (만원)'; headerStyle(ws.getCell(`N${r}`)); merge(`N${r}`, `W${r}`);
+  r++;
+
+  (json.claim_guide || []).forEach((g, idx) => {
+    ws.getRow(r).height = 27;
+    const bg = idx % 2 === 0 ? C_WHITE : C_F8;
+    ws.getCell(`A${r}`).value = g.situation;
+    style(ws.getCell(`A${r}`), { bg, align: 'left', sz: 10 });
+    merge(`A${r}`, `E${r}`);
+    ws.getCell(`F${r}`).value = g.claimable;
+    style(ws.getCell(`F${r}`), { bg, align: 'left', sz: 10 });
+    merge(`F${r}`, `M${r}`);
+    ws.getCell(`N${r}`).value = g.insurers_and_amount;
+    style(ws.getCell(`N${r}`), { bg, align: 'left', sz: 10 });
+    merge(`N${r}`, `W${r}`);
+    r++;
+  });
+
+  ws.getRow(r).height = 8; r++;
+
+  // ── C. 갱신 알림 ──
+  ws.getRow(r).height = 24;
+  const renSec = ws.getCell(`A${r}`);
+  renSec.value = '⚠  C. 갱신 알림';
+  style(renSec, { bg: { argb: 'FFEEEEEE' }, bold: true, sz: 14, align: 'center', fg: C_NAVY });
+  merge(`A${r}`, `W${r}`); r++;
+
+  ws.getRow(r).height = 18;
+  const renHdr = {A:'보험사 / 상품', E:'현재보험료', H:'갱신예정일', K:'갱신주기', M:'갱신 후 예상보험료', Q:'인상배율', T:'유의사항'};
+  const renMrg = {A:'D', E:'G', H:'J', K:'L', M:'P', Q:'S'};
+  Object.entries(renHdr).forEach(([col, label]) => {
+    const cell = ws.getCell(`${col}${r}`);
+    cell.value = label; headerStyle(cell);
+    if (renMrg[col]) merge(`${col}${r}`, `${renMrg[col]}${r}`);
+    else merge(`${col}${r}`, `W${r}`);
+  });
+  r++;
+
+  (json.renewal_alerts || []).forEach((a, idx) => {
+    ws.getRow(r).height = 32;
+    const bg = idx % 2 === 0 ? C_WHITE : C_F8;
+    const setRen = (col, val, endCol) => {
+      const cell = ws.getCell(`${col}${r}`);
+      cell.value = val; style(cell, { bg, align: endCol ? 'center' : 'left', sz: 10 });
+      if (endCol) merge(`${col}${r}`, `${endCol}${r}`);
+    };
+    setRen('A', `${a.company}\n${a.product}`, 'D');
+    setRen('E', a.current_premium, 'G');
+    setRen('H', a.renewal_date, 'J');
+    setRen('K', a.renewal_cycle, 'L');
+    setRen('M', a.expected_premium, 'P');
+    const ratCell = ws.getCell(`Q${r}`); ratCell.value = a.increase_multiple || '-';
+    style(ratCell, { bg, align: 'center', sz: 10, fg: { argb: 'FFE05A40' }, bold: true });
+    merge(`Q${r}`, `S${r}`);
+    setRen('T', a.caution, 'W');
+    r++;
+  });
+
+  // 갱신 주석
+  ws.getRow(r).height = 13;
+  ws.getCell(`A${r}`).value = '※ 갱신 후 예상보험료는 보험개발원 통계 기반 추정치로 실제와 다를 수 있습니다.';
+  style(ws.getCell(`A${r}`), { sz: 8, align: 'left', fg: { argb: 'FF888888' } });
+  merge(`A${r}`, `W${r}`); r++;
+
+  ws.getRow(r).height = 8; r++;
+
+  // ── D. 보완 필요 보장 ──
+  ws.getRow(r).height = 24;
+  const gapSec = ws.getCell(`A${r}`);
+  gapSec.value = '❌  D. 보완 필요 보장';
+  style(gapSec, { bg: { argb: 'FFEEEEEE' }, bold: true, sz: 14, align: 'center', fg: C_NAVY });
+  merge(`A${r}`, `W${r}`); r++;
+
+  ws.getRow(r).height = 18;
+  const gapHdr = {A:'보장항목', F:'현재가입', J:'권장금액', N:'부족금액', R:'추가가입 권고사항'};
+  const gapMrg = {A:'E', F:'I', J:'M', N:'Q'};
+  Object.entries(gapHdr).forEach(([col, label]) => {
+    const cell = ws.getCell(`${col}${r}`);
+    cell.value = label; headerStyle(cell);
+    if (gapMrg[col]) merge(`${col}${r}`, `${gapMrg[col]}${r}`);
+    else merge(`${col}${r}`, `W${r}`);
+  });
+  r++;
+
+  (json.coverage_gaps || []).forEach((g, idx) => {
+    ws.getRow(r).height = 23;
+    const bg = idx % 2 === 0 ? C_WHITE : C_F8;
+    ws.getCell(`A${r}`).value = g.item; style(ws.getCell(`A${r}`), { bg, align: 'left', sz: 10, bold: true }); merge(`A${r}`, `E${r}`);
+    ws.getCell(`F${r}`).value = g.current; style(ws.getCell(`F${r}`), { bg, align: 'center', sz: 10 }); merge(`F${r}`, `I${r}`);
+    ws.getCell(`J${r}`).value = g.recommended; style(ws.getCell(`J${r}`), { bg, align: 'center', sz: 10 }); merge(`J${r}`, `M${r}`);
+    const shortCell = ws.getCell(`N${r}`);
+    shortCell.value = g.shortfall;
+    const isGap = g.shortfall && g.shortfall.includes('△');
+    style(shortCell, { bg, align: 'center', sz: 10, bold: isGap, fg: isGap ? { argb: 'FFE05A40' } : { argb: 'FF2E7D32' } });
+    merge(`N${r}`, `Q${r}`);
+    ws.getCell(`R${r}`).value = g.recommendation; style(ws.getCell(`R${r}`), { bg, align: 'left', sz: 10 }); merge(`R${r}`, `W${r}`);
+    r++;
+  });
+
+  // 면책 주석
+  ws.getRow(r).height = 13;
+  ws.getCell(`A${r}`).value = '※ 본 자료는 유니스 VIP 상담 전용 참고자료이며, 보험금 지급은 약관 기준을 따릅니다.';
+  style(ws.getCell(`A${r}`), { sz: 8, align: 'left', fg: { argb: 'FF888888' } });
+  merge(`A${r}`, `W${r}`);
+
+  // ── 다운로드 ──
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${customerName}님_보장분석_케어맵.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function calcTotalsExcel(contracts) {
+  const keys = ['disease_death','accident_death','cancer_diagnosis','similar_cancer','cancer_treatment',
+    'brain_stroke','brain_bleed','brain_treatment','heart_ischemic','heart_mi',
+    'surgery','hospitalization','dementia','caregiver'];
+  const totals = {};
+  keys.forEach(k => {
+    const sum = contracts.reduce((acc, c) => acc + (Number(c[k]) || 0), 0);
+    totals[k] = sum > 0 ? sum : null;
+  });
+  return totals;
+}
+
+// ============================================================
+// 초기화
+// ============================================================
+function resetAll() {
+  uploadedFilesExisting = []; uploadedFilesNew = []; analysisResult = null;
+  document.getElementById('file-list-existing').innerHTML = '';
+  document.getElementById('file-list-new').innerHTML = '';
+  document.getElementById('customer-name').value = '';
+  document.getElementById('insurance-age').value = '';
+  document.getElementById('anniversary-date').value = '';
+  document.getElementById('error-box').classList.add('hidden');
+  document.getElementById('result-section').classList.add('hidden');
+  document.getElementById('intro-section').classList.remove('hidden');
+}
+
+// FP 코드 표시
+const params = new URLSearchParams(location.search);
+const fp = params.get('fp');
+if (fp) document.getElementById('fp-info-header').textContent = `FP: ${fp}`;
 </script>
 </body>
 </html>
