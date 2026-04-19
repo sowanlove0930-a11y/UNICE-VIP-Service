@@ -1275,7 +1275,7 @@ async function startAnalysis() {
       newPdfs: newPdfs
     };
 
-    const resp = await fetch(GAS_URL, {
+    const resp = await fetch(GAS_URL + '?action=analyzeInsurance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -1303,19 +1303,16 @@ async function startAnalysis() {
 
     renderResults(json);
 
-    // 사용 로그 기록 (고객 개인정보 제외 - 건수만)
-    const extractedName = (json.customer_info && json.customer_info.name) ? '(자동추출)' : '(미확인)';
-    fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'logCareMap',
-        fpSabun: currentFp.sabun,
-        fpName: currentFp.name,
-        branch: currentFp.branch,
-        timestamp: new Date().toISOString()
-      })
-    }).catch(() => {});
+    // 사용 로그 기록 - GET 방식 (CORS 우회)
+    const logParams = new URLSearchParams({
+      action: 'logCareMap',
+      fpSabun: currentFp.sabun,
+      fpName: currentFp.name,
+      fpRole: currentFp.role || 'FP',
+      branch: currentFp.branch,
+      timestamp: new Date().toISOString()
+    });
+    fetch(GAS_URL + '?' + logParams.toString()).catch(() => {});
 
     document.getElementById('loading-section').classList.add('hidden');
     document.getElementById('result-section').classList.remove('hidden');
