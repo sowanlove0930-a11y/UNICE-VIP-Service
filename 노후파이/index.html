@@ -8039,6 +8039,17 @@ function rvPrev() {
 
 // ── 통합 키보드 핸들러 ──
 document.addEventListener('keydown', e => {
+  // screen-5bc (저축 구조 재설계): Backspace 완전 차단 (전환 오버레이 중엔 제외)
+  if(e.key === 'Backspace') {
+    const _active = document.querySelector('.screen.active');
+    if(_active && _active.id === 'screen-5bc') {
+      const _overlay = document.getElementById('transitionOverlay');
+      if(!(_overlay && _overlay.classList.contains('show'))) {
+        e.preventDefault();
+        return;
+      }
+    }
+  }
   // Enter/Backspace는 홀드 시 연속 입력 허용
   if(e.repeat && e.key !== 'Enter' && e.key !== 'Backspace') return;
   // 비밀번호 게이트가 활성화 상태면 메인 키 핸들러 무시
@@ -8269,8 +8280,7 @@ document.addEventListener('keydown', e => {
   // ── screen-6a (idx 13) — 일반 화면으로 처리 ──
 
   // ── screen-5bc (idx 10) — 슬라이드쇼 제거, 바로 다음으로 ──
-  if(currentIdx === 10) {
-    if(e.key === 'Enter' || e.key === ' ') {
+  if(currentIdx === 10) {    if(e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       goNext();
       return;
@@ -8337,9 +8347,13 @@ document.addEventListener('keydown', e => {
     if(btn && btn.style.display !== 'none' && parseFloat(btn.style.opacity||1) > 0.4) goNext();
   }
   if(e.key === 'Backspace') {
-    // screen-5a (노후파이 진단): 섹션 열려있으면 페이지 이동 차단
-    const is5aActive = document.getElementById('screen-5a')?.classList.contains('active');
-    if(is5aActive) {
+    // screen-5b (저축 구조 재설계): Backspace 페이지 이동 비활성화
+    if(currentIdx === 8) {
+      if(!isInput) e.preventDefault();
+      return;
+    }
+    // screen-5a: 섹션 열려있으면 페이지 이동 차단
+    if(currentIdx === 6) {
       const anyOpen = Object.values(sectionOpen).some(v => v)
                    || assetSectionOpen
                    || ['sec-short-arrow','sec-mid-arrow','sec-long-arrow','sec-risk-arrow'].some(id => {
