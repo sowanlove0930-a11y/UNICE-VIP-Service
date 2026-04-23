@@ -1014,10 +1014,10 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
     " class="hidden">
       <div style="margin-bottom: 24px;">
         <h3 style="font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 8px;">
-          📊 이번 달 FP 비용 현황 (Top 5)
+          📊 이번 달 전체 FP 현황
         </h3>
-        <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
-          분석 횟수 & 비용 기준 상위 5명
+        <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;" id="admin-dash-sub">
+          분석 횟수 & 비용 기준 정렬
         </p>
       </div>
       
@@ -5083,7 +5083,7 @@ function postProcessJson(json) {
       'surgery','cancer_surgery','hospitalization','dementia','caregiver'
     ];
     (json.contracts||[]).forEach(c => {
-      if (c.category === '저축성' || c.category === '기타') {
+      if (c.category === '저축성') {
         // 건강보장 필드가 3개 이상 채워진 경우 건강보험으로 교정
         const filledCount = HEALTH_FIELDS.filter(f => parse(c[f]) > 0).length;
         if (filledCount >= 3) {
@@ -5207,6 +5207,35 @@ function postProcessJson(json) {
         const hc = parse(c.high_cancer);
         if (hc > 2000) {
           c.memo = ((c.memo||'') + ` ⚠고액암${hc}만확인(고액항암치료비cancer_treat_once오분류가능성)`).trim();
+        }
+      }
+    });
+  }
+
+  // [Fix-BrainSurg v129] brain_treat_once 누락 자동 보완
+  // AI가 뇌혈관수술비를 brain_treat_once 대신 memo에만 기록한 경우 자동 이동
+  {
+    const _pbsurg = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    (json.contracts||[]).forEach(function(c) {
+      if (!_pbsurg(c.brain_treat_once)) {
+        const m = (c.memo||'').match(/뇌혈관수술비[\s]*(\d[\d,]*)\s*만/);
+        if (m) {
+          c.brain_treat_once = parseInt(m[1].replace(/,/g,''));
+          c.memo = (c.memo||'').replace(/뇌혈관수술비[\s]*\d[\d,]*\s*만/, '').replace(/\n\n/g,'\n').trim();
+        }
+      }
+    });
+  }
+
+  // [Fix-ProductName v129] 상품명에 '건강보험' 명시 → 저축성 오분류 자동 교정
+  // 예: 삼성 다모은건강보험(2306) → AI가 30년납 종신으로 저축성 오분류
+  {
+    (json.contracts||[]).forEach(function(c) {
+      if (c.category === '저축성') {
+        const prod = (c.product||'') + (c.company||'');
+        if (prod.includes('건강보험') || prod.includes('건강보험')) {
+          c.category = '건강보험';
+          c.memo = ((c.memo||'') + ' [상품명기반건강보험자동교정]').trim();
         }
       }
     });
@@ -7638,22 +7667,27 @@ document.addEventListener('keydown', function(e) {
 // ── 관리자 판별 함수
 function isAdmin(fpCode) {
   if (!fpCode) return false;
-  // 대표 또는 지점장
+  // 대표 또는 지점장만 (센터장 제외)
   const code = fpCode ? fpCode.toUpperCase() : '';
-  return code === 'KTK01' || ['전소영', '이수아', '최성경', 'H2502982'].includes(fpCode);
+  return code === 'KTK01' || ['전소영', '이수아', '최성경'].includes(fpCode);
 }
 
-// ── 관리자 대시보드 표시
+// ── 관리자 대시보드 표시 (전체 FP)
 async function showAdminDashboard() {
   if (!currentFpCode || !isAdmin(currentFpCode)) return;
   
   try {
     const dashboard = document.getElementById('admin-dashboard');
     const body = document.getElementById('admin-dashboard-body');
+    const sub = document.getElementById('admin-dash-sub');
     
     if (!dashboard || !body) return;
     
-    // Apps Script에서 데이터 조회
+    // 로딩 표시
+    body.innerHTML = '<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--muted);">📊 데이터 불러오는 중...</td></tr>';
+    dashboard.style.display = 'block';
+    
+    // Apps Script에서 전체 데이터 조회
     const formData = new FormData();
     formData.append('action', 'getAllCosts');
     formData.append('userCode', currentFpCode);
@@ -7661,47 +7695,44 @@ async function showAdminDashboard() {
     const response = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: formData });
     const result = await response.json();
     
-    if (!result.success || !result.data) {
-      body.innerHTML = '<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--muted);">데이터가 없습니다.</td></tr>';
+    if (!result.success || !result.data || result.data.length === 0) {
+      body.innerHTML = '<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--muted);">이번 달 분석 기록이 없습니다.</td></tr>';
       return;
     }
     
-    // Top 5 만들기 (비용 기준 정렬)
-    const topFive = result.data.slice(0, 5);
+    const allData = result.data; // 비용 기준 내림차순 정렬됨
+    const medals = ['🥇', '🥈', '🥉'];
     
-    if (topFive.length === 0) {
-      body.innerHTML = '<tr><td colspan="4" style="padding: 40px; text-align: center; color: var(--muted);">데이터가 없습니다.</td></tr>';
-      return;
-    }
+    if (sub) sub.textContent = `총 ${allData.length}명 분석 기록 · 비용 기준 정렬`;
     
-    // 테이블 채우기
-    body.innerHTML = topFive.map((item, idx) => {
-      const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+    // 전체 FP 테이블
+    body.innerHTML = allData.map((item, idx) => {
+      const rank = idx < 3 ? medals[idx] : (idx + 1) + '위';
       const bgColor = idx % 2 === 0 ? '#FFFFFF' : '#F8F9FA';
+      const isTop3 = idx < 3;
       
       return `
-        <tr style="background: ${bgColor}; border-bottom: 1px solid #D0D8E8;">
-          <td style="padding: 12px; text-align: left; font-size: 14px; font-weight: 700; color: var(--navy);">
-            ${medals[idx]}
+        <tr style="background: ${bgColor}; border-bottom: 1px solid #E8EEF8;">
+          <td style="padding: 10px 12px; text-align: center; font-size: ${isTop3 ? '16' : '13'}px; font-weight: 700; color: var(--navy); width: 50px;">
+            ${rank}
           </td>
-          <td style="padding: 12px; text-align: left; font-size: 14px; font-weight: 700; color: var(--mid-navy);">
+          <td style="padding: 10px 12px; font-size: 14px; font-weight: ${isTop3 ? '700' : '500'}; color: var(--mid-navy);">
             ${item.fpName || item.fpCode}
           </td>
-          <td style="padding: 12px; text-align: center; font-size: 14px; color: var(--text);">
+          <td style="padding: 10px 12px; text-align: center; font-size: 13px; color: var(--text);">
             ${item.analysisCount}회
           </td>
-          <td style="padding: 12px; text-align: right; font-size: 14px; font-weight: 700; color: var(--success);">
+          <td style="padding: 10px 12px; text-align: right; font-size: 14px; font-weight: 700; color: ${isTop3 ? '#2E7D32' : 'var(--text)'};">
             ₩${(item.totalCost || 0).toLocaleString()}
           </td>
         </tr>
       `;
     }).join('');
     
-    // 대시보드 표시
-    dashboard.style.display = 'block';
-    
   } catch (error) {
     console.error('관리자 대시보드 로드 오류:', error);
+    const body = document.getElementById('admin-dashboard-body');
+    if (body) body.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: red;">오류가 발생했습니다.</td></tr>';
   }
 }
 
