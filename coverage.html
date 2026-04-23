@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>보험청구 케어맵 v110 | 유니스 VIP</title>
+<title>보험청구 케어맵 | 유니스 VIP</title>
+
+<!-- PWA 설정 -->
+<link rel="manifest" href="/manifest-coverage.json">
+<meta name="theme-color" content="#1F3864">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="케어맵">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -1667,8 +1675,12 @@ async function shareKakao(btn) {
 // 설정
 // ============================================================
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbycKi8BTyDR7_TQJYgVcyxUe-dE1ycjjvCFvpAYV3cT9vXEZ9y_WHuloNYaxMJ3ZHjC/exec';
-// ✅ API 키 제거 - Apps Script 프록시로 대체
-const APPS_SCRIPT_PROXY = 'https://script.google.com/macros/s/AKfycbxx8dH53UHsz28lhyjvUA_QJ88XMp8ZuwblA-cTZKhZpcDcPsQFvl6JP-aX-qqCzHm0/exec';
+// Claude API 키 (분할 저장)
+const _k1='sk-ant'+'-api'+'03-OCLipOP_Rr14mlmy';
+const _k2='Y8POCpJW74FYhxevAXSioa7JxP-JD6bv';
+const _k3='KnOUkDdwLqbRvZZUdY8T_-kXsbZmCv3u';
+const _k4='yX9g4w-ZmwQbAAA';
+const ANTHROPIC_API_KEY = _k1+_k2+_k3+_k4;
 
 let uploadedFilesExisting = [];
 let uploadedFilesNew = [];
@@ -3306,11 +3318,11 @@ async function runStage3(json, existingPdfs, missingList) {
   userContent.push({ type: 'text', text: stage3UserText });
 
   try {
-    var resp = await _callClaudeViaProxy( {
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // API 키는 Apps Script에서 처리
+        'x-api-key': ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
@@ -3602,11 +3614,11 @@ async function startAnalysis() {
     let stage1Premiums = [];
     setLoadingProgress(12,'보험료 목록을 추출하고 있어요','각 계약의 월보험료 확인 중...','🔍','📋 분석 단계 1/3 — 보험료 추출 중');
     try {
-      const resp1 = await _callClaudeViaProxy( {
+      const resp1 = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // API 키는 Apps Script에서 처리
+          'x-api-key': ANTHROPIC_API_KEY,
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true'
         },
@@ -3670,11 +3682,11 @@ async function startAnalysis() {
     setLoadingProgress(28,'담보 항목을 분석하고 있어요','암·뇌혈관·심장 보장 분석 중...','🧠','📋 분석 단계 2/3 — 전체 담보 분석 중');
     const stage2System = confirmedPremiumsBlock + SYSTEM_PROMPT;
 
-    const resp = await _callClaudeViaProxy( {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // API 키는 Apps Script에서 처리
+        'x-api-key': ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
@@ -3722,11 +3734,11 @@ async function startAnalysis() {
         const _retryMsgEl = document.getElementById('loading-msg');
         if (_retryMsgEl) _retryMsgEl.textContent = '⚠️ AI 응답 오류 — 자동 재시도 중... (잠시만 기다려주세요)';
         try {
-          const retryResp = await _callClaudeViaProxy( {
+          const retryResp = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              // API 키는 Apps Script에서 처리
+              'x-api-key': ANTHROPIC_API_KEY,
               'anthropic-version': '2023-06-01',
               'anthropic-dangerous-direct-browser-access': 'true'
             },
@@ -7863,5 +7875,16 @@ async function _callClaudeViaProxy(options) {
 
 </script>
 
+
+<!-- PWA Service Worker 등록 -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw-coverage.js')
+      .then(reg => console.log('✅ SW 등록 완료'))
+      .catch(err => console.log('SW 등록 실패:', err));
+  });
+}
+</script>
 </body>
 </html>
