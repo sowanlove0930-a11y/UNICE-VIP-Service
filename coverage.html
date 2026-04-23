@@ -1667,7 +1667,8 @@ async function shareKakao(btn) {
 // 설정
 // ============================================================
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbycKi8BTyDR7_TQJYgVcyxUe-dE1ycjjvCFvpAYV3cT9vXEZ9y_WHuloNYaxMJ3ZHjC/exec';
-const ANTHROPIC_API_KEY = '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';
+// ✅ API 키 제거 - Apps Script 프록시로 대체
+const APPS_SCRIPT_PROXY = 'https://script.google.com/macros/s/AKfycbxx8dH53UHsz28lhyjvUA_QJ88XMp8ZuwblA-cTZKhZpcDcPsQFvl6JP-aX-qqCzHm0/exec';
 
 let uploadedFilesExisting = [];
 let uploadedFilesNew = [];
@@ -3305,11 +3306,11 @@ async function runStage3(json, existingPdfs, missingList) {
   userContent.push({ type: 'text', text: stage3UserText });
 
   try {
-    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+    var resp = await _callClaudeViaProxy( {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
+        // API 키는 Apps Script에서 처리
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
@@ -3601,11 +3602,11 @@ async function startAnalysis() {
     let stage1Premiums = [];
     setLoadingProgress(12,'보험료 목록을 추출하고 있어요','각 계약의 월보험료 확인 중...','🔍','📋 분석 단계 1/3 — 보험료 추출 중');
     try {
-      const resp1 = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp1 = await _callClaudeViaProxy( {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
+          // API 키는 Apps Script에서 처리
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true'
         },
@@ -3669,11 +3670,11 @@ async function startAnalysis() {
     setLoadingProgress(28,'담보 항목을 분석하고 있어요','암·뇌혈관·심장 보장 분석 중...','🧠','📋 분석 단계 2/3 — 전체 담보 분석 중');
     const stage2System = confirmedPremiumsBlock + SYSTEM_PROMPT;
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await _callClaudeViaProxy( {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
+        // API 키는 Apps Script에서 처리
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
@@ -3721,11 +3722,11 @@ async function startAnalysis() {
         const _retryMsgEl = document.getElementById('loading-msg');
         if (_retryMsgEl) _retryMsgEl.textContent = '⚠️ AI 응답 오류 — 자동 재시도 중... (잠시만 기다려주세요)';
         try {
-          const retryResp = await fetch('https://api.anthropic.com/v1/messages', {
+          const retryResp = await _callClaudeViaProxy( {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-api-key': ANTHROPIC_API_KEY,
+              // API 키는 Apps Script에서 처리
               'anthropic-version': '2023-06-01',
               'anthropic-dangerous-direct-browser-access': 'true'
             },
@@ -7841,6 +7842,25 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
+
+// ✅ Claude API 프록시 함수 (Apps Script 경유)
+async function _callClaudeViaProxy(options) {
+  const body = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+  
+  const formData = new FormData();
+  formData.append('action', 'claudeAnalyze');
+  formData.append('messages', JSON.stringify(body.messages || []));
+  formData.append('systemPrompt', body.system || '');
+  formData.append('maxTokens', body.max_tokens || 4000);
+  
+  const response = await fetch(APPS_SCRIPT_PROXY, {
+    method: 'POST',
+    body: formData
+  });
+  
+  return response;
+}
+
 </script>
 
 </body>
