@@ -1404,29 +1404,49 @@ const FP_LOCAL = {
   'KTK01':    { name: '김태규', branch: '유니스', role: '대표',  active: true, managerEmail: '' },
 };
 
-function submitFpSabun() {
+async function submitFpSabun() {
   const sabun = document.getElementById('fp-sabun-input').value.trim().toUpperCase();
   const errEl = document.getElementById('fp-modal-error');
+  const btn = document.querySelector('.fp-modal-btn');
   errEl.textContent = '';
 
   if (!sabun) { errEl.textContent = '사번을 입력해주세요.'; return; }
 
+  // 1차: HTML 테이블 존재 여부 확인
   const fp = FP_LOCAL[sabun];
-
   if (!fp) {
     errEl.textContent = '등록되지 않은 사번입니다. 다시 확인해주세요.';
     return;
   }
 
-  if (!fp.active) {
-    document.getElementById('fp-modal-overlay').classList.add('hidden');
-    document.getElementById('block-overlay').classList.remove('hidden');
-    return;
+  // 2차: Google Sheets 실시간 활성여부 확인 (노후파이와 동일 구조)
+  if (btn) { btn.textContent = '확인 중...'; btn.disabled = true; }
+  try {
+    const formData = new FormData();
+    formData.append('action', 'checkActive');
+    formData.append('fpCode', sabun);
+    const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: formData });
+    const result = await res.json();
+
+    if (!result.ok) {
+      document.getElementById('fp-modal-overlay').classList.add('hidden');
+      document.getElementById('block-overlay').classList.remove('hidden');
+      return;
+    }
+  } catch (e) {
+    // 네트워크 오류 시 FP_LOCAL active 값으로 폴백
+    if (!fp.active) {
+      document.getElementById('fp-modal-overlay').classList.add('hidden');
+      document.getElementById('block-overlay').classList.remove('hidden');
+      return;
+    }
+  } finally {
+    if (btn) { btn.textContent = '확인'; btn.disabled = false; }
   }
 
   // 로그인 성공
-  currentFp = { sabun: sabun, name: fp.name, branch: fp.branch, role: fp.role, managerEmail: fp.managerEmail, active: fp.active };
-  currentFpCode = sabun; // 비용 시스템 연동
+  currentFp = { sabun: sabun, name: fp.name, branch: fp.branch, role: fp.role, managerEmail: fp.managerEmail, active: true };
+  currentFpCode = sabun;
   document.getElementById('fp-modal-overlay').classList.add('hidden');
   document.getElementById('fp-info-header').textContent = fp.name + ' · ' + fp.branch;
   showMotiMessage(fp);
