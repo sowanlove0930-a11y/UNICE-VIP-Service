@@ -893,35 +893,52 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
     <!-- 분석 전 비용 패널 -->
     <div id="pre-cost-panel" style="display:none;background:#fff;border:1.5px solid #D0D8E8;
          border-radius:12px;padding:16px 20px;margin-top:6px;animation:slideDown 0.25s ease;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span style="font-size:13px;color:var(--muted);">이번 달 내 누계</span>
-        <span style="font-size:11px;color:var(--muted);" id="pre-cost-month-label"></span>
+
+      <!-- 월 선택 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <span style="font-size:13px;font-weight:700;color:var(--navy);">월별 비용 조회</span>
+        <select id="pre-month-select"
+          onchange="onPreMonthChange()"
+          style="font-size:13px;font-weight:600;color:var(--navy);border:1.5px solid #D0D8E8;
+                 border-radius:8px;padding:5px 10px;background:#F8FAFF;cursor:pointer;
+                 font-family:inherit;outline:none;">
+        </select>
       </div>
+
+      <!-- 본인 누계 -->
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:13px;color:var(--text);">분석 횟수</span>
+        <span style="font-size:13px;color:var(--text);">내 분석 횟수</span>
         <span style="font-size:15px;font-weight:700;color:var(--navy);" id="pre-analysis-count">-</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;
                   padding-top:10px;border-top:1px solid var(--border);">
-        <span style="font-size:13px;color:var(--text);">누계 비용</span>
+        <span style="font-size:13px;color:var(--text);">내 누계 비용</span>
         <span style="font-size:17px;font-weight:900;color:#2E7D32;" id="pre-monthly-total">-</span>
       </div>
 
       <!-- 관리자 전용: 전체 FP 현황 -->
       <div id="pre-admin-section" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
-        <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;">📊 전체 FP 현황 (이번 달)</div>
+        <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;">📊 전체 FP 현황</div>
         <div id="pre-admin-loading" style="text-align:center;padding:16px;color:var(--muted);font-size:13px;">불러오는 중...</div>
-        <table id="pre-admin-table" style="display:none;width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="background:#F4F6FA;">
-              <th style="padding:7px 8px;text-align:center;color:var(--muted);font-weight:600;width:36px;">순위</th>
-              <th style="padding:7px 8px;text-align:left;color:var(--muted);font-weight:600;">이름</th>
-              <th style="padding:7px 8px;text-align:center;color:var(--muted);font-weight:600;">횟수</th>
-              <th style="padding:7px 8px;text-align:right;color:var(--muted);font-weight:600;">비용</th>
-            </tr>
-          </thead>
-          <tbody id="pre-admin-tbody"></tbody>
-        </table>
+        <div id="pre-admin-table-wrap" style="max-height:320px;overflow-y:auto;display:none;">
+          <table id="pre-admin-table" style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead style="position:sticky;top:0;z-index:1;">
+              <tr style="background:#F4F6FA;">
+                <th style="padding:7px 8px;text-align:center;color:var(--muted);font-weight:600;width:36px;">순위</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--muted);font-weight:600;">이름</th>
+                <th style="padding:7px 8px;text-align:center;color:var(--muted);font-weight:600;">횟수</th>
+                <th style="padding:7px 8px;text-align:right;color:var(--muted);font-weight:600;">비용</th>
+              </tr>
+            </thead>
+            <tbody id="pre-admin-tbody"></tbody>
+          </table>
+        </div>
+        <!-- 합계 -->
+        <div id="pre-admin-total-row" style="display:none;display:flex;justify-content:space-between;
+             align-items:center;padding:10px 8px;background:#F0F4FF;border-radius:8px;margin-top:8px;">
+          <span style="font-size:13px;font-weight:700;color:var(--navy);">전체 합계</span>
+          <span style="font-size:15px;font-weight:900;color:#2E7D32;" id="pre-admin-grand-total">-</span>
+        </div>
       </div>
     </div>
   </div>
@@ -7881,8 +7898,33 @@ async function showAdminDashboard() {
 
 
 
+// ── 분석 전 비용 패널: 월 목록 생성 (최근 12개월)
+function buildMonthOptions() {
+  const sel = document.getElementById('pre-month-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = `${d.getFullYear()}년 ${d.getMonth()+1}월${i===0?' (이번 달)':''}`;
+    const opt = document.createElement('option');
+    opt.value = ym;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  }
+}
+
+function getSelectedMonth() {
+  const sel = document.getElementById('pre-month-select');
+  return sel ? sel.value : null;
+}
+
+async function onPreMonthChange() {
+  await fetchPreCostData();
+}
+
 // ── 분석 전 비용 패널 토글
-let preCostLoaded = false;
 async function togglePreCostPanel() {
   const panel = document.getElementById('pre-cost-panel');
   const arrow = document.getElementById('pre-cost-btn-arrow');
@@ -7897,23 +7939,23 @@ async function togglePreCostPanel() {
   panel.style.display = 'block';
   arrow.textContent = '▲';
 
-  // 월 라벨
-  const now = new Date();
-  const monthLabel = document.getElementById('pre-cost-month-label');
-  if (monthLabel) monthLabel.textContent = `${now.getFullYear()}년 ${now.getMonth()+1}월`;
+  // 월 드롭다운 초기화 (처음 열 때만)
+  const sel = document.getElementById('pre-month-select');
+  if (sel && sel.options.length === 0) buildMonthOptions();
 
-  // 데이터 조회 (캐시 없으면 항상 새로 조회)
   await fetchPreCostData();
 }
 
 async function fetchPreCostData() {
   if (!currentFpCode) return;
+  const yearMonth = getSelectedMonth();
+  if (!yearMonth) return;
 
   try {
-    // 본인 누계
     const formData = new FormData();
     formData.append('action', 'getMonthlyCost');
     formData.append('fpCode', currentFpCode);
+    formData.append('yearMonth', yearMonth);
     const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: formData });
     const result = await res.json();
 
@@ -7932,33 +7974,37 @@ async function fetchPreCostData() {
     if (isAdmin(currentFpCode)) {
       const adminSec = document.getElementById('pre-admin-section');
       if (adminSec) adminSec.style.display = 'block';
-      await fetchPreAdminData();
+      await fetchPreAdminData(yearMonth);
     }
   } catch (err) {
     console.error('분석 전 비용 조회 오류:', err);
   }
 }
 
-async function fetchPreAdminData() {
+async function fetchPreAdminData(yearMonth) {
   const loading = document.getElementById('pre-admin-loading');
-  const table = document.getElementById('pre-admin-table');
+  const tableWrap = document.getElementById('pre-admin-table-wrap');
   const tbody = document.getElementById('pre-admin-tbody');
+  const totalRow = document.getElementById('pre-admin-total-row');
+  const grandTotal = document.getElementById('pre-admin-grand-total');
   if (!tbody) return;
 
-  if (loading) loading.style.display = 'block';
-  if (table) table.style.display = 'none';
+  if (loading) { loading.style.display = 'block'; loading.textContent = '불러오는 중...'; }
+  if (tableWrap) tableWrap.style.display = 'none';
+  if (totalRow) totalRow.style.display = 'none';
 
   try {
     const formData = new FormData();
     formData.append('action', 'getAllCosts');
     formData.append('userCode', currentFpCode);
+    formData.append('yearMonth', yearMonth);
     const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: formData });
     const result = await res.json();
 
     if (loading) loading.style.display = 'none';
 
     if (!result.success || !result.data || result.data.length === 0) {
-      if (loading) { loading.style.display = 'block'; loading.textContent = '이번 달 기록 없음'; }
+      if (loading) { loading.style.display = 'block'; loading.textContent = '해당 월 기록 없음'; }
       return;
     }
 
@@ -7974,7 +8020,13 @@ async function fetchPreAdminData() {
       </tr>`;
     }).join('');
 
-    if (table) table.style.display = 'table';
+    if (tableWrap) tableWrap.style.display = 'block';
+
+    // 합계
+    const total = allData.reduce((s, item) => s + (item.totalCost || 0), 0);
+    if (grandTotal) grandTotal.textContent = '₩' + total.toLocaleString();
+    if (totalRow) totalRow.style.display = 'flex';
+
   } catch (err) {
     console.error('관리자 전체 현황 오류:', err);
     if (loading) { loading.style.display = 'block'; loading.textContent = '오류 발생'; }
