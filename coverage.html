@@ -2423,8 +2423,15 @@ cancer_surgery (암수술비 — 별도 필드):
   ✅ 뇌심주요치료비 특약 내 약제비 항목
   ✅ 항혈전제약제비 / 혈전용해제약제비
   ✅ 뇌혈관치료약제비 / 뇌졸중약제비
+  ✅ "약제치료비" 포함 담보 중 뇌 관련 → brain_drug
+     · 심뇌혈관질환주요약제치료비 (항응고제 계열) → brain_drug
+     · 심뇌혈관질환주요약제치료비 (항혈전제 계열) → brain_drug
+     🚨 뇌심 분리 기준:
+        담보명에 "항응고" 포함 → brain_drug (뇌혈관 항응고제)
+        담보명에 "항혈소판" 포함 → heart_drug (심장 항혈소판제)
+        구분 불가(뇌심통합) → 전액 brain_drug + memo에 "뇌심약제치료비 통합" 표기
   ✅ 최신 통합특약 내 '뇌' 관련 약제비 항목 (뇌심케어, 뇌심플러스, 뇌심보장 등)
-  → 뇌+심장 통합 약제비 특약인 경우: 전액 brain_drug에 기재 후 memo에 "뇌심약제비 통합" 표기
+  → 뇌+심장 통합 약제비/약제치료비 특약인 경우: 전액 brain_drug에 기재 후 memo에 "뇌심약제비 통합" 표기
   → 뇌심주요치료비 특약에 약제비가 포함된 경우: 약제비 금액만 분리하여 brain_drug에 기재
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2451,7 +2458,7 @@ STEP 3: 위 해당 없으면 → brain_treat_once (1회한 간주)
   · 혈전용해치료비(뇌경색증,I63)(갱신형) 200만 → brain_treat_once = 200 ✅
   · 혈전용해치료비(급성심근경색증,I21)(갱신형) 200만 → heart_treat_once = 200 ✅
   ❌ brain_drug(뇌약제비★) / heart_drug(심약제비★) 배정 절대 금지
-  ※ 약제비(brain_drug)는 "약제비", "약제비★" 명시된 담보만 해당
+  ※ 약제비(brain_drug)는 "약제비", "약제비★", "약제치료비" 명시된 담보만 해당
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 [핵심 규칙 6-1] 부정맥 진단비 (arrhythmia 필드)
@@ -2470,8 +2477,15 @@ STEP 3: 위 해당 없으면 → brain_treat_once (1회한 간주)
   ✅ 뇌심주요치료비 특약 내 약제비 항목
   ✅ 항혈소판제약제비 / 항응고제약제비
   ✅ 심장치료약제비 / 심근경색약제비 / 관상동맥약제비
+  ✅ "약제치료비" 포함 담보 중 심장 관련 → heart_drug
+     · 심뇌혈관질환주요약제치료비 (항혈소판제 계열) → heart_drug
+     · 심혈관질환주요약제치료비 계열 → heart_drug
+     🚨 뇌심 분리 기준 (brain_drug 규칙 5와 동일):
+        담보명에 "항응고" 포함 → brain_drug
+        담보명에 "항혈소판" 포함 → heart_drug
+        구분 불가 → brain_drug 전액 + memo "뇌심약제치료비 통합"
   ✅ 최신 통합특약 내 '심장' 관련 약제비 항목 (뇌심케어, 뇌심플러스, 뇌심보장 등)
-  → 뇌+심장 통합 약제비 특약인 경우:
+  → 뇌+심장 통합 약제비/약제치료비 특약인 경우:
      - 특약명에 뇌·심 구분이 있으면 각각 분리 기재
      - 통합 금액만 있으면 전액 brain_drug에 기재하고 memo에 "뇌심약제비 통합, 심장도 포함" 표기
 
@@ -6497,7 +6511,7 @@ async function downloadExcel() {
       const addItem=(lbl,arr)=>{ if(!arr.length) return; amt+=(amt?'\n\n':'')+`${['①','②','③','④','⑤'][n-1]} ${lbl}\n   ${_fmt(arr)}`; n++; };
       addItem('뇌혈관 진단비', bv);
       addItem('뇌졸중 진단비', bs);
-      if(bdrug.length){clm+='\n뇌 약제비'; addItem('뇌 약제비(혈전용해제)', bdrug);}
+      if(bdrug.length){clm+='\n뇌 약제비★'; addItem('뇌 약제비★(항응고제·혈전용해제)', bdrug);}
       if(bt1.length){clm+='\n뇌 치료비(1회한)'; addItem('뇌 치료비(1회한)', bt1);}
       clm+='\n실손의료비'; amt+='\n\n'+['①','②','③','④','⑤'][n-1]+' 실손  '+_silsonCo;
       const allIns=[...bv,...bs,...bdrug,...bt1];
@@ -6511,22 +6525,25 @@ async function downloadExcel() {
       let amt='', n=1;
       const addItem=(lbl,arr)=>{ if(!arr.length) return; amt+=(amt?'\n\n':'')+`${['①','②','③','④','⑤','⑥'][n-1]} ${lbl}\n   ${_fmt(arr)}`; n++; };
       addItem('뇌혈관 진단비', bv); addItem('뇌졸중 진단비', bs); addItem('뇌출혈 진단비', bb);
-      if(bdrug.length) addItem('뇌 약제비', bdrug);
+      if(bdrug.length) addItem('뇌 약제비★(항응고제·혈전용해제)', bdrug);
       if(bt1.length) addItem('뇌 치료비(1회한)', bt1);
       amt+='\n\n'+['①','②','③','④','⑤','⑥'][n-1]+' 실손  '+_silsonCo;
       cg.push({ situation:'🩸 뇌출혈 진단 시', claimable:'뇌혈관·뇌졸중·뇌출혈 진단비\n실손의료비', insurers_and_amount:amt, insurers:[..._ins(allBV).split('\n'),hasSilson?_silsonCo+'(실손)':''].filter(Boolean).join('\n') });
     }
 
     // ❤️ 급성심근경색
-    const hi=_contribs('heart_ischemic'), hmi=_contribs('heart_mi'), ht1=_contribs('heart_treat_once');
+    const hi=_contribs('heart_ischemic'), hmi=_contribs('heart_mi');
+    const hdrug=_contribs('heart_drug'), ht1=_contribs('heart_treat_once');
     if(hi.length||hmi.length){
       let amt='', n=1;
-      const addItem=(lbl,arr)=>{ if(!arr.length) return; amt+=(amt?'\n\n':'')+`${['①','②','③','④'][n-1]} ${lbl}\n   ${_fmt(arr)}`; n++; };
+      const addItem=(lbl,arr)=>{ if(!arr.length) return; amt+=(amt?'\n\n':'')+`${['①','②','③','④','⑤','⑥'][n-1]} ${lbl}\n   ${_fmt(arr)}`; n++; };
       addItem('허혈성심장질환 진단비', hi); addItem('급성심근경색 진단비', hmi);
+      if(hdrug.length) addItem('심장 약제비★(항혈소판제)', hdrug);
       if(ht1.length) addItem('심장 치료비(1회한)', ht1);
-      amt+='\n\n'+['①','②','③','④'][n-1]+' 실손  '+_silsonCo;
-      const allH=[...hi,...hmi,...ht1];
-      cg.push({ situation:'❤️ 급성심근경색 시', claimable:'허혈성심장·급성심근경색 진단비\n심장 치료비(1회한)\n실손의료비', insurers_and_amount:amt, insurers:[..._ins(allH).split('\n'),hasSilson?_silsonCo+'(실손)':''].filter(Boolean).join('\n') });
+      amt+='\n\n'+['①','②','③','④','⑤','⑥'][n-1]+' 실손  '+_silsonCo;
+      const allH=[...hi,...hmi,...hdrug,...ht1];
+      const clmItems=['허혈성심장·급성심근경색 진단비'].concat(hdrug.length?['심장 약제비★']:[]).concat(ht1.length?['심장 치료비(1회한)']:['심장 치료비(1회한)']).concat(['실손의료비']);
+      cg.push({ situation:'❤️ 급성심근경색 시', claimable:clmItems.join('\n'), insurers_and_amount:amt, insurers:[..._ins(allH).split('\n'),hasSilson?_silsonCo+'(실손)':''].filter(Boolean).join('\n') });
     }
 
     // 🔪 수술 시
@@ -8046,13 +8063,11 @@ async function onPreMonthChange() {
 async function togglePreCostPanel() {
   const panel = document.getElementById('pre-cost-panel');
   const arrow = document.getElementById('pre-cost-btn-arrow');
-  const btnLabel = document.getElementById('pre-cost-btn-label');
   const isOpen = panel.style.display !== 'none';
 
   if (isOpen) {
     panel.style.display = 'none';
     arrow.textContent = '▼';
-    if (btnLabel) btnLabel.textContent = '이번 달 누계 비용 확인';
     return;
   }
 
@@ -8070,14 +8085,6 @@ async function fetchPreCostData() {
   if (!currentFpCode) return;
   const yearMonth = getSelectedMonth();
   if (!yearMonth) return;
-
-  // 버튼 로딩 상태
-  const btnLabel = document.getElementById('pre-cost-btn-label');
-  const countEl = document.getElementById('pre-analysis-count');
-  const totalEl = document.getElementById('pre-monthly-total');
-  if (btnLabel) btnLabel.textContent = '조회 중...';
-  if (countEl) countEl.textContent = '-';
-  if (totalEl) totalEl.textContent = '-';
 
   try {
     const formData = new FormData();
@@ -8097,7 +8104,6 @@ async function fetchPreCostData() {
       if (countEl) countEl.textContent = '0회';
       if (totalEl) totalEl.textContent = '0원';
     }
-    if (btnLabel) btnLabel.textContent = '이번 달 누계 비용 확인';
 
     // 관리자면 전체 현황도 표시
     if (isAdmin(currentFpCode)) {
