@@ -1448,6 +1448,8 @@ let currentFp = { sabun: '', name: '', branch: '', managerEmail: '' };
 // FP 정보는 Google Sheets에서 실시간 조회
 const FP_LOCAL = {}; // Sheets 방식으로 전환됨
 
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxx8dH53UHsz28lhyjvUA_QJ88XMp8ZuwblA-cTZKhZpcDcPsQFvl6JP-aX-qqCzHm0/exec';
+
 async function submitFpSabun() {
   const sabun = document.getElementById('fp-sabun-input').value.trim().toUpperCase();
   const errEl = document.getElementById('fp-modal-error');
@@ -1478,15 +1480,31 @@ async function submitFpSabun() {
       return;
     }
 
+    // 역할 변환 (Sheets 영문 → HTML 한글)
+    const ROLE_MAP = {
+      'CHIEF': '대표', 'BRANCH_MANAGER': '지점장',
+      'CENTER_MANAGER': '센터장', 'MANAGER': '매니저', 'FP': 'FP',
+      '대표': '대표', '지점장': '지점장', '센터장': '센터장', '매니저': '매니저'
+    };
+    const MANAGER_CODES = [
+      // 알파 매니저
+      'H2502953','H2502956','H2502984','H2502976','H2502962','H2502990','H2502972',
+      // 브라보 매니저
+      'H2502957','H2502997','H2502993'
+    ];
+    let rawRole = result.role || 'FP';
+    let koRole = ROLE_MAP[rawRole] || rawRole;
+    if (koRole === 'FP' && MANAGER_CODES.includes(sabun)) koRole = '매니저';
+
     // 로그인 성공
     const fp = {
       name: result.name,
       branch: result.branch,
-      role: result.role,
+      role: koRole,
       managerEmail: result.managerEmail || '',
       active: true
     };
-    currentFp = { sabun: sabun, ...fp };
+    currentFp = { sabun: sabun, name: fp.name, branch: fp.branch, role: fp.role, managerEmail: fp.managerEmail, active: fp.active };
     currentFpCode = sabun;
     document.getElementById('fp-modal-overlay').classList.add('hidden');
     document.getElementById('fp-info-header').textContent = fp.name + ' · ' + fp.branch;
@@ -7657,7 +7675,7 @@ async function downloadExcel() {
       memo: c.memo||'',
       // contracts에서 온 기타 계약의 사망담보 정보 보존
       disease_death: c.disease_death||null, accident_death: c.accident_death||null
-    })))
+    }))
   ].sort((a,b)=>_getStart(a.payment_period||a.coverage_period)-_getStart(b.payment_period||b.coverage_period));
   // 중복 제거: 회사+상품명 전체 기준
   const _othersSeenKeys = new Set();
@@ -8162,7 +8180,7 @@ function toggleCostInfo() {
      ============================================================ -->
 <script>
 // ── Apps Script 배포 URL
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxx8dH53UHsz28lhyjvUA_QJ88XMp8ZuwblA-cTZKhZpcDcPsQFvl6JP-aX-qqCzHm0/exec';
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxx8dH53UHsz28lhyjvUA_QJ88XMp8ZuwblA-cTZKhZpcDcPsQFvl6JP-aX-qqCzHm0/exec';
 
 // ── FP 코드 및 비용 데이터
 let currentFpCode = null;
