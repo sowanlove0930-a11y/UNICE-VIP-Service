@@ -4704,8 +4704,8 @@ function postProcessJson(json) {
       const prem = parseInt(String(c.monthly_premium||'0').replace(/[^0-9]/g,''))||0;
       const once = parseFloat(c.cancer_treat_once)||0;
       // 현대해상은 암치료비 1회한이 정상적으로 배정되지 않음 — 보험료 대비 비정상이면 0 초기화
-      // 기준: 100만 이상이면 의심 (Hi2508 기준 cancer_treat_once = 0)
-      if (once >= 100 && prem < 200000) {
+      // 기준: 300만 초과이면 의심 (100~300만은 항암방사선약물치료비 등 진짜 1회한 담보 보호)
+      if (once > 300 && prem < 200000) {
         c.cancer_treat_once = 0;
         c.memo = ((c.memo||'') + ' ⚠cancer_treat_once자동초기화(AI오배정감지)').trim();
       }
@@ -7693,10 +7693,20 @@ async function downloadExcel() {
   colHdr3(ws3,r3,['구분','회사명','상품명','월보험료','납입기간','납입방법','만기/종료일','납입 요약','비고']); r3++;
   const _othersRaw=[
     ...(json.other_contracts||[]),
-    ...((json.contracts||[]).filter(c=>c.category==='기타').map(c=>({
+    ...(json.contracts||[]).filter(c=>c.category==='기타').map(c=>({
       company: c.company||'',
       product: c.product||'',
-      monthly_premium: c.monthly_premium||'',
+      // 기타탭 중복계산 방지: 같은 회사의 건강보험 계약이 이 기타 계약의 상품명을 포함하면 보험료 null
+      // 예: 건강보험탭 "훼밀리라이프종합1605" + 기타탭 "훼밀리라이프종합1605(운전자특약)" → 보험료 null
+      monthly_premium: (() => {
+        const healths = (json.contracts||[]).filter(h => h.category !== '기타' && (h.company||'') === (c.company||''));
+        const isDup = healths.some(h => {
+          const hp = (h.product||'').trim();
+          const cp = (c.product||'').trim();
+          return cp.startsWith(hp) || hp.startsWith(cp);
+        });
+        return isDup ? null : (c.monthly_premium||'');
+      })(),
       payment_period: c.coverage_period ? c.coverage_period.split('\n')[0] : '',
       payment_method: '',
       maturity_date: '',
