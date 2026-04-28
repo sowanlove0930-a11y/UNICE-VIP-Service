@@ -1248,7 +1248,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 
     </div>
 
-    <button class="btn btn-reset" onclick="resetAll()">↩ 새 고객 분석하기</button>
+    <button class="btn btn-reset" id="btn-reset-main">↩ 새 고객 분석하기</button>
   </div>
 
 </main>
@@ -4599,9 +4599,8 @@ function postProcessJson(json) {
     }
   }
 
-  // ②-F 수술/치료비 필드가 JSON 객체로 반환된 경우 숫자로 자동 변환
-  // 예: surgery={"disease_major":300,"accident_major":300} → surgery=600
-  {
+  // ②-F 수술/치료비 필드가 JSON 객체/문자열로 반환된 경우 숫자로 자동 변환
+  try {
     const _NUMFIELDS = ['surgery','cancer_surgery','cancer_treat_once','cancer_treat_repeat',
       'brain_treat_once','brain_treat_repeat','heart_treat_once','heart_treat_repeat',
       'brain_drug','heart_drug','hospitalization','cancer_diagnosis','similar_cancer',
@@ -4610,27 +4609,34 @@ function postProcessJson(json) {
       if (v === null || v === undefined) return v;
       if (typeof v === 'number') return v;
       if (typeof v === 'string') {
+        if (v.trim().startsWith('{')) {
+          try {
+            const obj = JSON.parse(v);
+            const vals = Object.values(obj).map(x => parseFloat(String(x||0))).filter(x => !isNaN(x));
+            return vals.length ? vals.reduce((a,b) => a+b, 0) : null;
+          } catch(e2) { return null; }
+        }
         const n = parseFloat(v.replace(/[^0-9.]/g,''));
         return isNaN(n) ? null : n;
       }
-      if (typeof v === 'object') {
-        // 객체인 경우: 모든 숫자 값의 합산 (disease_major+accident_major 등)
-        // 단 disease/accident 각각 최대값만 (중복 방지)
-        const vals = Object.values(v).map(x => parseFloat(String(x||0).replace(/[^0-9.]/g,''))).filter(x => !isNaN(x));
+      if (typeof v === 'object' && !Array.isArray(v)) {
+        const vals = Object.values(v).map(x => parseFloat(String(x||0))).filter(x => !isNaN(x));
         return vals.length ? vals.reduce((a,b) => a+b, 0) : null;
       }
       return null;
     };
     (json.contracts||[]).forEach(c => {
       _NUMFIELDS.forEach(f => {
-        if (c[f] !== null && c[f] !== undefined && typeof c[f] === 'object') {
-          const converted = _toNum(c[f]);
+        const fv = c[f];
+        if (fv === null || fv === undefined || typeof fv === 'number') return;
+        if ((typeof fv === 'string' && fv.trim().startsWith('{')) ||
+            (typeof fv === 'object' && !Array.isArray(fv))) {
+          const converted = _toNum(fv);
           c[f] = converted;
-          c.memo = ((c.memo||'') + ' [' + f + '객체→' + converted + '자동변환]').trim();
         }
       });
     });
-  }
+  } catch(e) { /* surgery 변환 에러 — 무시하고 계속 진행 */ }
 
   // ③ monthly_premium 정규화: 원 단위 문자열 → 숫자형 통일
   // 일시납 계약은 monthly_premium 강제 0 처리
@@ -7258,13 +7264,37 @@ async function downloadExcel() {
   function writeRow2(c,r,isOdd){
     const bg=isOdd?WHITE:F8;
     ws2.getRow(r).height=autoH2([c.product,c.coverage_period,c.memo],Math.round(100*_s),Math.round(145*_s),17);
+    // surgery 필드 JSON 문자열/객체 안전 변환 (②-F 실패 + Stage3 덮어쓰기 대비 2차 방어)
+    const _safeParse = v => {
+      if (v === null || v === undefined) return null;
+      if (typeof v === 'number') return v;
+      // JS 객체 타입 (Stage3가 object로 반환한 경우)
+      if (typeof v === 'object' && !Array.isArray(v)) {
+        const nums = Object.values(v).map(x => parseFloat(x)).filter(x => !isNaN(x));
+        return nums.length ? nums.reduce((a,b) => a+b, 0) : null;
+      }
+      // JSON 문자열 타입
+      if (typeof v === 'string' && v.trim().startsWith('{')) {
+        try {
+          const obj = JSON.parse(v);
+          const nums = Object.values(obj).map(x => parseFloat(x)).filter(x => !isNaN(x));
+          return nums.length ? nums.reduce((a,b) => a+b, 0) : null;
+        } catch(e) { return null; }
+      }
+      // 일반 숫자 문자열
+      if (typeof v === 'string') {
+        const n = parseFloat(v.replace(/[^0-9.]/g, ''));
+        return isNaN(n) ? null : n;
+      }
+      return null;
+    };
     const vals={1:null,2:c.no,3:c.company,4:c.product,5:c.monthly_premium,6:c.coverage_period,
       7:c.disease_death,8:c.accident_death,9:c.high_cancer,10:c.cancer_diagnosis,11:c.similar_cancer,
       12:c.cancer_treat_once,13:c.cancer_treat_repeat,14:c.brain_vessel,15:c.brain_stroke,16:c.brain_bleed,
       17:c.brain_drug,18:c.brain_treat_once,19:c.brain_treat_repeat,
       20:c.heart_ischemic,21:c.heart_mi,22:c.arrhythmia,
       23:c.heart_drug,24:c.heart_treat_once,25:c.heart_treat_repeat,
-      26:c.surgery,27:c.hospitalization,
+      26:_safeParse(c.surgery),27:c.hospitalization,
       28:c.dementia,29:c.homecare,30:c.caregiver,
       31:c.silson?(c.silson_generation||((json.silson_info&&json.silson_info.generation)||'○')):'',
       32:c.memo||''};
@@ -7918,10 +7948,10 @@ function resetAll() {
   uploadedFilesExisting = []; uploadedFilesNew = []; analysisResult = null;
   document.getElementById('file-list-existing').innerHTML = '';
   const _fln = document.getElementById('file-list-new'); if (_fln) _fln.innerHTML = '';
-  document.getElementById('customer-name').value = '';
-  document.getElementById('insurance-age').value = '';
-  document.getElementById('anniversary-date').value = '';
-  // 파일 input 초기화
+  // 존재하는 input만 초기화 (없는 ID는 건너뜀)
+  ['customer-name','insurance-age','anniversary-date'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
   const _fi = document.getElementById('pdf-input-existing'); if (_fi) _fi.value = '';
   document.getElementById('error-box').classList.add('hidden');
   document.getElementById('result-section').classList.add('hidden');
@@ -7929,6 +7959,9 @@ function resetAll() {
   document.getElementById('intro-section').classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+// 새 고객 분석하기 버튼 (onclick 속성 대신 addEventListener — iOS Safari 호환)
+document.getElementById('btn-reset-main').addEventListener('click', function() { resetAll(); });
 
 // FP 코드 표시
 const params = new URLSearchParams(location.search);
