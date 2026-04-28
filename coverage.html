@@ -2820,19 +2820,6 @@ hospitalization(입원일당) 배정 대상:
   ✅ KB LIG내마음아는암보험처럼 담보명에 "(OO년갱신형)" 명시된 경우
   → 해당 계약 전체를 renewal_alerts에 포함 (담보 하나라도 갱신형이면)
 
-🚨 [핵심] memo 갱신 표시 의무 규칙 (JS 자동 감지를 위해 필수):
-  담보 상세 목록에서 단 하나라도 "(갱신)" 또는 "갱신형" 표기된 특약이 있으면
-  → 해당 계약의 memo 필드에 반드시 "⚠갱신형담보포함" 문구를 기재할 것
-  → 상품명에 갱신형이 없어도, 종합보험 내 갱신 특약이 있으면 무조건 기재
-  예:
-    흥국화재 가족사랑통합보험(1404)
-      담보: 급성심근경색수술비(갱신형) 200만 포함
-      → memo: "⚠갱신형담보포함 급성심근경색수술비(갱신형)"
-    현대해상 하이스타골드종합보험(Hi0809)
-      담보: 질병사망추가담보(갱신용) 포함
-      → memo: "⚠갱신형담보포함 질병사망추가담보(갱신용)"
-  🚨 이 규칙을 지키지 않으면 갱신탭에서 누락되어 고객에게 치명적 정보 손실
-
 🚨 전 담보 갱신형 계약 갱신알림 의무 기재:
   → 상품명에 "(갱신형)" 명시되거나, 가입담보상세에서 모든 담보에 "갱신형" 표기된 계약
      = 전체 계약이 갱신형 → 반드시 renewal_alerts에 포함
@@ -4612,17 +4599,57 @@ function postProcessJson(json) {
     }
   }
 
+  // ②-F 수술/치료비 필드가 JSON 객체로 반환된 경우 숫자로 자동 변환
+  // 예: surgery={"disease_major":300,"accident_major":300} → surgery=600
+  {
+    const _NUMFIELDS = ['surgery','cancer_surgery','cancer_treat_once','cancer_treat_repeat',
+      'brain_treat_once','brain_treat_repeat','heart_treat_once','heart_treat_repeat',
+      'brain_drug','heart_drug','hospitalization','cancer_diagnosis','similar_cancer',
+      'high_cancer','brain_vessel','brain_stroke','brain_bleed','heart_ischemic','heart_mi'];
+    const _toNum = v => {
+      if (v === null || v === undefined) return v;
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string') {
+        const n = parseFloat(v.replace(/[^0-9.]/g,''));
+        return isNaN(n) ? null : n;
+      }
+      if (typeof v === 'object') {
+        // 객체인 경우: 모든 숫자 값의 합산 (disease_major+accident_major 등)
+        // 단 disease/accident 각각 최대값만 (중복 방지)
+        const vals = Object.values(v).map(x => parseFloat(String(x||0).replace(/[^0-9.]/g,''))).filter(x => !isNaN(x));
+        return vals.length ? vals.reduce((a,b) => a+b, 0) : null;
+      }
+      return null;
+    };
+    (json.contracts||[]).forEach(c => {
+      _NUMFIELDS.forEach(f => {
+        if (c[f] !== null && c[f] !== undefined && typeof c[f] === 'object') {
+          const converted = _toNum(c[f]);
+          c[f] = converted;
+          c.memo = ((c.memo||'') + ' [' + f + '객체→' + converted + '자동변환]').trim();
+        }
+      });
+    });
+  }
+
   // ③ monthly_premium 정규화: 원 단위 문자열 → 숫자형 통일
   // 일시납 계약은 monthly_premium 강제 0 처리
   const _allContractArrays = [json.contracts||[], json.savings_contracts||[], json.other_contracts||[]];
   _allContractArrays.forEach(arr => arr.forEach(c => {
     const cp = String(c.coverage_period||c.payment_period||'');
     const pm = String(c.payment_method||c.memo||'');
-    if (cp.includes('일시납') || pm.includes('일시납') || cp.includes('0년납')) {
+    // 납입횟수 "X/Y회"가 있고 Y>1이면 일시납이 아님 — 오판 차단
+    const _payCountMatch = cp.match(/(\d+)\/(\d+)회/);
+    const _isNotSingle = _payCountMatch && parseInt(_payCountMatch[2]) > 1;
+    const _hasSingleKw = cp.includes('일시납') || pm.includes('일시납') || cp.includes('0년납');
+    if (_hasSingleKw && !_isNotSingle) {
       c.monthly_premium = '0';
       if (!c.memo || !c.memo.includes('일시납')) {
         c.memo = c.memo ? c.memo : '일시납';
       }
+    } else if (_isNotSingle && (c.memo||'').includes('일시납')) {
+      // 납입횟수가 X/Y회 형식인데 memo에 일시납이 잘못 기재된 경우 제거
+      c.memo = (c.memo||'').replace(/일시납/g, '').replace(/\s+/g, ' ').trim();
     } else if (c.monthly_premium !== null && c.monthly_premium !== undefined) {
       const raw = String(c.monthly_premium).replace(/[^0-9]/g, '');
       if (raw) {
@@ -4693,115 +4720,595 @@ function postProcessJson(json) {
     }
   });
 
-  // ══ 갱신알림 통합 감지 (파편화된 5개 블록 → 단일 블록으로 통합) ══
-  // 규칙: category 제한 없이 모든 contracts + other_contracts 순회
-  // 저축성/보완설계 제외, 실손전용 제외, 키워드 포괄적으로 확장
+  // ⑤-0 갱신알림 JS 전면 재구성 (AI 의존 제거 → 매번 일관된 결과)
+  // contracts의 memo/product에 갱신형 키워드가 있으면 무조건 갱신알림 생성
   {
-    // ① 통합 키워드 (상품명 + memo 모두 검색)
-    const _RKWALL = [
-      '갱신형', '갱신담보', '갱신특약', '(갱신)', '⚠ 갱신', '⚠갱신',
-      '⚠갱신형담보포함', '갱신형담보포함', '갱신용',
-      '(1001)', '[2404]', '(2404)', '1001', '2404',
-      '15년갱신', '5년갱신', '3년갱신', '1년갱신', '10년갱신', '20년갱신',
-      '연만기', '갱신주기', '갱신예정', '갱신형담보'
-    ];
-
-    // ② 갱신 여부 판단 함수
-    const _isRenewal = c => {
-      const txt = (c.product||'') + ' ' + (c.memo||'');
-      // 실손 전용 계약은 제외 (silson=true이고 갱신 키워드 없으면)
-      if (c.silson === true && !txt.includes('갱신')) return false;
-      // 저축성/보완설계는 제외
-      if (c.category === '저축성' || c.category === '보완설계') return false;
-      return _RKWALL.some(k => txt.includes(k));
+    const _RKW = ['갱신형', '갱신담보', '⚠ 갱신', '⚠갱신', 'galsin'];
+    const _isRenewalC = c => {
+      const txt = (c.product||'') + (c.memo||'');
+      return _RKW.some(k => txt.includes(k));
     };
-
-    // ③ 갱신예정일 추출 (coverage_period 종기일 우선)
-    const _getDate = c => {
+    const _extractDate = c => {
       const p = String(c.coverage_period||'');
       const m = p.match(/~(\d{4})\.(\d{2})/);
       if (m) return m[1]+'.'+m[2];
-      if (c.maturity_date) {
-        const md = String(c.maturity_date).match(/(\d{4})\.(\d{2})/);
-        if (md) return md[1]+'.'+md[2];
-      }
       return null;
     };
-
-    // ④ 갱신 주기 추출
-    const _getCycle = c => {
-      const txt = (c.product||'') + (c.memo||'');
-      const cycleMatch = txt.match(/(\d+)년갱신/);
-      if (cycleMatch) return cycleMatch[1]+'년';
-      if (txt.includes('1001') || txt.includes('(1001)')) return '15년';
-      if (txt.includes('2404') || txt.includes('[2404]')) return '5년';
-      if (txt.includes('연만기')) return '1년';
-      return '증권 확인 필요';
-    };
-
-    // ⑤ 보험료 추출
     const _getPrem = c => {
       const v = String(c.monthly_premium||'').replace(/[^0-9]/g,'');
-      return v ? parseInt(v).toLocaleString()+'원/월' : '확인필요';
+      return v ? v+'원/월' : '확인필요';
     };
 
-    // ⑥ 비갱신 대안 여부
-    const _getAlt = c => {
-      const prod = (c.product||'');
-      if (prod.includes('치아')) return '❌ 없음 (치아보험 특성상 비갱신 없음)';
-      return '✅ 있음 (비갱신형 전환 검토)';
-    };
-
-    // ⑦ 주의문구
-    const _getCaution = c => {
-      const prod = (c.product||'');
-      if (prod.includes('치아')) return '치아보험 갱신형 — 갱신 시 보험료 상승, 재가입 검토';
-      return '갱신형 담보 포함 — 고령 갱신 시 보험료 급등 대비 비갱신 전환 검토 권고';
-    };
-
-    // ⑧ 검색 대상: contracts + other_contracts 통합
-    const _allSrc = [
-      ...(json.contracts||[]),
-      ...(json.other_contracts||[]).map(o => ({...o, _isOther: true}))
-    ];
-
-    // ⑨ AI가 준 renewal_alerts 보존 (날짜/주기/예상보험료 등 AI 값 우선 사용)
-    const _aiAlerts = json.renewal_alerts || [];
-
-    // ⑩ 통합 감지 실행
-    const _seen = new Set();
-    const _newAlerts = [];
-
-    _allSrc.forEach(c => {
-      if (!_isRenewal(c)) return;
-      const key = ((c.company||'')+(c.product||'')).replace(/\s/g,'');
-      if (_seen.has(key)) return;
-      _seen.add(key);
-
-      // AI가 이미 이 계약 정보를 줬으면 AI 값 우선 사용
-      const ai = _aiAlerts.find(r => {
-        const rk = ((r.company||'')+(r.product||'')).replace(/\s/g,'');
-        return rk === key;
+    // contracts 기반 갱신알림 목록 재구성
+    const _jsRenewals = (json.contracts||[])
+      .filter(c => c.category !== '실손' && _isRenewalC(c))
+      .map(c => {
+        const existing = (json.renewal_alerts||[]).find(r => {
+          const rp = ((r.company||'')+(r.product||'')).replace(/\s/g,'');
+          const cp = ((c.company||'')+(c.product||'')).replace(/\s/g,'');
+          return rp === cp;
+        });
+        // AI가 준 값이 있으면 그대로 사용, 없으면 기본값
+        return {
+          company: c.company||'',
+          product: c.product||'',
+          current_premium: existing ? (existing.current_premium||_getPrem(c)) : _getPrem(c),
+          renewal_date: existing ? (existing.renewal_date||_extractDate(c)||'증권 확인 필요') : (_extractDate(c)||'증권 확인 필요'),
+          renewal_cycle: existing ? (existing.renewal_cycle||'증권 확인 필요') : '증권 확인 필요',
+          expected_premium: existing ? (existing.expected_premium||'갱신 시 약 1.5~2.5배 예상') : '갱신 시 약 1.5~2.5배 예상',
+          non_renewal_alt: existing ? (existing.non_renewal_alt||'△ 검토필요') : '△ 검토필요',
+          caution: existing ? (existing.caution||'갱신형 담보 포함 — 갱신 시 보험료 급등 주의') : '갱신형 담보 포함 — 갱신 시 보험료 급등 주의'
+        };
       });
 
-      const autoDate = _getDate(c);
-      _newAlerts.push({
-        company: c.company||'',
-        product: c.product||'',
-        current_premium: (ai && ai.current_premium) || _getPrem(c),
-        renewal_date: (ai && ai.renewal_date && !String(ai.renewal_date).includes('확인 필요'))
-          ? ai.renewal_date
-          : (autoDate || '증권 확인 필요'),
-        renewal_cycle: (ai && ai.renewal_cycle && !String(ai.renewal_cycle).includes('확인 필요'))
-          ? ai.renewal_cycle
-          : _getCycle(c),
-        expected_premium: (ai && ai.expected_premium) || '갱신 시 약 1.5~2.5배 예상',
-        non_renewal_alt: (ai && ai.non_renewal_alt) || _getAlt(c),
-        caution: (ai && ai.caution) || _getCaution(c)
+    // 중복 제거 (회사+상품명 전체 기준)
+    const _seenRA = new Set();
+    json.renewal_alerts = _jsRenewals.filter(r => {
+      const k = ((r.company||'')+(r.product||'')).replace(/\s/g,'');
+      if (_seenRA.has(k)) return false;
+      _seenRA.add(k);
+      return true;
+    });
+  }
+
+  // ⑤ 갱신알림 교정: 실손만 있는 계약 필터링 + 누락 보완
+  // 실손만 있는 계약이 갱신알림에 잘못 포함된 경우 제거
+  if (json.renewal_alerts && json.renewal_alerts.length > 0) {
+    // 갱신형 담보가 실제로 있는 계약 목록 추출
+    const trulyRenewal = (json.contracts || [])
+      .filter(c => {
+        const memoText = (c.memo || '').toLowerCase();
+        const prodText = (c.product || '');
+        // 실손만 있고 갱신형 담보 없는 계약 제외
+        const isSilsonOnly = c.silson === true && !memoText.includes('갱신');
+        // 명시적 갱신형 담보 존재 여부 (memo 또는 product에 갱신 언급)
+        const hasRenewal = memoText.includes('갱신') || prodText.includes('갱신');
+        return hasRenewal && !isSilsonOnly;
+      })
+      .map(c => ((c.company||'') + (c.product || '')).replace(/\s/g, ''));
+
+    // 치아보험은 무조건 갱신형으로 유지
+    json.renewal_alerts = json.renewal_alerts.filter(r => {
+      const prod = ((r.company||'') + (r.product || '')).replace(/\s/g, '');
+      const isTooth = (r.product || '').includes('치아') || (r.company || '').includes('라이나');
+      const isMatched = trulyRenewal.some(k => prod === k);
+      return isTooth || isMatched;
+    });
+  }
+
+  // 갱신형 상품인데 renewal_alerts에 없는 경우 추가
+  // 갱신형 상품인데 renewal_alerts에 없는 경우 추가
+  const RENEWAL_KW = ['갱신형', '갱신담보', '(1001)', '[2404]', '(2404)', '1001', '2404'];
+  const existingAlertProducts = (json.renewal_alerts || []).map(r =>
+    (r.product || '').replace(/\s/g, '')
+  );
+
+  // 건강보험 중 갱신형 누락 보완
+  const missingRenewals = (json.contracts || []).filter(c => {
+    const memo = (c.memo || '');
+    const prod = (c.product || '');
+    const isRenewal = RENEWAL_KW.some(k => (prod + memo).includes(k)) && c.category === '건강보험';
+    const isSilsonOnly = c.silson === true && !memo.includes('갱신') && !prod.includes('갱신');
+    const prodKey = ((c.company||'') + prod).replace(/\s/g, '');
+    const alreadyIn = existingAlertProducts.some(p => p === prodKey);
+    return isRenewal && !isSilsonOnly && !alreadyIn;
+  });
+
+  // 기타 보험 중 치아보험 갱신형 누락 보완
+  const missingToothRenewals = (json.other_contracts || []).filter(c => {
+    const prod = (c.product || '');
+    const memo = (c.memo || '');
+    const isTooth = prod.includes('치아') || memo.includes('치아보험');
+    const isRenewal = prod.includes('갱신형') || memo.includes('갱신');
+    const prodKey = ((c.company||'') + prod).replace(/\s/g, '');
+    const alreadyIn = existingAlertProducts.some(p => p === prodKey);
+    return isTooth && isRenewal && !alreadyIn;
+  });
+
+  const allMissing = [...missingRenewals, ...missingToothRenewals];
+
+  // ⑤-B contracts(기타) 중 치아보험 갱신형도 갱신알림에 추가 (v114)
+  const existingAlertProdKeys = (json.renewal_alerts || []).map(r =>
+    ((r.company||'') + (r.product || '')).replace(/\s/g, '')
+  );
+  const missingToothFromContracts = (json.contracts || []).filter(c => {
+    const prod = (c.product || '');
+    const memo = (c.memo || '');
+    const isTooth = prod.includes('치아') || memo.includes('치아보험');
+    const isRenewal = prod.includes('갱신형') || memo.includes('갱신');
+    const isOther = c.category === '기타';
+    const prodKey = ((c.company||'') + prod).replace(/\s/g, '');
+    const alreadyIn = existingAlertProdKeys.some(p => p === prodKey);
+    return isTooth && isRenewal && isOther && !alreadyIn;
+  });
+  const allMissingFinal = [...allMissing, ...missingToothFromContracts];
+
+  // coverage_period 종기일에서 갱신예정일 자동 추출
+  function extractRenewalDate(c) {
+    const period = (c.coverage_period || '');
+    const m = period.match(/~(\d{4})\.(\d{2})/);
+    if (m) return `${m[1]}.${m[2]}`;
+    if (c.maturity_date) {
+      const md = String(c.maturity_date).match(/(\d{4})\.(\d{2})/);
+      if (md) return `${md[1]}.${md[2]}`;
+    }
+    return null;
+  }
+
+  if (allMissingFinal.length > 0) {
+    if (!json.renewal_alerts) json.renewal_alerts = [];
+    allMissingFinal.forEach(c => {
+      const autoDate = extractRenewalDate(c);
+      const isTooth = (c.product||'').includes('치아');
+      json.renewal_alerts.push({
+        company: c.company || '',
+        product: c.product || '',
+        current_premium: c.monthly_premium ? String(c.monthly_premium).replace(/[^0-9]/g,'') + '원/월' : '확인필요',
+        renewal_date: autoDate || '증권 확인 필요',
+        renewal_cycle: isTooth ? '10년' : '증권 확인 필요',
+        expected_premium: isTooth ? '갱신 후 약 1.5~2배 예상' : '갱신 시 약 1.5~2.5배 예상',
+        non_renewal_alt: isTooth ? '❌ 없음' : '✅ 있음',
+        caution: isTooth
+          ? '치아보험 갱신형 — 갱신 시 보험료 상승 예상, 재가입 검토'
+          : '갱신형 특약 포함 — 고령 갱신 시 보험료 급등 대비 비갱신 전환 검토 권고'
       });
     });
+  }
 
-    json.renewal_alerts = _newAlerts;
+  // ⑤-C 기존 renewal_alerts의 "증권 확인 필요" → coverage_period 종기일로 자동 교정 (v114)
+  if (json.renewal_alerts && json.renewal_alerts.length > 0) {
+    json.renewal_alerts.forEach(r => {
+      if (r.renewal_date && !String(r.renewal_date).includes('확인 필요')) return;
+      const matched = (json.contracts || []).find(c => {
+        const cp = ((c.company||'') + (c.product || '')).replace(/\s/g, '');
+        const rp = ((r.company||'') + (r.product || '')).replace(/\s/g, '');
+        return cp === rp;
+      });
+      if (matched) {
+        const autoDate = extractRenewalDate(matched);
+        if (autoDate) r.renewal_date = autoDate;
+      }
+    });
+  }
+
+  // ⑧ 행복드림(1001) 항암방사선약물치료비 100만 자동 보완 (1회한)
+  (json.contracts || []).forEach(c => {
+    const prod = (c.product || '').replace(/\s/g, '');
+    const is1001 = prod.includes('1001') || prod.includes('행복드림');
+    if (is1001 && !c.cancer_treat_once && !c.cancer_treat_repeat) {
+      c.cancer_treat_once = 100;
+      if (!c.memo) c.memo = '';
+      c.memo = (c.memo + ' [항암방사선약물치료비 자동보완]').trim();
+    }
+  });
+
+  // ⑩ [v117] 반복 치료비 자동 교정 — 주요치료비 & 기간형 담보
+  // 규칙 ①: 특약명/memo에 "주요치료비" 포함 → 무조건 반복
+  // 규칙 ②: "연간", "진단후OO년", "OO년한", "통원1회당", "치료당", "매회" → 무조건 반복
+  // 규칙 ③: "최초1회한", "최초 1회한", "1회한" 명시된 것만 1회한 유지
+  {
+    const parse = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+
+    // 반복 확정 키워드 (이 중 하나라도 있으면 무조건 반복)
+    const REPEAT_KW = [
+      '주요치료비', '주요치료비Plus', '주요치료비plus',
+      '연간1회', '연간 1회', '연간', '진단후',
+      '만기5년', '만기10년', '만기15년', '만기20년',
+      '5년한', '10년한', '15년한', '20년한', '25년한',
+      '5년 한', '10년 한', '15년 한',
+      '통원1회당', '통원 1회당', '치료당', '매회', '매 회',
+      '항암방사선약물치료비',  // 신정원 담보명 "항암방사선약물치료비" 전체
+      '항암방사선·약물치료비',
+    ];
+    // 1회한 확정 키워드 (이 중 하나라도 있으면 1회한 유지 — 반복 키워드보다 우선)
+    const ONCE_KW = [
+      '최초1회한', '최초 1회한', '(최초1회한)', '최초 1 회한',
+      '중입자', '항암중입자', '표적항암약물허가', '암통합치료비',
+    ];
+
+    (json.contracts || []).forEach(c => {
+      const searchText = (c.memo || '') + ' ' + (c.product || '');
+
+      const hasOnce  = ONCE_KW.some(k => searchText.includes(k));
+      const hasRepeat = REPEAT_KW.some(k => searchText.includes(k));
+
+      // 1회한 키워드가 없고 반복 키워드가 있을 때만 교정
+      if (hasRepeat && !hasOnce) {
+        // 암 치료비: _once → _repeat 이동 (합산, 덮어쓰기 아님)
+        if (parse(c.cancer_treat_once) > 0) {
+          c.cancer_treat_repeat = (parse(c.cancer_treat_repeat) + parse(c.cancer_treat_once)) || null;
+          c.cancer_treat_once = null;
+        }
+        // 뇌 치료비
+        if (parse(c.brain_treat_once) > 0) {
+          c.brain_treat_repeat = (parse(c.brain_treat_repeat) + parse(c.brain_treat_once)) || null;
+          c.brain_treat_once = null;
+        }
+        // 심장 치료비
+        if (parse(c.heart_treat_once) > 0) {
+          c.heart_treat_repeat = (parse(c.heart_treat_repeat) + parse(c.heart_treat_once)) || null;
+          c.heart_treat_once = null;
+        }
+      }
+
+      // 반복 키워드가 있는데 AI가 _once에만 값을 넣은 경우 경고
+      if (hasRepeat && !hasOnce && parse(c.cancer_treat_once) === 0 && parse(c.cancer_treat_repeat) > 0) {
+        // 정상 — already in repeat
+      }
+    });
+  }
+  // ㉗ 저축성 보험 사망담보 contracts 자동 보완 (v114)
+  // savings_contracts에만 있는 계약의 사망담보를 contracts(기타)에 자동 추가
+  {
+    const SAVINGS_DEATH_KW = [
+      '드림저축','저축보험','연금보험','변액연금','변액유니버설','종신보험','적립보험',
+      '동행Plus','동행plus','Plus종신','VUL',
+      '꿈나무','미래보장','희망가득','희망저축','저축공제','플러스저축',
+      '어린이저축','교육보험','하이파이브','MAX연금'
+    ];
+    const existingProds = (json.contracts||[]).map(c => ((c.company||'')+(c.product||'')).replace(/\s/g,''));
+    (json.savings_contracts||[]).forEach(sv => {
+      const prod = (sv.product||'');
+      const prodKey = ((sv.company||'')+prod).replace(/\s/g,'');
+      const hasDeath = SAVINGS_DEATH_KW.some(k => prod.includes(k));
+      const alreadyIn = existingProds.some(p => p === prodKey);
+      if (hasDeath && !alreadyIn) {
+        // memo에서 사망담보 금액 파싱 (형식: "사망3,000+재해6,000")
+        const memo = sv.memo||'';
+        const diseaseM = memo.match(/사망\s*([\d,]+)/);
+        const accidentM = memo.match(/재해\s*([\d,]+)/);
+        // contracts의 기존 disease_death 우선, 없으면 memo 파싱값 사용
+        const diseaseDeath = diseaseM ? parseInt(diseaseM[1].replace(/,/g,'')) : null;
+        const accidentDeath = accidentM ? parseInt(accidentM[1].replace(/,/g,'')) : null;
+        if (!json.contracts) json.contracts = [];
+        json.contracts.push({
+          category: '기타',
+          no: sv.no || null,
+          company: sv.company || '',
+          product: sv.product || '',
+          monthly_premium: null,
+          coverage_period: sv.maturity_date ? `~${sv.maturity_date}` : null,
+          disease_death: diseaseDeath,
+          accident_death: accidentDeath,
+          high_cancer: null, cancer_diagnosis: null, similar_cancer: null,
+          cancer_treat_once: null, cancer_treat_repeat: null,
+          brain_vessel: null, brain_stroke: null, brain_bleed: null,
+          brain_drug: null, brain_treat_once: null, brain_treat_repeat: null,
+          heart_ischemic: null, heart_mi: null, arrhythmia: null,
+          heart_drug: null, heart_treat_once: null, heart_treat_repeat: null,
+          surgery: null, cancer_surgery: null,
+          hospitalization: null, dementia: null, homecare: null, caregiver: null,
+          silson: false,
+          memo: diseaseDeath ? `저축보험(사망담보포함)` : '저축보험(사망담보확인필요) ⚠'
+        });
+      }
+    });
+  }
+
+  // ㉖ 현대해상 Hi2508 혈전제거치료 brain/heart_treat_repeat 누락 감지 (v114)
+  {
+    const parse = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    const HI2508_KW = ['내삶엔', 'Hi2508', 'Hi 2508', '맞춤간편건강', '3N맞춤'];
+    (json.contracts||[]).forEach(c => {
+      const prod = (c.product||'') + (c.company||'');
+      const isHi2508 = HI2508_KW.some(k => prod.includes(k))
+        || ((c.company||'').includes('현대해상') && (c.product||'').includes('맞춤'));
+      if (isHi2508 && c.category === '건강보험') {
+        // brain_treat_once는 있는데 brain_treat_repeat이 없으면 혈전제거 누락 의심
+        if (parse(c.brain_treat_once) > 0 && !parse(c.brain_treat_repeat)) {
+          c.memo = ((c.memo||'') + ' ⚠혈전제거치료(뇌)확인필요').trim();
+        }
+        if (parse(c.heart_treat_once) > 0 && !parse(c.heart_treat_repeat)) {
+          c.memo = ((c.memo||'') + ' ⚠혈전제거치료(심장)확인필요').trim();
+        }
+      }
+    });
+  }
+
+  // ㉕ AIA 건강+암보험 암수술비(cancer_surgery) 누락 감지 경고 (v114)
+  // "일반암직접치료" / "특정소액암직접치료" 담보가 cancer_surgery로 미배정된 경우 감지
+  {
+    const parse = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    const AIA_CANCER_SURG_KW = ['AIA건강', 'AIA 건강', '건강+암', 'AIA건강+'];
+    (json.contracts||[]).forEach(c => {
+      const prod = (c.product||'') + (c.company||'');
+      const isAiaCancer = AIA_CANCER_SURG_KW.some(k => prod.includes(k))
+        || ((c.company||'').includes('AIA') && (c.product||'').includes('암보험'));
+      if (isAiaCancer && c.category === '건강보험') {
+        // cancer_diagnosis(일반암)이 있는데 cancer_surgery가 없으면 직접치료 담보 누락 의심
+        if (parse(c.cancer_diagnosis) > 0 && !parse(c.cancer_surgery)) {
+          c.memo = ((c.memo||'') + ' ⚠암수술비(직접치료)확인필요').trim();
+        }
+      }
+    });
+  }
+
+  // ㉔ 특정암진단(high_cancer) 누락 감지 경고 (v114)
+  // 신한케어받는암보험, 신한통합건강원ONE 등에서 특정암 1,500만 / 5,000만 미배정 감지
+  {
+    const parse = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    const SPECIFIC_CANCER_PRODUCTS = ['케어받는암', '통합건강보험 원', '통합건강보험원', '간편가입통합건강'];
+    (json.contracts||[]).forEach(c => {
+      const prod = (c.product||'');
+      const comp = (c.company||'');
+      const isShinhan = comp.includes('신한');
+      const matchProd = SPECIFIC_CANCER_PRODUCTS.some(k => prod.includes(k));
+      // 신한 계열 건강보험에 high_cancer가 없으면 특정암 누락 의심
+      if (isShinhan && matchProd && c.category === '건강보험' && !parse(c.high_cancer)) {
+        c.memo = ((c.memo||'') + ' ⚠특정암진단확인필요').trim();
+      }
+    });
+  }
+
+  // ㉕-B 새마을금고 MG On-Green 암공제 특정암진단 → high_cancer 누락 감지 (v117)
+  // MG On-Green은 6종 특정암진단(간담낭/대장/뼈뇌림프/위식도/유방생식기/폐후두)이 있으므로
+  // cancer_diagnosis가 과도하게 높고 high_cancer가 없으면 오분류로 판단
+  {
+    const parse = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    const MG_ONGREEN_KW = ['On-Green', 'OnGreen', '온그린', '암공제'];
+    (json.contracts||[]).forEach(c => {
+      const prod = (c.product||'');
+      const comp = (c.company||'');
+      const isMG = comp.includes('새마을') || comp.includes('MG금고') || comp.includes('MG중앙');
+      const isOnGreen = MG_ONGREEN_KW.some(k => prod.includes(k));
+      // MG On-Green 건강보험에서 high_cancer=0이고 cancer_diagnosis>10,000이면 특정암 오분류 의심
+      if (isMG && isOnGreen && c.category === '건강보험'
+          && !parse(c.high_cancer) && parse(c.cancer_diagnosis) > 10000) {
+        c.memo = ((c.memo||'') + ' ⚠특정암진단(간담낭/대장/뼈/위/유방/폐)→high_cancer재확인필요').trim();
+      }
+    });
+  }
+
+  // high_cancer가 있는 계약이 3개를 초과하거나 합계가 과도하게 높으면 교정
+  // 고액암 보유 가능 계약: 행복드림(1001), DB, NH, 교보, 삼성, 한화 등 건강보험
+  // 단, 실손·저축성·기타 계약에는 고액암 없음
+  const highCancerContracts = (json.contracts || []).filter(c => Number(c.high_cancer) > 0);
+  const totalHighCancer = highCancerContracts.reduce((a,c) => a + Number(c.high_cancer||0), 0);
+  // 고액암 합계가 15,000만 초과 → 중복 의심
+  if (totalHighCancer > 15000) {
+    // 고액암 보유 가능성 낮은 계약(실손 전용, 기본계약만, 사망보험 위주)에서 제거
+    const UNLIKELY_HIGH_CANCER = ['콤비', '콤비네이션', '피오레콤비', '암스트롱', '성공시대', '하나로', '닥터케어', '태아'];
+    (json.contracts || []).forEach(c => {
+      const prod = (c.product || '');
+      const isUnlikely = UNLIKELY_HIGH_CANCER.some(k => prod.includes(k));
+      if (isUnlikely && Number(c.high_cancer) > 0) {
+        c.high_cancer = null;
+      }
+    });
+  }
+  // "암수술비" 특약이 surgery 필드에 들어간 경우 cancer_surgery로 이동
+  (json.contracts || []).forEach(c => {
+    const prod = (c.product || '');
+    // 암수술비가 있는 것으로 알려진 상품 패턴
+    const CANCER_SURG_KW = ['하나로', '암스트롱', '투패스', '농협', '피오레'];
+    const hasCancerSurgProduct = CANCER_SURG_KW.some(k => prod.includes(k));
+    // surgery 값이 있고, cancer_surgery가 없고, 해당 상품이면 의심
+    if (c.surgery && !c.cancer_surgery && hasCancerSurgProduct) {
+      // 실제 암수술비 상품 목록 기준으로만 이동
+      if (prod.includes('하나로') || prod.includes('투패스')) {
+        c.cancer_surgery = c.surgery;
+        c.surgery = null;
+      }
+    }
+  });
+  if (json.silson_info) {
+    const si = json.silson_info;
+    // 실손 계약에서 가입일 찾기
+    const silsonContract = (json.contracts || []).find(c =>
+      c.silson === true || c.category === '실손' ||
+      (c.product || '').includes('실손') || (c.product || '').includes('실비')
+    );
+    // 건강보험 중 실손(silson:true) 계약의 보장기간 시작연도
+    const silsonInHealth = (json.contracts || []).find(c => c.silson === true);
+    const target = silsonContract || silsonInHealth;
+    if (target && target.coverage_period) {
+      const yearMatch = target.coverage_period.match(/^(\d{4})/);
+      if (yearMatch) {
+        const yr = parseInt(yearMatch[1]);
+        const mo = parseInt((target.coverage_period.match(/^(\d{4})\.(\d{2})/) || [])[2] || '1');
+        let correctGen = '';
+        if (yr < 2009 || (yr === 2009 && mo <= 9)) correctGen = '1세대';
+        else if (yr < 2017 || (yr === 2017 && mo <= 3)) correctGen = '2세대';
+        else if (yr < 2021 || (yr === 2021 && mo <= 6)) correctGen = '3세대';
+        else if (yr < 2025 || (yr === 2025 && mo <= 6)) correctGen = '4세대';
+        else correctGen = '5세대';
+        if (correctGen) si.generation = correctGen;
+      }
+    }
+    // 1세대 고정값 교정
+    if (si.generation === '1세대') {
+      si.rejoin_cycle = si.rejoin_cycle || '없음';
+      si.copayment_rate = si.copayment_rate || '없음 (0%)';
+    }
+    json.silson_info = si;
+  }
+
+  // ⑫-B 계약별 실손 세대 자동 계산 — silson_generation 필드 설정 (v114)
+  // silson:true인 계약의 coverage_period에서 가입연도를 파악해 세대 문자열 배정
+  // Excel col31에 "○" 대신 "1세대"/"2세대" 등이 표기되도록
+  {
+    function calcSilsonGen(coveragePeriod) {
+      if (!coveragePeriod) return null;
+      const m = coveragePeriod.match(/^(\d{4})\.(\d{2})/);
+      if (!m) return null;
+      const yr = parseInt(m[1]), mo = parseInt(m[2]);
+      if (yr < 2009 || (yr === 2009 && mo <= 9)) return '1세대';
+      if (yr < 2017 || (yr === 2017 && mo <= 3)) return '2세대';
+      if (yr < 2021 || (yr === 2021 && mo <= 6)) return '3세대';
+      if (yr < 2025 || (yr === 2025 && mo <= 6)) return '4세대';
+      return '5세대';
+    }
+    (json.contracts||[]).forEach(c => {
+      if (!c.silson) { c.silson_generation = null; return; }
+      // silson_generation이 이미 설정돼 있으면 유지
+      if (c.silson_generation && c.silson_generation !== '○') return;
+      const gen = calcSilsonGen(c.coverage_period);
+      c.silson_generation = gen || (json.silson_info && json.silson_info.generation) || '○';
+    });
+  }
+
+  // ⑫-C 실손 세대 memo 불일치 자동 교정 (v114)
+  // AI가 memo에 잘못된 세대(예: "2세대실손")를 기재한 경우 silson_generation과 일치하도록 교정
+  {
+    const GEN_PATTERNS = ['1세대실손','2세대실손','3세대실손','4세대실손','5세대실손',
+      '1세대','2세대','3세대','4세대','5세대'];
+    (json.contracts||[]).forEach(c => {
+      if (!c.silson || !c.silson_generation || c.silson_generation === '○') return;
+      const correctGen = c.silson_generation; // e.g. "1세대"
+      const memo = c.memo || '';
+      // memo에 다른 세대가 언급된 경우 제거 후 올바른 세대로 교체
+      const wrongGens = GEN_PATTERNS.filter(p => p !== correctGen && p !== (correctGen+'실손'));
+      let newMemo = memo;
+      wrongGens.forEach(p => { newMemo = newMemo.replace(new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'g'), ''); });
+      // 이미 올바른 세대가 언급돼 있으면 그대로, 없으면 앞에 추가
+      if (newMemo !== memo) {
+        if (!newMemo.includes(correctGen)) {
+          newMemo = (correctGen + '실손 ' + newMemo).trim();
+        }
+        c.memo = newMemo.replace(/\s{2,}/g, ' ').trim();
+      }
+    });
+  }
+  // similar_cancer 합계가 2,000만 초과이면 coverage_gaps에 경고 추가
+  {
+    const parse = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    const totalSimilar = (json.contracts||[]).reduce((a,c) => a + parse(c.similar_cancer), 0);
+    if (totalSimilar > 2000) {
+      // coverage_gaps의 유사암 항목에 경고 표시 추가
+      const gaps = json.coverage_gaps || [];
+      const similarGap = gaps.find(g => (g.item||'').includes('유사암'));
+      if (similarGap) {
+        similarGap.caution = '⚠ 후유장해 혼동 가능 — 유사암 담보명 재확인 필요';
+      }
+      // 각 계약 중 similar_cancer > 0인 계약 memo에 경고
+      (json.contracts||[]).forEach(c => {
+        if (parse(c.similar_cancer) > 0) {
+          c.memo = ((c.memo||'') + ' ⚠유사암재확인').trim();
+        }
+      });
+    }
+  }
+
+  // ⑭-0 N대질병수술비 memo 자동 보완 [v130]
+  // AI가 memo에 N대질병수술비 문구를 누락한 경우 product/memo에서 패턴 감지 후 보완
+  {
+    const NDAE_PATTERNS = [
+      /(\d+대질병수술비)\s*(\d+)만/,   // memo에 이미 있는 경우 감지용
+    ];
+    const NDAE_KW = ['16대질병수술비','5대질병수술비','8대질병수술비','10대질병수술비',
+                     '12대질병수술비','부인과질병수술비','여성만성질병수술비'];
+    (json.contracts||[]).forEach(c => {
+      if (!c.surgery) return;
+      const memo = c.memo || '';
+      // 이미 N대질병수술비 문구 있으면 스킵
+      const alreadyHas = NDAE_KW.some(kw => memo.includes(kw));
+      if (alreadyHas) return;
+      // product명에서 키워드 감지 (product에 담보명이 포함된 경우 드물지만 보완용)
+      const prodStr = (c.product || '') + ' ' + memo;
+      const found = NDAE_KW.find(kw => prodStr.includes(kw));
+      if (found) {
+        const surgAmt = String(c.surgery);
+        c.memo = (memo + ' ' + found + ' ' + surgAmt + '만').trim();
+      }
+    });
+  }
+
+  // ⑭ 수술비 과다 경고 플래그
+  // surgery 합계가 500만 초과이면 계약별 memo에 경고
+  {
+    const parse = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    const totalSurgery = (json.contracts||[]).reduce((a,c) => a + parse(c.surgery), 0);
+    if (totalSurgery > 500) {
+      (json.contracts||[]).forEach(c => {
+        if (parse(c.surgery) > 0) {
+          c.memo = ((c.memo||'') + ' ⚠수술비재확인').trim();
+        }
+      });
+    }
+  }
+
+  // ⑮ LTC간병보험 질병사망 오분류 교정
+  // 상품명에 LTC, 간병, 장기요양 포함 시 disease_death 강제 null
+  {
+    const LTC_KW = ['LTC', '간병보험', '장기요양', 'LIG110', '일일공'];
+    (json.contracts||[]).forEach(c => {
+      const prod = (c.product||'') + (c.company||'');
+      const isLTC = LTC_KW.some(k => prod.includes(k));
+      if (isLTC && Number(c.disease_death) > 0) {
+        c.memo = ((c.memo||'') + ' ⚠질병사망재확인(LTC)').trim();
+        c.disease_death = null;
+      }
+    });
+  }
+
+  // ⑯ 간병인사용입원일당 → caregiver 교정
+  // hospitalization이 과도하게 높으면 간병인사용 입원일당이 혼입된 것
+  // caregiver가 없는데 hospitalization > 10인 경우 경고
+  {
+    const parse = v => { const n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    (json.contracts||[]).forEach(c => {
+      const hosp = parse(c.hospitalization);
+      const care = parse(c.caregiver);
+      // 입원일당이 15만/일 이상이면 간병인사용일당 혼입 의심
+      if (hosp >= 15 && care === 0) {
+        c.memo = ((c.memo||'') + ' ⚠입원일당재확인(간병혼입?)').trim();
+      }
+    });
+  }
+
+  // ⑰ 갱신형 KEYWORD 확장 — "(OO년갱신형)" 패턴 포함
+  // RENEWAL_KW에 갱신형 패턴 추가하여 갱신알림 누락 방지
+  const RENEWAL_KW_V2 = ['갱신형', '갱신담보', '(1001)', '[2404]', '(2404)', '1001', '2404',
+    '15년갱신', '5년갱신', '1년갱신', '3년갱신', '10년갱신', '20년갱신', '연만기'];
+  const existingAlertProductsV2 = (json.renewal_alerts || []).map(r =>
+    ((r.company||'') + (r.product || '')).replace(/\s/g, '')
+  );
+  const missingRenewalsV2 = (json.contracts || []).filter(c => {
+    const memo = (c.memo || '');
+    const prod = (c.product || '');
+    const isRenewal = RENEWAL_KW_V2.some(k => (prod + memo).includes(k)) && c.category === '건강보험';
+    const isSilsonOnly = c.silson === true && !memo.includes('갱신') && !prod.includes('갱신');
+    const prodKey = ((c.company||'') + prod).replace(/\s/g, '');
+    const alreadyIn = existingAlertProductsV2.some(p => p === prodKey);
+    return isRenewal && !isSilsonOnly && !alreadyIn;
+  });
+  if (missingRenewalsV2.length > 0) {
+    if (!json.renewal_alerts) json.renewal_alerts = [];
+    missingRenewalsV2.forEach(c => {
+      const autoDateV2 = extractRenewalDate(c);
+      json.renewal_alerts.push({
+        company: c.company || '',
+        product: c.product || '',
+        current_premium: c.monthly_premium ? String(c.monthly_premium).replace(/[^0-9]/g,'') + '원/월' : '확인필요',
+        renewal_date: autoDateV2 || '증권 확인 필요',
+        renewal_cycle: RENEWAL_KW_V2.find(k => (c.product||'').includes(k) && k.includes('년갱신'))
+          ? RENEWAL_KW_V2.find(k => (c.product||'').includes(k) && k.includes('년갱신'))
+          : '증권 확인 필요',
+        expected_premium: '갱신 시 약 1.5~3배 예상 (특약 종류에 따라 상이)',
+        non_renewal_alt: '✅ 있음',
+        caution: '갱신형 담보 포함 — 고령 갱신 시 보험료 급등 대비 비갱신 전환 검토 권고'
+      });
+    });
   }
 
   // ⑱ 동양생명/수호천사 계열 암수술비 surgery 오분류 자동 교정
