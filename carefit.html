@@ -251,7 +251,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
 
 /* -- 게이트 -- */
 #gate {
-  position:fixed; inset:0; background:var(--bg); display:none!important;
+  position:fixed; inset:0; background:var(--bg); display:none;
   align-items:center; justify-content:center; z-index:999;
 }
 .gate-card {
@@ -447,6 +447,27 @@ input[type=number] { -moz-appearance:textfield; }
   opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* 브라우저 자동완성 흰색 방지 */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 30px rgba(18,24,44,0.98) inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff;
+}
+
+/* ── FP 코드 로딩 스피너 ── */
+@keyframes fpSpin { to { transform: rotate(360deg); } }
+.fp-spinner {
+  display:none; width:20px; height:20px; border:3px solid rgba(255,255,255,0.2);
+  border-top-color:#fff; border-radius:50%;
+  animation: fpSpin 0.7s linear infinite; flex-shrink:0;
+}
+#fpModal.loading .fp-spinner { display:block; }
+#fpModal.loading #fpInput    { opacity:0.4; pointer-events:none; }
+#fpModal.loading #fpLoadMsg  { display:block; }
+#fpLoadMsg { display:none; font-size:13px; color:rgba(255,255,255,0.55); margin-top:10px; text-align:center; }
 </style>
 </head>
 <body>
@@ -478,7 +499,11 @@ input[type=number] { -moz-appearance:textfield; }
     <div style="font-size:16px;font-weight:800;margin-bottom:6px;">내 FP 코드를 입력해주세요</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:20px;">예: ktk01</div>
     <input id="fpInput" type="text" class="input-field" placeholder="FP 코드" style="margin-bottom:12px;" onkeydown="if(event.key==='Enter')saveFp()">
-    <button onclick="saveFp()" class="nav-btn nav-next" style="width:100%;margin-top:4px;">확인</button>
+    <button id="fpConfirmBtn" onclick="saveFp()" class="nav-btn nav-next" style="width:100%;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:10px;">
+      <div class="fp-spinner"></div>
+      <span id="fpBtnText">확인</span>
+    </button>
+    <div id="fpLoadMsg">🔍 등록 여부 확인 중입니다...</div>
     <div id="fpErr" style="color:var(--red);font-size:13px;margin-top:8px;display:none;">코드를 입력해주세요</div>
   </div>
 </div>
@@ -1299,13 +1324,13 @@ input[type=number] { -moz-appearance:textfield; }
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;flex-shrink:0;">
           <div>
             <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:0.5px;">고객님 성함</div>
-            <input id="wu-name" type="text" placeholder="성함을 입력해 주세요"
+            <input id="wu-name" type="text" placeholder="성함을 입력해 주세요" autocomplete="off"
               style="width:100%;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:12px;color:var(--text);font-family:inherit;font-size:17px;font-weight:700;padding:13px 16px;outline:none;box-sizing:border-box;"
               onfocus="this.style.borderColor='rgba(232,88,12,0.5)'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
           </div>
           <div>
             <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:0.5px;">연락처</div>
-            <input id="wu-phone" type="tel" placeholder="010-0000-0000"
+            <input id="wu-phone" type="tel" placeholder="010-0000-0000" autocomplete="off"
               style="width:100%;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:12px;color:var(--text);font-family:inherit;font-size:17px;font-weight:700;padding:13px 16px;outline:none;box-sizing:border-box;"
               onfocus="this.style.borderColor='rgba(232,88,12,0.5)'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
           </div>
@@ -1325,7 +1350,7 @@ input[type=number] { -moz-appearance:textfield; }
           </div>
           <div style="background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px 18px;">
             <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">📍 장소</div>
-            <input id="wu-place" type="text" placeholder="미팅 장소"
+            <input id="wu-place" type="text" placeholder="미팅 장소" autocomplete="off"
               style="background:none;border:none;outline:none;color:var(--text);font-family:inherit;font-size:15px;font-weight:700;width:100%;">
           </div>
         </div>
@@ -1336,8 +1361,8 @@ input[type=number] { -moz-appearance:textfield; }
             style="padding:18px;border-radius:14px;border:1.5px solid rgba(232,88,12,0.5);background:rgba(232,88,12,0.15);color:var(--primary);font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all 0.2s;">
             <span style="font-size:22px;">💾</span> 상담 내용 저장하기
           </button>
-          <button onclick="s5KakaoShare()"
-            style="padding:18px;border-radius:14px;border:none;background:#FEE500;color:#3A1D1D;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;">
+          <button id="btnKakao" onclick="s5KakaoShare()"
+            style="padding:18px;border-radius:14px;border:none;background:#FEE500;color:#3A1D1D;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all 0.2s;">
             <span style="font-size:22px;">💬</span> 카카오톡으로 결과 전송
           </button>
         </div>
@@ -1714,6 +1739,7 @@ function checkGate() {
     return;
   }
   if(v==='carefit2026'){
+    try { sessionStorage.setItem('carefit_auth','ok'); } catch(e) {}
     document.getElementById('gate').style.display='none';
     init();
   } else {
@@ -1724,8 +1750,8 @@ function checkGate() {
 
 // -- FP --
 function openChangeFp() {
-  // localStorage 초기화 후 FP 모달 재오픈
   localStorage.removeItem('silson_fp');
+  try { sessionStorage.removeItem('carefit_auth'); } catch(e) {}
   state.fpCode = '';
   state.fpInfo = null;
   document.getElementById('fpDisplay').textContent = '-';
@@ -1734,14 +1760,53 @@ function openChangeFp() {
   document.getElementById('fpModal').style.display = 'flex';
 }
 
-function saveFp() {
-  const v=document.getElementById('fpInput').value.trim();
-  if(!v){ document.getElementById('fpErr').style.display='block'; return; }
-  state.fpCode=v;
-  localStorage.setItem('silson_fp',v);
-  document.getElementById('fpDisplay').textContent=v;
-  document.getElementById('fpModal').style.display='none';
-  loadFpInfo(v);
+async function saveFp() {
+  const v = document.getElementById('fpInput').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  const err = document.getElementById('fpErr');
+  if(!v){ err.textContent='FP 코드를 입력해 주세요'; err.style.display='block'; return; }
+
+  // GAS로 유효성 검증 - 로딩 상태 시작
+  var modal = document.getElementById('fpModal');
+  var btnText = document.getElementById('fpBtnText');
+  var btn = document.getElementById('fpConfirmBtn');
+  if(modal)   modal.classList.add('loading');
+  if(btnText) btnText.textContent = '확인 중...';
+  if(btn)     btn.disabled = true;
+  try {
+    var res  = await fetch(CAREFIT_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(v));
+    var data = await res.json();
+    if(!data.ok) {
+      err.textContent = data.msg || '등록되지 않은 코드입니다.';
+      err.style.display='block';
+      if(modal)   modal.classList.remove('loading');
+      if(btnText) btnText.textContent = '확인';
+      if(btn)     btn.disabled = false;
+      return;
+    }
+    // 검증 성공 → 비밀번호 창 표시
+    var fp = data.fp || { name:data.name, title:data.title, phone:data.phone, email:data.email, branch:data.branch };
+    state.fpCode = v;
+    state.fpInfo = fp;
+    localStorage.setItem('silson_fp', v);
+    document.getElementById('fpDisplay').textContent = fp.name + ' ' + fp.title;
+    document.getElementById('fpModal').style.display='none';
+    // 이미 비번 통과한 세션이면 바로 init
+    try {
+      if(sessionStorage.getItem('carefit_auth') === 'ok') { init(); return; }
+    } catch(e) {}
+    document.getElementById('gate').style.display='flex';
+    setTimeout(function(){ document.getElementById('gateInput').focus(); }, 100);
+  } catch(e) {
+    // 네트워크 오류 시 코드만 저장
+    state.fpCode = v;
+    localStorage.setItem('silson_fp', v);
+    document.getElementById('fpDisplay').textContent = v;
+    document.getElementById('fpModal').style.display='none';
+    loadFpInfo(v);
+  }
+  if(modal)   modal.classList.remove('loading');
+  if(btnText) btnText.textContent = '확인';
+  if(btn)     btn.disabled = false;
 }
 
 async function loadFpInfo(code) {
@@ -4034,9 +4099,18 @@ async function s5KakaoShare() {
 
   var text = lines.join('\n');
 
+  var kakaoBtn = document.getElementById('btnKakao');
   if(navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(function(){
       showToast('💬 복사 완료! 카카오톡에 붙여넣기 하세요', 3000);
+      if(kakaoBtn) {
+        kakaoBtn.innerHTML = '<span style="font-size:22px;">✅</span> 복사 완료!';
+        kakaoBtn.style.background='#c8f2a0';
+        setTimeout(function(){
+          kakaoBtn.innerHTML = '<span style="font-size:22px;">💬</span> 카카오톡으로 결과 전송';
+          kakaoBtn.style.background='#FEE500';
+        }, 2500);
+      }
     }).catch(function(){ prompt('아래 내용을 복사해 붙여넣기 하세요:', text); });
   } else {
     prompt('아래 내용을 복사해 붙여넣기 하세요:', text);
@@ -4490,7 +4564,8 @@ document.addEventListener('keydown', function(e) {
     document.querySelector('#gate button').style.display='none';
     return;
   }
-  document.getElementById('gate').style.display='flex';
+  // FP 코드 먼저 입력 → 유효하면 비밀번호 창 표시
+  document.getElementById('fpModal').style.display='flex';
 })();
 
 // ── 노후파이 미리보기 ──────────────────────────────────────
