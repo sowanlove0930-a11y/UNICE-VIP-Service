@@ -1726,9 +1726,11 @@ async function loadFpInfo(code) {
     var GAS = CAREFIT_GAS_URL;
     var res  = await fetch(GAS + '?action=getFpInfo&fp=' + encodeURIComponent(code));
     var data = await res.json();
-    if(data.ok && data.fp) {
-      state.fpInfo = data.fp;
-      document.getElementById('fpDisplay').textContent = data.fp.name + ' ' + data.fp.title;
+    if(data.ok) {
+      // GAS가 flat 형태 { ok, name, title, ... } 또는 { ok, fp: {...} } 모두 대응
+      var fp = data.fp || { name: data.name, title: data.title, phone: data.phone, email: data.email, branch: data.branch };
+      state.fpInfo = fp;
+      document.getElementById('fpDisplay').textContent = fp.name + ' ' + fp.title;
     }
   } catch(e) { /* 실패 시 코드만 표시 */ }
 }
@@ -4384,22 +4386,28 @@ document.addEventListener('keydown', function(e) {
 
   var isInput = ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName);
 
-  // 전환 오버레이 열려있으면 Enter로 확인
+  // 전환 오버레이 열려있으면 Enter→확인 / Backspace→이전
   if(document.getElementById('transitionOverlay').classList.contains('show')) {
     if(e.key==='Enter' || e.key===' ') { e.preventDefault(); confirmTransition(); }
+    if(e.key==='Backspace' || e.key==='ArrowLeft') { e.preventDefault(); document.getElementById('transitionOverlay').classList.remove('show'); }
     return;
   }
 
-  // Enter / ArrowRight → 앞으로
+  // Enter / ArrowRight → 앞으로 (슬라이드 중이면 다음 슬라이드)
   if(e.key==='Enter' || e.key==='ArrowRight') {
     if(isInput && e.key==='Enter') return;
     e.preventDefault();
+    if(currentIdx===2) {
+      var slides = document.querySelectorAll('[id^=gslide-]');
+      var maxSlide = slides.length - 1;
+      if(state.slideIdx < maxSlide) { goSlide(state.slideIdx + 1); return; }
+    }
     var n = document.getElementById('btnNext');
     if(n && !n.disabled && n.style.display !== 'none') n.click();
     else goNext();
   }
 
-  // Backspace / ArrowLeft → 뒤로
+  // Backspace / ArrowLeft → 뒤로 (슬라이드 중이면 이전 슬라이드)
   if(e.key==='Backspace' || e.key==='ArrowLeft') {
     if(isInput && e.key==='Backspace') return;
     e.preventDefault();
