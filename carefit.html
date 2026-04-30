@@ -3944,11 +3944,16 @@ function s5GetNextTopics() {
     .map(function(el){ return el.textContent.trim(); });
 }
 
-function s5KakaoShare() {
+async function s5KakaoShare() {
+  // fpInfo 없으면 재로드 시도
+  if(!state.fpInfo && state.fpCode) {
+    showToast('⏳ FP 정보 확인 중...', 1500);
+    await loadFpInfo(state.fpCode);
+  }
+
   var name = document.getElementById('wu-name')?.value || '고객';
   var date = document.getElementById('wu-date')?.value || '';
   var time = document.getElementById('wu-time')?.value || '';
-  var meetingStr = date + (time ? ' ' + time : '');
   var place = document.getElementById('wu-place')?.value || '';
   var note = document.getElementById('wu-note')?.value || '';
   var refName = document.getElementById('ref-name')?.value || '';
@@ -3962,19 +3967,16 @@ function s5KakaoShare() {
   var checkGradeEl = document.getElementById('checkGradeBig');
   var checkGrade = checkGradeEl && checkGradeEl.textContent !== '-' ? checkGradeEl.textContent : '—';
 
-  // 와닿은 것 요약 (핵심 키워드만)
+  var SHORT = {
+    '보험료':'보험료 갱신 걱정', '표적항암':'표적항암 실손 불가',
+    '지금부터':'지금 준비가 유리', '암·뇌심':'암뇌심 치료비 부담',
+    '5년':'재가입 시 보장 변경', '부모님':'부모님 간병 준비',
+    '치매':'치매 치료비 충격', '국민연금':'노후 의료비 부족'
+  };
   var touchedShort = s5GetTouched().map(function(t) {
-    if(t.includes('보험료')) return '보험료 갱신 걱정';
-    if(t.includes('표적항암')) return '표적항암 실손 불가';
-    if(t.includes('지금부터')) return '지금 준비가 유리';
-    if(t.includes('암·뇌심')) return '암뇌심 치료비 부담';
-    if(t.includes('5년')) return '재가입 시 보장 변경';
-    if(t.includes('부모님')) return '부모님 간병 준비';
-    if(t.includes('치매')) return '치매 치료비 충격';
-    if(t.includes('국민연금')) return '노후 의료비 부족';
+    for(var k in SHORT) { if(t.includes(k)) return SHORT[k]; }
     return t.slice(0,15);
   });
-  // 다음 상담 요약
   var nextShort = s5GetNextTopics().map(function(t) {
     if(t.includes('보장 공백')) return '보장 공백 분석';
     if(t.includes('케어맵')) return '케어맵 정밀 진단';
@@ -3983,24 +3985,54 @@ function s5KakaoShare() {
     return t.replace(/[🔍🎯📚👨‍👩‍👧]/g,'').trim().slice(0,12);
   });
 
-  var text = '📋 올라이프 케어핏 상담결과\n';
-  text += name + ' 고객님\n\n';
-  text += '🏥 실손: ' + genName + ' | 커버율: ' + pct + '%\n';
-  text += '📊 의료비 트렌드 체크: ' + checkGrade + '\n';
-  text += '🎯 케어핏: 암' + areaGradeOf(cfScores['암']) + ' / 뇌심' + areaGradeOf(cfScores['뇌심']) + ' / 간병' + areaGradeOf(cfScores['간병']) + ' / 노후' + areaGradeOf(cfScores['노후']) + '\n';
-  if(touchedShort.length) text += '\n💡 와닿은 것\n' + touchedShort.join(' · ') + '\n';
-  if(nextShort.length) text += '\n📌 다음 상담\n' + nextShort.join(' · ') + '\n';
-  if(refName) text += '\n☕ 추천: ' + refName + (refAge?' ('+refAge+')':'') + ' — 커피쿠폰 잊지 마세요!\n';
-  if(date) text += '\n📅 ' + date + (place?' / '+place:'') + '\n';
-  if(note) text += '📝 ' + note + '\n';
-  if(state.fpInfo) {
-    text += '\n━━━━━━━━━━━━━━━━━';
-    text += '\n👤 ' + state.fpInfo.name + ' ' + state.fpInfo.title;
-    text += '\n📞 ' + state.fpInfo.phone;
-    text += '\n한화생명금융서비스 VIP금융사업부 유니스지사';
-  } else {
-    text += '\n한화생명금융서비스 VIP사업부 유니스 | ' + (state.fpCode||'');
+  // ── 메시지 구성 (모바일 최적화) ──
+  var lines = [];
+  lines.push('📋 올라이프 케어핏 상담결과');
+  lines.push(name + ' 고객님');
+  lines.push('');
+  lines.push('🏥 실손 : ' + genName);
+  lines.push('📊 트렌드 체크 : ' + checkGrade + '등급');
+  lines.push('🎯 케어핏');
+  lines.push('   암 ' + areaGradeOf(cfScores['암']) +
+             '  |  뇌심 ' + areaGradeOf(cfScores['뇌심']) +
+             '  |  간병 ' + areaGradeOf(cfScores['간병']) +
+             '  |  노후 ' + areaGradeOf(cfScores['노후']));
+
+  if(touchedShort.length) {
+    lines.push('');
+    lines.push('💡 오늘 와닿은 것');
+    touchedShort.forEach(function(t){ lines.push('  · ' + t); });
   }
+  if(nextShort.length) {
+    lines.push('');
+    lines.push('📌 다음 상담 주제');
+    nextShort.forEach(function(t){ lines.push('  · ' + t); });
+  }
+  if(refName) {
+    lines.push('');
+    lines.push('☕ 추천인 : ' + refName + (refAge ? ' (' + refAge + '세)' : '') + ' — 커피쿠폰 전달 예정');
+  }
+  if(date || place) {
+    lines.push('');
+    lines.push('📅 다음 미팅');
+    lines.push('  ' + (date||'') + (time?' '+time:'') + (place?' / '+place:''));
+  }
+  if(note) {
+    lines.push('📝 ' + note);
+  }
+
+  // FP 서명
+  lines.push('');
+  lines.push('─────────────────');
+  if(state.fpInfo) {
+    lines.push('👤 ' + state.fpInfo.name + ' ' + state.fpInfo.title);
+    lines.push('📞 ' + state.fpInfo.phone);
+  } else {
+    lines.push('유니스지사 · ' + (state.fpCode||''));
+  }
+  lines.push('한화생명금융서비스 VIP금융사업부');
+
+  var text = lines.join('\n');
 
   if(navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(function(){
@@ -4040,6 +4072,8 @@ async function s5Save() {
       time: document.getElementById('wu-time')?.value || '',
       place: document.getElementById('wu-place')?.value || '',
       note: document.getElementById('wu-note')?.value || '',
+      refName: document.getElementById('ref-name')?.value || '',
+      refAge: document.getElementById('ref-age')?.value || '',
       date: new Date().toLocaleDateString('ko-KR')
     });
     var res = await fetch(CAREFIT_GAS_URL + '?' + p.toString());
