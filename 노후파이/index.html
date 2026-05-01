@@ -519,6 +519,90 @@ input[type=range]::-webkit-slider-thumb {
   .right-panel { padding: 18px 24px; }
 }
 
+
+/* ══ 태블릿 최적화 (iPad / 갤럭시탭) ══════════════════════════════ */
+
+/* ── 가로 모드 (1024px 이하) 보강 ── */
+@media (max-width: 1024px) {
+  /* 네비 */
+  .nav-bar { padding: 0 16px; height: 54px; }
+  #navMenuBtn { font-size: 12px; padding: 6px 12px; }
+
+  /* 레이아웃 */
+  .two-col { grid-template-columns: 260px 1fr; height: calc(100vh - 54px); }
+  .left-panel  { height: calc(100vh - 54px); padding: 14px 16px; }
+  .right-panel { height: calc(100vh - 54px); padding: 16px 20px; }
+
+  /* 타이포 */
+  .panel-title   { font-size: 24px; }
+  .panel-subtitle { font-size: 13px; }
+  .section-title { font-size: 18px; }
+  .input-field   { font-size: 20px; padding: 10px 14px; }
+
+  /* 버튼 터치 영역 확보 */
+  .btn-next-pc { min-height: 48px; font-size: 15px; padding: 0 28px; }
+  button { min-height: 44px; }
+
+  /* 전환 오버레이 */
+  .t-overlay-msg { font-size: 52px; }
+  .t-overlay-sub { font-size: 20px; }
+}
+
+/* ── 세로 모드 (768px 이하: iPad 세로, 갤럭시탭 세로) ── */
+@media (max-width: 768px) {
+  /* 전체 레이아웃을 세로 스택으로 전환 */
+  .two-col {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto 1fr;
+    height: auto;
+    min-height: calc(100vh - 54px);
+  }
+
+  /* 좌패널: 컴팩트 상단 바 형태 */
+  .left-panel {
+    height: auto !important;
+    min-height: unset;
+    padding: 12px 16px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .left-panel-inner { margin: 0; }
+  .left-bottom { margin-top: 12px; padding-top: 8px; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+
+  /* 우패널: 나머지 높이 */
+  .right-panel {
+    height: auto !important;
+    min-height: 60vh;
+    padding: 14px 16px;
+    overflow-y: auto;
+  }
+
+  /* 타이포 */
+  .panel-title   { font-size: 22px; }
+  .panel-subtitle { font-size: 12px; }
+  .section-title { font-size: 17px; }
+
+  /* 전환 오버레이 */
+  .t-overlay-msg { font-size: 40px; letter-spacing: -1px; }
+  .t-overlay-sub { font-size: 16px; }
+  .t-overlay-step { font-size: 13px; margin-bottom: 28px; }
+
+  /* screen-5a 노후파이 */
+  #screen-5a > .two-col {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto 1fr;
+  }
+
+  /* 슬라이드(screen-5b) 버튼 터치 크기 */
+  #screen-5b button,
+  #screen-5c button { min-height: 48px; }
+
+  /* 하단 네비 버튼 항상 노출 */
+  .btn-nav-wrap { gap: 10px; }
+  #btnBack, #btnNext { min-height: 52px; font-size: 15px; }
+}
+/* ════════════════════════════════════════════════════════════════ */
+
 /* ── 전환 오버레이 ── */
 #transitionOverlay {
   display: none;
@@ -821,7 +905,7 @@ html, body {
       font-weight:900; cursor:pointer; letter-spacing:0.3px;
     ">입장하기 →</button>
     <div style="font-size:12px; color:rgba(245,240,232,0.25); margin-top:4px;">
-      유효 기간 · ~2026년 5월 1일
+      유효 기간 · ~2026년 6월 30일
     </div>
   </div>
 </div>
@@ -829,7 +913,7 @@ html, body {
 <script>
 (function(){
   const PW     = 'nohupie2026';
-  const EXPIRY = new Date('2026-05-02T00:00:00+09:00');
+  const EXPIRY = new Date('2026-07-01T00:00:00+09:00');
   const SK     = 'unice_nohupie_auth_v1';
   const gate   = document.getElementById('pwGate');
   const form   = document.getElementById('pwForm');
@@ -907,6 +991,10 @@ html, body {
     <button type="button" class="fp-code-pill is-empty" id="fpCodePill" onclick="openFpCodeModal(true)" title="내 FP 링크 코드 설정">
       <span class="fp-code-meta">내 코드</span>
       <span class="fp-code-value" id="fpCodeValue">설정 필요</span>
+    </button>
+    <button id="navMenuBtn" onclick="toggleNavMenu()" type="button"
+      style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:20px;color:#F5F0E8;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
+      ≡ 목차 <span id="navMenuArrow" style="font-size:10px;display:inline-block;transition:transform 0.2s;">▼</span>
     </button>
     <span class="step-label" id="stepLabel">STEP 1 / 7</span>
     <div class="progress-bar-bg">
@@ -8038,6 +8126,82 @@ function rvPrev() {
 }
 
 // ── 통합 키보드 핸들러 ──
+// range 슬라이더 조작 후 포커스 해제 → 엔터/백스페이스 복구
+document.addEventListener('mouseup', function(e) {
+  if(e.target && e.target.type === 'range') e.target.blur();
+});
+document.addEventListener('touchend', function(e) {
+  if(e.target && e.target.type === 'range') e.target.blur();
+});
+
+
+// ══ 터치 스와이프 → 슬라이드 이동 ══════════════════════════════
+(function() {
+  var touchStartX = 0;
+  var touchStartY = 0;
+  var touchStartTime = 0;
+  var SWIPE_MIN_X  = 50;   // 최소 수평 이동(px)
+  var SWIPE_MAX_Y  = 80;   // 수직 이동 허용 최대(px)
+  var SWIPE_MAX_MS = 500;  // 최대 소요 시간(ms)
+
+  document.addEventListener('touchstart', function(e) {
+    if(e.touches.length !== 1) return;
+    touchStartX    = e.touches[0].clientX;
+    touchStartY    = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, {passive: true});
+
+  document.addEventListener('touchend', function(e) {
+    if(!e.changedTouches.length) return;
+    var dx = e.changedTouches[0].clientX - touchStartX;
+    var dy = e.changedTouches[0].clientY - touchStartY;
+    var dt = Date.now() - touchStartTime;
+
+    // 스크롤 중이거나 느리면 무시
+    if(Math.abs(dy) > SWIPE_MAX_Y) return;
+    if(Math.abs(dx) < SWIPE_MIN_X) return;
+    if(dt > SWIPE_MAX_MS) return;
+
+    var dir = dx < 0 ? 1 : -1; // 왼쪽 스와이프 = 다음, 오른쪽 = 이전
+
+    // ── screen-5c (리스크 슬라이드 1~3) ──
+    if(currentIdx === 11) {
+      if(dir === 1 && s5cSlide < 3) { s5cGo(s5cSlide + 1); return; }
+      if(dir === -1 && s5cSlide > 1) { s5cGo(s5cSlide - 1); return; }
+    }
+
+    // ── screen-5b (세로저축 슬라이드 1~3) ──
+    if(currentIdx === 8) {
+      if(dir === 1) {
+        if(s5bSlide === 1 && s5b1Step < 4)      { s5b1Next(); return; }
+        if(s5bSlide === 1 && s5b1Step === 4)     { s5bShowSlide(2); return; }
+        if(s5bSlide === 2 && s5b2Step < 4)       { s5b2Next(); return; }
+        if(s5bSlide === 2 && s5b2Step === 4)     { s5bShowSlide(3); return; }
+        if(s5bSlide === 3)                        { goNext(); return; }
+      }
+      if(dir === -1) {
+        if(s5bSlide === 1 && s5b1Step > 0)       { s5b1Prev(); return; }
+        if(s5bSlide === 2 && s5b2Step > 0)       { s5b2Prev(); return; }
+        if(s5bSlide > 1)                          { s5bShowSlide(s5bSlide - 1); return; }
+      }
+    }
+
+    // ── 전환 오버레이 열려있을 때 ──
+    var overlay = document.getElementById('transitionOverlay');
+    if(overlay && overlay.classList.contains('show')) {
+      if(dir === 1) confirmTransition();
+      else { overlay.classList.remove('show'); }
+      return;
+    }
+
+    // ── 일반 화면: 페이지 이동 ──
+    if(dir === 1)  goNext();
+    if(dir === -1) goBack();
+
+  }, {passive: true});
+})();
+// ════════════════════════════════════════════════════════════════
+
 document.addEventListener('keydown', e => {
   // screen-5bc (저축 구조 재설계): Backspace 완전 차단 (전환 오버레이 중엔 제외)
   if(e.key === 'Backspace') {
@@ -8060,24 +8224,11 @@ document.addEventListener('keydown', e => {
   if(fpModal && fpModal.classList.contains('show')) return;
   // FP 코드 모달이 열려있으면 메인 키 핸들러 무시
   const tag = document.activeElement.tagName;
-  const isInput = ['INPUT','TEXTAREA','SELECT'].includes(tag);
+  const isInput = ['INPUT','TEXTAREA','SELECT'].includes(tag) && document.activeElement.type !== 'range';
   const overlay = document.getElementById('transitionOverlay');
 
   // 숫자 키 → 페이지 바로 이동 (입력창 포커스 아닐 때)
-  if(!isInput && e.key >= '1' && e.key <= '9') {
-    const pageMap = {'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':10};
-    const target = pageMap[e.key];
-    if(target !== undefined) {
-      e.preventDefault();
-      // 현재 위치 히스토리에 저장 (Backspace로 돌아오기 위해)
-      if(screenHistory[screenHistory.length - 1] !== currentIdx) {
-        screenHistory.push(currentIdx);
-      }
-      screenHistory.push(target);
-      showScreen(target);
-      showToast(`📄 ${e.key}번 페이지로 이동`, 1500);
-      return;
-    }
+  if(false) { // 숫자 키 페이지 이동 비활성화
   }
 
   // Tab 키 → 마지막 화면(완료)으로 이동
@@ -8342,9 +8493,9 @@ document.addEventListener('keydown', e => {
   if(e.key === 'Enter') {
     if(tag === 'TEXTAREA') return;
     if(tag === 'BUTTON') { document.activeElement.click(); return; }
+    if(isInput) return;
     e.preventDefault();
-    const btn = document.getElementById('btnNext');
-    if(btn && btn.style.display !== 'none' && parseFloat(btn.style.opacity||1) > 0.4) goNext();
+    goNext();
   }
   if(e.key === 'Backspace') {
     // screen-5b (저축 구조 재설계): Backspace 페이지 이동 비활성화
@@ -8367,8 +8518,7 @@ document.addEventListener('keydown', e => {
     }
     if(isInput) return;
     e.preventDefault();
-    const backBtn = document.getElementById('btnBack');
-    if(backBtn && backBtn.style.display !== 'none') goBack();
+    goBack();
   }
 });
 
@@ -8499,6 +8649,120 @@ function initTrackScreen() {
 // ── screen-6a 초기화 ──
 function s6aInit(){}
 
+
+// ══════════════════════════════════════════════
+// 노후파이 목차 드롭다운
+// ══════════════════════════════════════════════
+var NP_NAV_STEPS = [
+  {idx:0,  label:'인트로',             sub:'시작 화면',              color:'#888780'},
+  {idx:1,  label:'체크리스트',          sub:'노후 준비 자가 진단',    color:'#E8A020'},
+  {idx:2,  label:'핵심 숫자',           sub:'은퇴 자산 계산',          color:'#4A90D9'},
+  {idx:3,  label:'리스크 분석',          sub:'위험 요소 점검',          color:'#E05A40'},
+  {idx:4,  label:'노후 소득 설계',       sub:'소득원 포트폴리오',       color:'#52B788'},
+  {idx:5,  label:'노후 지출 설계',       sub:'지출 구조 최적화',        color:'#9B59B6'},
+  {idx:6,  label:'실행 계획',            sub:'케어맵 & 다음 단계',      color:'#E8A020'},
+  {idx:7,  label:'결과 요약',            sub:'진단 리포트',             color:'#52B788'},
+  {idx:8,  label:'공유 & 저장',         sub:'상담 마무리',             color:'#BA7517'}
+];
+
+// SCREENS 배열 기반으로 실제 idx 매핑
+var NP_SCREEN_MAP = {
+  0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6,
+  7: 7, 8: 8, 9: 9, 10: 10, 11: 11, 12: 12,
+  13: 13, 14: 14, 15: 15, 16: 16
+};
+
+function toggleNavMenu() {
+  var dd = document.getElementById('navMenuDropdown');
+  var arrow = document.getElementById('navMenuArrow');
+  if(!dd) return;
+  var open = dd.style.display === 'block';
+  if(!open) renderNavMenu();
+  dd.style.display = open ? 'none' : 'block';
+  if(arrow) arrow.style.transform = open ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+function renderNavMenu() {
+  var list = document.getElementById('navMenuList');
+  if(!list) return;
+
+  // 화면 레이블 테이블
+  var labels = [
+    {label:'인트로',           color:'#888780'},
+    {label:'체크리스트',       color:'#E8A020'},
+    {label:'핵심 숫자',        color:'#4A90D9'},
+    {label:'리스크 분석',      color:'#E05A40'},
+    {label:'노후 소득 설계',   color:'#52B788'},
+    {label:'세부 소득 설계',   color:'#52B788'},
+    {label:'노후 지출 설계',   color:'#9B59B6'},
+    {label:'자산 배분',        color:'#E8A020'},
+    {label:'지출 세부',        color:'#9B59B6'},
+    {label:'지출 분석',        color:'#9B59B6'},
+    {label:'통합 분석',        color:'#9B59B6'},
+    {label:'케어맵',           color:'#E8A020'},
+    {label:'실행 계획',        color:'#52B788'},
+    {label:'실행 A',           color:'#52B788'},
+    {label:'실행 B',           color:'#52B788'},
+    {label:'상담 마무리',      color:'#BA7517'},
+    {label:'결과 공유',        color:'#BA7517'}
+  ];
+
+  // 주요 스텝만 표시 (서브 스크린 제외하고 깔끔하게)
+  var mainSteps = [
+    {idx:0,  label:'인트로',           color:'#888780', step:'0'},
+    {idx:1,  label:'체크리스트',       color:'#E8A020', step:'1'},
+    {idx:2,  label:'기본정보 입력',    color:'#4A90D9', step:'2'},
+    {idx:4,  label:'노후자금 진단',    color:'#52B788', step:'3'},
+    {idx:6,  label:'노후파이',         color:'#9B59B6', step:'4'},
+    {idx:8,  label:'저축 구조 설계',   color:'#9B59B6', step:'5'},
+    {idx:12, label:'2026 노후준비 트렌드', color:'#52B788', step:'6'},
+    {idx:15, label:'상담 마무리',      color:'#BA7517', step:'7'}
+  ];
+
+  var html = '';
+  mainSteps.forEach(function(step, i) {
+    var active = currentIdx === step.idx;
+    var bgCur = active ? 'rgba(255,255,255,0.06)' : 'transparent';
+    html += '<div data-np-idx="'+step.idx+'" data-bg="'+bgCur+'" style="padding:11px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;background:'+bgCur+';transition:background 0.15s;"'
+      + ' onmouseover="this.style.background=rgba(255,255,255,0.08)"'
+      + ' onmouseout="this.style.background=this.dataset.bg">';
+    html += '<div style="width:22px;height:22px;border-radius:50%;background:'+step.color+'22;border:1.5px solid '+step.color+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+      + '<span style="font-size:10px;color:'+step.color+';font-weight:900;">'+(active?'▶':step.step)+'</span></div>';
+    html += '<div>';
+    html += '<div style="font-size:11px;font-weight:800;color:'+(active?step.color:'#555')+';letter-spacing:0.5px;">STEP '+step.step+'</div>';
+    html += '<div style="font-size:13px;font-weight:'+(active?'700':'500')+';color:'+(active?'#fff':'#ccc')+';">'+step.label+'</div>';
+    html += '</div></div>';
+    if(i < mainSteps.length-1) html += '<div style="height:1px;background:rgba(255,255,255,0.06);margin:2px 0;"></div>';
+  });
+
+  list.innerHTML = html;
+  list.onclick = function(e) {
+    var el = e.target.closest('[data-np-idx]');
+    if(el) {
+      var idx = Number(el.getAttribute('data-np-idx'));
+      showScreen(idx);
+      document.getElementById('navMenuDropdown').style.display = 'none';
+      document.getElementById('navMenuArrow').style.transform = 'rotate(0deg)';
+    }
+  };
+}
+
+// 외부 클릭 시 닫기
+document.addEventListener('click', function(e) {
+  var btn = document.getElementById('navMenuBtn');
+  var dd  = document.getElementById('navMenuDropdown');
+  if(btn && dd && !btn.contains(e.target) && !dd.contains(e.target)) {
+    dd.style.display = 'none';
+    var arrow = document.getElementById('navMenuArrow');
+    if(arrow) arrow.style.transform = 'rotate(0deg)';
+  }
+});
+
 </script>
+
+<!-- ── 노후파이 목차 드롭다운 ── -->
+<div id="navMenuDropdown" style="display:none;position:fixed;right:20px;top:66px;width:280px;background:#0D1420;border:1px solid rgba(255,255,255,0.15);border-radius:14px;overflow-y:auto;max-height:80vh;box-shadow:0 8px 40px rgba(0,0,0,0.8);z-index:999999;">
+  <div style="padding:6px 0;" id="navMenuList"></div>
+</div>
 </body>
 </html>
