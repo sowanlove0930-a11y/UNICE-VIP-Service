@@ -534,6 +534,10 @@ input:-webkit-autofill:focus {
   .nav-btn { padding: 7px 14px; font-size: 12px; }
   .nav-center { font-size: 11px; }
 }
+
+/* 날짜 피커 색상 */
+::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.6); cursor: pointer; }
+input[type="date"]::-webkit-datetime-edit { color: var(--text); }
 </style>
 </head>
 <body>
@@ -1376,8 +1380,8 @@ input:-webkit-autofill:focus {
         </div>
 
         <!-- 카드4: 2차 상담 일정 -->
-        <div style="flex-shrink:0;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px 20px;position:relative;overflow:hidden;">
-          <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,rgba(55,138,221,0.8),transparent);"></div>
+        <div style="flex-shrink:0;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px 20px;position:relative;">
+          <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,rgba(55,138,221,0.8),transparent);border-radius:16px 16px 0 0;"></div>
           <div style="font-size:12px;font-weight:700;color:rgba(55,138,221,0.9);letter-spacing:1.5px;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
             <span>📅</span> 2차 상담 일정
           </div>
@@ -1394,21 +1398,43 @@ input:-webkit-autofill:focus {
             <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:0.5px;">연락처</div>
             <input id="wu-phone" type="tel" placeholder="010-0000-0000" autocomplete="off"
               style="width:100%;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:12px;color:var(--text);font-family:inherit;font-size:17px;font-weight:700;padding:13px 16px;outline:none;box-sizing:border-box;"
-              onfocus="this.style.borderColor='rgba(232,88,12,0.5)'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+              onfocus="this.style.borderColor='rgba(232,88,12,0.5)'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'"
+              oninput="wuPhoneFmt(this)">
           </div>
         </div>
 
         <!-- 다음 미팅 일정 -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
-          <div style="background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px 18px;">
-            <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">📅 다음 미팅 날짜</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;position:relative;">
+          <div style="background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px 18px;cursor:pointer;" onclick="document.getElementById('wu-date').showPicker ? document.getElementById('wu-date').showPicker() : document.getElementById('wu-date').click()">
+            <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;"><span style="filter:brightness(0) invert(1);font-size:12px;">📅</span> 다음 미팅 날짜</div>
             <input type="date" id="wu-date"
               style="background:transparent;border:none;outline:none;color:var(--text);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;width:100%;color-scheme:dark;">
           </div>
-          <div style="background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px 18px;">
-            <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">⏰ 시간</div>
-            <input type="time" id="wu-time"
-              style="background:transparent;border:none;outline:none;color:var(--text);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;width:100%;color-scheme:dark;">
+          <div id="wuTimeBox" style="background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px 18px;cursor:pointer;" onclick="wuTpToggle(event)">
+            <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;"><span style="filter:brightness(0) invert(1);font-size:12px;">🕐</span> 시간</div>
+            <div id="wu-time-disp" style="font-size:15px;font-weight:700;color:var(--text);">-- : --</div>
+            <input type="hidden" id="wu-time" value="">
+          </div>
+          <!-- 커스텀 시간 피커 - 네이티브 스타일 (body fixed 위치) -->
+          <div id="wuTp" style="display:none;position:fixed;z-index:99999;background:rgba(30,36,50,0.99);border:1px solid rgba(255,255,255,0.1);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.6);overflow:hidden;width:220px;">
+            <div style="display:grid;grid-template-columns:80px 1fr 1fr;">
+              <!-- 오전/오후 -->
+              <div style="border-right:1px solid rgba(255,255,255,0.08);">
+                <div id="wuTpApList" style="display:flex;flex-direction:column;"></div>
+              </div>
+              <!-- 시 (1~12 유한 스크롤) -->
+              <div style="border-right:1px solid rgba(255,255,255,0.08);max-height:220px;overflow-y:auto;">
+                <div id="wuTpHours" style="display:flex;flex-direction:column;"></div>
+              </div>
+              <!-- 분 -->
+              <div style="max-height:220px;overflow-y:auto;">
+                <div id="wuTpMins" style="display:flex;flex-direction:column;"></div>
+              </div>
+            </div>
+            <div style="border-top:1px solid rgba(255,255,255,0.08);padding:6px;">
+              <button onclick="wuTpConfirm();event.stopPropagation()"
+                style="width:100%;padding:8px;border:none;border-radius:6px;background:#0057d8;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">확인</button>
+            </div>
           </div>
           <div style="background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px 18px;">
             <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">📍 장소</div>
@@ -1639,7 +1665,7 @@ const GEN_DATA = {
 const CHECK_ITEMS = [
   {q:'최근 암·뇌심 치료가 입원보다 통원 중심으로 바뀌고 있다는 걸 알고 있다', tag:'통원화 트렌드'},
   {q:'표적항암제·면역항암제 1년 치료비가 5,000만~1억원대라는 걸 알고 있다', tag:'고액 의료비'},
-  {q:'내 실손의 통원 한도가 실제 항암 치료비를 감당하기에 충분하다고 생각한다', tag:'통원 한도'},
+  {q:'내 실손의 통원 한도만으로는 실제 항암 치료비를 감당하기 어렵다는 걸 알고 있다', tag:'통원 한도'},
   {q:'갱신 보험료가 5년마다 35~50% 폭등한다는 걸 알고 있다', tag:'보험료 상승'},
   {q:'도수치료·MRI 한도 소진 후에도 대안 보장이 준비되어 있다', tag:'비급여 한도'},
   {q:'비급여 자기부담이 세대가 바뀔수록 점점 높아지는 구조라는 걸 알고 있다', tag:'자기부담 상승'},
@@ -4807,6 +4833,239 @@ function cfGetFamilyData() {
 }
 
 
+// ── 전화번호 자동 하이픈 ──────────────────────────────────
+function wuPhoneFmt(el) {
+  var v = el.value.replace(/[^0-9]/g, '');
+  if (v.length <= 3) el.value = v;
+  else if (v.length <= 7) el.value = v.slice(0,3) + '-' + v.slice(3);
+  else el.value = v.slice(0,3) + '-' + v.slice(3,7) + '-' + v.slice(7,11);
+}
+
+// 가족 연락처도 동일하게 적용
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id && e.target.id.startsWith('cfFamPhone')) {
+    wuPhoneFmt(e.target);
+  }
+});
+
+// ── 커스텀 타임피커 ──────────────────────────────────────
+var wuTimeSel = { h: null, m: null };
+
+function wuTimePickerToggle() {
+  var picker = document.getElementById('wuTimePicker');
+  if (!picker) return;
+  var isOpen = picker.style.display === 'block';
+  picker.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    var cur = document.getElementById('wu-time').value || '';
+    var parts = cur.split(':');
+    wuTimeSel.h = parts[0] ? parseInt(parts[0]) : null;
+    wuTimeSel.m = parts[1] ? parseInt(parts[1]) : null;
+    wuTimeRender();
+  }
+}
+
+function wuTimePickerClose() {
+  var picker = document.getElementById('wuTimePicker');
+  if (picker) picker.style.display = 'none';
+}
+
+function wuTimeRender() {
+  var mWrap = document.getElementById('wuTimeMins');
+  if (!mWrap) return;
+
+  var amHours  = [6,7,8,9,10,11];
+  var pmHours  = [12,13,14,15,16,17,18,19,20,21];
+  var mins     = [0,10,20,30,40,50];
+
+  function hLabel(h) {
+    if (h === 0)  return '오전 12시 (자정)';
+    if (h < 12)   return '오전 ' + h + '시';
+    if (h === 12) return '오후 12시 (정오)';
+    return '오후 ' + (h-12) + '시';
+  }
+
+  function btn(val, label, type, selected) {
+    var sel = selected ? 'background:var(--primary);color:#000;font-weight:800;' : 'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);';
+    return '<button type="button" onclick="wuTimeSel.' + type + '=' + val + ';wuTimeRender()" ' +
+      'style="' + sel + 'border:none;border-radius:8px;padding:9px 12px;font-family:inherit;font-size:13px;cursor:pointer;text-align:left;transition:all 0.1s;width:100%;">'+
+      label + '</button>';
+  }
+
+  var hHtml = '';
+  amHours.forEach(function(h) { hHtml += btn(h, hLabel(h), 'h', wuTimeSel.h === h); });
+  document.getElementById('wuTimeAmHours').innerHTML = hHtml;
+  var pmHtml = '';
+  pmHours.forEach(function(h) { pmHtml += btn(h, hLabel(h), 'h', wuTimeSel.h === h); });
+  document.getElementById('wuTimePmHours').innerHTML = pmHtml;
+
+  var mHtml = '<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);margin-bottom:8px;letter-spacing:1px;">분</div>';
+  mHtml += '<div style="display:flex;flex-direction:column;gap:4px;">';
+  mins.forEach(function(m) { mHtml += btn(m, m === 0 ? '00분' : m + '분', 'm', wuTimeSel.m === m); });
+  mHtml += '</div>';
+  if (mWrap) mWrap.innerHTML = mHtml;
+
+  // 확인 버튼 상태
+  var confirmBtn = document.getElementById('wuTimeConfirm');
+  if (confirmBtn) {
+    var ready = wuTimeSel.h !== null && wuTimeSel.m !== null;
+    confirmBtn.disabled = !ready;
+    confirmBtn.style.opacity = ready ? '1' : '0.4';
+  }
+}
+
+function wuTimeConfirm() {
+  if (wuTimeSel.h === null || wuTimeSel.m === null) return;
+  var hh = String(wuTimeSel.h).padStart(2, '0');
+  var mm = String(wuTimeSel.m).padStart(2, '0');
+  var h12 = wuTimeSel.h === 0 ? 12 : wuTimeSel.h > 12 ? wuTimeSel.h - 12 : wuTimeSel.h;
+  var ap  = wuTimeSel.h < 12 ? '오전' : '오후';
+  document.getElementById('wu-time').value = hh + ':' + mm;
+  document.getElementById('wu-time-display').textContent = ap + ' ' + h12 + ':' + mm;
+  document.getElementById('wu-time-display').style.color = 'var(--text)';
+  wuTimePickerClose();
+}
+
+// ── 커스텀 타임피커 ──────────────────────────────────────
+var wuTpState = { ap: '오후', h: null, m: null };
+
+function wuTpOpen() {
+  var tp = document.getElementById('wuTp');
+  if (tp && tp.style.display !== 'block') {
+    var box = document.getElementById('wuTimeBox');
+    document.body.appendChild(tp);
+    tp.style.visibility = 'hidden';
+    tp.style.display = 'block';
+    var r = box.getBoundingClientRect();
+    var tpH = tp.offsetHeight || 300;
+    tp.style.left = r.left + 'px';
+    tp.style.top = Math.max(8, r.top - tpH - 4) + 'px';
+    tp.style.visibility = 'visible';
+    var cur = document.getElementById('wu-time').value || '';
+    var parts = cur.split(':');
+    if (parts[0]) {
+      var h24 = parseInt(parts[0]);
+      wuTpState.ap = h24 < 12 ? '오전' : '오후';
+      wuTpState.h  = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+      wuTpState.m  = parts[1] ? parseInt(parts[1]) : null;
+    }
+    wuTpRender();
+  }
+}
+
+function wuTpToggle(e) {
+  e.stopPropagation();
+  var tp = document.getElementById('wuTp');
+  if (!tp) return;
+  var isOpen = tp.style.display !== 'none';
+  if (isOpen) { tp.style.display = 'none'; return; }
+  // body 최상위로 이동 + 위치 계산
+  document.body.appendChild(tp);
+  var box = document.getElementById('wuTimeBox').getBoundingClientRect();
+  tp.style.left = box.left + 'px';
+  tp.style.top = '0px'; // 임시로 렌더 후 높이 측정
+  tp.style.visibility = 'hidden';
+  tp.style.display = 'block';
+  var tpH = tp.offsetHeight || 300;
+  tp.style.top = Math.max(8, box.top - tpH - 4) + 'px';
+  tp.style.visibility = 'visible';
+  tp.style.display = 'block';
+  var cur = document.getElementById('wu-time').value || '';
+  var parts = cur.split(':');
+  if (parts[0]) {
+    var h24 = parseInt(parts[0]);
+    wuTpState.ap = h24 < 12 ? '오전' : '오후';
+    wuTpState.h  = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+    wuTpState.m  = parts[1] ? parseInt(parts[1]) : null;
+  }
+  wuTpRender();
+}
+
+function wuTpSet(key, val) {
+  wuTpState[key] = val;
+  wuTpRender();
+}
+
+function wuTpRender() {
+  function mkItem(label, sel, onclick) {
+    var div = document.createElement('div');
+    div.textContent = label;
+    div.style.cssText = 'padding:9px 12px;font-size:15px;cursor:pointer;text-align:center;transition:background 0.1s;' +
+      (sel ? 'background:#0057d8;color:#fff;font-weight:700;' : 'color:rgba(255,255,255,0.75);');
+    if (!sel) {
+      div.onmouseenter = function(){ this.style.background = 'rgba(0,87,216,0.35)'; this.style.color = '#fff'; };
+      div.onmouseleave = function(){ this.style.background = ''; this.style.color = 'rgba(255,255,255,0.75)'; };
+    }
+    div.onclick = function(e){ e.stopPropagation(); onclick(); };
+    return div;
+  }
+  // 오전/오후
+  var apWrap = document.getElementById('wuTpApList');
+  if (apWrap) {
+    apWrap.innerHTML = '';
+    ['오전','오후'].forEach(function(ap) {
+      apWrap.appendChild(mkItem(ap, wuTpState.ap === ap, function(){ wuTpState.ap = ap; wuTpRender(); }.bind(null)));
+    });
+    // AP 재할당 버그 방지
+    var items = apWrap.children;
+    for (var i = 0; i < items.length; i++) {
+      (function(ap){ items[i].onclick = function(e){ e.stopPropagation(); wuTpState.ap = ap; wuTpRender(); }; })(['오전','오후'][i]);
+    }
+  }
+  // 시 1~12
+  var hWrap = document.getElementById('wuTpHours');
+  if (hWrap) {
+    hWrap.innerHTML = '';
+    for (var h = 1; h <= 12; h++) {
+      (function(hv){
+        hWrap.appendChild(mkItem(hv + '', wuTpState.h === hv, function(){ wuTpState.h = hv; wuTpRender(); }));
+      })(h);
+    }
+    // 선택 항목으로 스크롤
+    if (wuTpState.h !== null) {
+      var selEl = hWrap.children[wuTpState.h - 1];
+      if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+    }
+  }
+  // 분 00~50 (10분 단위)
+  var mWrap = document.getElementById('wuTpMins');
+  if (mWrap) {
+    mWrap.innerHTML = '';
+    [0,10,20,30,40,50].forEach(function(m) {
+      mWrap.appendChild(mkItem((m < 10 ? '0' : '') + m, wuTpState.m === m, function(){ wuTpState.m = m; wuTpRender(); }.bind(null)));
+    });
+    // 분 클릭 재할당
+    var mins = [0,10,20,30,40,50];
+    var mItems = mWrap.children;
+    for (var j = 0; j < mItems.length; j++) {
+      (function(mv){ mItems[j].onclick = function(e){ e.stopPropagation(); wuTpState.m = mv; wuTpRender(); }; })(mins[j]);
+    }
+  }
+}
+
+function wuTpConfirm() {
+  if (wuTpState.h === null || wuTpState.m === null) return;
+  var h12 = wuTpState.h;
+  var h24 = wuTpState.ap === '오전'
+    ? (h12 === 12 ? 0 : h12)
+    : (h12 === 12 ? 12 : h12 + 12);
+  var mm = (wuTpState.m < 10 ? '0' : '') + wuTpState.m;
+  var hh = (h24 < 10 ? '0' : '') + h24;
+  document.getElementById('wu-time').value = hh + ':' + mm;
+  document.getElementById('wu-time-disp').textContent = wuTpState.ap + ' ' + h12 + ':' + mm;
+  document.getElementById('wu-time-disp').style.color = 'var(--text)';
+  document.getElementById('wuTp').style.display = 'none';
+}
+
+// 외부 클릭 시 닫기
+document.addEventListener('click', function(e) {
+  var tp = document.getElementById('wuTp');
+  if (tp && tp.style.display !== 'none' && !tp.contains(e.target)) {
+    var box = tp.previousElementSibling;
+    if (!box || !box.contains(e.target)) tp.style.display = 'none';
+  }
+});
+
 // ── STEP 5 랩업 ──────────────────────────────────────────
 function s5Init() {
   // 오늘 요약 자동 표시
@@ -4884,19 +5143,11 @@ async function s5KakaoShare() {
     return t.slice(0,15);
   });
   var nextShort = s5GetNextTopics().map(function(t) {
-    if(t.includes('보장 공백')) return '보장 공백 분석';
-    if(t.includes('케어맥')) return '케어맥 정밀 진단 (회사별 보장내용)';
+    if(t.includes('케어맵') || t.includes('케어맥') || t.includes('보장내용')) return '회사별 보장내용 정밀 진단 (케어맵)';
     if(t.includes('노후파이')) return '노후파이클래스';
-    if(t.includes('배우자')) {
-      var famData = cfGetFamilyData();
-      if(famData.length > 0) {
-        var famStr = famData.map(function(f){ return f.rel + (f.name?' '+f.name:'') + (f.phone?' '+f.phone:''); }).join(', ');
-        return '가족 보장 점검 (' + famStr + ')';
-      }
-      return '가족 보장 점검';
-    }
-    return t.replace(/[🔍🎯📚👨‍👩‍👧]/g,'').trim().slice(0,12);
-  });
+    if(t.includes('배우자')) return null; // 가족 보장 점검은 별도 헤더로
+    return t.replace(/[🔍🎯📚👨‍👩‍👧★]/g,'').replace('GA 최초','').trim().slice(0,20);
+  }).filter(function(t){ return t && t.trim(); });
 
   // ── 메시지 구성 (모바일 최적화) ──
   var lines = [];
@@ -4921,21 +5172,27 @@ async function s5KakaoShare() {
     lines.push('📌 다음 상담 주제');
     nextShort.forEach(function(t){ lines.push('  · ' + t); });
   }
+
+  // 가족 보장 점검 — 별도 헤더로 정렬
+  var famData = cfGetFamilyData();
+  if(famData.length > 0) {
+    lines.push('');
+    lines.push('👨\u200d👩\u200d👧 가족 보장 점검 신청');
+    var maxRelLen = 0;
+    famData.forEach(function(f){ if(f.rel.length > maxRelLen) maxRelLen = f.rel.length; });
+    famData.forEach(function(f) {
+      var pad = '';
+      for(var i = f.rel.length; i < maxRelLen; i++) pad += ' ';
+      var line = '  · ' + f.rel + pad;
+      if(f.name)  line += '  ' + f.name;
+      if(f.phone) line += '  ' + f.phone;
+      lines.push(line);
+    });
+  }
+
   if(refName) {
     lines.push('');
-    lines.push('☕ 추천인 : ' + refName + (refAge ? ' (' + refAge + '세)' : '') + ' — 커피쿠폰 전달 예정');
-    // 가족 보장 점검 상세
-    var famData = cfGetFamilyData();
-    if(famData.length > 0) {
-      lines.push('');
-      lines.push('👨\u200d👩\u200d👧 가족 보장 점검 신청');
-      famData.forEach(function(f) {
-        var line = '  \u00b7 ' + f.rel;
-        if(f.name) line += ' \u2014 ' + f.name;
-        if(f.phone) line += ' / ' + f.phone;
-        lines.push(line);
-      });
-    }
+    lines.push('☕ 추천인 : ' + refName + (refAge ? ' (' + refAge + '세)' : '') + ' \u2014 커피쿠폰 전달 예정');
   }
   if(date || place) {
     lines.push('');
@@ -4987,6 +5244,11 @@ async function s5Save() {
     var total = state.calcResult ? state.calcResult.total : 0;
     var silson = state.calcResult ? state.calcResult.silson : 0;
     var coverPct = total > 0 ? Math.round(silson/total*100) : 0;
+    var famData = cfGetFamilyData();
+    var famStr = famData.map(function(f) {
+      return f.rel + (f.name ? '-' + f.name : '') + (f.phone ? '/' + f.phone : '');
+    }).join(' | ');
+
     var p = new URLSearchParams({
       action: 'saveSilson',
       fp: state.fpCode || 'unknown',
@@ -5008,6 +5270,7 @@ async function s5Save() {
       note: document.getElementById('wu-note')?.value || '',
       refName: document.getElementById('ref-name')?.value || '',
       refAge: document.getElementById('ref-age')?.value || '',
+      familyCheck: famStr,
       date: new Date().toLocaleDateString('ko-KR')
     });
     var res = await fetch(CAREFIT_GAS_URL + '?' + p.toString());
@@ -6460,6 +6723,8 @@ function cmUpdateSlide() {
   </div>
 </div>
 <!-- ======== 가족 위기비용 시뮬레이터 모달 끝 ======== -->
+
+
 
 </body>
 </html>
