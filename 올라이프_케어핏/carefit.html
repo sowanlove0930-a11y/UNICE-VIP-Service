@@ -1344,11 +1344,20 @@ input:-webkit-autofill:focus {
               <div class="wu-check-box"></div>
               <span style="font-size:15px;line-height:1.5;">👨‍👩‍👧 배우자/가족 보장도 함께 점검받고 싶다</span>
             </div>
-            <div id="familyMemberWrap" style="display:none;padding:12px 14px;background:rgba(58,184,122,0.05);border:1px solid rgba(58,184,122,0.2);border-radius:12px;margin-top:2px;">
-              <div style="font-size:12px;font-weight:600;color:rgba(58,184,122,0.8);margin-bottom:8px;">누구의 보장을 점검받고 싶으신가요?</div>
-              <input id="familyMemberInput" type="text" placeholder="예: 남편, 아내, 어머니, 아들..." autocomplete="off"
-                style="width:100%;background:rgba(255,255,255,0.05);border:1.5px solid rgba(58,184,122,0.25);border-radius:10px;color:#fff;font-family:inherit;font-size:15px;font-weight:600;padding:10px 14px;outline:none;box-sizing:border-box;"
-                onfocus="this.style.borderColor='rgba(58,184,122,0.5)'" onblur="this.style.borderColor='rgba(58,184,122,0.25)'">
+            <div id="familyMemberWrap" style="display:none;padding:14px 16px;background:rgba(58,184,122,0.05);border:1px solid rgba(58,184,122,0.2);border-radius:12px;margin-top:2px;">
+              <div style="font-size:12px;font-weight:700;color:rgba(58,184,122,0.8);margin-bottom:12px;">👨‍👩‍👧 누구의 보장을 함께 점검받으실 건가요? <span style="font-weight:400;color:rgba(255,255,255,0.3);">(복수 선택 가능)</span></div>
+
+              <!-- 관계 선택 버튼 -->
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+                <button onclick="cfFamilyToggle('배우자')" id="cfFamBtn배우자" type="button" style="padding:7px 16px;border-radius:20px;border:1.5px solid rgba(58,184,122,0.3);background:transparent;color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;">배우자</button>
+                <button onclick="cfFamilyToggle('아버지')" id="cfFamBtn아버지" type="button" style="padding:7px 16px;border-radius:20px;border:1.5px solid rgba(58,184,122,0.3);background:transparent;color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;">아버지</button>
+                <button onclick="cfFamilyToggle('어머니')" id="cfFamBtn어머니" type="button" style="padding:7px 16px;border-radius:20px;border:1.5px solid rgba(58,184,122,0.3);background:transparent;color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;">어머니</button>
+                <button onclick="cfFamilyToggle('자녀')" id="cfFamBtn자녀" type="button" style="padding:7px 16px;border-radius:20px;border:1.5px solid rgba(58,184,122,0.3);background:transparent;color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;">자녀</button>
+                <button onclick="cfFamilyToggle('기타')" id="cfFamBtn기타" type="button" style="padding:7px 16px;border-radius:20px;border:1.5px solid rgba(58,184,122,0.3);background:transparent;color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;">기타</button>
+              </div>
+
+              <!-- 선택된 관계 카드들 -->
+              <div id="cfFamilyCards" style="display:flex;flex-direction:column;gap:8px;"></div>
             </div>
           </div>
         </div><!-- 카드2 end -->
@@ -4688,6 +4697,116 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+// ── 가족 보장 점검 관계 토글 ──────────────────────────────
+var cfFamilySelected = {};
+var cfFamilyCounters = { '자녀': 0, '기타': 0 };
+
+function cfFamilyToggle(rel) {
+  var btn = document.getElementById('cfFamBtn' + rel);
+  var cards = document.getElementById('cfFamilyCards');
+  if (!btn || !cards) return;
+
+  var isMulti = (rel === '자녀' || rel === '기타');
+
+  if (cfFamilySelected[rel]) {
+    // 해제 - 단일/다중 공통
+    delete cfFamilySelected[rel];
+    if (isMulti) cfFamilyCounters[rel] = 0;
+    btn.style.background = 'transparent';
+    btn.style.color = 'rgba(255,255,255,0.6)';
+    btn.style.borderColor = 'rgba(58,184,122,0.3)';
+    var card = document.getElementById('cfFamCard_' + rel);
+    if (card) card.remove();
+    return;
+  }
+
+  // 선택 활성화
+  cfFamilySelected[rel] = true;
+  btn.style.background = 'rgba(58,184,122,0.2)';
+  btn.style.color = '#3AB87A';
+  btn.style.borderColor = 'rgba(58,184,122,0.7)';
+
+    if (isMulti) {
+      // 다중: 기존 카드 없으면 wrapper 생성
+      var wrapper = document.getElementById('cfFamCard_' + rel);
+      if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.id = 'cfFamCard_' + rel;
+        wrapper.style.cssText = 'background:rgba(255,255,255,0.04);border:1px solid rgba(58,184,122,0.15);border-radius:10px;padding:12px 14px;';
+        wrapper.innerHTML = '<div style="font-size:12px;font-weight:700;color:rgba(58,184,122,0.8);margin-bottom:8px;">' + rel + '</div>'
+          + '<div id="cfFamRows_' + rel + '" style="display:flex;flex-direction:column;gap:8px;"></div>'
+          + '<button type="button" onclick="cfAddFamilyRow(\'' + rel + '\')" style="margin-top:8px;padding:6px 14px;border-radius:8px;border:1px solid rgba(58,184,122,0.4);background:transparent;color:#3AB87A;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ ' + rel + ' 추가</button>';
+        cards.appendChild(wrapper);
+      }
+      cfAddFamilyRow(rel);
+    } else {
+      // 단일 관계
+      var card = document.createElement('div');
+      card.id = 'cfFamCard_' + rel;
+      card.style.cssText = 'background:rgba(255,255,255,0.04);border:1px solid rgba(58,184,122,0.15);border-radius:10px;padding:12px 14px;';
+      card.innerHTML = '<div style="font-size:12px;font-weight:700;color:rgba(58,184,122,0.8);margin-bottom:8px;">' + rel + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+        + '<input placeholder="성함" id="cfFamName_' + rel + '" style="background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-family:inherit;font-size:14px;padding:9px 12px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor=\'rgba(58,184,122,0.5)\'" onblur="this.style.borderColor=\'rgba(255,255,255,0.1)\'"/>'
+        + '<input placeholder="연락처" id="cfFamPhone_' + rel + '" style="background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-family:inherit;font-size:14px;padding:9px 12px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor=\'rgba(58,184,122,0.5)\'" onblur="this.style.borderColor=\'rgba(255,255,255,0.1)\'"/>'
+        + '</div>';
+      cards.appendChild(card);
+    }
+}
+
+function cfAddFamilyRow(rel) {
+  var rowsWrap = document.getElementById('cfFamRows_' + rel);
+  if (!rowsWrap) return;
+  var idx = ++cfFamilyCounters[rel];
+  var isEtc = rel === '기타';
+  var rowId = 'cfFamRow_' + rel + '_' + idx;
+  var row = document.createElement('div');
+  row.id = rowId;
+  row.style.cssText = 'display:flex;align-items:center;gap:6px;';
+
+  var relInput = isEtc
+    ? '<input placeholder="관계 (예: 형제, 시어머니)" id="cfFamRel_' + idx + '" style="flex:1;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-family:inherit;font-size:14px;padding:9px 10px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor=\'rgba(58,184,122,0.5)\'" onblur="this.style.borderColor=\'rgba(255,255,255,0.1)\'"/>'
+    : '';
+
+  row.innerHTML = relInput
+    + '<input placeholder="성함" id="cfFamName_' + rel + '_' + idx + '" style="flex:1.2;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-family:inherit;font-size:14px;padding:9px 10px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor=\'rgba(58,184,122,0.5)\'" onblur="this.style.borderColor=\'rgba(255,255,255,0.1)\'"/>'
+    + '<input placeholder="연락처" id="cfFamPhone_' + rel + '_' + idx + '" style="flex:1.5;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-family:inherit;font-size:14px;padding:9px 10px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor=\'rgba(58,184,122,0.5)\'" onblur="this.style.borderColor=\'rgba(255,255,255,0.1)\'"/>'
+    + '<button type="button" onclick="document.getElementById(\'' + rowId + '\').remove()" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.4);font-size:14px;cursor:pointer;font-family:inherit;line-height:1;">✕</button>';
+
+  rowsWrap.appendChild(row);
+}
+
+function cfGetFamilyData() {
+  var result = [];
+  var singles = ['배우자', '아버지', '어머니'];
+  var multis  = ['자녀', '기타'];
+
+  singles.forEach(function(rel) {
+    if (!cfFamilySelected[rel]) return;
+    var name  = (document.getElementById('cfFamName_'  + rel) || {}).value || '';
+    var phone = (document.getElementById('cfFamPhone_' + rel) || {}).value || '';
+    result.push({ rel: rel, name: name, phone: phone });
+  });
+
+  multis.forEach(function(rel) {
+    if (!cfFamilySelected[rel]) return;
+    var rowsWrap = document.getElementById('cfFamRows_' + rel);
+    if (!rowsWrap) return;
+    var rows = rowsWrap.querySelectorAll('[id^="cfFamRow_' + rel + '_"]');
+    rows.forEach(function(row) {
+      var idx = row.id.split('_').pop();
+      var relLabel = rel === '기타'
+        ? ((document.getElementById('cfFamRel_' + idx) || {}).value || '기타')
+        : rel;
+      var name  = (document.getElementById('cfFamName_'  + rel + '_' + idx) || {}).value || '';
+      var phone = (document.getElementById('cfFamPhone_' + rel + '_' + idx) || {}).value || '';
+      result.push({ rel: relLabel, name: name, phone: phone });
+    });
+  });
+
+  return result;
+}
+
+
 // ── STEP 5 랩업 ──────────────────────────────────────────
 function s5Init() {
   // 오늘 요약 자동 표시
@@ -4768,7 +4887,14 @@ async function s5KakaoShare() {
     if(t.includes('보장 공백')) return '보장 공백 분석';
     if(t.includes('케어맥')) return '케어맥 정밀 진단 (회사별 보장내용)';
     if(t.includes('노후파이')) return '노후파이클래스';
-    if(t.includes('배우자')) { var fmv=document.getElementById('familyMemberInput'); var fmn=fmv?fmv.value.trim():''; return '가족 보장 점검'+(fmn?' ('+fmn+')':''); }
+    if(t.includes('배우자')) {
+      var famData = cfGetFamilyData();
+      if(famData.length > 0) {
+        var famStr = famData.map(function(f){ return f.rel + (f.name?' '+f.name:'') + (f.phone?' '+f.phone:''); }).join(', ');
+        return '가족 보장 점검 (' + famStr + ')';
+      }
+      return '가족 보장 점검';
+    }
     return t.replace(/[🔍🎯📚👨‍👩‍👧]/g,'').trim().slice(0,12);
   });
 
@@ -4798,6 +4924,18 @@ async function s5KakaoShare() {
   if(refName) {
     lines.push('');
     lines.push('☕ 추천인 : ' + refName + (refAge ? ' (' + refAge + '세)' : '') + ' — 커피쿠폰 전달 예정');
+    // 가족 보장 점검 상세
+    var famData = cfGetFamilyData();
+    if(famData.length > 0) {
+      lines.push('');
+      lines.push('👨\u200d👩\u200d👧 가족 보장 점검 신청');
+      famData.forEach(function(f) {
+        var line = '  \u00b7 ' + f.rel;
+        if(f.name) line += ' \u2014 ' + f.name;
+        if(f.phone) line += ' / ' + f.phone;
+        lines.push(line);
+      });
+    }
   }
   if(date || place) {
     lines.push('');
