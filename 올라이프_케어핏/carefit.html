@@ -3741,6 +3741,8 @@ function cfUpdateGrade() {
     if(bar) bar.style.width = (cfScores[t]/10*100) + '%';
     var fill = document.getElementById('cfBarFill'+t);
     if(fill) fill.style.width = (cfScores[t]/10*100) + '%';
+    var val = document.getElementById('cfBarVal'+t);
+    if(val) val.textContent = cfScores[t] + '/10';
   });
 
   // 취약 영역 문구
@@ -4478,7 +4480,10 @@ function fsSelectDisease(id) {
     + '<button onclick="closeFamilySimulator()" style="flex:2;background:#E03535;border:none;border-radius:10px;color:#fff;font-family:inherit;font-size:15px;font-weight:800;padding:15px;cursor:pointer;">← 올라이프 케어핏 돌아가기</button>'
     + '<button onclick="fsCopyResult(this)" id="fsKakaoBtn" style="flex:1;background:rgba(254,229,0,0.1);border:1.5px solid rgba(254,229,0,0.3);border-radius:10px;color:#FEE500;font-family:inherit;font-size:14px;font-weight:700;padding:15px;cursor:pointer;transition:all 0.2s;">💬 카카오 공유</button>'
     + '</div>'
-    + '<button onclick="fsShowScreen(\'fs0\')" style="width:100%;margin-top:8px;background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:rgba(255,255,255,0.4);font-family:inherit;font-size:14px;font-weight:700;padding:13px;cursor:pointer;">다른 가족 구성원도 확인하기</button>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">'
+    + '<button style="background:transparent;border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.5);font-family:inherit;font-size:14px;font-weight:700;padding:13px;cursor:pointer;" onclick="fsShowScreen(' + "'" + 'fs1' + "'" + ')">\ub2e4\ub978 \uc0c1\ud669 \ubcf4\uae30</button>'
+    + '<button style="background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:rgba(255,255,255,0.35);font-family:inherit;font-size:14px;font-weight:700;padding:13px;cursor:pointer;" onclick="fsShowScreen(' + "'" + 'fs0' + "'" + ')">\ub2e4\ub978 \uac00\uc871 \uad6c\uc131\uc6d0\ub3c4 \ud655\uc778\ud558\uae30</button>'
+    + '</div>'
     + '</div>';
 
   var wrap = el('fsCategoryWrap');
@@ -5231,7 +5236,8 @@ document.addEventListener('keydown', function(e) {
   // 모달 열려있으면 메인 앱 키 무시
   var nfOpen = document.getElementById('nfModal') && document.getElementById('nfModal').style.display !== 'none';
   var cmOpen = document.getElementById('cmModal') && document.getElementById('cmModal').style.display !== 'none';
-  if(nfOpen || cmOpen) return;
+  var fsOpen = document.getElementById('fsModal') && document.getElementById('fsModal').style.display !== 'none';
+  if(nfOpen || cmOpen || fsOpen) return;
 
   var isInput = ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)
                && document.activeElement?.type !== 'range';
@@ -5256,6 +5262,9 @@ document.addEventListener('keydown', function(e) {
   // Backspace / ArrowLeft → 뒤로 (슬라이드 중이면 이전 슬라이드)
   if(e.key==='Backspace' || e.key==='ArrowLeft') {
     if(isInput && e.key==='Backspace') return;
+    // fsModal 열려있으면 전체 핸들러 무시 (fsModal 전용 핸들러가 처리)
+    var fsM = document.getElementById('fsModal');
+    if(fsM && fsM.style.display !== 'none') return;
     e.preventDefault();
     if(currentIdx===2 && state.slideIdx > 0) {
       goSlide(state.slideIdx - 1);
@@ -5362,12 +5371,33 @@ function nfCalc() {
   if(t20) t20.textContent = y20;
   var t30 = document.getElementById('nf30y');
   if(t30) t30.textContent = y30;
+  // 국민연금연구원 기준 비교 갭 메시지
+  var gapEl = document.getElementById('nfGapMsg');
+  if(gapEl) {
+    var std = 369; // 여유로운 생활 기준
+    var diff = std - total;
+    if(diff > 0) {
+      gapEl.style.display = 'block';
+      gapEl.textContent = '⚠ 여유로운 생활 기준보다 ' + diff + '만원 부족합니다';
+      gapEl.style.background = 'rgba(224,58,58,0.08)';
+      gapEl.style.borderColor = 'rgba(224,58,58,0.2)';
+      gapEl.style.color = 'rgba(224,58,58,0.9)';
+    } else if(diff < 0) {
+      gapEl.style.display = 'block';
+      gapEl.textContent = '✓ 여유로운 생활 기준을 ' + Math.abs(diff) + '만원 초과합니다';
+      gapEl.style.background = 'rgba(58,184,122,0.08)';
+      gapEl.style.borderColor = 'rgba(58,184,122,0.2)';
+      gapEl.style.color = 'rgba(58,184,122,0.9)';
+    } else {
+      gapEl.style.display = 'none';
+    }
+  }
   // 노후 필요 자금 (90세 기준 25년)
   var needTotal = Math.round(total * 12 * 25 / 10000) * 10000;
   var needEl = document.getElementById('nfNeedTotal');
   if(needEl) {
-    var eok = Math.floor(needTotal / 100000000);
-    var chun = Math.round((needTotal % 100000000) / 10000000);
+    var eok = Math.floor(needTotal / 10000);
+    var chun = Math.round((needTotal % 10000) / 1000);
     needEl.textContent = '약 ' + (chun > 0 ? eok + '억 ' + chun + '천' : eok + '억');
   }
 }
@@ -5507,10 +5537,12 @@ function cmUpdateSlide() {
 
             <!-- 국민연금연구원 기준 -->
             <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:14px;">
-              <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:1px;margin-bottom:10px;">📊 국민연금연구원 2023 기준</div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:13px;color:rgba(255,255,255,0.5);">소박한 일상</span><span style="font-size:15px;font-weight:700;color:#fff;">224만원</span></div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:13px;color:rgba(255,255,255,0.5);">여유로운 생활</span><span style="font-size:15px;font-weight:700;color:#F0A830;">369만원</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:rgba(255,255,255,0.5);">풍요로운 이상</span><span style="font-size:15px;font-weight:700;color:#E24B4A;">500만원+</span></div>
+              <div style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.7);letter-spacing:0.5px;margin-bottom:4px;">📊 국민연금연구원 2023 기준</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:10px;">내가 설정한 금액과 비교해보세요</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="font-size:13px;color:rgba(255,255,255,0.5);">소박한 일상</span><span style="font-size:15px;font-weight:700;color:#fff;">224만원</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px 10px;background:rgba(240,168,48,0.08);border:1px solid rgba(240,168,48,0.2);border-radius:8px;"><span style="font-size:13px;color:#F0A830;font-weight:700;">여유로운 생활</span><span style="font-size:15px;font-weight:700;color:#F0A830;">369만원</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="font-size:13px;color:rgba(255,255,255,0.5);">풍요로운 인생</span><span style="font-size:15px;font-weight:700;color:#E24B4A;">500만원+</span></div>
+              <div id="nfGapMsg" style="margin-top:10px;padding:8px 10px;background:rgba(224,58,58,0.08);border:1px solid rgba(224,58,58,0.15);border-radius:8px;font-size:12px;font-weight:700;color:rgba(224,58,58,0.8);display:none;"></div>
             </div>
           </div>
 
@@ -5534,8 +5566,11 @@ function cmUpdateSlide() {
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;flex:1;min-height:0;overflow:hidden;" id="nfCatGrid"></div>
 
             <!-- 내 노후 생활비 합계 -->
-            <div style="background:linear-gradient(160deg,rgba(30,22,5,0.9),rgba(10,15,30,0.98));border:1px solid rgba(240,168,48,0.2);border-radius:16px;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;">
-              <div style="font-size:22px;font-weight:700;color:rgba(255,255,255,0.7);">내 노후 생활비</div>
+            <div style="background:linear-gradient(160deg,rgba(40,30,5,0.95),rgba(15,20,40,0.98));border:2px solid rgba(240,168,48,0.4);border-radius:16px;padding:20px 28px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 0 24px rgba(240,168,48,0.08);">
+              <div>
+                <div style="font-size:12px;font-weight:700;letter-spacing:2px;color:rgba(240,168,48,0.6);margin-bottom:4px;">MY RETIREMENT COST</div>
+                <div style="font-size:22px;font-weight:800;color:rgba(255,255,255,0.85);">내 노후 생활비</div>
+              </div>
               <div style="text-align:right;">
                 <div style="font-size:52px;font-weight:900;color:#F0A830;letter-spacing:-2px;line-height:1;" id="nfTotal">243</div>
                 <div style="font-size:14px;color:rgba(240,168,48,0.6);">만원 · 연간 <span id="nfAnnual">2,916</span>만원</div>
@@ -5890,8 +5925,8 @@ function cmUpdateSlide() {
 
             <!-- 타이틀 -->
             <div style="text-align:center;margin-bottom:24px;">
-              <div style="font-size:13px;font-weight:700;letter-spacing:3px;color:rgba(58,184,122,0.8);margin-bottom:8px;text-align:center;">케어맵의 장점</div>
-              <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-0.5px;text-align:center;">기존 보험 분석서와 무엇이 다른가요?</div>
+              <div style="font-size:18px;font-weight:800;letter-spacing:2px;color:rgba(58,184,122,0.9);margin-bottom:10px;text-align:center;">케어맵의 장점</div>
+              <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-0.5px;text-align:center;">기존 보장분석과 무엇이 다른가요?</div>
             </div>
 
             <!-- 비교 그리드 -->
@@ -5900,7 +5935,7 @@ function cmUpdateSlide() {
               <!-- Before -->
               <div style="background:rgba(224,53,53,0.05);border:1px solid rgba(224,53,53,0.15);border-radius:14px;padding:22px 24px;">
                 <div style="font-size:14px;font-weight:800;letter-spacing:2px;color:rgba(224,53,53,0.8);margin-bottom:10px;">BEFORE</div>
-                <div style="font-size:22px;font-weight:900;color:rgba(255,255,255,0.7);margin-bottom:20px;">기존 보험사 분석서</div>
+                <div style="font-size:22px;font-weight:900;color:rgba(255,255,255,0.7);margin-bottom:20px;">기존 보험사 보장분석</div>
                 <div style="display:flex;flex-direction:column;gap:14px;">
                   <div style="display:flex;align-items:flex-start;gap:12px;">
                     <div style="width:22px;height:22px;border-radius:50%;background:rgba(224,53,53,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;font-size:12px;">✕</div>
