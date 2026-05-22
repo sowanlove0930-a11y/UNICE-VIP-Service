@@ -1410,6 +1410,15 @@ function cmUpdateSlide() {
   <!-- ② 중앙: 결과 요약 -->
   <div class="center">
 
+    <!-- 수술/간병 모드 안내 배너 -->
+    <div id="surgModeBanner" style="display:none;background:linear-gradient(135deg,rgba(56,189,248,.12),rgba(56,189,248,.05));border-bottom:1.5px solid rgba(56,189,248,.25);padding:12px 24px;flex-shrink:0;display:none;align-items:center;gap:14px;">
+      <div style="font-size:22px;flex-shrink:0;">✂️</div>
+      <div>
+        <div style="font-size:14px;font-weight:900;color:#4FC3F7;margin-bottom:2px;">수술·간병 비교 모드</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.5);">손보10사 · 40세 기준으로 전환됐습니다. 수술/간병 담보를 해제하면 원래 화면으로 돌아갑니다.</div>
+      </div>
+    </div>
+
     <!-- 1존: 비교 존 -->
     <div class="cmp-zone" id="triZone">
       <div class="cmp-label">📋 개별 가입시 보험료 비교</div>
@@ -3256,7 +3265,8 @@ function setSumLabels(a,b,c,d){
 
 function getRows(){
   var g=S.gender, a=S.age, e=S.exam;
-  /* 수술/간병 담보 ON 시 DCOMP(손보10사,40세) */
+
+  /* 수술/간병 담보 ON 시 → 무조건 DCOMP 손보10사 40세 기준 */
   if(S.useSurg||S.useNsurg||S.useCare){
     return DCOMP[g]||DCOMP.M;
   }
@@ -3329,18 +3339,20 @@ function renderCheapBar(rows){
   /* ── 수술/간병 ON 시: surg/nsurg/care 최저가 표시 ── */
   if(S.useSurg||S.useNsurg||S.useCare){
     bar.classList.remove('hidden');
+    /* 수술/간병은 항상 DCOMP에서 최저가 직접 참조 */
+    var dcompB=DCOMP[S.gender]||DCOMP.M;
     var surgItems=[];
     if(S.useSurg){
-      var bySurg=rows.reduce(function(a,r){return (r.surg!=null&&r.surg<(a.surg||Infinity))?r:a;},rows[0]);
-      surgItems.push({icon:'✂️',type:'5종수술비',co:bySurg.co,price:bySurg.surg||0,color:'var(--c-brain)',glow:'rgba(56,189,248,.75)'});
+      var bySurgB=dcompB.reduce(function(a,r){return (r.surg||0)<(a.surg||Infinity)?r:a;},dcompB[0]);
+      surgItems.push({icon:'✂️',type:'5종수술비',co:bySurgB.co,price:bySurgB.surg||0,color:'var(--c-brain)',glow:'rgba(56,189,248,.75)'});
     }
     if(S.useNsurg){
-      var byNsurg=rows.reduce(function(a,r){return (r.nsurg!=null&&r.nsurg<(a.nsurg||Infinity))?r:a;},rows[0]);
-      surgItems.push({icon:'🔧',type:'N대수술비',co:byNsurg.co,price:byNsurg.nsurg||0,color:'var(--c-heart)',glow:'rgba(192,132,252,.75)'});
+      var byNsurgB=dcompB.reduce(function(a,r){return (r.nsurg||0)<(a.nsurg||Infinity)?r:a;},dcompB[0]);
+      surgItems.push({icon:'🔧',type:'N대수술비',co:byNsurgB.co,price:byNsurgB.nsurg||0,color:'var(--c-heart)',glow:'rgba(192,132,252,.75)'});
     }
     if(S.useCare){
-      var byCare=rows.reduce(function(a,r){return (r.care!=null&&r.care<(a.care||Infinity))?r:a;},rows[0]);
-      surgItems.push({icon:'🏥',type:'간병인 일당',co:byCare.co,price:byCare.care||0,color:'var(--c-cancer)',glow:'rgba(255,107,122,.75)'});
+      var byCareB=dcompB.reduce(function(a,r){return (r.care||0)<(a.care||Infinity)?r:a;},dcompB[0]);
+      surgItems.push({icon:'🏥',type:'간병인 일당',co:byCareB.co,price:byCareB.care||0,color:'var(--c-cancer)',glow:'rgba(255,107,122,.75)'});
     }
     /* 3대질병 선택 시 함께 표시 */
     var hasDiag=S.useCancer||S.useBrain||S.useHeart;
@@ -3533,6 +3545,12 @@ function ugobiCheckPw(){
   }catch(e){}
 })();
 function render(){
+  /* 수술/간병 모드 배너 */
+  var banner=document.getElementById('surgModeBanner');
+  if(banner){
+    var isComp=S.useSurg||S.useNsurg||S.useCare;
+    banner.style.display=isComp?'flex':'none';
+  }
   if(isAllOff()){ renderEmpty(); return; }
   if(S.mode==='premium') renderPremium();
   else                   renderCoverage();
@@ -3617,29 +3635,117 @@ function renderCoverage(){
     var comboCosEl=$('heroComboCos');
     if(comboCosEl && combo){
       comboCosEl.innerHTML='';
-      combo.cos.forEach(function(c){
-        var pnm=PNAMES[c.co]||'';
-        var subTotal=c.items.reduce(function(s,x){return s+x.price;},0);
-        var allLabels=c.items.map(function(x){return x.label;}).join(' ');
-        var accentColor,bgColor,borderColor;
-        if(allLabels.indexOf('뇌혈관')>=0){
-          accentColor='var(--c-brain)';bgColor='rgba(56,189,248,.08)';borderColor='rgba(56,189,248,.25)';
-        } else if(allLabels.indexOf('허혈')>=0){
-          accentColor='var(--c-heart)';bgColor='rgba(192,132,252,.08)';borderColor='rgba(192,132,252,.25)';
-        } else {
-          accentColor='var(--c-cancer)';bgColor='rgba(255,107,122,.08)';borderColor='rgba(255,107,122,.25)';
+      var useComp=S.useSurg||S.useNsurg||S.useCare;
+
+      /* ── 수술/간병 ON: 섹션 분리형 ── */
+      if(useComp){
+        /* 섹션1: 3대질병 복합설계 */
+        var hasDiag=S.useCancer||S.useBrain||S.useHeart;
+        if(hasDiag && combo.cos.length>0){
+          var sec1=document.createElement('div');
+          sec1.style.cssText='font-size:11px;font-weight:800;color:rgba(255,255,255,.4);letter-spacing:1.5px;margin:6px 0 6px 4px;';
+          sec1.textContent='3대질병 복합설계';
+          comboCosEl.appendChild(sec1);
+          combo.cos.forEach(function(c){
+            var pnm=PNAMES[c.co]||'';
+            var subTotal=c.items.reduce(function(s,x){return s+x.price;},0);
+            var allLabels=c.items.map(function(x){return x.label;}).join(' ');
+            var accentColor,bgColor,borderColor;
+            if(allLabels.indexOf('뇌혈관')>=0){accentColor='var(--c-brain)';bgColor='rgba(56,189,248,.07)';borderColor='rgba(56,189,248,.2)';}
+            else if(allLabels.indexOf('허혈')>=0){accentColor='var(--c-heart)';bgColor='rgba(192,132,252,.07)';borderColor='rgba(192,132,252,.2)';}
+            else{accentColor='var(--c-cancer)';bgColor='rgba(255,107,122,.07)';borderColor='rgba(255,107,122,.2)';}
+            var badgesHtml=c.items.map(function(x){
+              return '<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:5px;'+
+                     'background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);'+
+                     'font-size:14px;font-weight:700;color:rgba(255,255,255,.85);margin-right:5px;">'+x.label+'</span>';
+            }).join('');
+            var row=document.createElement('div');
+            row.className='hero-combo-row';
+            row.style.cssText='background:'+bgColor+';border-color:'+borderColor+';border-left-width:4px;border-left-color:'+accentColor+';';
+            row.innerHTML='<div class="hero-combo-head">'+
+              '<div class="hero-combo-left">'+
+                '<span class="hero-combo-co" style="color:'+accentColor+';">'+c.co+'</span>'+
+                (pnm?'<span class="hero-combo-prod">'+pnm+'</span>':'')+
+                '<span class="hero-combo-badges">'+badgesHtml+'</span>'+
+              '</div>'+
+              '<div class="hero-combo-price">'+subTotal.toLocaleString()+'원</div>'+
+            '</div>';
+            comboCosEl.appendChild(row);
+          });
         }
-        var badgesHtml=c.items.map(function(x){
-          return '<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:5px;'+
-                 'background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);'+
-                 'font-size:14px;font-weight:700;color:rgba(255,255,255,.85);margin-right:5px;">'+
-                 x.label+'</span>';
-        }).join('');
-        var row=document.createElement('div');
-        row.className='hero-combo-row';
-        row.style.cssText='background:'+bgColor+';border-color:'+borderColor+';border-left-width:4px;border-left-color:'+accentColor+';';
-        row.innerHTML=
-          '<div class="hero-combo-head">'+
+
+        /* 섹션2: 수술·간병 최저가 */
+        /* 수술/간병은 항상 DCOMP에서 최저가 회사 직접 참조 */
+        var dcomp2=DCOMP[S.gender]||DCOMP.M;
+        var surgRows=[];
+        if(S.useSurg){
+          var bySurg=dcomp2.reduce(function(a,r){return (r.surg||0)<(a.surg||Infinity)?r:a;},dcomp2[0]);
+          surgRows.push({co:bySurg.co,label:'✂️ 5종수술비',price:bySurg.surg||0,color:'var(--c-brain)'});
+        }
+        if(S.useNsurg){
+          var byNsurg=dcomp2.reduce(function(a,r){return (r.nsurg||0)<(a.nsurg||Infinity)?r:a;},dcomp2[0]);
+          surgRows.push({co:byNsurg.co,label:'🔧 N대수술비',price:byNsurg.nsurg||0,color:'var(--c-heart)'});
+        }
+        if(S.useCare){
+          var byCare2=dcomp2.reduce(function(a,r){return (r.care||0)<(a.care||Infinity)?r:a;},dcomp2[0]);
+          surgRows.push({co:byCare2.co,label:'🏥 간병인 일당',price:byCare2.care||0,color:'#F0A830'});
+        }
+        if(surgRows.length>0){
+          /* 구분선 */
+          var divLine=document.createElement('div');
+          divLine.style.cssText='height:1px;background:rgba(255,255,255,.07);margin:10px 0 8px;';
+          comboCosEl.appendChild(divLine);
+          var sec2=document.createElement('div');
+          sec2.style.cssText='font-size:11px;font-weight:800;color:rgba(255,255,255,.4);letter-spacing:1.5px;margin:0 0 6px 4px;';
+          sec2.textContent='수술·간병 최저가';
+          comboCosEl.appendChild(sec2);
+          surgRows.forEach(function(sr){
+            var pnm=PNAMES[sr.co]||'';
+            var row=document.createElement('div');
+            row.className='hero-combo-row';
+            row.style.cssText='background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.1);border-left-width:4px;border-left-color:'+sr.color+';';
+            row.innerHTML='<div class="hero-combo-head">'+
+              '<div class="hero-combo-left">'+
+                '<span class="hero-combo-co" style="color:'+sr.color+';">'+sr.co+'</span>'+
+                (pnm?'<span class="hero-combo-prod">'+pnm+'</span>':'')+
+                '<span class="hero-combo-badges"><span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);font-size:14px;font-weight:700;color:rgba(255,255,255,.8);margin-right:5px;">'+sr.label+'</span></span>'+
+              '</div>'+
+              '<div class="hero-combo-price">'+sr.price.toLocaleString()+'원</div>'+
+            '</div>';
+            comboCosEl.appendChild(row);
+          });
+
+          /* 합산 총액 */
+          var surgTotal=surgRows.reduce(function(s,r){return s+r.price;},0);
+          var diagTotal=combo?combo.total:0;
+          var grandTotal=diagTotal+surgTotal;
+          var sumDiv=document.createElement('div');
+          sumDiv.style.cssText='margin-top:10px;padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;display:flex;justify-content:space-between;align-items:center;';
+          sumDiv.innerHTML=
+            '<span style="font-size:13px;font-weight:700;color:rgba(255,255,255,.55);">월 합산 보험료</span>'+
+            '<span style="font-size:20px;font-weight:900;color:var(--gold);">'+grandTotal.toLocaleString()+'원</span>';
+          comboCosEl.appendChild(sumDiv);
+        }
+
+      /* ── 기존: 수술/간병 OFF ── */
+      } else {
+        combo.cos.forEach(function(c){
+          var pnm=PNAMES[c.co]||'';
+          var subTotal=c.items.reduce(function(s,x){return s+x.price;},0);
+          var allLabels=c.items.map(function(x){return x.label;}).join(' ');
+          var accentColor,bgColor,borderColor;
+          if(allLabels.indexOf('뇌혈관')>=0){accentColor='var(--c-brain)';bgColor='rgba(56,189,248,.08)';borderColor='rgba(56,189,248,.25)';}
+          else if(allLabels.indexOf('허혈')>=0){accentColor='var(--c-heart)';bgColor='rgba(192,132,252,.08)';borderColor='rgba(192,132,252,.25)';}
+          else{accentColor='var(--c-cancer)';bgColor='rgba(255,107,122,.08)';borderColor='rgba(255,107,122,.25)';}
+          var badgesHtml=c.items.map(function(x){
+            return '<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:5px;'+
+                   'background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);'+
+                   'font-size:14px;font-weight:700;color:rgba(255,255,255,.85);margin-right:5px;">'+x.label+'</span>';
+          }).join('');
+          var row=document.createElement('div');
+          row.className='hero-combo-row';
+          row.style.cssText='background:'+bgColor+';border-color:'+borderColor+';border-left-width:4px;border-left-color:'+accentColor+';';
+          row.innerHTML='<div class="hero-combo-head">'+
             '<div class="hero-combo-left">'+
               '<span class="hero-combo-co" style="color:'+accentColor+';">'+c.co+'</span>'+
               (pnm?'<span class="hero-combo-prod">'+pnm+'</span>':'')+
@@ -3647,8 +3753,9 @@ function renderCoverage(){
             '</div>'+
             '<div class="hero-combo-price">'+subTotal.toLocaleString()+'원</div>'+
           '</div>';
-        comboCosEl.appendChild(row);
-      });
+          comboCosEl.appendChild(row);
+        });
+      }
     }
 
     var badges=$('heroBadges');
@@ -3867,31 +3974,89 @@ var covRowMap={useCancer:'cancerRow',usePseudo:'pseudoRow',useBrain:'brainRow',u
 });
 
 /* 추가담보 토글 버튼 */
+/* 암뇌심 상태 저장소 */
+var savedDiagState = null;
+
+function saveDiagState(){
+  savedDiagState = {
+    useCancer: S.useCancer, cancer: S.cancer,
+    usePseudo: S.usePseudo, pseudo: S.pseudo,
+    useBrain:  S.useBrain,  brain:  S.brain,
+    useHeart:  S.useHeart,  heart:  S.heart
+  };
+}
+
+function clearDiagForSurg(){
+  /* 암뇌심 상태값 해제 */
+  S.useCancer=false; S.usePseudo=false;
+  S.useBrain=false;  S.useHeart=false;
+  /* UI: cov-hdr 버튼 off + cover-item cov-off 추가 */
+  var pairs=[
+    {btn:'btnCancer', ci:'ci-cancer'},
+    {btn:'btnPseudo', ci:'ci-pseudo'},
+    {btn:'btnBrain',  ci:'ci-brain'},
+    {btn:'btnHeart',  ci:'ci-heart'}
+  ];
+  pairs.forEach(function(p){
+    var btn=$(p.btn); if(btn) btn.classList.remove('on');
+    var ci=$(p.ci);  if(ci)  ci.classList.add('cov-off');
+  });
+}
+
+function restoreDiagState(){
+  if(!savedDiagState) return;
+  S.useCancer=savedDiagState.useCancer; S.cancer=savedDiagState.cancer;
+  S.usePseudo=savedDiagState.usePseudo; S.pseudo=savedDiagState.pseudo;
+  S.useBrain =savedDiagState.useBrain;  S.brain =savedDiagState.brain;
+  S.useHeart =savedDiagState.useHeart;  S.heart =savedDiagState.heart;
+  savedDiagState=null;
+  /* UI: cov-hdr 버튼 on/off + cov-off 복원 */
+  var pairs=[
+    {key:'useCancer', btn:'btnCancer', ci:'ci-cancer'},
+    {key:'usePseudo', btn:'btnPseudo', ci:'ci-pseudo'},
+    {key:'useBrain',  btn:'btnBrain',  ci:'ci-brain'},
+    {key:'useHeart',  btn:'btnHeart',  ci:'ci-heart'}
+  ];
+  pairs.forEach(function(p){
+    var btn=$(p.btn); if(btn) btn.classList.toggle('on', S[p.key]);
+    var ci=$(p.ci);  if(ci)  ci.classList.toggle('cov-off', !S[p.key]);
+  });
+}
+
 var btnSurg=$('btnSurg');
 if(btnSurg){
   btnSurg.addEventListener('click',function(){
+    var wasCompOff=!S.useSurg&&!S.useNsurg&&!S.useCare; /* 토글 전 체크 */
     S.useSurg=!S.useSurg;
     btnSurg.classList.toggle('on',S.useSurg);
-    applyRestrictions();
-    render();
+    var isCompOn=S.useSurg||S.useNsurg||S.useCare;
+    if(S.useSurg && wasCompOff){ saveDiagState(); clearDiagForSurg(); }
+    else if(!isCompOn){ restoreDiagState(); }
+    applyRestrictions(); render();
   });
 }
 var btnNsurg=$('btnNsurg');
 if(btnNsurg){
   btnNsurg.addEventListener('click',function(){
+    var wasCompOff=!S.useSurg&&!S.useNsurg&&!S.useCare;
     S.useNsurg=!S.useNsurg;
     btnNsurg.classList.toggle('on',S.useNsurg);
-    applyRestrictions();
-    render();
+    var isCompOn=S.useSurg||S.useNsurg||S.useCare;
+    if(S.useNsurg && wasCompOff){ saveDiagState(); clearDiagForSurg(); }
+    else if(!isCompOn){ restoreDiagState(); }
+    applyRestrictions(); render();
   });
 }
 var btnCare=$('btnCare');
 if(btnCare){
   btnCare.addEventListener('click',function(){
+    var wasCompOff=!S.useSurg&&!S.useNsurg&&!S.useCare;
     S.useCare=!S.useCare;
     btnCare.classList.toggle('on',S.useCare);
-    applyRestrictions();
-    render();
+    var isCompOn=S.useSurg||S.useNsurg||S.useCare;
+    if(S.useCare && wasCompOff){ saveDiagState(); clearDiagForSurg(); }
+    else if(!isCompOn){ restoreDiagState(); }
+    applyRestrictions(); render();
   });
 }
 
@@ -3910,6 +4075,8 @@ function toggleMode(){
 function applyRestrictions(){
   var exam=S.exam;
   var useComp=S.useSurg||S.useNsurg||S.useCare;
+  /* 수술/간병 ON이면 항상 40세·일반심사 고정 */
+  var forceAge40=useComp;
   var ageRow=$('ageRow');
   var coverItems=document.querySelectorAll('.cover-item');
   var presetBtns=document.querySelectorAll('#preEco,#preStd,#prePrem');
@@ -3919,8 +4086,8 @@ function applyRestrictions(){
   ageRow.querySelectorAll('[data-v]').forEach(function(btn){ btn.disabled=false; });
   $('examRow').querySelectorAll('[data-v]').forEach(function(btn){ btn.disabled=false; });
 
-  if(useComp){
-    /* 수술/간병 ON: 40세 · 일반심사 고정 */
+  if(forceAge40){
+    /* 수술/간병 ON + 3대질병 OFF: 40세 · 일반심사 고정 */
     ageRow.querySelectorAll('[data-v]').forEach(function(btn){
       if(btn.dataset.v!=='40') btn.disabled=true;
     });
@@ -3954,9 +4121,18 @@ function applyRestrictions(){
   var stRow=$('simpleTypeRow');
   if(stRow){ stRow.classList.toggle('hidden', S.exam!=='simple'); }
 
-  /* 수술·간병 40세 안내 */
+  /* 수술·간병 안내 */
   var note=$('addonAgeNote');
-  if(note){ note.classList.toggle('hidden', !useComp); }
+  if(note){
+    note.classList.toggle('hidden', !useComp);
+    if(useComp){
+      if(forceAge40){
+        note.innerHTML='<span style="color:rgba(255,184,48,.9);">⚠️</span> 수술/간병 선택 시 손보10사 · <strong>40세</strong> 기준으로 비교됩니다';
+      } else {
+        note.innerHTML='<span style="color:rgba(56,189,248,.9);">ℹ️</span> 수술/간병은 <strong>손보10사 최저가</strong>로 자동 추가됩니다 (40세 기준)';
+      }
+    }
+  }
 
   /* ── 2. 담보 조정 버튼 제한 ── */
   coverItems.forEach(function(el){ el.style.opacity='1'; });
