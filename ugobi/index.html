@@ -3325,6 +3325,62 @@ function bestCombo(rows){
 /* ── 담보별 최저가 바 ── */
 function renderCheapBar(rows){
   var bar=$('cheapBar'); if(!bar) return;
+
+  /* ── 수술/간병 ON 시: surg/nsurg/care 최저가 표시 ── */
+  if(S.useSurg||S.useNsurg||S.useCare){
+    bar.classList.remove('hidden');
+    var surgItems=[];
+    if(S.useSurg){
+      var bySurg=rows.reduce(function(a,r){return (r.surg!=null&&r.surg<(a.surg||Infinity))?r:a;},rows[0]);
+      surgItems.push({icon:'✂️',type:'5종수술비',co:bySurg.co,price:bySurg.surg||0,color:'var(--c-brain)',glow:'rgba(56,189,248,.75)'});
+    }
+    if(S.useNsurg){
+      var byNsurg=rows.reduce(function(a,r){return (r.nsurg!=null&&r.nsurg<(a.nsurg||Infinity))?r:a;},rows[0]);
+      surgItems.push({icon:'🔧',type:'N대수술비',co:byNsurg.co,price:byNsurg.nsurg||0,color:'var(--c-heart)',glow:'rgba(192,132,252,.75)'});
+    }
+    if(S.useCare){
+      var byCare=rows.reduce(function(a,r){return (r.care!=null&&r.care<(a.care||Infinity))?r:a;},rows[0]);
+      surgItems.push({icon:'🏥',type:'간병인 일당',co:byCare.co,price:byCare.care||0,color:'var(--c-cancer)',glow:'rgba(255,107,122,.75)'});
+    }
+    /* 3대질병 선택 시 함께 표시 */
+    var hasDiag=S.useCancer||S.useBrain||S.useHeart;
+    if(hasDiag){
+      if(S.useCancer){
+        var byCancer=rows.reduce(function(a,r){return r.cancer<a.cancer?r:a;},rows[0]);
+        surgItems.unshift({icon:'🎯',type:'암 진단비',co:byCancer.co,price:Math.round(byCancer.cancer*S.cancer),color:'var(--c-cancer)',glow:'rgba(255,107,122,.75)'});
+      }
+      if(S.useBrain){
+        var byBrain=rows.reduce(function(a,r){return r.brain<a.brain?r:a;},rows[0]);
+        surgItems.push({icon:'🧠',type:'뇌혈관 진단비',co:byBrain.co,price:Math.round(byBrain.brain*S.brain),color:'var(--c-brain)',glow:'rgba(56,189,248,.75)'});
+      }
+      if(S.useHeart){
+        var byHeart=rows.reduce(function(a,r){return r.heart<a.heart?r:a;},rows[0]);
+        surgItems.push({icon:'❤️',type:'허혈성 진단비',co:byHeart.co,price:Math.round(byHeart.heart*S.heart),color:'var(--c-heart)',glow:'rgba(192,132,252,.75)'});
+      }
+    }
+    bar.innerHTML='<div class="cheap-section-label">🏅 담보별 최저가</div><div class="cheap-grid"></div>';
+    var grid=bar.querySelector('.cheap-grid');
+    surgItems.forEach(function(it){
+      var pnm=PNAMES[it.co]||'';
+      var card=document.createElement('div');
+      card.className='cheap-card';
+      card.style.borderLeftColor=it.color;
+      card.innerHTML=
+        '<div class="cheap-card-head">'+
+          '<div class="cheap-card-head-left">'+
+            '<span class="cheap-card-icon">'+it.icon+'</span>'+
+            '<span class="cheap-card-type" style="color:'+it.color+'">'+it.type+'</span>'+
+          '</div>'+
+          '<div class="cheap-card-price" style="color:'+it.color+';text-shadow:0 0 20px '+it.glow+',0 0 40px '+it.glow.replace('.75','.35')+'">'+it.price.toLocaleString()+'원</div>'+
+        '</div>'+
+        '<div class="cheap-card-co" style="color:'+it.color+'">'+it.co+'</div>'+
+        (pnm?'<div class="cheap-card-prod">'+pnm+'</div>':'');
+      grid.appendChild(card);
+    });
+    return;
+  }
+
+  /* ── 기존: 3대질병 최저가 ── */
   var hasPrices=rows.length>0 && rows[0].cancer!==undefined;
   if(!hasPrices){bar.classList.add('hidden');return;}
   var byCancer=rows[0],byPseudo=rows[0],byBrain=rows[0],byHeart=rows[0];
