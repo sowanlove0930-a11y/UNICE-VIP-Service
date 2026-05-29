@@ -378,17 +378,19 @@ function drawNearby(lat, lng) {
     var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
     markers.push(marker);
 
-    // 이름 오버레이 (클릭 가능)
+    // 이름 오버레이 (클릭 가능 - 큰 클릭 영역)
     var labelEl = document.createElement('div');
-    labelEl.style.cssText = 'background:rgba(13,22,40,.85);border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+    labelEl.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
     labelEl.textContent = c.name;
     (function(customer, distance){
-      labelEl.addEventListener('click', function(){ showPopup(customer, distance); });
+      function fire(e){ if(e){ e.preventDefault(); e.stopPropagation(); } console.log('[NEARBY] 라벨 클릭:', customer.name); showPopup(customer, distance); }
+      labelEl.addEventListener('click', fire);
+      labelEl.addEventListener('touchstart', fire);
     })(c, dist);
     var nameOverlay = new kakao.maps.CustomOverlay({
       position: pos,
       content: labelEl,
-      yAnchor: 3.2,
+      yAnchor: 3.0,
       clickable: true
     });
     nameOverlay.setMap(kakaoMap);
@@ -396,6 +398,7 @@ function drawNearby(lat, lng) {
     // 마커 클릭 이벤트
     (function(customer, distance, markerEl){
       kakao.maps.event.addListener(markerEl, 'click', function() {
+        console.log('[NEARBY] 마커 클릭:', customer.name);
         showPopup(customer, distance);
       });
     })(c, dist, marker);
@@ -403,6 +406,17 @@ function drawNearby(lat, lng) {
 
   document.getElementById('clist').innerHTML = listHtml;
   window._nearbyList = nearby;
+
+  // 리스트 항목에 클릭 이벤트 직접 등록 (onclick 속성 의존 제거)
+  nearby.forEach(function(item, idx){
+    var el = document.getElementById('citem_'+idx);
+    if(el){
+      el.style.cursor = 'pointer';
+      (function(i){
+        el.addEventListener('click', function(){ selectCustomer(i); });
+      })(idx);
+    }
+  });
 }
 
 // ── 고객 선택 ────────────────────────────────────────
