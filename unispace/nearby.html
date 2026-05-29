@@ -243,6 +243,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           <span class="rp-slot-text" id="rpToText">고객 핀 또는 지도 선택</span>
           <button type="button" class="rp-clear" id="rpToClear" style="display:none">✕</button>
         </div>
+        <button type="button" class="rp-myloc" id="rpToMyLoc">📍 내위치</button>
         <button type="button" class="rp-mapsel" id="rpToMapSel" title="지도에서 선택">🗺️</button>
       </div>
       <input type="text" class="rp-input" id="rpToInput" placeholder="주소 직접 입력">
@@ -447,18 +448,10 @@ window.addEventListener('DOMContentLoaded', function() {
 
   // 길찾기 패널 이벤트
   var rpMyLoc = document.getElementById('rpMyLoc');
-  if(rpMyLoc) rpMyLoc.addEventListener('click', function(){
-    if(!navigator.geolocation){ alert('위치 정보를 지원하지 않는 브라우저입니다.'); return; }
-    rpMyLoc.textContent = '⏳';
-    navigator.geolocation.getCurrentPosition(function(pos){
-      panelFrom = { name:'내 현재 위치', lat:String(pos.coords.latitude), lng:String(pos.coords.longitude) };
-      rpMyLoc.textContent = '📍 내위치';
-      renderRoutePanel();
-    }, function(){
-      rpMyLoc.textContent = '📍 내위치';
-      alert('위치를 가져올 수 없습니다. 브라우저 위치 권한을 확인해주세요.');
-    }, { enableHighAccuracy:true, timeout:10000 });
-  });
+  if(rpMyLoc) rpMyLoc.addEventListener('click', function(){ getMyLocForPanel('from', rpMyLoc); });
+
+  var rpToMyLoc = document.getElementById('rpToMyLoc');
+  if(rpToMyLoc) rpToMyLoc.addEventListener('click', function(){ getMyLocForPanel('to', rpToMyLoc); });
 
   var rpFromClear = document.getElementById('rpFromClear');
   if(rpFromClear) rpFromClear.addEventListener('click', function(){ panelFrom=null; renderRoutePanel(); });
@@ -912,6 +905,44 @@ function renderSelectedCustomerCard(c, dist) {
 
 // ── 팝업 출발/도착 버튼 상태 갱신 (더 이상 팝업에 없음, 유지만) ──
 function updateRouteStatus() {}
+
+// ── 패널 내위치 설정 ─────────────────────────────────
+function getMyLocForPanel(type, btn) {
+  if(!navigator.geolocation){ alert('위치 정보를 지원하지 않는 브라우저입니다.'); return; }
+  var origText = btn ? btn.textContent : '';
+  if(btn) btn.textContent = '⏳';
+
+  function applyLoc(lat, lng) {
+    var obj = { name:'내 현재 위치', lat:String(lat), lng:String(lng) };
+    if(type === 'from') panelFrom = obj; else panelTo = obj;
+    if(btn) btn.textContent = origText;
+    renderRoutePanel();
+  }
+
+  function onError(err) {
+    if(err.code === 1) {
+      // 권한 거부 - 재시도 없이 안내
+      if(btn) btn.textContent = origText;
+      alert('위치 권한이 거부됐습니다.\n브라우저 주소창 옆 자물쇠 → 위치 허용으로 변경 후 다시 시도하세요.');
+    } else {
+      // GPS 실패 → 저정밀도로 재시도
+      navigator.geolocation.getCurrentPosition(
+        function(pos){ applyLoc(pos.coords.latitude, pos.coords.longitude); },
+        function(){
+          if(btn) btn.textContent = origText;
+          alert('위치를 가져올 수 없습니다. 잠시 후 다시 시도해주세요.');
+        },
+        { enableHighAccuracy:false, timeout:10000, maximumAge:60000 }
+      );
+    }
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos){ applyLoc(pos.coords.latitude, pos.coords.longitude); },
+    onError,
+    { enableHighAccuracy:true, timeout:8000, maximumAge:0 }
+  );
+}
 
 // ── 지도 선택 모드 ───────────────────────────────────
 function enterMapSelectMode(type) {
