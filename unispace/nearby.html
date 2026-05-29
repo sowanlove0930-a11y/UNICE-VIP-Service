@@ -118,7 +118,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .ev-section-label-event{color:#E8C97A;}
 .ev-section-label-custom{color:#A78BFA;}
 /* 선택 고객 카드 */
-.selected-customer-card{border-top:1px solid var(--bdr);padding:10px 14px;background:rgba(255,255,255,.02);flex-shrink:0;}
+.selected-customer-card{margin-top:8px;}
+.scc-divider{border:none;border-top:1px solid rgba(255,255,255,.07);margin-bottom:10px;}
 .scc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
 .scc-info{display:flex;align-items:center;gap:6px;}
 .scc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
@@ -128,9 +129,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .scc-btns{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
 .scc-btn{padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;transition:all .2s;}
 .scc-from{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);color:#60A5FA;}
-.scc-from.active{background:rgba(59,130,246,.3);color:#fff;}
+.scc-from:hover{background:rgba(59,130,246,.22);}
 .scc-to{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#F87171;}
-.scc-to.active{background:rgba(239,68,68,.3);color:#fff;}
+.scc-to:hover{background:rgba(239,68,68,.2);}
 /* 계약 요약 */
 .popup-contracts{margin-bottom:2px;}
 .pc-item{background:rgba(255,255,255,.04);border-radius:7px;padding:6px 8px;margin-bottom:4px;font-size:11px;}
@@ -216,22 +217,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <div class="clist" id="clist"><div class="empty">🔍 주소를 검색해주세요</div></div>
 
     <!-- 선택 고객 카드 -->
-    <div class="selected-customer-card" id="selectedCustomerCard" style="display:none">
-      <div class="scc-header">
-        <div class="scc-info">
-          <div class="scc-dot" id="sccDot"></div>
-          <span class="scc-name" id="sccName"></span>
-          <span class="scc-tag" id="sccTag"></span>
-        </div>
-        <span class="scc-dist" id="sccDist"></span>
-      </div>
-      <div class="scc-btns">
-        <button type="button" class="scc-btn scc-from" id="sccFrom">🚩 출발지로</button>
-        <button type="button" class="scc-btn scc-to" id="sccTo">🏁 도착지로</button>
-      </div>
-    </div>
-
-    <!-- 길찾기 섹션 -->
     <div class="route-panel" id="routePanel">
       <div class="rp-title">🗺️ 길찾기</div>
 
@@ -268,6 +253,23 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <a class="rp-nav-btn" id="rpWalk" href="#" target="_blank">🚶<span>도보</span></a>
       </div>
       <div class="rp-hint" id="rpHint">출발지·도착지 설정 후 활성화</div>
+
+      <!-- 선택 고객 카드 — 길찾기 섹션 최하단 -->
+      <div class="selected-customer-card" id="selectedCustomerCard" style="display:none">
+        <div class="scc-divider"></div>
+        <div class="scc-header">
+          <div class="scc-info">
+            <div class="scc-dot" id="sccDot"></div>
+            <span class="scc-name" id="sccName"></span>
+            <span class="scc-tag" id="sccTag"></span>
+          </div>
+          <span class="scc-dist" id="sccDist"></span>
+        </div>
+        <div class="scc-btns">
+          <button type="button" class="scc-btn scc-from" id="sccFrom">🚩 출발지로</button>
+          <button type="button" class="scc-btn scc-to" id="sccTo">🏁 도착지로</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -422,9 +424,10 @@ window.addEventListener('DOMContentLoaded', function() {
     if(!selectedPanelCustomer || !selectedPanelCustomer.lat) return;
     var c = selectedPanelCustomer;
     panelFrom = { name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' };
-    document.getElementById('sccFrom').className = 'scc-btn scc-from active';
-    document.getElementById('sccTo').className   = 'scc-btn scc-to';
     renderRoutePanel();
+    var card = document.getElementById('selectedCustomerCard');
+    if(card) card.style.display = 'none';
+    selectedPanelCustomer = null;
   });
 
   var sccTo = document.getElementById('sccTo');
@@ -432,9 +435,10 @@ window.addEventListener('DOMContentLoaded', function() {
     if(!selectedPanelCustomer || !selectedPanelCustomer.lat) return;
     var c = selectedPanelCustomer;
     panelTo = { name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' };
-    document.getElementById('sccTo').className   = 'scc-btn scc-to active';
-    document.getElementById('sccFrom').className = 'scc-btn scc-from';
     renderRoutePanel();
+    var card = document.getElementById('selectedCustomerCard');
+    if(card) card.style.display = 'none';
+    selectedPanelCustomer = null;
   });
 
   // 내 위치 버튼
@@ -900,11 +904,10 @@ function renderSelectedCustomerCard(c, dist) {
   if(tag)  { tag.textContent = c.customerType||''; tag.style.background = tagBg; tag.style.color = tagColor; }
   if(dstEl) dstEl.textContent = distStr;
 
-  // 버튼 활성 상태 반영
   var sf = document.getElementById('sccFrom');
   var st = document.getElementById('sccTo');
-  if(sf) sf.className = 'scc-btn scc-from' + (panelFrom && panelFrom.name===c.name?' active':'');
-  if(st) st.className = 'scc-btn scc-to'   + (panelTo   && panelTo.name===c.name?' active':'');
+  if(sf) sf.className = 'scc-btn scc-from';
+  if(st) st.className = 'scc-btn scc-to';
 }
 
 // ── 팝업 출발/도착 버튼 상태 갱신 (더 이상 팝업에 없음, 유지만) ──
