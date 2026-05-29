@@ -57,15 +57,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .map-wrap{flex:1;position:relative;}
 #kakaoMap{width:100%;height:100%;}
 
-/* API 키 안내 배너 */
-.api-banner{position:absolute;inset:0;background:var(--bg3);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;gap:12px;padding:30px;}
-.api-title{font-size:16px;font-weight:800;color:var(--gold2);}
-.api-sub{font-size:13px;color:var(--text2);text-align:center;line-height:1.7;}
-.api-input{width:100%;max-width:340px;padding:10px 14px;background:rgba(255,255,255,.05);border:1px solid var(--bdr2);border-radius:10px;color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif;text-align:center;}
-.api-btn{padding:10px 28px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;cursor:pointer;}
-.api-link{font-size:11px;color:#60A5FA;text-decoration:none;}
-.api-link:hover{text-decoration:underline;}
-
 /* 팝업 */
 .map-popup{position:absolute;background:rgba(13,22,40,.96);border:1px solid var(--bdr2);border-radius:14px;padding:0;min-width:230px;max-width:260px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.6);display:none;overflow:hidden;}
 .drag-handle{background:rgba(255,255,255,.04);padding:8px 14px 6px;cursor:grab;user-select:none;border-bottom:1px solid rgba(255,255,255,.06);}
@@ -174,15 +165,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
   <!-- 지도 -->
   <div class="map-wrap">
-    <!-- API 키 안내 배너 -->
-    <div class="api-banner" id="apiBanner">
-      <div class="api-title">🗺️ 카카오맵 API 키 필요</div>
-      <div class="api-sub">실제 지도를 사용하려면<br>카카오 개발자 API 키가 필요합니다.<br>발급은 무료입니다.</div>
-      <input type="text" class="api-input" id="apiKeyInput" placeholder="카카오 JavaScript API 키 입력">
-      <button type="button" class="api-btn" onclick="initMap()">지도 불러오기</button>
-      <a href="https://developers.kakao.com" target="_blank" class="api-link">→ 카카오 개발자 콘솔에서 무료 발급</a>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">키는 이 기기에만 저장됩니다</div>
-    </div>
     <div id="kakaoMap"></div>
 
     <!-- 팝업 -->
@@ -257,6 +239,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 </div>
 
 <script>
+// ── 카카오 API 키 ────────────────────────────────────
+var KAKAO_JS_KEY   = 'cbfa60013e8c77c5a8c168d4d5862d51';
+var KAKAO_REST_KEY = '281bb27cc451ac8e5f6bf303af9fec09';
+
 // ── 전역 변수 ────────────────────────────────────────
 var kakaoMap = null;
 var markers  = [];
@@ -287,12 +273,8 @@ window.addEventListener('DOMContentLoaded', function() {
     sessionStorage.removeItem('nearbyTarget');
   }
 
-  // 저장된 API 키
-  var savedKey = localStorage.getItem('kakao_map_key') || '';
-  if(savedKey) {
-    document.getElementById('apiKeyInput').value = savedKey;
-    loadKakaoScript(savedKey);
-  }
+  // 내장 키로 자동 지도 로드
+  loadKakaoScript(KAKAO_JS_KEY);
 
   // 팝업 드래그 이동 (마우스 + 터치)
   (function(){
@@ -370,13 +352,6 @@ window.addEventListener('DOMContentLoaded', function() {
 });
 
 // ── 카카오맵 로드 ────────────────────────────────────
-function initMap() {
-  var key = document.getElementById('apiKeyInput').value.trim();
-  if(!key) { alert('API 키를 입력해주세요'); return; }
-  localStorage.setItem('kakao_map_key', key);
-  loadKakaoScript(key);
-}
-
 function loadKakaoScript(key) {
   var existing = document.getElementById('kakaoScript');
   if(existing) existing.remove();
@@ -390,7 +365,6 @@ function loadKakaoScript(key) {
       return;
     }
     kakao.maps.load(function() {
-      document.getElementById('apiBanner').style.display = 'none';
       document.getElementById('mapLegend').style.display = '';
       var container = document.getElementById('kakaoMap');
       var options = { center: new kakao.maps.LatLng(35.1631, 129.1635), level: 7 };
@@ -750,21 +724,28 @@ function showPopup(c, dist, pixelX, pixelY) {
     popup.style.display = 'block';
     popup.style.zIndex  = '9999';
 
+    // 팝업 실제 크기 측정
+    var pw = popup.offsetWidth  || 250;
+    var ph = popup.offsetHeight || 300;
+
     var mapWrap = document.querySelector('.map-wrap');
     var mw = mapWrap ? mapWrap.offsetWidth  : window.innerWidth;
     var mh = mapWrap ? mapWrap.offsetHeight : window.innerHeight;
-    var pw = 240, ph = 380; // 팝업 예상 크기
 
-    var px = 16, py = 60;
+    var px, py;
     if(pixelX !== undefined && pixelY !== undefined) {
-      px = pixelX + 16;
-      py = pixelY - ph / 2;
+      px = pixelX + 20;
+      py = pixelY + 20;
+      // 오른쪽 밖으로 나가면 왼쪽으로
+      if(px + pw > mw - 8) px = pixelX - pw - 20;
+      // 아래쪽 밖으로 나가면 위로
+      if(py + ph > mh - 8) py = pixelY - ph - 20;
+    } else {
+      px = 16; py = 60;
     }
-    // 화면 밖으로 나가면 반대쪽으로
-    if(px + pw > mw - 10) px = (pixelX !== undefined ? pixelX : pw) - pw - 16;
-    if(py < 10)           py = 10;
-    if(py + ph > mh - 10) py = mh - ph - 10;
-    if(px < 10)           px = 10;
+    // 최소값 보정
+    if(px < 8) px = 8;
+    if(py < 8) py = 8;
 
     popup.style.left = px + 'px';
     popup.style.top  = py + 'px';
