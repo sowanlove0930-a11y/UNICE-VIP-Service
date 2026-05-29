@@ -238,18 +238,28 @@ function loadKakaoScript(key) {
   s.id  = 'kakaoScript';
   s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey='+key+'&libraries=services&autoload=false';
   s.onload = function() {
+    if(typeof kakao === 'undefined' || !kakao.maps) {
+      console.error('[NEARBY] kakao 객체 없음 - 도메인 미등록 가능성');
+      alert('지도 SDK 로드 실패.\n현재 주소: ' + window.location.origin + '\n이 주소가 카카오 콘솔 도메인과 일치하는지 확인하세요.');
+      return;
+    }
     kakao.maps.load(function() {
       document.getElementById('apiBanner').style.display = 'none';
       document.getElementById('mapLegend').style.display = '';
       var container = document.getElementById('kakaoMap');
       var options = { center: new kakao.maps.LatLng(35.1631, 129.1635), level: 7 };
       kakaoMap = new kakao.maps.Map(container, options);
-      // 주소가 있으면 바로 검색
+      console.log('[NEARBY] 지도 로드 성공');
       var addr = document.getElementById('addrInput').value.trim();
       if(addr) searchAddr();
     });
   };
-  s.onerror = function() { alert('API 키가 올바르지 않거나 도메인 등록이 필요합니다.\n카카오 개발자 콘솔에서 확인해주세요.'); };
+  s.onerror = function() {
+    console.error('[NEARBY] SDK 스크립트 로드 자체 실패');
+    console.error('[NEARBY] 현재 주소(origin):', window.location.origin);
+    console.error('[NEARBY] 사용 키:', key);
+    alert('지도 SDK 스크립트 로드 실패\n\n현재 페이지 주소: ' + window.location.origin + '\n\n카카오 콘솔 JavaScript SDK 도메인에\n위 주소가 정확히 등록되어 있어야 합니다.\n저장 후 5~10분 기다린 뒤 Ctrl+Shift+R 새로고침하세요.');
+  };
   document.head.appendChild(s);
 }
 
@@ -368,15 +378,22 @@ function drawNearby(lat, lng) {
     var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
     markers.push(marker);
 
-    // 이름 오버레이
+    // 이름 오버레이 (클릭 가능)
+    var labelEl = document.createElement('div');
+    labelEl.style.cssText = 'background:rgba(13,22,40,.85);border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+    labelEl.textContent = c.name;
+    (function(customer, distance){
+      labelEl.addEventListener('click', function(){ showPopup(customer, distance); });
+    })(c, dist);
     var nameOverlay = new kakao.maps.CustomOverlay({
       position: pos,
-      content: '<div style="background:rgba(13,22,40,.85);border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px">'+c.name+'</div>',
-      yAnchor: 3.2
+      content: labelEl,
+      yAnchor: 3.2,
+      clickable: true
     });
     nameOverlay.setMap(kakaoMap);
 
-    // 클릭 이벤트
+    // 마커 클릭 이벤트
     (function(customer, distance, markerEl){
       kakao.maps.event.addListener(markerEl, 'click', function() {
         showPopup(customer, distance);
