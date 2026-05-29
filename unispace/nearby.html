@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주변 고객 찾기 — UNISPACE</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&family=Syncopate:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080E1C;--bg2:#0D1628;--bg3:#111D35;--gold:#C9A84C;--gold2:#E8C97A;--text:#F0F4FF;--text2:#8B98B8;--text3:#4A5568;--bdr:rgba(255,255,255,.08);--bdr2:rgba(255,255,255,.14);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;}
+
+/* 헤더 */
+.header{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--bdr);z-index:100;flex-shrink:0;}
+.back-btn{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid var(--bdr2);border-radius:20px;padding:6px 14px;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;transition:all .2s;}
+.back-btn:hover{background:rgba(255,255,255,.1);color:var(--text);}
+.header-title{font-family:'Syncopate',sans-serif;font-size:12px;font-weight:700;color:var(--gold2);letter-spacing:.1em;}
+.header-sub{font-size:12px;color:var(--text2);margin-left:auto;}
+
+/* 메인 레이아웃 */
+.main{display:flex;flex:1;overflow:hidden;}
+
+/* 좌측 패널 */
+.left{width:280px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--bdr);display:flex;flex-direction:column;overflow:hidden;}
+.lhead{padding:14px 16px;border-bottom:1px solid var(--bdr);}
+.ltitle{font-size:11px;font-weight:700;color:var(--gold2);letter-spacing:.06em;margin-bottom:10px;}
+.mcard{background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:10px 12px;margin-bottom:10px;}
+.mlabel{font-size:10px;color:#60A5FA;font-weight:700;margin-bottom:3px;}
+.mname{font-size:14px;font-weight:700;color:var(--text);}
+.maddr{font-size:11px;color:var(--text2);margin-top:2px;}
+.addr-input{width:100%;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:'Noto Sans KR',sans-serif;margin-top:6px;}
+.addr-input:focus{outline:none;border-color:var(--gold);}
+.search-btn{width:100%;padding:8px;border:none;border-radius:8px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-top:6px;}
+.rrow{display:flex;align-items:center;gap:8px;margin-top:8px;}
+.rlabel{font-size:11px;color:var(--text2);white-space:nowrap;}
+.rchips{display:flex;gap:4px;}
+.rchip{font-size:11px;padding:3px 9px;border-radius:20px;cursor:pointer;font-weight:600;transition:all .2s;border:1px solid var(--bdr);}
+.rchip.on{background:rgba(59,130,246,.18);color:#60A5FA;border-color:rgba(59,130,246,.4);}
+.rchip.off{background:rgba(255,255,255,.04);color:var(--text3);}
+.rcnt{padding:7px 16px;font-size:11px;color:var(--text2);border-bottom:1px solid rgba(255,255,255,.05);}
+.rcnt b{color:var(--text);}
+.clist{flex:1;overflow-y:auto;}
+.ci{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer;transition:background .15s;}
+.ci:hover{background:rgba(255,255,255,.03);}
+.ci.sel{background:rgba(59,130,246,.07);border-left:2px solid #3B82F6;}
+.ctop{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;}
+.cn{font-size:13px;font-weight:600;color:var(--text);}
+.cd{font-size:11px;font-weight:700;color:#60A5FA;}
+.ci2{font-size:11px;color:var(--text2);}
+.ctag{font-size:9px;padding:1px 5px;border-radius:5px;font-weight:700;margin-left:3px;vertical-align:middle;}
+.tc{background:rgba(16,185,129,.12);color:#34D399;}
+.tm{background:rgba(139,92,246,.12);color:#A78BFA;}
+.tw{background:rgba(244,163,38,.12);color:#FCD34D;}
+.empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;}
+
+/* 지도 */
+.map-wrap{flex:1;position:relative;}
+#kakaoMap{width:100%;height:100%;}
+
+/* API 키 안내 배너 */
+.api-banner{position:absolute;inset:0;background:var(--bg3);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;gap:12px;padding:30px;}
+.api-title{font-size:16px;font-weight:800;color:var(--gold2);}
+.api-sub{font-size:13px;color:var(--text2);text-align:center;line-height:1.7;}
+.api-input{width:100%;max-width:340px;padding:10px 14px;background:rgba(255,255,255,.05);border:1px solid var(--bdr2);border-radius:10px;color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif;text-align:center;}
+.api-btn{padding:10px 28px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;cursor:pointer;}
+.api-link{font-size:11px;color:#60A5FA;text-decoration:none;}
+.api-link:hover{text-decoration:underline;}
+
+/* 팝업 */
+.map-popup{position:absolute;background:rgba(13,22,40,.96);border:1px solid var(--bdr2);border-radius:14px;padding:14px;min-width:210px;z-index:30;box-shadow:0 10px 30px rgba(0,0,0,.6);display:none;}
+.popup-close{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;}
+.phead{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.pname{font-size:14px;font-weight:700;color:var(--text);}
+.ptag{font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;}
+.prow{font-size:11px;color:var(--text2);margin-bottom:3px;}
+.prow b{color:#60A5FA;}
+.divider{border:none;border-top:1px solid rgba(255,255,255,.07);margin:8px 0;}
+.section-label{font-size:10px;color:var(--text2);font-weight:700;margin-bottom:5px;}
+.nav-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;}
+.nav-btn{padding:7px 4px;border-radius:8px;text-align:center;cursor:pointer;transition:all .2s;border:1px solid var(--bdr);background:rgba(255,255,255,.04);text-decoration:none;}
+.nav-btn:hover{background:rgba(255,255,255,.1);}
+.nav-icon{font-size:14px;display:block;margin-bottom:2px;}
+.nav-text{font-size:10px;color:var(--text2);font-weight:600;}
+.contact-btns{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;}
+.contact-btn{padding:7px;border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:700;transition:all .2s;text-decoration:none;display:block;}
+.btn-call{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);color:#34D399;}
+.btn-kakao{background:rgba(254,229,0,.1);border:1px solid rgba(254,229,0,.25);color:#FEE500;}
+.btn-call:hover{background:rgba(16,185,129,.2);}
+.btn-kakao:hover{background:rgba(254,229,0,.18);}
+.detail-btn{width:100%;padding:8px;border-radius:8px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-size:12px;font-weight:700;text-align:center;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;}
+
+/* 범례 */
+.legend{position:absolute;bottom:12px;left:12px;background:rgba(13,22,40,.9);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;z-index:20;}
+.lr{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--text2);}
+.lr:last-child{margin-bottom:0;}
+.ldot{width:9px;height:9px;border-radius:50%;}
+
+/* 반경 선택 */
+.radius-input{display:none;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <a class="back-btn" href="javascript:history.back()">← 돌아가기</a>
+  <div class="header-title">📍 NEARBY</div>
+  <div class="header-sub" id="headerSub">주변 고객 찾기</div>
+</div>
+
+<div class="main">
+  <!-- 좌측 패널 -->
+  <div class="left">
+    <div class="lhead">
+      <div class="ltitle">기준 위치</div>
+      <div class="mcard" id="targetCard">
+        <div class="mlabel">📅 기준 고객</div>
+        <div class="mname" id="targetName">—</div>
+        <div class="maddr" id="targetAddr">주소를 입력해주세요</div>
+      </div>
+      <input type="text" class="addr-input" id="addrInput" placeholder="장소명 또는 주소 입력 (예: 해운대 스타벅스)">
+      <button type="button" class="search-btn" onclick="searchAddr()">🔍 검색 및 주변 고객 찾기</button>
+      <div class="rrow">
+        <span class="rlabel">반경</span>
+        <div class="rchips" id="rchips">
+          <span class="rchip off" onclick="setRadius(1,this)">1km</span>
+          <span class="rchip off" onclick="setRadius(3,this)">3km</span>
+          <span class="rchip on"  onclick="setRadius(5,this)">5km</span>
+          <span class="rchip off" onclick="setRadius(10,this)">10km</span>
+        </div>
+      </div>
+    </div>
+    <div class="rcnt" id="resultCount">주소를 검색하면 주변 고객이 표시됩니다</div>
+    <div class="clist" id="clist"><div class="empty">🔍 주소를 검색해주세요</div></div>
+  </div>
+
+  <!-- 지도 -->
+  <div class="map-wrap">
+    <!-- API 키 안내 배너 -->
+    <div class="api-banner" id="apiBanner">
+      <div class="api-title">🗺️ 카카오맵 API 키 필요</div>
+      <div class="api-sub">실제 지도를 사용하려면<br>카카오 개발자 API 키가 필요합니다.<br>발급은 무료입니다.</div>
+      <input type="text" class="api-input" id="apiKeyInput" placeholder="카카오 JavaScript API 키 입력">
+      <button type="button" class="api-btn" onclick="initMap()">지도 불러오기</button>
+      <a href="https://developers.kakao.com" target="_blank" class="api-link">→ 카카오 개발자 콘솔에서 무료 발급</a>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">키는 이 기기에만 저장됩니다</div>
+    </div>
+    <div id="kakaoMap"></div>
+
+    <!-- 팝업 -->
+    <div class="map-popup" id="mapPopup">
+      <button type="button" class="popup-close" onclick="closePopup()">✕</button>
+      <div class="phead">
+        <span class="pname" id="popupName"></span>
+        <span class="ptag" id="popupTag"></span>
+      </div>
+      <div class="prow" id="popupAddr"></div>
+      <div class="prow" id="popupDist"></div>
+      <div class="prow" id="popupPhone"></div>
+      <div class="prow" id="popupContact"></div>
+      <div class="divider"></div>
+      <div class="section-label">🗺️ 길찾기</div>
+      <div class="nav-btns">
+        <a class="nav-btn" id="navCar" href="#" target="_blank">
+          <span class="nav-icon">🚗</span><span class="nav-text">자동차</span>
+        </a>
+        <a class="nav-btn" id="navBus" href="#" target="_blank">
+          <span class="nav-icon">🚌</span><span class="nav-text">대중교통</span>
+        </a>
+        <a class="nav-btn" id="navWalk" href="#" target="_blank">
+          <span class="nav-icon">🚶</span><span class="nav-text">도보</span>
+        </a>
+      </div>
+      <div class="divider"></div>
+      <div class="section-label">📲 연락하기</div>
+      <div class="contact-btns">
+        <a class="contact-btn btn-call" id="btnCall" href="#">📞 전화걸기</a>
+        <a class="contact-btn btn-kakao" id="btnKakao" href="#" target="_blank">💬 카카오톡</a>
+      </div>
+      <button type="button" class="detail-btn" id="btnDetail" onclick="goDetail()">고객 상세 보기 →</button>
+    </div>
+
+    <!-- 범례 -->
+    <div class="legend" id="mapLegend" style="display:none">
+      <div class="lr"><div class="ldot" style="background:#3B82F6"></div>기준 위치</div>
+      <div class="lr"><div class="ldot" style="background:#10B981"></div>계약 고객</div>
+      <div class="lr"><div class="ldot" style="background:#8B5CF6"></div>관리 고객</div>
+      <div class="lr"><div class="ldot" style="background:#F59E0B"></div>연락 필요</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 전역 변수 ────────────────────────────────────────
+var kakaoMap = null;
+var markers  = [];
+var circles  = [];
+var radiusKm = 5;
+var centerLat = 0, centerLng = 0;
+var selectedCustomerId = null;
+var allCustomers = [];
+
+// ── 초기화 ───────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', function() {
+  // 고객 데이터 로드
+  try { allCustomers = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e){}
+
+  // sessionStorage에서 타겟 정보
+  var target = null;
+  try { target = JSON.parse(sessionStorage.getItem('nearbyTarget') || 'null'); } catch(e){}
+  if(target) {
+    document.getElementById('targetName').textContent = target.name || '—';
+    document.getElementById('targetAddr').textContent = target.address || '주소를 입력해주세요';
+    document.getElementById('addrInput').value        = target.address || '';
+    document.getElementById('headerSub').textContent  = target.name + ' 주변 고객 찾기';
+    sessionStorage.removeItem('nearbyTarget');
+  }
+
+  // 저장된 API 키
+  var savedKey = localStorage.getItem('kakao_map_key') || '';
+  if(savedKey) {
+    document.getElementById('apiKeyInput').value = savedKey;
+    loadKakaoScript(savedKey);
+  }
+});
+
+// ── 카카오맵 로드 ────────────────────────────────────
+function initMap() {
+  var key = document.getElementById('apiKeyInput').value.trim();
+  if(!key) { alert('API 키를 입력해주세요'); return; }
+  localStorage.setItem('kakao_map_key', key);
+  loadKakaoScript(key);
+}
+
+function loadKakaoScript(key) {
+  var existing = document.getElementById('kakaoScript');
+  if(existing) existing.remove();
+  var s = document.createElement('script');
+  s.id  = 'kakaoScript';
+  s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey='+key+'&libraries=services&autoload=false';
+  s.onload = function() {
+    kakao.maps.load(function() {
+      document.getElementById('apiBanner').style.display = 'none';
+      document.getElementById('mapLegend').style.display = '';
+      var container = document.getElementById('kakaoMap');
+      var options = { center: new kakao.maps.LatLng(35.1631, 129.1635), level: 7 };
+      kakaoMap = new kakao.maps.Map(container, options);
+      // 주소가 있으면 바로 검색
+      var addr = document.getElementById('addrInput').value.trim();
+      if(addr) searchAddr();
+    });
+  };
+  s.onerror = function() { alert('API 키가 올바르지 않거나 도메인 등록이 필요합니다.\n카카오 개발자 콘솔에서 확인해주세요.'); };
+  document.head.appendChild(s);
+}
+
+// ── 반경 선택 ────────────────────────────────────────
+function setRadius(km, el) {
+  radiusKm = km;
+  document.querySelectorAll('.rchip').forEach(function(c){ c.className='rchip off'; });
+  el.className = 'rchip on';
+  if(centerLat && centerLng) drawNearby(centerLat, centerLng);
+}
+
+// ── 주소 검색 ────────────────────────────────────────
+function searchAddr() {
+  if(!kakaoMap) { alert('먼저 API 키를 입력하고 지도를 불러주세요'); return; }
+  var addr = document.getElementById('addrInput').value.trim();
+  if(!addr) { alert('주소를 입력해주세요'); return; }
+  var geocoder = new kakao.maps.services.Geocoder();
+  var places   = new kakao.maps.services.Places();
+  // 장소명 검색 우선
+  places.keywordSearch(addr, function(result, status) {
+    if(status === kakao.maps.services.Status.OK && result.length > 0) {
+      var p = result[0];
+      centerLat = parseFloat(p.y); centerLng = parseFloat(p.x);
+      document.getElementById('targetAddr').textContent = p.place_name + ' · ' + p.address_name;
+      drawNearby(centerLat, centerLng);
+    } else {
+      // 주소 검색으로 fallback
+      geocoder.addressSearch(addr, function(result2, status2) {
+        if(status2 === kakao.maps.services.Status.OK) {
+          centerLat = parseFloat(result2[0].y); centerLng = parseFloat(result2[0].x);
+          drawNearby(centerLat, centerLng);
+        } else {
+          alert('주소를 찾을 수 없습니다. 더 구체적으로 입력해보세요.');
+        }
+      });
+    }
+  });
+}
+
+// ── 주변 고객 표시 ───────────────────────────────────
+function drawNearby(lat, lng) {
+  clearMarkers();
+  kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+  kakaoMap.setLevel(7);
+
+  // 기준 마커
+  var centerPos = new kakao.maps.LatLng(lat, lng);
+  var centerMarker = new kakao.maps.Marker({
+    position: centerPos,
+    map: kakaoMap,
+    title: '기준 위치'
+  });
+  var centerOverlay = new kakao.maps.CustomOverlay({
+    position: centerPos,
+    content: '<div style="background:rgba(13,22,40,.9);border:1px solid rgba(59,130,246,.4);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#60A5FA;white-space:nowrap;margin-bottom:4px">'+document.getElementById('targetName').textContent+'</div>',
+    yAnchor: 2.8
+  });
+  centerOverlay.setMap(kakaoMap);
+  markers.push(centerMarker);
+
+  // 반경 원
+  var circle = new kakao.maps.Circle({
+    center: centerPos,
+    radius: radiusKm * 1000,
+    strokeWeight: 2,
+    strokeColor: '#3B82F6',
+    strokeOpacity: 0.5,
+    strokeStyle: 'dashed',
+    fillColor: '#3B82F6',
+    fillOpacity: 0.04
+  });
+  circle.setMap(kakaoMap);
+  circles.push(circle);
+
+  // 고객 중 좌표 있는 것만, 반경 내 필터
+  var nearby = [];
+  allCustomers.forEach(function(c) {
+    if(!c.lat || !c.lng) return;
+    var dist = getDistKm(lat, lng, parseFloat(c.lat), parseFloat(c.lng));
+    if(dist <= radiusKm) nearby.push({ c:c, dist:dist });
+  });
+  nearby.sort(function(a,b){ return a.dist-b.dist; });
+
+  // 결과 없으면 안내
+  document.getElementById('resultCount').innerHTML = '반경 '+radiusKm+'km 내 고객 <b>'+nearby.length+'명</b> 발견';
+
+  if(!nearby.length) {
+    document.getElementById('clist').innerHTML = '<div class="empty">😊 반경 '+radiusKm+'km 내<br>등록된 고객이 없습니다</div>';
+    return;
+  }
+
+  // 리스트 + 마커 렌더
+  var listHtml = '';
+  nearby.forEach(function(item, idx) {
+    var c    = item.c;
+    var dist = item.dist;
+    var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
+    var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
+    var tagText  = c.customerType||'고객';
+    listHtml += '<div class="ci" id="citem_'+idx+'" onclick="selectCustomer('+idx+')">'
+      +'<div class="ctop"><span class="cn">'+c.name+'</span><span class="cd">'+distStr+'</span></div>'
+      +'<div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div>'
+      +'</div>';
+
+    // 마커
+    var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
+    var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
+    var svgContent = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
+      +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="'+color+'"/>'
+      +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>'
+      +'</svg>';
+    var markerImg = new kakao.maps.MarkerImage(
+      'data:image/svg+xml;base64,'+btoa(svgContent),
+      new kakao.maps.Size(28,36)
+    );
+    var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
+    markers.push(marker);
+
+    // 이름 오버레이
+    var nameOverlay = new kakao.maps.CustomOverlay({
+      position: pos,
+      content: '<div style="background:rgba(13,22,40,.85);border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px">'+c.name+'</div>',
+      yAnchor: 3.2
+    });
+    nameOverlay.setMap(kakaoMap);
+
+    // 클릭 이벤트
+    (function(customer, distance, markerEl){
+      kakao.maps.event.addListener(markerEl, 'click', function() {
+        showPopup(customer, distance);
+      });
+    })(c, dist, marker);
+  });
+
+  document.getElementById('clist').innerHTML = listHtml;
+  window._nearbyList = nearby;
+}
+
+// ── 고객 선택 ────────────────────────────────────────
+function selectCustomer(idx) {
+  document.querySelectorAll('.ci').forEach(function(el){ el.classList.remove('sel'); });
+  var el = document.getElementById('citem_'+idx);
+  if(el) el.classList.add('sel');
+  var item = window._nearbyList[idx];
+  if(item) showPopup(item.c, item.dist);
+}
+
+// ── 팝업 표시 ────────────────────────────────────────
+function showPopup(c, dist) {
+  selectedCustomerId = c.id;
+  var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
+  var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
+
+  document.getElementById('popupName').textContent = c.name;
+  document.getElementById('popupTag').textContent  = c.customerType||'고객';
+  document.getElementById('popupTag').className    = 'ptag '+tagClass;
+  document.getElementById('popupAddr').textContent = '📍 '+(c.address||'주소 미등록')+' · '+distStr;
+  document.getElementById('popupPhone').innerHTML  = c.phone ? '📞 '+c.phone : '';
+  document.getElementById('popupContact').textContent = c.lastContact ? '마지막 연락: '+c.lastContact : '';
+
+  // 길찾기 URL (카카오맵)
+  var destLat = c.lat || '', destLng = c.lng || '';
+  var destName = encodeURIComponent(c.name);
+  if(destLat && destLng) {
+    document.getElementById('navCar').href  = 'https://map.kakao.com/link/to/'+destName+','+destLat+','+destLng;
+    document.getElementById('navBus').href  = 'https://map.kakao.com/link/to/'+destName+','+destLat+','+destLng;
+    document.getElementById('navWalk').href = 'https://map.kakao.com/link/to/'+destName+','+destLat+','+destLng;
+  }
+
+  // 전화
+  document.getElementById('btnCall').href = c.phone ? 'tel:'+c.phone.replace(/-/g,'') : '#';
+
+  // 카카오톡
+  document.getElementById('btnKakao').href = '#';
+  document.getElementById('btnKakao').onclick = function() {
+    if(typeof Kakao !== 'undefined' && Kakao.isInitialized()) {
+      Kakao.Share.sendDefault({
+        objectType: 'text',
+        text: '[유니스] '+c.name+' 고객님께 연락드립니다.',
+        link: { mobileWebUrl: window.location.href }
+      });
+    } else {
+      alert('카카오톡 공유는 카카오 SDK 연동 후 사용 가능합니다.');
+    }
+    return false;
+  };
+
+  var popup = document.getElementById('mapPopup');
+  popup.style.display = '';
+  popup.style.left = '16px';
+  popup.style.top  = '60px';
+}
+
+function closePopup() { document.getElementById('mapPopup').style.display='none'; }
+
+function goDetail() {
+  if(selectedCustomerId) {
+    sessionStorage.setItem('openCustomerId', selectedCustomerId);
+    window.location.href = 'customer.html';
+  }
+}
+
+// ── 마커 클리어 ──────────────────────────────────────
+function clearMarkers() {
+  markers.forEach(function(m){ m.setMap(null); });
+  circles.forEach(function(c){ c.setMap(null); });
+  markers=[]; circles=[];
+}
+
+// ── 거리 계산 (Haversine) ────────────────────────────
+function getDistKm(lat1,lng1,lat2,lng2) {
+  var R=6371, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+</script>
+</body>
+</html>

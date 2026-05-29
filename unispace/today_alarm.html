@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>오늘의 알림 — UNISPACE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=DM+Serif+Display:ital@0;1&family=Syncopate:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080E1C;--bg2:#0D1628;--bg3:#111D35;
+  --sur:rgba(255,255,255,.04);--sur2:rgba(255,255,255,.08);
+  --bdr:rgba(255,255,255,.08);--bdr2:rgba(255,255,255,.16);
+  /* ④ unispace.html 호환 별칭 */
+  --surface:rgba(255,255,255,.04);--surface2:rgba(255,255,255,.08);
+  --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.16);
+  --gold:#C9A84C;--gold2:#E8C97A;--gold-g:rgba(201,168,76,.2);--gold-glow:rgba(201,168,76,.2);
+  --green:#10B981;--blue:#3B82F6;--red:#EF4444;--purple:#8B5CF6;--orange:#F4A326;
+  --text:#F0F4FF;--text2:#8B98B8;--text3:#4A5568;
+  --r-xl:20px;--r-lg:16px;--r-md:12px;--r-sm:8px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+/* ② 커스텀 스크롤바 */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,.25);border-radius:10px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(201,168,76,.45);}
+*{scrollbar-width:thin;scrollbar-color:rgba(201,168,76,.25) transparent;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 40% at 15% 10%,rgba(201,168,76,.07),transparent 60%),
+             radial-gradient(ellipse 50% 50% at 85% 80%,rgba(59,130,246,.06),transparent 60%);}
+
+/* ── 레이아웃 ── */
+.app{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:0 24px 40px;}
+
+/* ── 헤더 ── */
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--bdr);margin-bottom:24px;}
+.back-btn{display:flex;align-items:center;gap:8px;background:var(--sur);border:1px solid var(--bdr2);border-radius:20px;padding:7px 16px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;transition:all .2s;}
+.back-btn:hover{background:var(--sur2);color:var(--text);}
+.header-center{text-align:center;}
+.header-title{font-family:'Syncopate',sans-serif;font-size:13px;font-weight:700;letter-spacing:.15em;background:linear-gradient(135deg,var(--gold2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.header-date{font-size:12px;color:var(--text2);margin-top:3px;}
+.header-right{font-size:13px;color:var(--text2);}
+
+/* ── 요약 카드 ── */
+.summary-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px;}
+.sum-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:14px 16px;position:relative;overflow:hidden;cursor:pointer;transition:all .2s;}
+.sum-card:hover{border-color:var(--bdr2);transform:translateY(-2px);}
+.sum-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.sum-today::before   {background:linear-gradient(90deg,var(--gold),transparent);}
+.sum-d30::before     {background:linear-gradient(90deg,var(--purple),transparent);}
+.sum-d5::before      {background:linear-gradient(90deg,var(--blue),transparent);}
+.sum-manage::before  {background:linear-gradient(90deg,var(--orange),transparent);}
+.sum-icon{font-size:20px;margin-bottom:6px;}
+.sum-label{font-size:11px;color:var(--text2);font-weight:600;margin-bottom:4px;}
+.sum-count{font-size:22px;font-weight:800;}
+.sum-today  .sum-count{color:var(--gold2);}
+.sum-d30    .sum-count{color:#A78BFA;}
+.sum-d5     .sum-count{color:#60A5FA;}
+.sum-manage .sum-count{color:var(--orange);}
+.sum-unit{font-size:12px;color:var(--text2);font-weight:500;}
+
+/* ── 섹션 ── */
+.alarm-section{margin-bottom:24px;}
+.section-header{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.section-badge{display:flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;}
+.badge-today  {background:rgba(201,168,76,.12);color:var(--gold2);border:1px solid rgba(201,168,76,.2);}
+.badge-d30    {background:rgba(139,92,246,.12);color:#A78BFA;border:1px solid rgba(139,92,246,.2);}
+.badge-d5     {background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.2);}
+.badge-manage {background:rgba(244,163,38,.1);color:var(--orange);border:1px solid rgba(244,163,38,.2);}
+.section-count{font-size:12px;color:var(--text2);}
+.empty-section{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:20px;text-align:center;color:var(--text2);font-size:13px;}
+
+/* ── 알림 카드 ── */
+.alarm-list{display:flex;flex-direction:column;gap:8px;}
+.alarm-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:0;overflow:hidden;transition:all .2s;position:relative;}
+.alarm-card:hover{border-color:var(--bdr2);}
+/* ③ 완료 처리 — 부드러운 transition */
+.alarm-card{transition:opacity .4s ease,filter .4s ease,border-color .2s;}
+.alarm-card.done{opacity:.4;filter:grayscale(.65);}
+.alarm-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;}
+.ac-birthday::before   {background:var(--gold);}
+.ac-anniversary::before{background:var(--green);}
+.ac-event::before      {background:var(--orange);}
+.ac-payment::before    {background:var(--blue);}
+.ac-aging::before      {background:var(--purple);}
+.ac-noc::before        {background:var(--orange);}
+
+.alarm-card-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px 10px 18px;}
+.ac-left{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;}
+.ac-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.ac-type-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;}
+.type-birthday   {background:rgba(201,168,76,.15);color:var(--gold2);}
+.type-anniversary{background:rgba(16,185,129,.12);color:#34D399;}
+.type-event      {background:rgba(244,163,38,.12);color:var(--orange);}
+.type-payment    {background:rgba(59,130,246,.12);color:#60A5FA;}
+.type-aging      {background:rgba(139,92,246,.12);color:#A78BFA;}
+.type-noc        {background:rgba(244,163,38,.1);color:var(--orange);}
+.ac-name{font-size:15px;font-weight:700;}
+.ac-desc{font-size:12px;color:var(--text2);margin-bottom:0;margin-top:3px;line-height:1.4;}
+.ac-phone{font-size:12px;color:var(--text3);}
+.ac-phone-inline{font-size:12px;color:#6B7FA3;text-decoration:none;margin-left:4px;transition:color .2s;}
+.ac-phone-inline:hover{color:#93A8CC;}
+.ac-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;margin-left:16px;}
+/* ⑧ 카톡 버튼 — FFE500 대신 골드 계열 amber로 통일 */
+.kakao-copy-btn{display:flex;align-items:center;gap:5px;padding:7px 12px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.28);border-radius:20px;color:var(--gold2);font-family:'Noto Sans KR',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.kakao-copy-btn:hover{background:rgba(201,168,76,.2);border-color:var(--gold);}
+.done-btn{display:flex;align-items:center;gap:5px;padding:7px 12px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:20px;color:#34D399;font-family:'Noto Sans KR',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.done-btn:hover{background:rgba(16,185,129,.18);}
+.done-btn.checked{background:rgba(255,255,255,.04);border-color:var(--bdr);color:var(--text3);}
+
+
+/* ── 아코디언 ── */
+.section-header { cursor: pointer; user-select: none; }
+.section-header:hover .section-badge { filter: brightness(1.1); }
+.accordion-arrow {
+  margin-left: auto; font-size: 12px; color: var(--text2);
+  transition: transform .3s ease; flex-shrink: 0;
+}
+.accordion-arrow.closed { transform: rotate(-90deg); }
+.accordion-body {
+  overflow: hidden;
+  transition: max-height .35s cubic-bezier(.77,0,.18,1), opacity .3s ease;
+  max-height: 2000px; opacity: 1;
+}
+.accordion-body.closed { max-height: 0; opacity: 0; }
+
+/* ── 카톡 버전 선택 모달 ── */
+.kakao-modal-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(8,14,28,.88); backdrop-filter: blur(10px);
+  display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+.kakao-modal-overlay.open { opacity: 1; pointer-events: all; }
+.kakao-modal {
+  width: 100%; max-width: 600px;
+  background: var(--bg2); border: 1px solid var(--bdr2);
+  border-radius: 24px 24px 0 0;
+  padding: 8px 0 40px;
+  transform: translateY(100%);
+  transition: transform .35s cubic-bezier(.34,1.2,.64,1);
+  max-height: 88vh; overflow-y: auto;
+}
+.kakao-modal-overlay.open .kakao-modal { transform: translateY(0); }
+.kakao-modal-handle { width: 40px; height: 4px; background: var(--bdr2); border-radius: 2px; margin: 10px auto 0; }
+.kakao-modal-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--bdr); display: flex; align-items: center; justify-content: space-between; }
+.kakao-modal-title { font-size: 16px; font-weight: 700; }
+.kakao-modal-name  { font-size: 12px; color: var(--text2); margin-top: 3px; }
+.kakao-modal-close { background: var(--sur); border: 1px solid var(--bdr); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--text2); cursor: pointer; font-size: 14px; }
+
+.kakao-version-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.kakao-version-item {
+  border: 1.5px solid var(--bdr); border-radius: var(--r-lg);
+  overflow: hidden; cursor: pointer; transition: border-color .2s;
+}
+.kakao-version-item:hover { border-color: var(--bdr2); }
+.kakao-version-item.selected { border-color: var(--gold); background: rgba(201,168,76,.06); }
+.kakao-version-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: var(--bg3);
+}
+.kakao-version-num {
+  width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800;
+  background: var(--sur2); color: var(--text2);
+}
+.kakao-version-item.selected .kakao-version-num { background: linear-gradient(135deg,var(--gold2),var(--gold)); color: #080E1C; }
+.kakao-version-label { font-size: 12px; font-weight: 700; color: var(--text2); }
+.kakao-version-item.selected .kakao-version-label { color: var(--gold2); }
+.kakao-version-preview {
+  padding: 10px 14px; font-size: 12px; line-height: 1.8;
+  color: var(--text); white-space: pre-line;
+  max-height: 100px; overflow: hidden; position: relative;
+}
+.kakao-version-preview::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 30px; background: linear-gradient(transparent, var(--bg2));
+}
+.kakao-version-item.selected .kakao-version-preview::after { background: linear-gradient(transparent, rgba(201,168,76,.04)); }
+
+/* ⑧ 카카오 복사 확인 버튼 — 골드 그라데이션으로 통일 */
+.kakao-copy-confirm {
+  margin: 4px 16px 0; padding: 14px;
+  background: linear-gradient(135deg, var(--gold2), var(--gold));
+  border: none; border-radius: var(--r-lg);
+  color: #080E1C; font-family: 'Noto Sans KR', sans-serif;
+  font-size: 15px; font-weight: 800; cursor: pointer;
+  transition: all .2s; width: calc(100% - 32px);
+  box-shadow: 0 4px 20px rgba(201,168,76,.3);
+}
+.kakao-copy-confirm:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(201,168,76,.45); }
+/* ── 토스트 ── */
+
+.gift-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  background: rgba(255,140,0,.1);
+  border: 1px solid rgba(255,140,0,.3);
+  border-radius: 20px;
+  color: #FFB347;
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all .2s;
+  white-space: nowrap; text-decoration: none;
+}
+.gift-btn:hover { background: rgba(255,140,0,.2); transform: translateY(-1px); }
+
+/* 카드 내 선물 버튼 (작은 버전) */
+.gift-btn-sm {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 12px;
+  background: rgba(255,140,0,.08);
+  border: 1px solid rgba(255,140,0,.2);
+  border-radius: 14px;
+  color: #FFB347;
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all .2s;
+  white-space: nowrap; text-decoration: none;
+  margin-bottom: 6px;
+}
+.gift-btn-sm:hover { background: rgba(255,140,0,.18); }
+
+/* 카톡+완료 가로 배치 */
+.ac-btn-row {
+  display: flex; gap: 6px; align-items: center;
+}
+.ac-right {
+  display: flex; flex-direction: row;
+  align-items: center; gap: 8px;
+  flex-shrink: 0; margin-left: 0;
+}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(27,58,107,.95);color:#fff;padding:11px 22px;border-radius:24px;font-size:13px;font-weight:500;z-index:500;opacity:0;transition:all .3s;white-space:nowrap;backdrop-filter:blur(8px);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- 헤더 -->
+  <header class="header">
+    <a class="back-btn" href="index.html">← 메인으로</a>
+    <div class="header-center">
+      <div class="header-title">TODAY ALARM</div>
+      <div class="header-date" id="headerDate">—</div>
+    </div>
+    <div class="header-right" id="headerFp">유니스지사</div>
+  </header>
+
+  <!-- 요약 카드 -->
+  <div class="summary-cards">
+    <div class="sum-card sum-today" onclick="scrollToSection('today')">
+      <div class="sum-icon">📋</div>
+      <div class="sum-label">오늘 챙길 고객</div>
+      <div><span class="sum-count" id="cntToday">0</span><span class="sum-unit">건</span></div>
+    </div>
+    <div class="sum-card sum-d30" onclick="scrollToSection('d30')">
+      <div class="sum-icon">📅</div>
+      <div class="sum-label">D-30 예정</div>
+      <div><span class="sum-count" id="cntD30">0</span><span class="sum-unit">건</span></div>
+    </div>
+    <div class="sum-card sum-d5" onclick="scrollToSection('d5')">
+      <div class="sum-icon">💳</div>
+      <div class="sum-label">D-5 이체</div>
+      <div><span class="sum-count" id="cntD5">0</span><span class="sum-unit">건</span></div>
+    </div>
+    <div class="sum-card sum-manage" onclick="scrollToSection('manage')">
+      <div class="sum-icon">⚠️</div>
+      <div class="sum-label">장기 미연락</div>
+      <div><span class="sum-count" id="cntManage">0</span><span class="sum-unit">건</span></div>
+    </div>
+  </div>
+
+  <!-- 오늘 알림 -->
+  <div class="alarm-section" id="section-today">
+    <div class="section-header" style="justify-content:space-between;" onclick="toggleSection('today')">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="section-badge badge-today">🔔 오늘 알림</div>
+        <span class="section-count" id="labelToday"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <a class="gift-btn" href="https://orange.hanbizmall.com/?pn=member.login.form" target="_blank" onclick="event.stopPropagation()">🎁 선물 보내기</a>
+        <span class="accordion-arrow" id="arrow-today">▼</span>
+      </div>
+    </div>
+    <div class="accordion-body" id="body-today">
+      <div class="alarm-list" id="listToday"></div>
+    </div>
+  </div>
+
+  <!-- D-30 상령일 -->
+  <div class="alarm-section" id="section-d30">
+    <div class="section-header" onclick="toggleSection('d30')">
+      <div class="section-badge badge-d30">📅 D-30 예정 · 상령일</div>
+      <span class="section-count" id="labelD30"></span>
+      <span class="accordion-arrow" id="arrow-d30">▼</span>
+    </div>
+    <div class="accordion-body" id="body-d30">
+      <div class="alarm-list" id="listD30"></div>
+    </div>
+  </div>
+
+  <!-- D-5 이체 -->
+  <div class="alarm-section" id="section-d5">
+    <div class="section-header" onclick="toggleSection('d5')">
+      <div class="section-badge badge-d5">💳 D-5 예정 · 이체일</div>
+      <span class="section-count" id="labelD5"></span>
+      <span class="accordion-arrow" id="arrow-d5">▼</span>
+    </div>
+    <div class="accordion-body" id="body-d5">
+      <div class="alarm-list" id="listD5"></div>
+    </div>
+  </div>
+
+  <!-- 관리 알림 -->
+  <div class="alarm-section" id="section-manage">
+    <div class="section-header" onclick="toggleSection('manage')">
+      <div class="section-badge badge-manage">⚠️ 관리 알림 · 장기 미연락 30일+</div>
+      <span class="section-count" id="labelManage"></span>
+      <span class="accordion-arrow" id="arrow-manage">▼</span>
+    </div>
+    <div class="accordion-body" id="body-manage">
+      <div class="alarm-list" id="listManage"></div>
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+
+
+// ── 카톡 문구 데이터 ──────────────────────────────
+function getSign() {
+  var fp = JSON.parse(localStorage.getItem('unispace_user') || '{}');
+  var name  = fp.name  || '담당 FP';
+  var role  = fp.role  || 'FP';
+  var phone = fp.phone || '';
+  var line1 = '한화생명금융 VIP사업부 유니스지사';
+  var line2 = name + ' ' + role;
+  return line1 + '\n' + line2 + (phone ? '\n' + phone : '');
+}
+
+var KAKAO_TEMPLATES = {
+  birthday: {
+    label: '🎂 생일',
+    versions: [
+      { name:'기본',      text: function(c){ return c.name+' 고객님, 안녕하세요 😊\n오늘은 소중한 생신이시네요 🎂\n항상 건강하시고 행복한 하루 되세요!\n\n'+getSign(); }},
+      { name:'따뜻하게',  text: function(c){ return c.name+' 고객님, 생신 축하드립니다 🎂🎊\n오늘 하루 가족과 함께 행복한 시간 보내세요!\n언제나 든든히 곁에 있겠습니다 😊\n\n'+getSign(); }},
+      { name:'간결하게',  text: function(c){ return c.name+' 고객님, 생신 축하드립니다! 🎂\n건강하고 행복한 한 해 되세요 😊\n\n'+getSign(); }},
+      { name:'감성적',    text: function(c){ return c.name+' 고객님 🎂\n오늘 특별한 날, 진심으로 축하드립니다.\n항상 건강하시고 좋은 일만 가득하시길 바랍니다 🙏\n\n'+getSign(); }},
+      { name:'따뜻하게2', text: function(c){ return c.name+' 고객님, 생신 축하드립니다 🎉🎂\n한 해 한 해 더 특별해지시는 것 같아요 😊\n오늘도 행복한 하루 보내세요!\n\n'+getSign(); }},
+    ]
+  },
+  c100: {
+    label: '🎉 계약 100일',
+    versions: [
+      { name:'기본',      text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+'  가입 후 벌써 100일이 됐네요 🎉\n앞으로도 좋은 보장으로 함께하겠습니다.\n\n'+getSign(); }},
+      { name:'신뢰 강조', text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+' 계약 100일이 되었습니다 🎊\n변함없이 든든하게 보장해 드리겠습니다.\n불편하신 점 있으면 언제든 연락 주세요!\n\n'+getSign(); }},
+      { name:'간결하게',  text: function(c,e){ return c.name+' 고객님 😊\n'+(e.insurer||'보험')+' 가입 100일 됐습니다! 🎉\n잘 유지해 주셔서 감사합니다 🙏\n\n'+getSign(); }},
+      { name:'체크 유도', text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+' 가입 100일이 되었네요 🎉\n혹시 보장 내용 다시 한번 확인해 드릴까요?\n편하신 시간에 말씀 주세요!\n\n'+getSign(); }},
+      { name:'감사 표현', text: function(c,e){ return c.name+' 고객님 🙏\n믿고 함께해 주신 지 100일이 됐습니다 🎊\n앞으로도 최선을 다해 챙겨드리겠습니다.\n\n'+getSign(); }},
+    ]
+  },
+  anniversary: {
+    label: '🎊 계약 기념일',
+    versions: [
+      { name:'기본',      text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+' 가입 '+e.year+'주년을 축하드립니다 🎊\n항상 든든한 보장으로 함께하겠습니다.\n\n'+getSign(); }},
+      { name:'감사 강조', text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+' 함께한 지 어느덧 '+e.year+'년이 됐네요 🎊\n믿고 함께해 주셔서 진심으로 감사드립니다.\n앞으로도 잘 부탁드립니다 😊\n\n'+getSign(); }},
+      { name:'간결하게',  text: function(c,e){ return c.name+' 고객님 😊\n'+(e.insurer||'보험')+' '+e.year+'주년 축하드립니다! 🎉\n오래 함께해 주셔서 감사합니다 🙏\n\n'+getSign(); }},
+      { name:'상담 유도', text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+' 가입 '+e.year+'주년이 됐습니다 🎊\n보장 내용이 지금 상황에도 잘 맞는지 한번 점검해 드릴까요?\n편하신 시간에 연락 주세요!\n\n'+getSign(); }},
+      { name:'감성적',    text: function(c,e){ return c.name+' 고객님 🙏\n'+e.year+'년 전 저를 믿어주셔서 감사합니다.\n앞으로도 고객님 곁에서 든든하게 함께하겠습니다 😊\n\n'+getSign(); }},
+    ]
+  },
+  event: {
+    label: '📌 커스텀 이벤트',
+    versions: [
+      { name:'기본',      text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n설정하신 날짜('+(e.eventName||'이벤트')+')가 도래했습니다 📌\n필요하신 게 있으면 말씀해 주세요!\n\n'+getSign(); }},
+      { name:'안내형',    text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.eventName||'중요한 날짜')+'가 됐습니다 📌\n관련해서 도움 드릴 사항 있으시면 편하게 말씀 주세요!\n\n'+getSign(); }},
+      { name:'간결하게',  text: function(c,e){ return c.name+' 고객님 😊\n'+(e.eventName||'설정하신 날')+'이 됐습니다 📌\n필요하신 거 있으시면 말씀해 주세요!\n\n'+getSign(); }},
+      { name:'보험 연결', text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.eventName||'중요한 날짜')+'가 됐습니다 📌\n이 시점에 맞춰 보험 보장도 다시 한번 점검해 드릴까요?\n편하신 시간에 연락 주세요!\n\n'+getSign(); }},
+      { name:'따뜻하게',  text: function(c,e){ return c.name+' 고객님 😊\n'+(e.eventName||'특별한 날')+'이 됐습니다.\n항상 건강하시고 좋은 일만 가득하시길 바랍니다 🙏\n\n'+getSign(); }},
+    ]
+  },
+  aging: {
+    label: '⏰ 상령일 D-30',
+    versions: [
+      { name:'기본',        text: function(c){ return c.name+' 고객님, 안녕하세요 😊\n보험 나이가 바뀌는 날이 30일 후입니다 ⏰\n보험료 인상 전 추가 보장이 필요하신지 점검해 드리겠습니다!\n\n'+getSign(); }},
+      { name:'혜택 강조',   text: function(c){ return c.name+' 고객님, 안녕하세요 😊\n다음 달이면 보험 나이가 한 살 올라가요 ⏰\n지금이 더 저렴하게 가입할 수 있는 마지막 기회일 수 있습니다!\n필요하신 보장 있으시면 말씀 주세요 😊\n\n'+getSign(); }},
+      { name:'간결하게',    text: function(c){ return c.name+' 고객님 😊\n보험 나이 바뀌는 날 30일 전입니다 ⏰\n보험료 오르기 전에 필요한 보장 챙겨두세요!\n\n'+getSign(); }},
+      { name:'부드럽게',    text: function(c){ return c.name+' 고객님, 안녕하세요 😊\n곧 보험 나이가 바뀌는 시기가 다가오네요 ⏰\n급하진 않지만 한번 보장 내용 점검해 드릴까요?\n\n'+getSign(); }},
+      { name:'정보 제공형', text: function(c){ return c.name+' 고객님, 안녕하세요 😊\n보험 나이가 바뀌는 날이 30일 후입니다 ⏰\n이날이 지나면 보험 나이가 +1세가 되어 보험료가 인상될 수 있어요.\n지금 필요한 보장 있으시면 미리 챙겨두시는 게 좋습니다!\n\n'+getSign(); }},
+    ]
+  },
+  payment: {
+    label: '💳 이체일 D-5',
+    versions: [
+      { name:'기본',      text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+' 이체일('+(e.payday||'')+'일)이 5일 후입니다 💳\n자동이체 계좌 잔액을 미리 확인해 주세요!\n\n'+getSign(); }},
+      { name:'부드럽게',  text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+' 이체일이 곧 다가옵니다 💳\n혹시 계좌 잔액 미리 확인해 두시면 좋을 것 같아서 알려드려요 😊\n\n'+getSign(); }},
+      { name:'간결하게',  text: function(c,e){ return c.name+' 고객님 😊\n'+(e.insurer||'보험')+' 이체일 5일 전입니다 💳\n잔액 미리 확인해 주세요!\n\n'+getSign(); }},
+      { name:'배려 강조', text: function(c,e){ return c.name+' 고객님, 안녕하세요 😊\n'+(e.insurer||'보험')+' 이체일이 '+(e.payday||'')+'일입니다 💳\n보험료가 자동이체 되어야 보장이 유지되어서 미리 알려드립니다.\n항상 잘 챙겨드리겠습니다 😊\n\n'+getSign(); }},
+      { name:'친근하게',  text: function(c,e){ return c.name+' 고객님 💳\n'+(e.insurer||'보험')+' 이체일 5일 남았어요!\n계좌 잔액 꼭 확인해 주세요 😊\n\n'+getSign(); }},
+    ]
+  },
+  noc: {
+    label: '📵 장기 미연락',
+    versions: [
+      { name:'기본',        text: function(c){ return c.name+' 고객님, 안녕하세요 😊\n오랜만에 인사드립니다 🙂\n요즘 건강은 어떠세요?\n필요하신 게 있으시면 편하게 연락 주세요!\n\n'+getSign(); }},
+      { name:'안부 중심',   text: function(c){ return c.name+' 고객님, 안녕하세요 😊\n연락드린 지 오래됐네요 🙏\n별고 없이 잘 지내고 계신가요?\n언제든 편하게 연락 주세요!\n\n'+getSign(); }},
+      { name:'간결하게',    text: function(c){ return c.name+' 고객님 😊\n오랜만에 인사드립니다!\n잘 지내고 계시죠? 😊\n\n'+getSign(); }},
+      { name:'정보 제공형', text: function(c){ return c.name+' 고객님, 안녕하세요 😊\n오랜만에 연락드립니다 🙏\n최근 보험 관련 변경사항이나 도움 드릴 것이 있는지 확인차 연락드렸습니다.\n편하실 때 말씀 주세요!\n\n'+getSign(); }},
+      { name:'따뜻하게',    text: function(c){ return c.name+' 고객님 😊\n요즘 어떻게 지내고 계세요?\n항상 고객님 건강과 행복을 응원하고 있습니다 🙏\n필요하신 거 있으시면 언제든 연락 주세요!\n\n'+getSign(); }},
+    ]
+  }
+};
+
+// ── 카톡 모달 ─────────────────────────────────────
+var ALARM_MAP = {};
+var kakaoCurrentType = null;
+var kakaoCurrentC    = null;
+var kakaoCurrentE    = null;
+var kakaoSelected    = 0;
+
+function openKakaoModal(key) {
+  var cfg = ALARM_MAP[key];
+  if (!cfg) { showToast('오류: 알림 정보를 찾을 수 없어요'); return; }
+  kakaoCurrentType = cfg.kakaoType;
+  kakaoCurrentC    = cfg.customer;
+  kakaoCurrentE    = cfg.extra || {};
+  kakaoSelected    = 0;
+
+  var tpl = KAKAO_TEMPLATES[kakaoCurrentType];
+  if (!tpl) return;
+
+  document.getElementById('kakaoModalTitle').textContent = tpl.label + ' 문구 선택';
+  document.getElementById('kakaoModalName').textContent  = kakaoCurrentC.name + ' 고객님';
+
+  var list = document.getElementById('kakaoVersionList');
+  list.innerHTML = tpl.versions.map(function(v, i) {
+    var preview = v.text(kakaoCurrentC, kakaoCurrentE);
+    return '<div class="kakao-version-item' + (i===0?' selected':'') + '" onclick="selectKakaoVersion('+i+')" id="kv_'+i+'">' +
+      '<div class="kakao-version-header">' +
+        '<div class="kakao-version-num">'+(i+1)+'</div>' +
+        '<div class="kakao-version-label">버전'+(i+1)+' · '+v.name+'</div>' +
+      '</div>' +
+      '<div class="kakao-version-preview">'+escHtml(preview.replace(/\\n/g,"\n"))+'</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('kakaoModalOverlay').classList.add('open');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function selectKakaoVersion(i) {
+  document.querySelectorAll('.kakao-version-item').forEach(function(el, idx) {
+    el.classList.toggle('selected', idx === i);
+  });
+  kakaoSelected = i;
+}
+
+function confirmKakaoCopy() {
+  var tpl = KAKAO_TEMPLATES[kakaoCurrentType];
+  if (!tpl) return;
+  var text = tpl.versions[kakaoSelected].text(kakaoCurrentC, kakaoCurrentE);
+  text = text.replace(/\\n/g, '\n');
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function(){
+      document.getElementById('kakaoModalOverlay').classList.remove('open');
+      showToast('💬 카톡 문구가 복사됐어요!');
+    });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    document.getElementById('kakaoModalOverlay').classList.remove('open');
+    showToast('💬 카톡 문구가 복사됐어요!');
+  }
+}
+
+function closeKakaoModal(e) {
+  if (!e || e.target === document.getElementById('kakaoModalOverlay'))
+    document.getElementById('kakaoModalOverlay').classList.remove('open');
+}
+// ── 아코디언 ──────────────────────────────────────
+function toggleSection(id) {
+  var body  = document.getElementById('body-'+id);
+  var arrow = document.getElementById('arrow-'+id);
+  if (!body) return;
+  var isOpen = !body.classList.contains('closed');
+  if (isOpen) {
+    body.classList.add('closed');
+    if (arrow) arrow.classList.add('closed');
+  } else {
+    body.classList.remove('closed');
+    if (arrow) arrow.classList.remove('closed');
+  }
+}
+// ── 유틸 ──────────────────────────────────────────
+var DB   = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
+var DONE = JSON.parse(localStorage.getItem('unispace_alarm_done') || '{}');
+var TODAY = new Date();
+TODAY.setHours(0,0,0,0);
+
+function dateDiff(d) {
+  // d: 'YYYY-MM-DD' 또는 Date
+  var t = d instanceof Date ? d : new Date(d);
+  t.setHours(0,0,0,0);
+  return Math.round((t - TODAY) / 86400000);
+}
+
+function thisYearDate(mmdd) {
+  // mmdd: 'MM-DD' 형식 → 올해 날짜
+  var parts = mmdd.split('-');
+  return new Date(TODAY.getFullYear(), parseInt(parts[0])-1, parseInt(parts[1]));
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  return d.replace(/-/g,'.');
+}
+
+var toastTimer;
+function showToast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 2800);
+}
+
+function scrollToSection(id) {
+  var el = document.getElementById('section-'+id);
+  if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// ── 알림 카드 생성 ────────────────────────────────
+function makeCard(cfg) {
+  ALARM_MAP[cfg.kakaoKey] = cfg;
+  var doneKey = cfg.doneKey;
+  var isDone  = !!DONE[doneKey];
+  var card = document.createElement('div');
+  card.className = 'alarm-card ' + cfg.colorCls + (isDone ? ' done' : '');
+  card.innerHTML =
+    '<div class="alarm-card-inner">' +
+      '<div class="ac-left">' +
+        '<div class="ac-top">' +
+          '<span class="ac-type-badge ' + cfg.typeCls + '">' + cfg.typeLabel + '</span>' +
+          '<span class="ac-name">' + cfg.name + '</span>' +
+          '<a href="tel:' + cfg.phone + '" class="ac-phone-inline">📞 ' + cfg.phone + '</a>' +
+        '</div>' +
+        '<div class="ac-desc">' + cfg.desc + '</div>' +
+      '</div>' +
+      '<div class="ac-right">' +
+        '<button class="kakao-copy-btn" onclick="openKakaoModal(\'' + cfg.kakaoKey + '\')">💬 카톡</button>' +
+        '<button class="done-btn' + (isDone?' checked':'') + '" id="doneBtn_'+doneKey+'" onclick="markDone(\'' + doneKey + '\',this)">' +
+          (isDone ? '✓ 완료' : '✅ 완료') +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  return card;
+}
+
+function escQ(s) { return (s||'').replace(/'/g,"\\'").replace(/\n/g,'\\n'); }
+
+function copyKakao(key, msg) {
+  var text = msg.replace(/\\n/g, '\n');
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function(){ showToast('💬 카톡 문구가 복사됐어요!'); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('💬 카톡 문구가 복사됐어요!');
+  }
+}
+
+function markDone(key, btn) {
+  DONE[key] = !DONE[key];
+  localStorage.setItem('unispace_alarm_done', JSON.stringify(DONE));
+  var card = btn.closest('.alarm-card');
+  if (DONE[key]) {
+    card.classList.add('done');
+    btn.classList.add('checked');
+    btn.textContent = '✓ 완료';
+    showToast('✅ 완료 처리됐어요!');
+  } else {
+    card.classList.remove('done');
+    btn.classList.remove('checked');
+    btn.textContent = '✅ 완료';
+  }
+}
+
+// ── 카카오 문구 생성 ──────────────────────────────
+function kakaoMsg(type, c, extra) {
+  var name = c.name;
+  switch(type) {
+    case 'birthday':
+      return name + ' 고객님, 안녕하세요 😊\n오늘은 소중한 생신이시네요 🎂\n항상 건강하시고 행복한 하루 되세요!\n\n유니스지사 드림';
+    case 'c100':
+      return name + ' 고객님, 안녕하세요 😊\n' + (extra.insurer||'') + ' 가입 후 벌써 100일이 됐네요 🎉\n앞으로도 좋은 보장으로 함께하겠습니다.\n\n유니스지사 드림';
+    case 'anniversary':
+      return name + ' 고객님, 안녕하세요 😊\n' + (extra.insurer||'') + ' 가입 ' + extra.year + '주년을 축하드립니다 🎊\n항상 든든한 보장으로 함께하겠습니다.\n\n유니스지사 드림';
+    case 'event':
+      return name + ' 고객님, 안녕하세요 😊\n설정하신 날짜(' + (extra.eventName||'') + ')가 도래했습니다 📌\n필요하신 게 있으면 말씀해 주세요!\n\n유니스지사 드림';
+    case 'aging':
+      return name + ' 고객님, 안녕하세요 😊\n보험 나이가 곧 한 살 올라가는 상령일(30일 후)이 다가오고 있어요 ⏰\n보험료 인상 전 추가 보장이 필요하신지 점검해 드리겠습니다!\n\n유니스지사 드림';
+    case 'payment':
+      return name + ' 고객님, 안녕하세요 😊\n' + (extra.insurer||'') + ' 보험료 수금일(' + extra.payday + ')이 5일 후입니다 💳\n자동이체 계좌 잔액을 미리 확인해 주세요!\n\n유니스지사 드림';
+    case 'noc':
+      return name + ' 고객님, 안녕하세요 😊\n오랜만에 인사드립니다 🙂\n요즘 건강은 어떠세요? 필요하신 게 있으시면 편하게 연락 주세요!\n\n유니스지사 드림';
+  }
+  return '';
+}
+
+// ── 메인 렌더 ─────────────────────────────────────
+function render() {
+  // 날짜 표시
+  var days = ['일','월','화','수','목','금','토'];
+  var d = new Date();
+  document.getElementById('headerDate').textContent =
+    d.getFullYear() + '년 ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일 (' + days[d.getDay()] + ')';
+
+  var fp = JSON.parse(localStorage.getItem('unispace_user') || '{}');
+  if (fp.name) document.getElementById('headerFp').textContent = fp.name + ' FP님';
+
+  var todayItems=[], d30Items=[], d5Items=[], manageItems=[];
+
+  DB.forEach(function(c) {
+    var name  = c.name;
+    var phone = c.phone;
+
+    // ① 생일
+    if (c.birth) {
+      var bParts = c.birth.split('-');
+      if (bParts.length >= 3) {
+        var bDate = thisYearDate(bParts[1]+'-'+bParts[2]);
+        var bDiff = dateDiff(bDate);
+        if (bDiff === 0) {
+          var age = d.getFullYear() - parseInt(bParts[0]);
+          todayItems.push({ c:c, colorCls:'ac-birthday', typeCls:'type-birthday', typeLabel:'🎂 생일',
+            name:name, phone:phone, desc:'오늘 생일 · '+age+'세 ('+c.birth+')',
+            doneKey:'birthday_'+c.id+'_'+d.getFullYear(),
+            kakaoKey:'birthday_'+c.id, kakaoType:'birthday', customer:c, extra:{},
+            kakaoMsg: kakaoMsg('birthday', c, {}) });
+        }
+      }
+    }
+
+    // ② 계약 기념일 (100일 / 1·2·3주년)
+    (c.contracts||[]).forEach(function(ct, ci) {
+      if (!ct.date) return;
+      var cDate = new Date(ct.date);
+      var diff  = Math.round((TODAY - cDate) / 86400000);
+      var insurer = ct.insurer || '';
+
+      if (diff === 100) {
+        todayItems.push({ c:c, colorCls:'ac-anniversary', typeCls:'type-anniversary', typeLabel:'🎉 100일',
+          name:name, phone:phone, desc:insurer+' 계약 100일 기념일 ('+fmtDate(ct.date)+')',
+          doneKey:'c100_'+c.id+'_'+ci,
+          kakaoKey:'c100_'+c.id+'_'+ci, kakaoType:'c100', customer:c, extra:{insurer:insurer},
+          kakaoMsg: kakaoMsg('c100', c, {insurer:insurer}) });
+      }
+      [1,2,3].forEach(function(yr) {
+        var anniv = new Date(cDate); anniv.setFullYear(anniv.getFullYear()+yr);
+        if (dateDiff(anniv) === 0) {
+          todayItems.push({ c:c, colorCls:'ac-anniversary', typeCls:'type-anniversary', typeLabel:'🎉 '+yr+'주년',
+            name:name, phone:phone, desc:insurer+' 계약 '+yr+'주년 기념일 ('+fmtDate(ct.date)+')',
+            doneKey:'anniv'+yr+'_'+c.id+'_'+ci,
+            kakaoKey:'anniv_'+yr+'_'+c.id+'_'+ci, kakaoType:'anniversary', customer:c, extra:{insurer:insurer,year:yr},
+            kakaoMsg: kakaoMsg('anniversary', c, {insurer:insurer, year:yr}) });
+        }
+      });
+
+      // ⑤ 이체일 D-5
+      if (ct.payday) {
+        var payDay = parseInt(ct.payday);
+        var d5Date = new Date(TODAY.getFullYear(), TODAY.getMonth(), payDay);
+        if (dateDiff(d5Date) === 5) {
+          d5Items.push({ c:c, colorCls:'ac-payment', typeCls:'type-payment', typeLabel:'💳 이체 D-5',
+            name:name, phone:phone, desc:insurer+' 이체일 '+ct.payday+' (5일 후) · 월 '+Number(ct.premium||0).toLocaleString()+'원',
+            doneKey:'pay_'+c.id+'_'+ci+'_'+TODAY.getFullYear()+'_'+TODAY.getMonth(),
+            kakaoKey:'pay_'+c.id+'_'+ci, kakaoType:'payment', customer:c, extra:{insurer:insurer,payday:ct.payday},
+            kakaoMsg: kakaoMsg('payment', c, {insurer:insurer, payday:ct.payday}) });
+        }
+      }
+    });
+
+    // ③ 커스텀이벤트
+    (c.events||[]).forEach(function(ev, ei) {
+      if (!ev.alertDate && !ev.date) return;
+      var evDate = new Date(ev.alertDate || ev.date);
+      if (dateDiff(evDate) === 0) {
+        todayItems.push({ c:c, colorCls:'ac-event', typeCls:'type-event', typeLabel:'📌 이벤트',
+          name:name, phone:phone, desc:(ev.name||'커스텀이벤트')+' · '+(ev.repeat||'1회'),
+          doneKey:'ev_'+c.id+'_'+ei+'_'+TODAY.getFullYear(),
+          kakaoKey:'ev_'+c.id+'_'+ei, kakaoType:'event', customer:c, extra:{eventName:ev.name},
+          kakaoMsg: kakaoMsg('event', c, {eventName:ev.name}) });
+      }
+    });
+
+    // ④ 상령일 D-30 (직전 생일 + 6개월)
+    if (c.birth) {
+      var bp = c.birth.split('-');
+      if (bp.length >= 3) {
+        var bMonth = parseInt(bp[1])-1, bDay = parseInt(bp[2]);
+        // 직전 생일 계산 (올해 생일이 오늘 이전이면 올해, 아니면 작년)
+        var birthThisYear = new Date(TODAY.getFullYear(), bMonth, bDay);
+        var lastBirthday = birthThisYear <= TODAY ? birthThisYear : new Date(TODAY.getFullYear()-1, bMonth, bDay);
+        // 상령일 = 직전 생일 + 6개월
+        var agingDate = new Date(lastBirthday);
+        agingDate.setMonth(agingDate.getMonth() + 6);
+        if (dateDiff(agingDate) === 30) {
+          d30Items.push({ c:c, colorCls:'ac-aging', typeCls:'type-aging', typeLabel:'⏰ 상령일 D-30',
+            name:name, phone:phone, desc:'보험 나이 변경일 30일 전 · 상령일 '+(agingDate.getMonth()+1)+'월 '+agingDate.getDate()+'일',
+            doneKey:'aging_'+c.id+'_'+TODAY.getFullYear(),
+            kakaoKey:'aging_'+c.id, kakaoType:'aging', customer:c, extra:{},
+            kakaoMsg: kakaoMsg('aging', c, {}) });
+        }
+      }
+    }
+
+    // ⑥ 장기 미연락 30일+
+    if (c.lastContact) {
+      var lc = new Date(c.lastContact.split(' ')[0]);
+      var nocDiff = Math.round((TODAY - lc) / 86400000);
+      if (nocDiff >= 30) {
+        manageItems.push({ c:c, colorCls:'ac-noc', typeCls:'type-noc', typeLabel:'📵 미연락 '+nocDiff+'일',
+          name:name, phone:phone, desc:'마지막 연락 '+fmtDate(c.lastContact.split(' ')[0])+' · '+nocDiff+'일 경과',
+          doneKey:'noc_'+c.id,
+          kakaoKey:'noc_'+c.id, kakaoType:'noc', customer:c, extra:{},
+          kakaoMsg: kakaoMsg('noc', c, {}) });
+      }
+    }
+  });
+
+  // 카운트 업데이트 — cntToday는 전체 합산 (오늘 챙길 고객 총수)
+  document.getElementById('cntToday').textContent  = todayItems.length + d30Items.length + d5Items.length + manageItems.length;
+  document.getElementById('cntD30').textContent    = d30Items.length;
+  document.getElementById('cntD5').textContent     = d5Items.length;
+  document.getElementById('cntManage').textContent = manageItems.length;
+
+  // 렌더
+  renderSection('listToday',  'labelToday',  todayItems,  '생일·기념일·이벤트 없음');
+  renderSection('listD30',    'labelD30',    d30Items,    '상령일 30일 전 고객 없음');
+  renderSection('listD5',     'labelD5',     d5Items,     '이체일 5일 전 고객 없음');
+  renderSection('listManage', 'labelManage', manageItems, '30일 이상 미연락 고객 없음');
+}
+
+function renderSection(listId, labelId, items, emptyMsg) {
+  var el    = document.getElementById(listId);
+  var label = document.getElementById(labelId);
+  var sectionId = listId.replace('list','section-');
+  // sectionId 찾기
+  var sectionEl = el.closest('.alarm-section');
+  label.textContent = items.length ? items.length + '건' : '';
+  if (!items.length) {
+    el.innerHTML = '<div class="empty-section" style="padding:12px;font-size:12px;">✨ ' + emptyMsg + '</div>';
+    if (sectionEl) sectionEl.style.opacity = '0.5';
+    return;
+  }
+  if (sectionEl) sectionEl.style.opacity = '1';
+  el.innerHTML = '';
+  // 완료 항목은 뒤로
+  items.sort(function(a,b){ return (DONE[a.doneKey]?1:0) - (DONE[b.doneKey]?1:0); });
+  items.forEach(function(item) { el.appendChild(makeCard(item)); });
+}
+
+
+// ── 테스트 데이터 자동 삽입 ──────────────────────────
+(function() {
+  var existing = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
+  var hasTest = existing.some(function(c){ return c.id && c.id.startsWith('ALARM_TEST'); });
+  if (hasTest) return; // 이미 있으면 스킵
+
+  var testCustomers = [
+    // 1. 생일 오늘
+    { id:'ALARM_TEST1', name:'김생일', phone:'010-1111-0001',
+      birth:'1985-05-25', gender:'여', grade:'VIP', channel:'지인', customerType:'계약',
+      contracts:[{ insurer:'한화생명', product:'종신보험', date:'2020-03-10', premium:'150000', payday:'15', paymethod:'자동이체' }],
+      family:[], events:[], lastContact:'2026-05-01', registered:'2020-03-10' },
+
+    // 2. 계약 100일 기념일 오늘 (계약일 2026-02-14)
+    { id:'ALARM_TEST2', name:'박백일', phone:'010-1111-0002',
+      birth:'1990-08-10', gender:'남', grade:'우량', channel:'소개', customerType:'계약',
+      contracts:[{ insurer:'삼성생명', product:'건강보험', date:'2026-02-14', premium:'80000', payday:'10', paymethod:'자동이체' }],
+      family:[], events:[], lastContact:'2026-04-10', registered:'2026-02-14' },
+
+    // 3. 계약 1주년 오늘 (계약일 2025-05-25)
+    { id:'ALARM_TEST3', name:'이주년', phone:'010-1111-0003',
+      birth:'1978-03-15', gender:'남', grade:'VIP', channel:'가족', customerType:'계약',
+      contracts:[{ insurer:'교보생명', product:'암보험', date:'2025-05-25', premium:'120000', payday:'25', paymethod:'카드' }],
+      family:[], events:[], lastContact:'2026-05-10', registered:'2025-05-25' },
+
+    // 4. 계약 2주년 오늘 (계약일 2024-05-25)
+    { id:'ALARM_TEST4', name:'최이년', phone:'010-1111-0004',
+      birth:'1982-11-20', gender:'여', grade:'우량', channel:'DB', customerType:'계약',
+      contracts:[{ insurer:'현대해상', product:'실손보험', date:'2024-05-25', premium:'45000', payday:'20', paymethod:'자동이체' }],
+      family:[], events:[], lastContact:'2026-03-01', registered:'2024-05-25' },
+
+    // 5. 계약 3주년 오늘 (계약일 2023-05-25)
+    { id:'ALARM_TEST5', name:'정삼년', phone:'010-1111-0005',
+      birth:'1975-07-04', gender:'남', grade:'일반', channel:'히든', customerType:'관리',
+      contracts:[{ insurer:'삼성화재', product:'운전자보험', date:'2023-05-25', premium:'35000', payday:'5', paymethod:'자동이체' }],
+      family:[], events:[], lastContact:'2026-04-20', registered:'2023-05-25' },
+
+    // 6. 커스텀이벤트 오늘
+    { id:'ALARM_TEST6', name:'강이벤', phone:'010-1111-0006',
+      birth:'1988-02-14', gender:'여', grade:'VIP', channel:'소개', customerType:'계약',
+      contracts:[], family:[],
+      events:[{ name:'보험가입 가능일', alertDate:'2026-05-25', repeat:'1회' }],
+      lastContact:'2026-05-15', registered:'2024-01-01' },
+
+    // 7. 상령일 D-30 (생일 12월 25일 → 상령일 6월 25일 → 30일 전 = 5월 26일... 조정)
+    // 생일 11월 25일 → 상령일 5월 25일+30 = 6월 24일... 
+    // 생일 12월 24일 → 상령일 6월 24일 → D-30 = 5월 25일 ✓
+    { id:'ALARM_TEST7', name:'홍상령', phone:'010-1111-0007',
+      birth:'1980-12-24', gender:'남', grade:'우량', channel:'지인', customerType:'계약',
+      contracts:[{ insurer:'메트라이프', product:'종신보험', date:'2022-03-01', premium:'200000', payday:'1', paymethod:'자동이체' }],
+      family:[], events:[], lastContact:'2026-05-20', registered:'2022-03-01' },
+
+    // 8. 이체일 D-5 (오늘 5월 25일 + 5 = 5월 30일 → payday 30)
+    { id:'ALARM_TEST8', name:'류수금', phone:'010-1111-0008',
+      birth:'1992-06-30', gender:'여', grade:'일반', channel:'지인', customerType:'계약',
+      contracts:[{ insurer:'DB손보', product:'어린이보험', date:'2021-08-15', premium:'60000', payday:'30', paymethod:'자동이체' }],
+      family:[], events:[], lastContact:'2026-05-10', registered:'2021-08-15' },
+
+    // 9. 장기 미연락 (마지막 연락 60일 전)
+    { id:'ALARM_TEST9', name:'윤미연', phone:'010-1111-0009',
+      birth:'1970-09-15', gender:'여', grade:'VIP', channel:'가족', customerType:'계약',
+      contracts:[{ insurer:'한화생명', product:'연금보험', date:'2019-01-10', premium:'300000', payday:'10', paymethod:'자동이체' }],
+      family:[], events:[], lastContact:'2026-03-20', registered:'2019-01-10' },
+
+    // 10. 장기 미연락 (마지막 연락 45일 전)
+    { id:'ALARM_TEST10', name:'임장기', phone:'010-1111-0010',
+      birth:'1995-04-01', gender:'남', grade:'일반', channel:'히든', customerType:'관리',
+      contracts:[], family:[], events:[],
+      lastContact:'2026-04-10', registered:'2025-06-01' },
+  ];
+
+  var merged = existing.concat(testCustomers);
+  localStorage.setItem('unispace_customers', JSON.stringify(merged));
+})();
+
+DB = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
+var d = new Date();
+render();
+</script>
+
+<!-- 카톡 버전 선택 모달 -->
+<div class="kakao-modal-overlay" id="kakaoModalOverlay" onclick="closeKakaoModal(event)">
+  <div class="kakao-modal">
+    <div class="kakao-modal-handle"></div>
+    <div class="kakao-modal-header">
+      <div>
+        <div class="kakao-modal-title" id="kakaoModalTitle">카톡 문구 선택</div>
+        <div class="kakao-modal-name" id="kakaoModalName"></div>
+      </div>
+      <div class="kakao-modal-close" onclick="closeKakaoModal()">✕</div>
+    </div>
+    <div class="kakao-version-list" id="kakaoVersionList"></div>
+    <button class="kakao-copy-confirm" onclick="confirmKakaoCopy()">💬 선택한 문구 복사하기</button>
+  </div>
+</div>
+</body>
+</html>

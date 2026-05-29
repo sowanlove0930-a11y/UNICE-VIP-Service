@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>출결관리 — UNISPACE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=DM+Serif+Display:ital@0;1&family=Syncopate:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080E1C; --bg2:#0D1628; --bg3:#111D35;
+  --sur:rgba(255,255,255,.04); --sur2:rgba(255,255,255,.08);
+  --bdr:rgba(255,255,255,.08); --bdr2:rgba(255,255,255,.16);
+  --gold:#C9A84C; --gold2:#E8C97A;
+  --green:#10B981; --blue:#3B82F6; --red:#EF4444;
+  --purple:#8B5CF6; --orange:#F4A326;
+  --text:#F0F4FF; --text2:#8B98B8; --text3:#4A5568;
+  --r-xl:20px; --r-lg:16px; --r-md:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,.25);border-radius:10px;}
+*{scrollbar-width:thin;scrollbar-color:rgba(201,168,76,.25) transparent;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 40% at 15% 10%,rgba(201,168,76,.07),transparent 60%),
+             radial-gradient(ellipse 50% 50% at 85% 80%,rgba(59,130,246,.06),transparent 60%);}
+.app{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:0 24px 40px;}
+
+/* HEADER */
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--bdr);margin-bottom:20px;}
+.back-btn{display:flex;align-items:center;gap:8px;background:var(--sur);border:1px solid var(--bdr2);border-radius:20px;padding:7px 16px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none;}
+.back-btn:hover{background:var(--sur2);color:var(--text);}
+.header-title{display:flex;align-items:center;gap:10px;}
+.header-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--purple),#6D28D9);display:flex;align-items:center;justify-content:center;font-size:16px;}
+.header-title-text{font-family:'Syncopate',sans-serif;font-size:14px;font-weight:700;letter-spacing:.1em;background:linear-gradient(135deg,#A78BFA,var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.header-fp{font-size:12px;color:var(--text2);}
+
+/* TAB */
+.tab-nav{display:flex;gap:6px;margin-bottom:24px;background:var(--bg3);border-radius:16px;padding:5px;border:1px solid var(--bdr);}
+.tab-btn{flex:1;padding:11px 14px;border:none;border-radius:12px;background:transparent;color:var(--text2);font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .25s;}
+.tab-btn:hover{color:var(--text);background:var(--sur2);}
+.tab-btn.active{background:linear-gradient(135deg,#A78BFA,var(--purple));color:#fff;font-weight:700;box-shadow:0 4px 16px rgba(139,92,246,.3);}
+.tab-page{display:none;} .tab-page.active{display:block;}
+
+/* 체크인 */
+.checkin-hero{background:linear-gradient(135deg,rgba(139,92,246,.1),rgba(59,130,246,.06));border:1px solid rgba(139,92,246,.2);border-radius:20px;padding:32px;margin-bottom:20px;text-align:center;}
+.checkin-date{font-size:13px;color:var(--text2);margin-bottom:6px;}
+.checkin-clock{font-family:'Syncopate',sans-serif;font-size:42px;font-weight:700;background:linear-gradient(135deg,var(--gold2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-variant-numeric:tabular-nums;margin-bottom:4px;}
+.checkin-status-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:24px;}
+.checkin-standard{font-size:12px;color:var(--text3);}
+.deadline-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#FCA5A5;}
+.checkin-btn{display:inline-flex;align-items:center;gap:10px;padding:16px 48px;border:none;border-radius:16px;background:linear-gradient(135deg,#A78BFA,var(--purple));color:#fff;font-family:'Noto Sans KR',sans-serif;font-size:16px;font-weight:800;cursor:pointer;transition:all .25s;box-shadow:0 6px 24px rgba(139,92,246,.35);}
+.checkin-btn:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(139,92,246,.5);}
+.checkin-btn:disabled{background:linear-gradient(135deg,rgba(255,255,255,.1),rgba(255,255,255,.06));color:var(--text2);cursor:not-allowed;transform:none;box-shadow:none;border:1px solid var(--bdr);}
+.checkin-btn.done-normal{background:linear-gradient(135deg,rgba(16,185,129,.2),rgba(16,185,129,.1));border:1px solid rgba(16,185,129,.3);color:#34D399;}
+.checkin-btn.done-late{background:linear-gradient(135deg,rgba(239,68,68,.15),rgba(239,68,68,.08));border:1px solid rgba(239,68,68,.25);color:#FCA5A5;}
+.my-record-card{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;padding:20px 24px;}
+.my-record-title{font-size:12px;font-weight:700;color:var(--text2);letter-spacing:.06em;margin-bottom:14px;}
+.my-record-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr2);}
+.my-record-row:last-child{border-bottom:none;}
+.my-record-label{font-size:13px;color:var(--text2);}
+.my-month-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px;}
+.mms-card{background:var(--bg3);border:1px solid var(--bdr);border-radius:12px;padding:14px;text-align:center;}
+.mms-val{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;margin-bottom:4px;}
+.mms-label{font-size:11px;color:var(--text2);}
+.c-normal{color:#34D399;} .c-late{color:#FCA5A5;} .c-absent{color:var(--text3);} .c-demerit{color:var(--orange);}
+.status-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;}
+.sb-normal{background:rgba(16,185,129,.12);color:#34D399;border:1px solid rgba(16,185,129,.25);}
+.sb-late{background:rgba(239,68,68,.1);color:#FCA5A5;border:1px solid rgba(239,68,68,.2);}
+.sb-absent{background:rgba(255,255,255,.06);color:var(--text3);border:1px solid var(--bdr);}
+.sb-prereport{background:rgba(244,163,38,.1);color:var(--orange);border:1px solid rgba(244,163,38,.2);}
+.sb-approved{background:rgba(16,185,129,.12);color:#34D399;border:1px solid rgba(16,185,129,.25);}
+
+/* 출석현황 탭 */
+.filter-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+.filter-select{padding:8px 14px;background:var(--sur);border:1px solid var(--bdr2);border-radius:10px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:13px;cursor:pointer;}
+.filter-select:focus{outline:none;border-color:var(--purple);}
+.filter-select option{background:#0D1628;}
+.att-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.att-sum-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;text-align:center;}
+.att-sum-val{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;margin-bottom:3px;}
+.att-sum-label{font-size:11px;color:var(--text2);}
+.att-table-wrap{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;overflow:hidden;}
+.att-table{width:100%;border-collapse:collapse;}
+.att-table th{font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.05em;padding:10px 14px;border-bottom:1px solid var(--bdr);text-align:left;background:var(--bg3);}
+.att-table td{padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px;vertical-align:middle;}
+.att-table tr:last-child td{border-bottom:none;}
+.att-table tr:hover td{background:rgba(255,255,255,.02);}
+.att-av{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+.av-alpha{background:rgba(201,168,76,.15);color:var(--gold2);}
+.av-bravo{background:rgba(59,130,246,.12);color:#60A5FA;}
+.demerit-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;background:rgba(244,163,38,.12);color:var(--orange);border:1px solid rgba(244,163,38,.25);}
+
+/* 사전근태보고 탭 */
+.pr-info-banner{background:rgba(244,163,38,.06);border:1px solid rgba(244,163,38,.2);border-radius:14px;padding:14px 18px;margin-bottom:16px;font-size:12px;color:var(--orange);line-height:1.8;}
+.pr-section{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;padding:22px 24px;margin-bottom:16px;}
+.pr-section-title{font-size:13px;font-weight:700;color:var(--text2);letter-spacing:.04em;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.wn-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.wn-field{display:flex;flex-direction:column;gap:6px;}
+.wn-label{font-size:11px;font-weight:700;color:var(--gold);letter-spacing:.05em;}
+.wn-select,.wn-input{padding:11px 14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:13px;transition:all .2s;}
+.wn-select:focus,.wn-input:focus{outline:none;border-color:var(--purple);background:rgba(139,92,246,.05);}
+.wn-select option{background:#0D1628;}
+.wn-full{grid-column:span 2;}
+.wn-btn{width:100%;padding:13px;border:none;border-radius:12px;margin-top:4px;background:linear-gradient(135deg,#A78BFA,var(--purple));color:#fff;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(139,92,246,.25);}
+.wn-btn:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(139,92,246,.4);}
+.wn-btn-gold{background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;box-shadow:0 4px 16px rgba(201,168,76,.25);}
+.wn-btn-gold:hover{box-shadow:0 6px 22px rgba(201,168,76,.4);}
+
+/* 사전보고 내역 목록 */
+.pr-list{display:flex;flex-direction:column;gap:8px;}
+.pr-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg3);border:1px solid var(--bdr);border-radius:12px;}
+.pr-item-date{font-size:13px;font-weight:700;min-width:90px;}
+.pr-item-type{font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;}
+.prt-late{background:rgba(239,68,68,.1);color:#FCA5A5;border:1px solid rgba(239,68,68,.2);}
+.prt-absent{background:rgba(255,255,255,.06);color:var(--text3);border:1px solid var(--bdr);}
+.prt-leave{background:rgba(139,92,246,.12);color:#A78BFA;border:1px solid rgba(139,92,246,.2);}
+.prt-half{background:rgba(16,185,129,.1);color:#34D399;border:1px solid rgba(16,185,129,.2);}
+.prt-offsite{background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.2);}
+.pr-item-note{font-size:12px;color:var(--text2);flex:1;}
+.pr-proof-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;}
+.proof-done{background:rgba(16,185,129,.12);color:#34D399;border:1px solid rgba(16,185,129,.2);}
+.proof-pending{background:rgba(244,163,38,.1);color:var(--orange);border:1px solid rgba(244,163,38,.2);}
+.pr-delete{background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all .2s;}
+.pr-delete:hover{background:rgba(239,68,68,.1);color:#FCA5A5;}
+.pr-empty{text-align:center;padding:28px;color:var(--text2);font-size:13px;}
+
+/* 인증샷 업로드 */
+.photo-upload-area {
+  margin-top: 14px;
+  border: 1.5px dashed rgba(139,92,246,.3); border-radius: 14px;
+  padding: 20px; text-align: center; cursor: pointer;
+  transition: all .25s; background: rgba(139,92,246,.03);
+  position: relative; overflow: hidden;
+}
+.photo-upload-area:hover { border-color: #A78BFA; background: rgba(139,92,246,.07); }
+.photo-upload-area.has-photo { border-style: solid; border-color: rgba(16,185,129,.4); background: rgba(16,185,129,.04); }
+.photo-upload-icon { font-size: 28px; margin-bottom: 8px; }
+.photo-upload-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.photo-upload-sub { font-size: 11px; color: var(--text2); line-height: 1.6; }
+.photo-upload-sub b { color: #A78BFA; }
+.photo-file-input { display: none; }
+.photo-preview-wrap {
+  margin-top: 14px; display: none;
+  border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(16,185,129,.3);
+  position: relative;
+}
+.photo-preview-wrap.show { display: block; }
+.photo-preview-img { width: 100%; max-height: 220px; object-fit: cover; display: block; }
+.photo-preview-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: rgba(16,185,129,.08);
+}
+.photo-preview-name { font-size: 12px; color: #34D399; font-weight: 600; }
+.photo-remove-btn { font-size: 11px; color: var(--text3); background: none; border: none; cursor: pointer; padding: 2px 8px; border-radius: 6px; transition: all .2s; }
+.photo-remove-btn:hover { background: rgba(239,68,68,.1); color: #FCA5A5; }
+.gas-photo-notice { font-size: 11px; color: rgba(244,163,38,.7); margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+
+/* 증빙 완료 버튼 상태 */
+.proof-confirm-btn.has-photo { background: linear-gradient(135deg,#34D399,var(--green)); }
+
+/* 증빙 처리 섹션 */
+.proof-select-wrap{display:flex;gap:10px;align-items:flex-end;}
+.proof-select-wrap .wn-select{flex:1;}
+.proof-confirm-btn{padding:11px 20px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.proof-confirm-btn:hover{box-shadow:0 4px 16px rgba(201,168,76,.35);}
+
+/* GAS 배너 */
+.gas-todo-banner{display:flex;align-items:center;gap:10px;background:rgba(244,163,38,.06);border:1px solid rgba(244,163,38,.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--orange);}
+
+/* toast */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(13,22,40,.95);border:1px solid var(--bdr2);border-radius:12px;padding:12px 22px;font-size:13px;font-weight:600;color:var(--text);opacity:0;transition:all .3s;z-index:999;white-space:nowrap;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+@media(max-width:600px){
+  .att-summary{grid-template-columns:repeat(2,1fr);}
+  .wn-grid{grid-template-columns:1fr;} .wn-full{grid-column:span 1;}
+  .my-month-summary{grid-template-columns:repeat(2,1fr);}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <a class="back-btn" href="index.html">← 메인으로</a>
+    <div class="header-title">
+      <div class="header-icon">🕐</div>
+      <div class="header-title-text">ATTENDANCE</div>
+    </div>
+    <div class="header-fp" id="headerFp">—</div>
+  </div>
+
+  <div class="gas-todo-banner">
+    ⚡ <b style="margin-right:4px">GAS 연동 예정</b> 현재 데이터는 이 기기 localStorage에만 저장됩니다. GAS 연동 후 전체 FP 데이터 통합 예정.
+  </div>
+
+  <div class="tab-nav">
+    <button type="button" class="tab-btn active" onclick="switchTab('checkin',this)">📍 출근 체크인</button>
+    <button type="button" class="tab-btn" onclick="switchTab('status',this)" id="statusTabBtn">📊 출석 현황</button>
+    <button type="button" class="tab-btn" onclick="switchTab('prereport',this)">📋 사전근태보고</button>
+  </div>
+
+  <!-- ══ 출근 체크인 탭 ══ -->
+  <div id="pageCheckin" class="tab-page active">
+    <div class="checkin-hero">
+      <div class="checkin-date" id="heroDate">—</div>
+      <div class="checkin-clock" id="heroClock">00:00:00</div>
+      <div class="checkin-status-row">
+        <span class="checkin-standard">정상 출근 기준: 10:10:59 이전</span>
+        <span class="deadline-badge">10:11:00~ 지각</span>
+      </div>
+      <button type="button" class="checkin-btn" id="checkinBtn" onclick="doCheckin()">📍 출근 체크인</button>
+    </div>
+    <div class="my-record-card">
+      <div class="my-record-title">이번 달 내 출결 요약</div>
+      <div class="my-month-summary">
+        <div class="mms-card"><div class="mms-val c-normal" id="myNormalCount">0</div><div class="mms-label">정상 출근</div></div>
+        <div class="mms-card"><div class="mms-val c-late" id="myLateCount">0</div><div class="mms-label">지각</div></div>
+        <div class="mms-card"><div class="mms-val c-absent" id="myAbsentCount">0</div><div class="mms-label">미출결</div></div>
+        <div class="mms-card"><div class="mms-val c-demerit" id="myDemeritCount">0</div><div class="mms-label">디메리트 누적</div></div>
+      </div>
+      <div style="margin-top:16px;border-top:1px solid var(--bdr2);padding-top:14px;">
+        <div class="my-record-title" style="margin-bottom:10px">최근 출근 기록</div>
+        <div id="recentRecords"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 출석 현황 탭 ══ -->
+  <div id="pageStatus" class="tab-page">
+    <div class="filter-bar">
+      <select class="filter-select" id="statusYear" onchange="onYearMonthChange()"></select>
+      <select class="filter-select" id="statusMonth" onchange="onYearMonthChange()"></select>
+      <select class="filter-select" id="statusDay" onchange="renderStatus()">
+        <option value="all">전체 일자</option>
+      </select>
+      <select class="filter-select" id="statusBranch" onchange="renderStatus()">
+        <option value="all">전체 지점</option>
+        <option value="알파지점">알파지점</option>
+        <option value="브라보지점">브라보지점</option>
+      </select>
+    </div>
+    <div class="att-summary">
+      <div class="att-sum-card"><div class="att-sum-val" style="color:#34D399" id="sumAttRate">—</div><div class="att-sum-label">이번달 출근율</div></div>
+      <div class="att-sum-card"><div class="att-sum-val" style="color:#FCA5A5" id="sumLateFp">—</div><div class="att-sum-label" id="sumNormalLabel">지각 FP</div></div>
+      <div class="att-sum-card"><div class="att-sum-val" style="color:var(--text3)" id="sumAbsentFp">—</div><div class="att-sum-label">미출결 FP</div></div>
+      <div class="att-sum-card"><div class="att-sum-val" style="color:var(--orange)" id="sumDemerit">—</div><div class="att-sum-label" id="sumDemeritLabel">디메리트 대상</div></div>
+    </div>
+    <div class="att-table-wrap">
+      <table class="att-table">
+        <thead><tr id="statusTableHead">
+          <th></th><th>이름</th><th>지점</th><th>정상</th><th>지각</th><th>미출결</th><th>사전보고</th><th>디메리트</th>
+        </tr></thead>
+        <tbody id="statusTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ 사전근태보고 탭 ══ -->
+  <div id="pagePrereport" class="tab-page">
+
+    <div class="pr-info-banner">
+      📋 <b>사전근태보고란?</b> 익일 결근·지각 예정 시 <b>전날 23:59까지</b> 미리 보고합니다.<br>
+      사전보고 후 <b>당일 증빙(구두/인증샷)을 완료하면 출결 인정</b>이 됩니다.<br>
+      <span style="color:rgba(244,163,38,.6);font-size:11px">※ 당일 보고는 지점장·대표만 가능합니다 · 증빙 없이 사전보고만 한 경우 지각/미출결로 처리됩니다</span>
+    </div>
+
+    <!-- 당일 입력 제한 안내 (FP용) -->
+    <div id="prTodayBlock" style="display:none;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:14px 18px;margin-bottom:16px">
+      <div style="font-size:14px;font-weight:700;color:#FCA5A5;margin-bottom:4px">⚠️ 당일 보고는 입력 불가</div>
+      <div style="font-size:12px;color:var(--text2)">사전근태보고는 <b>전날 23:59까지</b> 입력해야 합니다.<br>당일 보고가 필요하면 <b>지점장 또는 대표</b>에게 연락해 주세요.</div>
+    </div>
+
+    <!-- 사전보고 등록 -->
+    <div class="pr-section" id="prFormSection">
+      <div class="pr-section-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>📝 사전보고 등록</span>
+        <span id="prAdminBadge" style="display:none;font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;background:rgba(201,168,76,.15);color:var(--gold2)">관리자 모드</span>
+      </div>
+      <div class="wn-grid">
+        <div class="wn-field">
+          <label class="wn-label">보고 날짜 <span style="font-size:10px;color:var(--text3);font-weight:400">(예정일)</span></label>
+          <input type="date" class="wn-input" id="prDate" onchange="checkPrDateLimit()">
+        </div>
+        <div class="wn-field">
+          <label class="wn-label">유형</label>
+          <select class="wn-select" id="prType">
+            <option value="지각예정">⚠️ 지각 예정</option>
+            <option value="미출석예정">❌ 미출석 예정</option>
+            <option value="활동">📌 활동</option>
+            <option value="리프레쉬">🌿 리프레쉬</option>
+            <option value="기타사유">📝 기타 사유</option>
+          </select>
+        </div>
+        <div class="wn-field wn-full">
+          <label class="wn-label">사유 <span style="color:var(--red);font-size:10px">* 필수</span></label>
+          <input type="text" class="wn-input" id="prNote" placeholder="예) 자녀 학교 행사, 병원 진료, 고객 긴급 방문 등" maxlength="100">
+        </div>
+      </div>
+      <button type="button" class="wn-btn" style="margin-top:14px" id="prSubmitBtn" onclick="savePrereport()">📋 사전보고 등록하기</button>
+    </div>
+
+    <!-- 증빙 처리 -->
+    <div class="pr-section">
+      <div class="pr-section-title">✅ 증빙 처리 <span style="font-size:11px;font-weight:400;color:var(--text3)">사전보고한 날짜를 선택하고 증빙 완료 처리하세요</span></div>
+
+      <div class="proof-select-wrap">
+        <select class="wn-select" id="proofTargetDate">
+          <option value="">사전보고 날짜 선택</option>
+        </select>
+        <button type="button" class="proof-confirm-btn" id="proofConfirmBtn" onclick="confirmProof()">✅ 증빙 완료 처리</button>
+      </div>
+
+      <!-- 인증샷 업로드 -->
+      <input type="file" class="photo-file-input" id="proofPhotoInput"
+        accept="image/*" capture="environment" onchange="handlePhotoSelect(this)">
+
+      <div class="photo-upload-area" id="photoUploadArea" onclick="document.getElementById('proofPhotoInput').click()">
+        <div class="photo-upload-icon">📷</div>
+        <div class="photo-upload-title">인증샷 첨부 (선택)</div>
+        <div class="photo-upload-sub">
+          클릭하면 <b>카메라로 바로 찍거나</b> 갤러리·폴더에서 선택<br>
+          PC · 스마트폰 모두 가능
+        </div>
+      </div>
+
+      <!-- 미리보기 -->
+      <div class="photo-preview-wrap" id="photoPreviewWrap">
+        <img class="photo-preview-img" id="photoPreviewImg" src="" alt="인증샷 미리보기">
+        <div class="photo-preview-bar">
+          <span class="photo-preview-name" id="photoPreviewName"></span>
+          <button type="button" class="photo-remove-btn" onclick="removePhoto()">✕ 삭제</button>
+        </div>
+      </div>
+
+      <div class="gas-photo-notice">
+        ⚡ 인증샷은 현재 미리보기만 지원 · GAS 연동 후 Google Drive 자동 저장 예정
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">증빙 완료 시 해당 날짜 출결이 ✅ 출결인정으로 변경됩니다</div>
+    </div>
+
+    <!-- 이번달 내역 -->
+    <div class="pr-section" style="padding-bottom:8px">
+      <div class="pr-section-title">📅 이번 달 사전보고 내역</div>
+      <div class="pr-list" id="prereportList"></div>
+    </div>
+
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// GAS 연동 포인트
+// TODO_GAS_1: 출근 체크인 → GAS POST (action:'checkin', fpId, fpName, branch, date, time, status)
+// TODO_GAS_2: 전체 출석 현황 → GAS GET (action:'getAttendance', year, month)
+// TODO_GAS_3: 사전근태보고 등록 → GAS POST (action:'savePrereport', fpId, date, type, note)
+// TODO_GAS_4: 증빙 완료 처리 → GAS POST (action:'confirmProof', fpId, date)
+// TODO_GAS_5: 월별 디메리트 집계 → GAS GET (action:'getDemerit', year, month)
+
+var LATE_HOUR = 10, LATE_MIN = 11;
+var currentUser = null;
+var ATT_KEY = 'unispace_attendance';  // 체크인 기록
+var PR_KEY  = 'unispace_prereport';   // 사전근태보고 { "YYYY-MM-DD": { "fpId": {name,branch,type,note,proof,reportedAt} } }
+
+function getAttDB() { try{return JSON.parse(localStorage.getItem(ATT_KEY)||'{}');}catch(e){return{};} }
+function saveAttDB(db){ localStorage.setItem(ATT_KEY,JSON.stringify(db)); }
+function getPrDB()  { try{return JSON.parse(localStorage.getItem(PR_KEY)||'{}');}catch(e){return{};} }
+function savePrDB(db){ localStorage.setItem(PR_KEY,JSON.stringify(db)); }
+
+function showToast(msg){
+  var t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove('show');},2800);
+}
+function getTodayStr(){
+  var n=new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
+function getTomorrowStr(){
+  var n=new Date(); n.setDate(n.getDate()+1);
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
+function getYMStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function getWorkdaysInMonth(y,m){
+  var days=[],last=new Date(y,m+1,0).getDate();
+  for(var d=1;d<=last;d++){var dow=new Date(y,m,d).getDay();if(dow!==0&&dow!==6)days.push(d);}
+  return days;
+}
+
+// ── 초기화 ──────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',function(){
+  // ── 개발모드: unispace_user 없거나 id 없으면 대표 계정으로 자동 설정 ──
+  var DEV_USER = {id:'ktk01',name:'김태규',role:'대표',branch:'유니스지사',phone:'010-2049-0093',active:true};
+  var saved = localStorage.getItem('unispace_user');
+  if (saved) {
+    try {
+      var parsed = JSON.parse(saved);
+      currentUser = parsed.id ? parsed : DEV_USER;
+    } catch(e) { currentUser = DEV_USER; }
+  } else {
+    currentUser = DEV_USER;
+  }
+  localStorage.setItem('unispace_user', JSON.stringify(currentUser));
+  // ──────────────────────────────────────────────────
+
+  document.getElementById('headerFp').textContent=currentUser.name+' · '+currentUser.branch;
+  var isAdmin=currentUser.role==='대표'||currentUser.role==='지점장';
+  document.getElementById('statusTabBtn').style.display=isAdmin?'':'none';
+
+  initFilters();
+  startLiveClock();
+  renderCheckinTab();
+  renderPrereportTab();
+
+  // unispace에서 탭 자동 이동
+  var attTab = sessionStorage.getItem('attTab');
+  if(attTab) {
+    sessionStorage.removeItem('attTab');
+    var tabBtn = document.getElementById(attTab==='status' ? 'statusTabBtn' : null);
+    if(attTab === 'status' && tabBtn) tabBtn.click();
+    else if(attTab === 'prereport') {
+      var btn = document.querySelector('.tab-btn[onclick*="prereport"]');
+      if(btn) btn.click();
+    }
+  }
+
+  // 날짜 기본값: 오늘
+  document.getElementById('prDate').value=getTodayStr();
+  checkPrDateLimit();
+});
+
+// ── 라이브 시계 ──────────────────────────────────────
+function startLiveClock(){
+  function tick(){
+    var n=new Date(),days=['일','월','화','수','목','금','토'];
+    document.getElementById('heroClock').textContent=
+      String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0');
+    document.getElementById('heroDate').textContent=
+      n.getFullYear()+'년 '+(n.getMonth()+1)+'월 '+n.getDate()+'일 ('+days[n.getDay()]+')';
+  }
+  tick(); setInterval(tick,1000);
+}
+
+// ── 탭 전환 ──────────────────────────────────────────
+function switchTab(key,el){
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+  document.querySelectorAll('.tab-page').forEach(function(p){p.classList.remove('active');});
+  el.classList.add('active');
+  var pageId='page'+key.charAt(0).toUpperCase()+key.slice(1);
+  document.getElementById(pageId).classList.add('active');
+  if(key==='status') renderStatus();
+}
+
+// ── 체크인 탭 렌더 ───────────────────────────────────
+function renderCheckinTab(){
+  var today=getTodayStr(),db=getAttDB(),prDb=getPrDB();
+  var rec=db[today]&&db[today][currentUser.id];
+  var btn=document.getElementById('checkinBtn');
+
+  if(rec){
+    var isLate=rec.status==='지각';
+    btn.textContent=(isLate?'⚠️ 지각 체크인 완료 · ':'✅ 출근 완료 · ')+rec.time;
+    btn.disabled=true;
+    btn.className='checkin-btn '+(isLate?'done-late':'done-normal');
+  }else{
+    btn.textContent='📍 출근 체크인'; btn.disabled=false; btn.className='checkin-btn';
+  }
+
+  // 이번달 요약 (디메리트 포함)
+  var now=new Date(),ym=getYMStr(now);
+  var workdays=getWorkdaysInMonth(now.getFullYear(),now.getMonth());
+  var todayNum=now.getDate();
+  var normalCnt=0,lateCnt=0,absentCnt=0,demeritCnt=0;
+
+  workdays.forEach(function(d){
+    if(d>todayNum) return;
+    var ds=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var attRec=db[ds]&&db[ds][currentUser.id];
+    var prRec=prDb[ds]&&prDb[ds][currentUser.id];
+    var proofDone=prRec&&prRec.proof;
+
+    if(!attRec){
+      if(proofDone) normalCnt++;       // 미출결 + 증빙 = 출결인정
+      else if(prRec) { /* 사전보고 대기 */ }
+      else { absentCnt++; demeritCnt++; }
+    } else if(attRec.status==='지각'){
+      if(proofDone) normalCnt++;       // 지각 + 증빙 = 출결인정
+      else { lateCnt++; demeritCnt++; }
+    } else {
+      normalCnt++;
+    }
+  });
+
+  document.getElementById('myNormalCount').textContent=normalCnt;
+  document.getElementById('myLateCount').textContent=lateCnt;
+  document.getElementById('myAbsentCount').textContent=absentCnt;
+  document.getElementById('myDemeritCount').textContent=demeritCnt;
+
+  // 최근 7일
+  var recentEl=document.getElementById('recentRecords');
+  var recentDays=[];
+  for(var i=0;i<7;i++){
+    var d2=new Date(); d2.setDate(d2.getDate()-i);
+    if(d2.getDay()===0||d2.getDay()===6) continue;
+    recentDays.push(d2);
+  }
+  recentEl.innerHTML=recentDays.map(function(d2){
+    var ds=d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')+'-'+String(d2.getDate()).padStart(2,'0');
+    var attRec=db[ds]&&db[ds][currentUser.id];
+    var prRec=prDb[ds]&&prDb[ds][currentUser.id];
+    var days=['일','월','화','수','목','금','토'];
+    var dayLabel=(d2.getMonth()+1)+'/'+d2.getDate()+' ('+days[d2.getDay()]+')';
+    var badge;
+    if(!attRec){
+      if(prRec&&prRec.proof) badge='<span class="status-badge sb-approved">✅ 출결인정</span>';
+      else if(prRec) badge='<span class="status-badge sb-prereport">📋 사전보고</span>';
+      else badge='<span class="status-badge sb-absent">미출결</span>';
+    } else if(attRec.status==='지각'){
+      if(prRec&&prRec.proof) badge='<span class="status-badge sb-approved">✅ 출결인정</span>';
+      else badge='<span class="status-badge sb-late">지각 '+attRec.time.slice(0,5)+'</span>';
+    } else {
+      badge='<span class="status-badge sb-normal">정상 '+attRec.time.slice(0,5)+'</span>';
+    }
+    return '<div class="my-record-row"><span class="my-record-label">'+dayLabel+'</span>'+badge+'</div>';
+  }).join('');
+}
+
+// ── 출근 체크인 실행 ─────────────────────────────────
+function doCheckin(){
+  var today=getTodayStr(),db=getAttDB();
+  if(db[today]&&db[today][currentUser.id]){showToast('오늘 이미 체크인하셨습니다');return;}
+  var now=new Date(),h=now.getHours(),m=now.getMinutes(),s=now.getSeconds();
+  var timeStr=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  var isLate=(h>LATE_HOUR)||(h===LATE_HOUR&&m>=LATE_MIN);
+  if(!db[today]) db[today]={};
+  db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
+  saveAttDB(db);
+  // TODO_GAS_1: GAS POST 체크인
+  renderCheckinTab();
+  showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
+}
+
+// ── 사전근태보고 날짜 제한 ───────────────────────────
+function checkPrDateLimit() {
+  var isAdmin = currentUser.role === '대표' || currentUser.role === '지점장';
+  var selDate = document.getElementById('prDate').value;
+  var today   = getTodayStr();
+  var block   = document.getElementById('prTodayBlock');
+  var btn     = document.getElementById('prSubmitBtn');
+  var badge   = document.getElementById('prAdminBadge');
+
+  if(!selDate) return;
+
+  if(selDate === today) {
+    // 당일 선택
+    if(isAdmin) {
+      // 관리자: 가능 + 관리자 모드 뱃지 표시
+      if(block)  block.style.display  = 'none';
+      if(btn)    btn.disabled = false;
+      if(badge)  badge.style.display  = '';
+    } else {
+      // FP: 차단
+      if(block)  block.style.display  = '';
+      if(btn)    btn.disabled = true;
+      if(badge)  badge.style.display  = 'none';
+    }
+  } else {
+    // 미래 날짜: 모두 가능
+    if(block)  block.style.display  = 'none';
+    if(btn)    btn.disabled = false;
+    if(badge)  badge.style.display  = 'none';
+  }
+}
+function renderPrereportTab(){
+  var db=getPrDB(),now=new Date();
+  var ym=getYMStr(now);
+
+  // 증빙 처리 드롭다운 — 이번달 사전보고 중 미증빙 건
+  var proofSel=document.getElementById('proofTargetDate');
+  proofSel.innerHTML='<option value="">사전보고 날짜 선택</option>';
+  Object.keys(db).filter(function(d){return d.startsWith(ym);}).sort().forEach(function(date){
+    var rec=db[date][currentUser.id];
+    if(rec&&!rec.proof){
+      proofSel.innerHTML+='<option value="'+date+'">'+date+' ('+rec.type+')</option>';
+    }
+  });
+
+  // 이번달 내역
+  var items=[];
+  Object.keys(db).filter(function(d){return d.startsWith(ym);}).sort().reverse().forEach(function(date){
+    var rec=db[date]&&db[date][currentUser.id];
+    if(rec) items.push({date:date,rec:rec});
+  });
+
+  var listEl=document.getElementById('prereportList');
+  if(!items.length){listEl.innerHTML='<div class="pr-empty">이번 달 사전보고 내역이 없습니다</div>';return;}
+
+  var typeMap={'지각예정':'prt-late','미출결예정':'prt-absent','휴가':'prt-leave','반차':'prt-half','외근':'prt-offsite'};
+  var typeEmoji={'지각예정':'⚠️','미출결예정':'❌','휴가':'🌴','반차':'🌤','외근':'🚗'};
+  listEl.innerHTML=items.map(function(item){
+    var cls=typeMap[item.rec.type]||'prt-absent';
+    var emo=typeEmoji[item.rec.type]||'📋';
+    var proofHtml=item.rec.proof
+      ?'<span class="pr-proof-badge proof-done">✅ 증빙완료</span>'
+      :'<span class="pr-proof-badge proof-pending">📋 증빙대기</span>';
+    return '<div class="pr-item">'+
+      '<div class="pr-item-date">'+item.date+'</div>'+
+      '<span class="pr-item-type '+cls+'">'+emo+' '+item.rec.type+'</span>'+
+      '<div class="pr-item-note">'+item.rec.note+'</div>'+
+      proofHtml+
+      '<button type="button" class="pr-delete" onclick="deletePrereport(\''+item.date+'\')">삭제</button>'+
+    '</div>';
+  }).join('');
+}
+
+// ── 사전보고 저장 ─────────────────────────────────────
+function savePrereport(){
+  var date=document.getElementById('prDate').value;
+  var type=document.getElementById('prType').value;
+  var note=document.getElementById('prNote').value.trim();
+  if(!date){showToast('날짜를 선택해 주세요');return;}
+  if(!note){showToast('⚠️ 사유를 입력해 주세요');return;}
+
+  // FP 당일 입력 차단 (이중 검증)
+  var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
+  if(!isAdmin && date===getTodayStr()){
+    showToast('⚠️ 당일 보고는 지점장·대표만 가능합니다');
+    return;
+  }
+
+  var db=getPrDB();
+  if(!db[date]) db[date]={};
+  db[date][currentUser.id]={
+    name:currentUser.name,branch:currentUser.branch,
+    type:type,note:note,proof:false,
+    reportedAt:new Date().toISOString()
+  };
+  savePrDB(db);
+  // TODO_GAS_3: GAS POST 사전보고
+
+  document.getElementById('prNote').value='';
+  document.getElementById('prDate').value=getTomorrowStr();
+  showToast('📋 사전보고가 등록되었습니다');
+  renderPrereportTab();
+  renderCheckinTab();
+}
+
+// ── 인증샷 업로드 ─────────────────────────────────────
+// TODO_GAS_4: 증빙 완료 처리 시 이미지 → GAS POST → Google Drive 저장
+// GAS 연동 전: 미리보기만 지원, 실제 저장 없음
+var _selectedPhotoBase64 = null;
+var _selectedPhotoName   = null;
+
+function handlePhotoSelect(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('⚠️ 이미지 파일만 선택 가능합니다'); return; }
+  if (file.size > 10 * 1024 * 1024) { showToast('⚠️ 10MB 이하 이미지만 가능합니다'); return; }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    _selectedPhotoBase64 = e.target.result;
+    _selectedPhotoName   = file.name;
+
+    document.getElementById('photoPreviewImg').src    = e.target.result;
+    document.getElementById('photoPreviewName').textContent = '📎 ' + file.name;
+    document.getElementById('photoPreviewWrap').classList.add('show');
+    document.getElementById('photoUploadArea').classList.add('has-photo');
+    document.getElementById('proofConfirmBtn').classList.add('has-photo');
+    document.getElementById('proofConfirmBtn').textContent = '✅ 인증샷 포함 증빙 완료';
+    showToast('📷 인증샷이 선택되었습니다');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto() {
+  _selectedPhotoBase64 = null;
+  _selectedPhotoName   = null;
+  document.getElementById('proofPhotoInput').value  = '';
+  document.getElementById('photoPreviewImg').src    = '';
+  document.getElementById('photoPreviewWrap').classList.remove('show');
+  document.getElementById('photoUploadArea').classList.remove('has-photo');
+  document.getElementById('proofConfirmBtn').classList.remove('has-photo');
+  document.getElementById('proofConfirmBtn').textContent = '✅ 증빙 완료 처리';
+}
+
+// ── 증빙 완료 처리 ───────────────────────────────────
+function confirmProof(){
+  var date=document.getElementById('proofTargetDate').value;
+  if(!date){showToast('증빙 처리할 날짜를 선택해 주세요');return;}
+
+  var db=getPrDB();
+  if(db[date]&&db[date][currentUser.id]){
+    db[date][currentUser.id].proof   = true;
+    db[date][currentUser.id].proofAt = new Date().toISOString();
+    db[date][currentUser.id].hasPhoto = !!_selectedPhotoBase64;
+    // TODO_GAS_4: GAS POST { fpId, date, proof:true, photoBase64: _selectedPhotoBase64 }
+    // GAS 연동 후 Google Drive 저장 → Sheets에 링크 기록
+    savePrDB(db);
+
+    var msg = _selectedPhotoBase64
+      ? '✅ ' + date + ' 인증샷 포함 출결 인정 처리되었습니다'
+      : '✅ ' + date + ' 출결 인정 처리되었습니다';
+    showToast(msg);
+
+    removePhoto(); // 사진 초기화
+    renderPrereportTab();
+    renderCheckinTab();
+  }
+}
+
+// ── 사전보고 삭제 ─────────────────────────────────────
+function deletePrereport(date){
+  var db=getPrDB();
+  if(db[date]&&db[date][currentUser.id]){
+    delete db[date][currentUser.id];
+    savePrDB(db);
+    showToast('삭제되었습니다');
+    renderPrereportTab();
+  }
+}
+
+// ── 출석 현황 탭 ─────────────────────────────────────
+function initFilters(){
+  var now=new Date();
+  var yearSel=document.getElementById('statusYear');
+  for(var y=now.getFullYear();y>=2025;y--){
+    yearSel.innerHTML+='<option value="'+y+'"'+(y===now.getFullYear()?' selected':'')+'>'+y+'년</option>';
+  }
+  var monthSel=document.getElementById('statusMonth');
+  for(var mo=1;mo<=12;mo++){
+    monthSel.innerHTML+='<option value="'+mo+'"'+(mo===now.getMonth()+1?' selected':'')+'>'+mo+'월</option>';
+  }
+  updateDayOptions(); // 일자 옵션 초기화
+}
+
+// 연도/월 변경 시 일자 드롭다운 재생성
+function onYearMonthChange(){
+  updateDayOptions();
+  renderStatus();
+}
+
+function updateDayOptions(){
+  var year  = parseInt(document.getElementById('statusYear').value);
+  var month = parseInt(document.getElementById('statusMonth').value);
+  var now   = new Date();
+  var daySel = document.getElementById('statusDay');
+  var curDay = daySel.value; // 기존 선택값 유지
+  daySel.innerHTML = '<option value="all">전체 일자</option>';
+  var lastDay = new Date(year, month, 0).getDate();
+  var maxDay  = (year===now.getFullYear()&&month===now.getMonth()+1) ? now.getDate() : lastDay;
+  for(var d=1; d<=maxDay; d++){
+    var dow = new Date(year, month-1, d).getDay();
+    if(dow===0||dow===6) continue; // 주말 제외
+    var ds = String(d)+'일';
+    daySel.innerHTML += '<option value="'+d+'"'+(String(curDay)===String(d)?' selected':'')+'>'+ds+'</option>';
+  }
+}
+
+function renderStatus(){
+  var year   = parseInt(document.getElementById('statusYear').value);
+  var month  = parseInt(document.getElementById('statusMonth').value);
+  var day    = document.getElementById('statusDay').value;   // 'all' or 숫자
+  var branch = document.getElementById('statusBranch').value;
+  var attDb=getAttDB(), prDb=getPrDB();
+  var now=new Date();
+  var isDayMode = (day !== 'all');
+
+  var fpList=getFpList().filter(function(fp){
+    if(!fp.active) return false;
+    if(branch!=='all'&&fp.branch!==branch) return false;
+    if(currentUser.role==='지점장') return fp.branch===currentUser.branch;
+    return true;
+  });
+
+  // 대상 날짜 목록
+  var targetDays;
+  if(isDayMode){
+    targetDays = [parseInt(day)];
+  } else {
+    var maxDay = (year===now.getFullYear()&&month===now.getMonth()+1)?now.getDate():31;
+    targetDays = getWorkdaysInMonth(year,month-1).filter(function(d){ return d<=maxDay; });
+  }
+
+  var totalNormal=0, totalPossible=0, lateFpSet={}, absentFpSet={}, demeritFps=0;
+  var rows=fpList.map(function(fp){
+    var normalCnt=0, lateCnt=0, absentCnt=0, prCnt=0, demerit=0;
+    targetDays.forEach(function(d){
+      var ds=year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      var attRec=attDb[ds]&&attDb[ds][fp.id];
+      var prRec=prDb[ds]&&prDb[ds][fp.id];
+      var proofDone=prRec&&prRec.proof;
+      if(!attRec){
+        if(proofDone) normalCnt++;
+        else if(prRec) prCnt++;
+        else { absentCnt++; demerit++; }
+      } else if(attRec.status==='지각'){
+        if(proofDone) normalCnt++;
+        else { lateCnt++; demerit++; }
+      } else { normalCnt++; }
+    });
+    totalNormal += normalCnt;
+    totalPossible += targetDays.length;
+    if(lateCnt > 0)  lateFpSet[fp.id]   = true;
+    if(absentCnt > 0) absentFpSet[fp.id] = true;
+    if(!isDayMode && demerit>=3 && (normalCnt+lateCnt)>0) demeritFps++;
+    return {fp,normalCnt,lateCnt,absentCnt,prCnt,demerit,
+            timeStr: isDayMode && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')]
+                     && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id]
+                     ? attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id].time : ''};
+  });
+
+  // 요약 카드
+  var attRate = totalPossible > 0 ? Math.round(totalNormal / totalPossible * 100) : 0;
+  var lateFpCount   = Object.keys(lateFpSet).length;
+  var absentFpCount = Object.keys(absentFpSet).length;
+
+  if(isDayMode){
+    // 일별 모드
+    var dayNormal  = rows.filter(function(r){ return r.normalCnt>0; }).length;
+    var dayLate    = rows.filter(function(r){ return r.lateCnt>0; }).length;
+    var dayAbsent  = rows.filter(function(r){ return r.absentCnt>0; }).length;
+    var dayPr      = rows.filter(function(r){ return r.prCnt>0; }).length;
+    document.getElementById('sumAttRate').textContent  = dayNormal+'명';
+    document.getElementById('sumAttRate').closest('.att-sum-card').querySelector('.att-sum-label').textContent = '정상 출근';
+    document.getElementById('sumLateFp').textContent   = dayLate+'명';
+    document.getElementById('sumNormalLabel').textContent = '지각';
+    document.getElementById('sumAbsentFp').textContent = dayAbsent+'명';
+    document.getElementById('sumDemerit').textContent  = dayPr+'명';
+    document.getElementById('sumDemeritLabel').textContent = '사전보고';
+  } else {
+    // 월간 모드
+    document.getElementById('sumAttRate').textContent  = attRate+'%';
+    document.getElementById('sumAttRate').closest('.att-sum-card').querySelector('.att-sum-label').textContent = '이번달 출근율';
+    document.getElementById('sumLateFp').textContent   = lateFpCount+'명';
+    document.getElementById('sumNormalLabel').textContent = '지각 FP';
+    document.getElementById('sumAbsentFp').textContent = absentFpCount+'명';
+    document.getElementById('sumDemerit').textContent  = demeritFps+'명';
+    document.getElementById('sumDemeritLabel').textContent = '디메리트 대상';
+  }
+
+  // 테이블 헤더 — 일별 모드 시 체크인 시간 컬럼 추가
+  var head = document.getElementById('statusTableHead');
+  if(isDayMode){
+    head.innerHTML='<th></th><th>이름</th><th>지점</th><th>출결 상태</th><th>체크인</th><th>사전보고</th>';
+  } else {
+    head.innerHTML='<th></th><th>이름</th><th>지점</th><th>정상</th><th>지각</th><th>미출결</th><th>사전보고</th><th>디메리트 <span style="font-size:10px;color:var(--text3);font-weight:400">(3회 기준)</span></th>';
+  }
+
+  // 테이블 행 — 알파지점 먼저, 브라보지점 다음, 각 지점 내 디메리트 순
+  var sortedRows = rows.sort(function(a,b){
+    var branchOrder = function(fp) {
+      if(fp.branch==='알파지점') return 0;
+      if(fp.branch==='브라보지점') return 1;
+      return 2;
+    };
+    var bo = branchOrder(a.fp) - branchOrder(b.fp);
+    if(bo !== 0) return bo;
+    if(isDayMode) return (b.lateCnt+b.absentCnt)-(a.lateCnt+a.absentCnt);
+    return b.demerit-a.demerit;
+  });
+  var tbody=document.getElementById('statusTableBody');
+  tbody.innerHTML=sortedRows.map(function(r){
+    var isAlpha = r.fp.branch==='알파지점';
+    var avCls   = isAlpha ? 'av-alpha' : 'av-bravo';
+    var brLabel = isAlpha ? '알파' : (r.fp.branch==='브라보지점'?'브라보':'—');
+    var brLabelHtml = '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;' +
+      (isAlpha
+        ? 'background:rgba(201,168,76,.12);color:var(--gold2);border:1px solid rgba(201,168,76,.2)'
+        : r.fp.branch==='브라보지점'
+          ? 'background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.2)'
+          : 'background:var(--sur);color:var(--text3)') +
+      '">'+brLabel+'</span>';
+    if(isDayMode){
+      var statusHtml;
+      if(r.normalCnt>0&&r.lateCnt===0){ statusHtml='<span style="color:#34D399;font-weight:700">✅ 정상</span>'; }
+      else if(r.normalCnt>0&&r.lateCnt>0){ statusHtml='<span style="color:#34D399;font-weight:700">✅ 출결인정</span>'; }
+      else if(r.lateCnt>0){ statusHtml='<span style="color:#FCA5A5;font-weight:700">⚠️ 지각</span>'; }
+      else if(r.prCnt>0){ statusHtml='<span style="color:var(--orange);font-weight:700">📋 사전보고</span>'; }
+      else { statusHtml='<span style="color:#94A3B8;font-weight:600">❌ 미출결</span>'; }
+      return '<tr>'+
+        '<td>'+brLabelHtml+'</td>'+
+        '<td style="font-weight:700">'+r.fp.name+'</td>'+
+        '<td style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
+        '<td>'+statusHtml+'</td>'+
+        '<td style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums">'+(r.timeStr?r.timeStr.slice(0,5):'—')+'</td>'+
+        '<td style="color:var(--orange)">'+(r.prCnt?'📋 있음':'—')+'</td>'+
+      '</tr>';
+    } else {
+      var demeritHtml;
+      var hasAnyData = (r.normalCnt + r.lateCnt) > 0;
+      if(!hasAnyData)              demeritHtml = '<span style="color:var(--text3);font-size:11px">미집계</span>';
+      else if(r.demerit === 0)     demeritHtml = '<span style="color:var(--text3)">—</span>';
+      else if(r.demerit === 1)     demeritHtml = '<span style="color:#60A5FA;font-weight:700;font-size:13px">D-2</span>';
+      else if(r.demerit === 2)     demeritHtml = '<span style="color:var(--orange);font-weight:700;font-size:13px">D-1 ⚡</span>';
+      else                         demeritHtml = '<span class="demerit-badge">⚠️ 디메리트</span>';
+      return '<tr>'+
+        '<td>'+brLabelHtml+'</td>'+
+        '<td style="font-weight:700">'+r.fp.name+'</td>'+
+        '<td style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
+        '<td style="color:#34D399;font-weight:700">'+(r.normalCnt?r.normalCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
+        '<td style="color:#FCA5A5;font-weight:700">'+(r.lateCnt?r.lateCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
+        '<td style="color:#94A3B8;font-weight:600">'+(r.absentCnt?r.absentCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
+        '<td style="color:var(--orange)">'+r.prCnt+'건</td>'+
+        '<td>'+demeritHtml+'</td>'+
+      '</tr>';
+    }
+  }).join('');
+}
+
+function absentTotal(rows){
+  return rows.reduce(function(acc,r){ return acc+r.absentCnt; }, 0);
+}
+// FP 목록
+function getFpList(){
+  return [
+    {id:'ktk01',active:true,name:'김태규',role:'대표',branch:'유니스지사'},
+    {id:'H2502965',active:true,name:'이수아',role:'지점장',branch:'브라보지점'},
+    {id:'H2502969',active:true,name:'전소영',role:'지점장',branch:'알파지점'},
+    {id:'H2502956',active:true,name:'강민경',role:'FP',branch:'알파지점'},
+    {id:'H2503600',active:true,name:'강아름',role:'FP',branch:'브라보지점'},
+    {id:'H2502976',active:true,name:'강현주',role:'FP',branch:'알파지점'},
+    {id:'H2504847',active:true,name:'고은채',role:'FP',branch:'브라보지점'},
+    {id:'H2502957',active:true,name:'고혜영',role:'FP',branch:'브라보지점'},
+    {id:'H2605405',active:true,name:'구지혜',role:'FP',branch:'브라보지점'},
+    {id:'H2502980',active:true,name:'김려원',role:'FP',branch:'알파지점'},
+    {id:'H2502972',active:true,name:'김명옥',role:'FP',branch:'알파지점'},
+    {id:'H2503207',active:true,name:'김유경',role:'FP',branch:'알파지점'},
+    {id:'H2605024',active:true,name:'김윤미',role:'FP',branch:'알파지점'},
+    {id:'H2605020',active:true,name:'김윤아',role:'FP',branch:'브라보지점'},
+    {id:'H2503698',active:true,name:'김윤희',role:'FP',branch:'브라보지점'},
+    {id:'H2502982',active:true,name:'김진영',role:'FP',branch:'브라보지점'},
+    {id:'H2503839',active:true,name:'김현주',role:'FP',branch:'알파지점'},
+    {id:'H2504707',active:true,name:'김희연',role:'FP',branch:'알파지점'},
+    {id:'H2505077',active:true,name:'노유경',role:'FP',branch:'브라보지점'},
+    {id:'H2502984',active:true,name:'문희영',role:'FP',branch:'알파지점'},
+    {id:'H2502959',active:true,name:'박경화',role:'FP',branch:'알파지점'},
+    {id:'H2605144',active:true,name:'박미옥',role:'FP',branch:'알파지점'},
+    {id:'H2605022',active:true,name:'박성미',role:'FP',branch:'알파지점'},
+    {id:'H2605005',active:true,name:'박자연',role:'FP',branch:'알파지점'},
+    {id:'H2503663',active:true,name:'박주미',role:'FP',branch:'알파지점'},
+    {id:'H2605023',active:true,name:'박지온',role:'FP',branch:'브라보지점'},
+    {id:'H2504600',active:true,name:'박혜리',role:'FP',branch:'브라보지점'},
+    {id:'H2502985',active:true,name:'박혜윤',role:'FP',branch:'브라보지점'},
+    {id:'H2502975',active:true,name:'반민주',role:'FP',branch:'알파지점'},
+    {id:'H2605134',active:true,name:'백금채',role:'FP',branch:'브라보지점'},
+    {id:'H2503188',active:true,name:'서누리',role:'FP',branch:'브라보지점'},
+    {id:'H2502961',active:true,name:'서일선',role:'FP',branch:'알파지점'},
+    {id:'H2503173',active:true,name:'성형희',role:'FP',branch:'알파지점'},
+    {id:'H2605244',active:true,name:'손진이',role:'FP',branch:'브라보지점'},
+    {id:'H2502962',active:true,name:'옥서윤',role:'FP',branch:'알파지점'},
+    {id:'H2502987',active:true,name:'유순남',role:'FP',branch:'알파지점'},
+    {id:'H2502988',active:true,name:'유지예',role:'FP',branch:'알파지점'},
+    {id:'H2502989',active:true,name:'윤선정',role:'FP',branch:'브라보지점'},
+    {id:'H2502990',active:true,name:'이강애',role:'FP',branch:'알파지점'},
+    {id:'H2502951',active:true,name:'이경화',role:'FP',branch:'브라보지점'},
+    {id:'H2502966',active:true,name:'이윤희',role:'FP',branch:'알파지점'},
+    {id:'H2605021',active:true,name:'이정원',role:'FP',branch:'알파지점'},
+    {id:'H2503658',active:true,name:'이정희',role:'FP',branch:'알파지점'},
+    {id:'H2502992',active:true,name:'전선희',role:'FP',branch:'알파지점'},
+    {id:'H2605053',active:true,name:'정연미',role:'FP',branch:'알파지점'},
+    {id:'H2502970',active:true,name:'정윤주',role:'FP',branch:'알파지점'},
+    {id:'H2502997',active:true,name:'조윤서',role:'FP',branch:'브라보지점'},
+    {id:'H2502955',active:true,name:'최나헬',role:'FP',branch:'알파지점'},
+    {id:'H2503162',active:true,name:'최성경',role:'FP',branch:'알파지점'},
+    {id:'H2502993',active:true,name:'최영주',role:'FP',branch:'브라보지점'},
+    {id:'H2502952',active:true,name:'최은희',role:'FP',branch:'브라보지점'},
+    {id:'H2503695',active:true,name:'추희진',role:'FP',branch:'알파지점'},
+    {id:'H2605017',active:true,name:'한송이',role:'FP',branch:'브라보지점'},
+    {id:'H2502953',active:true,name:'허영민',role:'FP',branch:'알파지점'},
+  ];
+}
+</script>
+</body>
+</html>

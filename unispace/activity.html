@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>활동관리 — UNISPACE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=DM+Serif+Display:ital@0;1&family=Syncopate:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080E1C; --bg2:#0D1628; --bg3:#111D35;
+  --sur:rgba(255,255,255,.04); --sur2:rgba(255,255,255,.08);
+  --bdr:rgba(255,255,255,.08); --bdr2:rgba(255,255,255,.16);
+  --gold:#C9A84C; --gold2:#E8C97A;
+  --green:#10B981; --blue:#3B82F6; --red:#EF4444;
+  --purple:#8B5CF6; --orange:#F4A326;
+  --text:#F0F4FF; --text2:#8B98B8; --text3:#4A5568;
+  --r-xl:20px; --r-lg:16px; --r-md:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(201,168,76,.25);border-radius:10px;}
+*{scrollbar-width:thin;scrollbar-color:rgba(201,168,76,.25) transparent;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 40% at 15% 10%,rgba(201,168,76,.07),transparent 60%),
+             radial-gradient(ellipse 50% 50% at 85% 80%,rgba(59,130,246,.06),transparent 60%);}
+.app{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:0 24px 40px;display:flex;flex-direction:column;}
+
+/* HEADER */
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--bdr);margin-bottom:24px;}
+.back-btn{display:flex;align-items:center;gap:8px;background:var(--sur);border:1px solid var(--bdr2);border-radius:20px;padding:7px 16px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none;}
+.back-btn:hover{background:var(--sur2);color:var(--text);}
+.header-title{display:flex;align-items:center;gap:10px;}
+.header-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--orange),#B45309);display:flex;align-items:center;justify-content:center;font-size:16px;}
+.header-title-text{font-family:'Syncopate',sans-serif;font-size:14px;font-weight:700;letter-spacing:.1em;background:linear-gradient(135deg,#FCD34D,var(--orange));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.header-fp{font-size:12px;color:var(--text2);}
+
+/* 메인 레이아웃 */
+.main-layout{display:grid;grid-template-columns:320px 1fr;gap:20px;align-items:start;}
+
+/* ── 달력 ── */
+.calendar-wrap{background:var(--bg2);border:1px solid var(--bdr2);border-radius:20px;overflow:hidden;position:sticky;top:20px;}
+.cal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--bdr);}
+.cal-title{font-family:'Syncopate',sans-serif;font-size:13px;font-weight:700;letter-spacing:.08em;color:var(--gold2);}
+.cal-nav{display:flex;gap:4px;}
+.cal-nav-btn{width:30px;height:30px;border-radius:8px;background:var(--sur);border:1px solid var(--bdr);color:var(--text2);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.cal-nav-btn:hover{background:var(--sur2);color:var(--text);}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);padding:10px 14px 6px;}
+.cal-dow-cell{text-align:center;font-size:10px;font-weight:700;color:var(--text3);padding:4px 0;}
+.cal-dow-cell.sun{color:rgba(239,68,68,.7);}
+.cal-dow-cell.sat{color:rgba(59,130,246,.6);}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);padding:0 14px 14px;gap:2px;}
+.cal-day{
+  aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;cursor:pointer;
+  font-size:13px;font-weight:600;color:var(--text2);
+  transition:all .2s;position:relative;gap:2px;
+}
+.cal-day:hover{background:var(--sur2);color:var(--text);}
+.cal-day.empty{cursor:default;pointer-events:none;}
+.cal-day.today{color:var(--gold2);font-weight:800;}
+.cal-day.today::before{content:'';position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--gold2);}
+.cal-day.selected{background:rgba(201,168,76,.15);color:var(--gold2);border:1px solid rgba(201,168,76,.3);}
+.cal-day.has-act{color:var(--text);}
+.cal-day.sun-col{color:rgba(239,68,68,.5);}
+.cal-day.sat-col{color:rgba(59,130,246,.5);}
+.cal-dots{display:flex;gap:2px;justify-content:center;}
+.cal-dot{width:4px;height:4px;border-radius:50%;}
+.dot-ongoing{background:#60A5FA;}
+.dot-complete{background:#34D399;}
+
+/* 달력 하단 요약 */
+.cal-summary{padding:14px 20px;border-top:1px solid var(--bdr);display:flex;gap:16px;}
+.cal-sum-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);}
+.cal-sum-dot{width:8px;height:8px;border-radius:50%;}
+
+/* ── 우측 패널 ── */
+.panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.panel-date-title{font-size:18px;font-weight:800;color:var(--text);}
+.panel-date-sub{font-size:12px;color:var(--text2);margin-top:2px;}
+.add-act-btn{display:flex;align-items:center;gap:6px;padding:9px 18px;border:none;border-radius:12px;background:linear-gradient(135deg,#FCD34D,var(--orange));color:#080E1C;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(244,163,38,.25);}
+.add-act-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(244,163,38,.4);}
+
+/* 활동 카드 */
+.activity-list{display:flex;flex-direction:column;gap:12px;}
+.act-card{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;overflow:hidden;transition:all .2s;}
+.act-card:hover{border-color:rgba(244,163,38,.25);}
+.act-card-header{display:flex;align-items:center;gap:12px;padding:14px 18px 10px;}
+.act-type-badge{font-size:11px;font-weight:800;padding:4px 12px;border-radius:8px;}
+.type-1{background:rgba(139,92,246,.15);color:#A78BFA;border:1px solid rgba(139,92,246,.25);}
+.type-2{background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.25);}
+.type-3{background:rgba(244,163,38,.12);color:var(--orange);border:1px solid rgba(244,163,38,.25);}
+.act-status-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;margin-left:auto;}
+.status-ongoing{background:rgba(59,130,246,.1);color:#93C5FD;border:1px solid rgba(59,130,246,.2);}
+.status-complete{background:rgba(16,185,129,.1);color:#6EE7B7;border:1px solid rgba(16,185,129,.2);}
+.act-card-body{padding:0 18px 14px;}
+.act-customer{font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px;}
+.act-info{display:flex;flex-wrap:wrap;gap:10px;}
+.act-info-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);}
+.act-card-footer{padding:10px 18px;border-top:1px solid var(--bdr2);display:flex;gap:8px;align-items:center;}
+.act-next-info{font-size:11px;color:var(--text3);flex:1;}
+.act-next-info b{color:#60A5FA;}
+.act-btn{padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;border:none;font-family:'Noto Sans KR',sans-serif;}
+.act-btn-result{background:rgba(244,163,38,.12);color:var(--orange);border:1px solid rgba(244,163,38,.2);}
+.act-btn-result:hover{background:rgba(244,163,38,.22);}
+.act-btn-delete{background:rgba(239,68,68,.08);color:#FCA5A5;border:1px solid rgba(239,68,68,.15);}
+.act-btn-delete:hover{background:rgba(239,68,68,.16);}
+.act-empty{text-align:center;padding:48px 20px;}
+.act-empty-icon{font-size:36px;margin-bottom:12px;}
+.act-empty-title{font-family:'DM Serif Display',serif;font-size:16px;color:var(--text2);font-style:italic;margin-bottom:6px;}
+.act-empty-sub{font-size:12px;color:var(--text3);}
+
+/* ── 모달 ── */
+.modal-overlay{position:fixed;inset:0;z-index:500;background:rgba(8,14,28,.85);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:var(--bg2);border:1px solid var(--bdr2);border-radius:24px;width:100%;max-width:460px;margin:20px;padding:28px;box-shadow:0 32px 64px rgba(0,0,0,.6);animation:modalIn .3s cubic-bezier(.34,1.4,.64,1) both;}
+@keyframes modalIn{from{transform:scale(.92) translateY(16px);opacity:0;}to{transform:scale(1) translateY(0);opacity:1;}}
+.modal-title{font-family:'Syncopate',sans-serif;font-size:13px;font-weight:700;color:var(--gold2);letter-spacing:.08em;margin-bottom:4px;}
+.modal-sub{font-size:12px;color:var(--text2);margin-bottom:20px;}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.modal-field{display:flex;flex-direction:column;gap:6px;}
+.modal-field.full{grid-column:span 2;}
+.modal-label{font-size:11px;font-weight:700;color:var(--gold);letter-spacing:.05em;}
+.modal-input,.modal-select{padding:11px 14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:13px;transition:all .2s;width:100%;}
+.modal-input:focus,.modal-select:focus{outline:none;border-color:var(--orange);background:rgba(244,163,38,.05);}
+.modal-select option{background:#0D1628;}
+.modal-btns{display:flex;gap:8px;margin-top:16px;}
+.modal-btn{flex:1;padding:12px;border:none;border-radius:12px;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;}
+.modal-cancel{background:var(--sur);border:1px solid var(--bdr);color:var(--text2);}
+.modal-cancel:hover{background:var(--sur2);}
+.modal-confirm{background:linear-gradient(135deg,#FCD34D,var(--orange));color:#080E1C;}
+.modal-confirm:hover{box-shadow:0 4px 16px rgba(244,163,38,.35);}
+.modal-confirm-green{background:linear-gradient(135deg,#34D399,var(--green));color:#080E1C;}
+
+/* 결과입력 모달 결과 선택 */
+.result-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.result-choice-btn{padding:14px;border-radius:12px;border:1.5px solid var(--bdr2);background:var(--sur);cursor:pointer;transition:all .2s;text-align:center;}
+.result-choice-btn:hover{border-color:rgba(244,163,38,.3);background:rgba(244,163,38,.05);}
+.result-choice-btn.selected-ongoing{border-color:#60A5FA;background:rgba(59,130,246,.08);}
+.result-choice-btn.selected-complete{border-color:#34D399;background:rgba(16,185,129,.08);}
+.result-choice-icon{font-size:22px;margin-bottom:6px;}
+.result-choice-label{font-size:13px;font-weight:700;color:var(--text);}
+.result-choice-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.next-schedule-area{display:none;}
+.next-schedule-area.show{display:block;}
+
+/* 지원 탭 */
+.support-tab {
+  padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all .2s; border: 1px solid var(--bdr2);
+  background: var(--sur); color: var(--text2); font-family: 'Noto Sans KR', sans-serif;
+}
+.support-tab.active { background: rgba(201,168,76,.15); border-color: var(--gold); color: var(--gold2); }
+
+/* toast */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(13,22,40,.95);border:1px solid var(--bdr2);border-radius:12px;padding:12px 22px;font-size:13px;font-weight:600;color:var(--text);opacity:0;transition:all .3s;z-index:999;white-space:nowrap;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* GAS 배너 */
+.gas-banner{display:flex;align-items:center;gap:10px;background:rgba(244,163,38,.06);border:1px solid rgba(244,163,38,.2);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:12px;color:var(--orange);}
+
+@media(max-width:768px){
+  .main-layout{grid-template-columns:1fr;} .calendar-wrap{position:relative;top:0;}
+  .modal-grid{grid-template-columns:1fr;} .modal-field.full{grid-column:span 1;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <a class="back-btn" href="index.html">← 메인으로</a>
+    <div class="header-title">
+      <div class="header-icon">📌</div>
+      <div class="header-title-text">ACTIVITY</div>
+    </div>
+    <div class="header-fp" id="headerFp">—</div>
+  </div>
+
+  <div class="gas-banner">
+    ⚡ <b style="margin-right:4px">GAS 연동 예정</b> 현재 데이터는 이 기기 localStorage에만 저장됩니다.
+  </div>
+
+  <div class="main-layout">
+
+    <!-- 달력 -->
+    <div class="calendar-wrap">
+      <div class="cal-header">
+        <div class="cal-title" id="calTitle">2026.05</div>
+        <div class="cal-nav">
+          <button type="button" class="cal-nav-btn" onclick="moveMonth(-1)">‹</button>
+          <button type="button" class="cal-nav-btn" onclick="moveMonth(1)">›</button>
+        </div>
+      </div>
+      <div class="cal-dow">
+        <div class="cal-dow-cell sun">일</div>
+        <div class="cal-dow-cell">월</div>
+        <div class="cal-dow-cell">화</div>
+        <div class="cal-dow-cell">수</div>
+        <div class="cal-dow-cell">목</div>
+        <div class="cal-dow-cell">금</div>
+        <div class="cal-dow-cell sat">토</div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-summary">
+        <div class="cal-sum-item"><div class="cal-sum-dot" style="background:#60A5FA"></div>진행중</div>
+        <div class="cal-sum-item"><div class="cal-sum-dot" style="background:#34D399"></div>완료</div>
+      </div>
+    </div>
+
+    <!-- 우측 패널 -->
+    <div>
+      <div class="panel-header">
+        <div>
+          <div class="panel-date-title" id="panelDateTitle">날짜를 선택하세요</div>
+          <div class="panel-date-sub" id="panelDateSub"></div>
+        </div>
+        <button type="button" class="add-act-btn" id="addActBtn" onclick="openAddModal()" style="display:none">
+          + 활동 추가
+        </button>
+      </div>
+      <div class="activity-list" id="activityList">
+        <div class="act-empty">
+          <div class="act-empty-icon">📅</div>
+          <div class="act-empty-title">날짜를 선택해주세요</div>
+          <div class="act-empty-sub">달력에서 날짜를 클릭하면<br>해당일 활동이 표시됩니다</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- toast -->
+<div class="toast" id="toast"></div>
+
+<!-- 활동 추가 모달 -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal-box">
+    <div class="modal-title">ACTIVITY ADD</div>
+    <div class="modal-sub" id="addModalSub">새로운 활동을 등록합니다</div>
+    <div class="modal-grid">
+      <div class="modal-field">
+        <label class="modal-label">활동 유형</label>
+        <select class="modal-select" id="addType">
+          <optgroup label="상담">
+            <option value="1차">1차 상담</option>
+            <option value="2차">2차 상담</option>
+            <option value="3차">3차 상담</option>
+          </optgroup>
+          <optgroup label="기타 활동">
+            <option value="친숙">친숙</option>
+            <option value="소개">소개</option>
+            <option value="관리">관리</option>
+            <option value="청약">청약</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">날짜</label>
+        <input type="date" class="modal-input" id="addDate">
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">시간</label>
+        <input type="time" class="modal-input" id="addTime">
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">장소</label>
+        <input type="text" class="modal-input" id="addPlace" placeholder="예) 강남 카페">
+      </div>
+      <div class="modal-field full">
+        <label class="modal-label">고객명 <span style="color:var(--red);font-size:10px">* 필수</span></label>
+        <input type="text" class="modal-input" id="addCustomer" placeholder="고객 이름 입력">
+      </div>
+
+      <!-- 헬퍼/지원 탭 -->
+      <div class="modal-field full">
+        <label class="modal-label">지원 구분 <span style="font-size:10px;color:var(--text3);font-weight:400">(선택)</span></label>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <button type="button" class="support-tab active" id="tabNone"    onclick="setSupportTab('none',this)">없음</button>
+          <button type="button" class="support-tab"        id="tabHelper"  onclick="setSupportTab('helper',this)">👤 헬퍼</button>
+          <button type="button" class="support-tab"        id="tabSupport" onclick="setSupportTab('support',this)">🤝 지원</button>
+        </div>
+        <div id="helperArea"  style="display:none">
+          <input type="text" class="modal-input" id="addHelper" placeholder="헬퍼 이름 입력 (예: 김명옥)">
+        </div>
+        <div id="supportArea" style="display:none">
+          <select class="modal-select" id="addSupport">
+            <option value="지점장">지점장</option>
+            <option value="매니저">매니저</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-field full">
+        <label class="modal-label">메모</label>
+        <input type="text" class="modal-input" id="addNote" placeholder="상담 목적, 준비사항 등 (선택)">
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button type="button" class="modal-btn modal-cancel" onclick="closeAddModal()">취소</button>
+      <button type="button" class="modal-btn modal-confirm" onclick="saveActivity()">등록하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 결과 입력 모달 -->
+<div class="modal-overlay" id="resultModal">
+  <div class="modal-box">
+    <div class="modal-title">RESULT INPUT</div>
+    <div class="modal-sub" id="resultModalSub">상담 결과를 입력합니다</div>
+
+    <div class="result-choice">
+      <div class="result-choice-btn" id="choiceOngoing" onclick="selectResult('ongoing')">
+        <div class="result-choice-icon">🔵</div>
+        <div class="result-choice-label">진행중</div>
+        <div class="result-choice-sub">다음 약속 입력</div>
+      </div>
+      <div class="result-choice-btn" id="choiceComplete" onclick="selectResult('complete')">
+        <div class="result-choice-icon">✅</div>
+        <div class="result-choice-label">완료</div>
+        <div class="result-choice-sub">상담 종결 처리</div>
+      </div>
+    </div>
+
+    <!-- 다음 약속 (진행중 선택 시) -->
+    <div class="next-schedule-area" id="nextScheduleArea">
+      <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:10px;letter-spacing:.04em">다음 약속 일정</div>
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">차수</label>
+          <select class="modal-select" id="nextType">
+            <option value="2차">2차 상담</option>
+            <option value="3차">3차 상담</option>
+          </select>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">날짜</label>
+          <input type="date" class="modal-input" id="nextDate">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">시간</label>
+          <input type="time" class="modal-input" id="nextTime">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">장소</label>
+          <input type="text" class="modal-input" id="nextPlace" placeholder="예) 홍대 카페">
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-btns">
+      <button type="button" class="modal-btn modal-cancel" onclick="closeResultModal()">취소</button>
+      <button type="button" class="modal-btn modal-confirm-green" id="resultConfirmBtn" onclick="saveResult()">저장하기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// GAS 연동 포인트
+// TODO_GAS_ACT_1: 활동 저장 → GAS POST (action:'saveActivity', fpId, data)
+// TODO_GAS_ACT_2: 월별 활동 조회 → GAS GET (action:'getActivities', fpId, ym)
+// TODO_GAS_ACT_3: 결과 입력 → GAS POST (action:'saveResult', actId, status, nextData)
+// TODO_GAS_ACT_4: 지점 전체 조회 → GAS GET (action:'getBranchActivities', branch, ym)
+
+var ACT_KEY = 'unispace_activities';
+var currentUser = null;
+var selectedDate = null;
+var currentYear, currentMonth;
+var editingActId = null;  // 결과 입력 대상 actId
+var selectedResult = null;
+
+// ── 초기화 ──────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', function() {
+  var saved = localStorage.getItem('unispace_user');
+  var DEV_USER = {id:'ktk01',name:'김태규',role:'대표',branch:'유니스지사'};
+  if(saved){ try{ currentUser=JSON.parse(saved); if(!currentUser.id) currentUser=DEV_USER; }catch(e){ currentUser=DEV_USER; } }
+  else { currentUser = DEV_USER; }
+
+  document.getElementById('headerFp').textContent = currentUser.name + ' · ' + currentUser.branch;
+
+  // unispace 빈 셀 클릭으로 넘어온 경우 날짜 자동 설정 + 모달 오픈
+  var addActDate = sessionStorage.getItem('addActDate');
+  if(addActDate) {
+    sessionStorage.removeItem('addActDate');
+    // 해당 월로 달력 이동 후 모달 오픈
+    var parts = addActDate.split('-');
+    currentYear  = parseInt(parts[0]);
+    currentMonth = parseInt(parts[1]) - 1;
+    selectedDate = addActDate;
+    renderCalendar();
+    selectDate(currentYear, currentMonth, parseInt(parts[2]));
+    setTimeout(function(){ openAddModal(); }, 200);
+  }
+
+  var now = new Date();
+  currentYear  = now.getFullYear();
+  currentMonth = now.getMonth();
+  renderCalendar();
+
+  // 오늘 날짜 자동 선택
+  selectDate(now.getFullYear(), now.getMonth(), now.getDate());
+});
+
+// ── 유틸 ────────────────────────────────────────────
+function getActDB(){ try{return JSON.parse(localStorage.getItem(ACT_KEY)||'{}');}catch(e){return{};} }
+function saveActDB(db){ localStorage.setItem(ACT_KEY, JSON.stringify(db)); }
+function showToast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove('show');},2800); }
+function genId(){ return 'act_'+Date.now()+'_'+Math.random().toString(36).substr(2,5); }
+function dateStr(y,m,d){ return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
+function formatTime(t){ if(!t) return ''; var p=t.split(':'); return p[0]+':'+p[1]; }
+
+// ── 달력 렌더 ────────────────────────────────────────
+function renderCalendar(){
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('calTitle').textContent = currentYear+'.'+String(currentMonth+1).padStart(2,'0');
+
+  var db = getActDB();
+  var grid = document.getElementById('calGrid');
+  var firstDay = new Date(currentYear, currentMonth, 1).getDay();
+  var lastDate = new Date(currentYear, currentMonth+1, 0).getDate();
+  var today = new Date(); today.setHours(0,0,0,0);
+  var html = '';
+
+  for(var i=0; i<firstDay; i++) html += '<div class="cal-day empty"></div>';
+
+  for(var d=1; d<=lastDate; d++){
+    var ds = dateStr(currentYear, currentMonth, d);
+    var dow = new Date(currentYear, currentMonth, d).getDay();
+    var dayActs = Object.values(db).filter(function(a){ return a.fpId===currentUser.id && a.date===ds; });
+    var ongoingCnt  = dayActs.filter(function(a){ return a.status==='진행중'; }).length;
+    var completeCnt = dayActs.filter(function(a){ return a.status==='완료'; }).length;
+    var isToday = (new Date(currentYear,currentMonth,d).getTime()===today.getTime());
+    var isSel   = selectedDate && selectedDate===ds;
+    var cls = 'cal-day';
+    if(dow===0) cls+=' sun-col'; if(dow===6) cls+=' sat-col';
+    if(isToday) cls+=' today'; if(isSel) cls+=' selected';
+    if(dayActs.length) cls+=' has-act';
+    var dotsHtml = '';
+    if(ongoingCnt)  dotsHtml += '<div class="cal-dot dot-ongoing"></div>';
+    if(completeCnt) dotsHtml += '<div class="cal-dot dot-complete"></div>';
+    var dots = dotsHtml ? '<div class="cal-dots">'+dotsHtml+'</div>' : '';
+    html += '<div class="'+cls+'" onclick="selectDate('+currentYear+','+currentMonth+','+d+')">'+d+dots+'</div>';
+  }
+  grid.innerHTML = html;
+}
+
+function moveMonth(dir){
+  currentMonth += dir;
+  if(currentMonth > 11){ currentMonth=0; currentYear++; }
+  if(currentMonth < 0){ currentMonth=11; currentYear--; }
+  renderCalendar();
+}
+
+// ── 날짜 선택 ─────────────────────────────────────────
+function selectDate(y, m, d){
+  selectedDate = dateStr(y, m, d);
+  currentYear = y; currentMonth = m;
+  renderCalendar();
+
+  var days=['일','월','화','수','목','금','토'];
+  var dow = new Date(y,m,d).getDay();
+  document.getElementById('panelDateTitle').textContent = (m+1)+'월 '+d+'일 ('+days[dow]+')';
+  document.getElementById('panelDateSub').textContent   = y+'년';
+  document.getElementById('addActBtn').style.display    = '';
+  document.getElementById('addDate').value = selectedDate;
+
+  renderActivityList();
+}
+
+// ── 활동 목록 렌더 ───────────────────────────────────
+function renderActivityList(){
+  var db   = getActDB();
+  var list = Object.values(db).filter(function(a){ return a.fpId===currentUser.id && a.date===selectedDate; });
+  list.sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
+
+  var el = document.getElementById('activityList');
+  if(!list.length){
+    el.innerHTML = '<div class="act-empty"><div class="act-empty-icon">📋</div><div class="act-empty-title">오늘 활동이 없어요</div><div class="act-empty-sub">+ 활동 추가 버튼으로 등록하세요</div></div>';
+    return;
+  }
+
+  var typeMap = {'1차':'type-1','2차':'type-2','3차':'type-3'};
+  el.innerHTML = list.map(function(a){
+    var typeCls   = typeMap[a.type]||'type-1';
+    var statusCls = a.status==='완료'?'status-complete':'status-ongoing';
+    var nextInfo  = a.nextDate
+      ? '다음 약속: <b>'+a.nextDate+' '+formatTime(a.nextTime)+'</b> '+a.nextPlace
+      : '';
+    var supportBadge = '';
+    if(a.helper)  supportBadge = '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(139,92,246,.12);color:#A78BFA;border:1px solid rgba(139,92,246,.2);margin-left:6px">👤 '+a.helper+'</span>';
+    if(a.support) supportBadge = '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(59,130,246,.1);color:#60A5FA;border:1px solid rgba(59,130,246,.2);margin-left:6px">🤝 '+a.support+'</span>';
+    var footerBtns = a.status!=='완료'
+      ? '<button type="button" class="act-btn act-btn-result" onclick="openResultModal(\''+a.id+'\')">결과 입력</button>'
+      : '<span style="font-size:11px;color:#34D399;font-weight:700">✅ 상담 완료</span>';
+    return '<div class="act-card">'+
+      '<div class="act-card-header">'+
+        '<span class="act-type-badge '+typeCls+'">'+a.type+'</span>'+
+        '<span class="act-status-badge '+statusCls+'">'+a.status+'</span>'+
+      '</div>'+
+      '<div class="act-card-body">'+
+        '<div class="act-customer">'+a.customerName+supportBadge+'</div>'+
+        '<div class="act-info">'+
+          (a.time?'<div class="act-info-item">⏰ '+formatTime(a.time)+'</div>':'')+
+          (a.place?'<div class="act-info-item">📍 '+a.place+'</div>':'')+
+          (a.note?'<div class="act-info-item">💬 '+a.note+'</div>':'')+
+        '</div>'+
+      '</div>'+
+      '<div class="act-card-footer">'+
+        '<div class="act-next-info">'+nextInfo+'</div>'+
+        footerBtns+
+        '<button type="button" class="act-btn act-btn-delete" onclick="deleteActivity(\''+a.id+'\')">삭제</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+// ── 헬퍼/지원 탭 ─────────────────────────────────────
+function setSupportTab(type, el) {
+  document.querySelectorAll('.support-tab').forEach(function(b){ b.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('helperArea').style.display  = type==='helper'  ? '' : 'none';
+  document.getElementById('supportArea').style.display = type==='support' ? '' : 'none';
+}
+
+// ── 활동 추가 모달 ───────────────────────────────────
+function openAddModal(){
+  document.getElementById('addCustomer').value = '';
+  document.getElementById('addNote').value     = '';
+  document.getElementById('addTime').value     = '';
+  document.getElementById('addPlace').value    = '';
+  document.getElementById('addType').value     = '1차';
+  document.getElementById('addDate').value     = selectedDate || '';
+  document.getElementById('addHelper').value   = '';
+  setSupportTab('none', document.getElementById('tabNone'));
+  document.getElementById('addModal').classList.add('open');
+  setTimeout(function(){ document.getElementById('addCustomer').focus(); },100);
+}
+function closeAddModal(){ document.getElementById('addModal').classList.remove('open'); }
+
+function saveActivity(){
+  var customer = document.getElementById('addCustomer').value.trim();
+  var date     = document.getElementById('addDate').value;
+  if(!customer){ showToast('⚠️ 고객명을 입력해 주세요'); return; }
+  if(!date)     { showToast('⚠️ 날짜를 선택해 주세요'); return; }
+
+  // 헬퍼/지원 값 추출
+  var helperTab  = document.getElementById('tabHelper').classList.contains('active');
+  var supportTab = document.getElementById('tabSupport').classList.contains('active');
+  var helperVal  = helperTab  ? document.getElementById('addHelper').value.trim()  : '';
+  var supportVal = supportTab ? document.getElementById('addSupport').value         : '';
+
+  var db  = getActDB();
+  var id  = genId();
+  db[id]  = {
+    id:           id,
+    fpId:         currentUser.id,
+    fpName:       currentUser.name,
+    branch:       currentUser.branch,
+    date:         date,
+    time:         document.getElementById('addTime').value,
+    place:        document.getElementById('addPlace').value.trim(),
+    customerName: customer,
+    type:         document.getElementById('addType').value,
+    status:       '진행중',
+    helper:       helperVal,
+    support:      supportVal,
+    nextDate:     '', nextTime:'', nextPlace:'',
+    note:         document.getElementById('addNote').value.trim(),
+    parentId:     '',
+    createdAt:    new Date().toISOString()
+  };
+  saveActDB(db);
+  // TODO_GAS_ACT_1: GAS POST
+  sessionStorage.setItem('openWeekAcc','1');
+  closeAddModal();
+  if(selectedDate === date) renderActivityList();
+  renderCalendar();
+  showToast('✅ 활동이 등록되었습니다');
+}
+
+// ── 결과 입력 모달 ───────────────────────────────────
+function openResultModal(actId){
+  editingActId  = actId;
+  selectedResult = null;
+  var db  = getActDB();
+  var act = db[actId];
+  if(!act) return;
+
+  document.getElementById('resultModalSub').textContent = act.customerName+' · '+act.type+' 상담';
+  document.getElementById('choiceOngoing').className  = 'result-choice-btn';
+  document.getElementById('choiceComplete').className = 'result-choice-btn';
+  document.getElementById('nextScheduleArea').classList.remove('show');
+  document.getElementById('resultModal').classList.add('open');
+
+  // 다음 차수 자동 설정
+  var nextTypeEl = document.getElementById('nextType');
+  nextTypeEl.innerHTML = '';
+  if(act.type==='1차') nextTypeEl.innerHTML = '<option value="2차">2차 상담</option><option value="3차">3차 상담</option>';
+  else                 nextTypeEl.innerHTML = '<option value="3차">3차 상담</option>';
+
+  document.getElementById('nextDate').value  = '';
+  document.getElementById('nextTime').value  = '';
+  document.getElementById('nextPlace').value = '';
+}
+function closeResultModal(){ document.getElementById('resultModal').classList.remove('open'); editingActId=null; selectedResult=null; }
+
+function selectResult(type){
+  selectedResult = type;
+  document.getElementById('choiceOngoing').className  = 'result-choice-btn'+(type==='ongoing'?' selected-ongoing':'');
+  document.getElementById('choiceComplete').className = 'result-choice-btn'+(type==='complete'?' selected-complete':'');
+  var area = document.getElementById('nextScheduleArea');
+  type==='ongoing' ? area.classList.add('show') : area.classList.remove('show');
+}
+
+function saveResult(){
+  if(!selectedResult){ showToast('⚠️ 결과를 선택해 주세요'); return; }
+  var db  = getActDB();
+  var act = db[editingActId];
+  if(!act) return;
+
+  if(selectedResult==='complete'){
+    act.status = '완료';
+    saveActDB(db);
+    // TODO_GAS_ACT_3
+    closeResultModal();
+    renderActivityList();
+    renderCalendar();
+    showToast('✅ 상담이 완료 처리되었습니다');
+  } else {
+    // 진행중 — 다음 일정 생성
+    var nextDate  = document.getElementById('nextDate').value;
+    var nextTime  = document.getElementById('nextTime').value;
+    var nextPlace = document.getElementById('nextPlace').value.trim();
+    if(!nextDate){ showToast('⚠️ 다음 약속 날짜를 입력해 주세요'); return; }
+
+    // 현재 활동 → 진행중 + 다음 일정 정보 기록
+    act.status    = '진행중';
+    act.nextDate  = nextDate;
+    act.nextTime  = nextTime;
+    act.nextPlace = nextPlace;
+
+    // 다음 차수 활동 자동 생성
+    var nextId    = genId();
+    db[nextId] = {
+      id:           nextId,
+      fpId:         currentUser.id,
+      fpName:       currentUser.name,
+      branch:       currentUser.branch,
+      date:         nextDate,
+      time:         nextTime,
+      place:        nextPlace,
+      customerName: act.customerName,
+      type:         document.getElementById('nextType').value,
+      status:       '진행중',
+      nextDate:'', nextTime:'', nextPlace:'',
+      note:         '',
+      parentId:     editingActId,
+      createdAt:    new Date().toISOString()
+    };
+
+    saveActDB(db);
+    // TODO_GAS_ACT_3
+    closeResultModal();
+    renderActivityList();
+    renderCalendar();
+    showToast('🔵 다음 '+document.getElementById('nextType').value+' 상담이 '+nextDate+'에 등록되었습니다');
+  }
+}
+
+// ── 활동 삭제 ─────────────────────────────────────────
+function deleteActivity(actId){
+  var db = getActDB();
+  delete db[actId];
+  saveActDB(db);
+  renderActivityList();
+  renderCalendar();
+  showToast('삭제되었습니다');
+}
+</script>
+</body>
+</html>
