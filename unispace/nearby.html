@@ -67,8 +67,14 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .api-link:hover{text-decoration:underline;}
 
 /* 팝업 */
-.map-popup{position:absolute;background:rgba(13,22,40,.96);border:1px solid var(--bdr2);border-radius:14px;padding:14px;min-width:210px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.6);display:none;}
-.popup-close{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;}
+.map-popup{position:absolute;background:rgba(13,22,40,.96);border:1px solid var(--bdr2);border-radius:14px;padding:0;min-width:230px;max-width:260px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.6);display:none;overflow:hidden;}
+.drag-handle{background:rgba(255,255,255,.04);padding:8px 14px 6px;cursor:grab;user-select:none;border-bottom:1px solid rgba(255,255,255,.06);}
+.drag-handle:active{cursor:grabbing;}
+.drag-bar{width:36px;height:3px;background:rgba(255,255,255,.2);border-radius:2px;margin:0 auto 6px;}
+.popup-inner-head{display:flex;align-items:center;justify-content:space-between;}
+.pnamewrap{display:flex;align-items:center;gap:6px;}
+.popup-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0;}
+.popup-body{padding:12px 14px;}
 .phead{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
 .pname{font-size:14px;font-weight:700;color:var(--text);}
 .ptag{font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;}
@@ -107,6 +113,24 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .lr:last-child{margin-bottom:0;}
 .ldot{width:9px;height:9px;border-radius:50%;}
 
+/* 이벤트 카드 */
+.ev-card{border-radius:8px;padding:8px 10px;margin-bottom:5px;}
+.ev-card-event{background:rgba(232,201,122,.08);border:1px solid rgba(232,201,122,.2);}
+.ev-card-custom{background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25);}
+.ev-card-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
+.ev-card-name{font-size:11px;font-weight:700;color:#F0F4FF;}
+.ev-dday{font-size:11px;font-weight:800;color:#E8C97A;}
+.ev-dday-custom{font-size:11px;font-weight:800;color:#A78BFA;}
+.ev-dday-today{font-size:11px;font-weight:800;color:#34D399;}
+.ev-date{font-size:11px;color:#8B98B8;}
+.ev-section-label{font-size:10px;font-weight:700;margin-bottom:4px;}
+.ev-section-label-event{color:#E8C97A;}
+.ev-section-label-custom{color:#A78BFA;}
+/* 내 위치 버튼 */
+.myloc-btn{padding:8px 10px;border:none;border-radius:8px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#60A5FA;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .2s;}
+.myloc-btn:hover{background:rgba(59,130,246,.28);}
+.myloc-btn.loading{opacity:.6;cursor:wait;}
+
 /* 반경 선택 */
 .radius-input{display:none;}
 </style>
@@ -130,7 +154,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <div class="maddr" id="targetAddr">주소를 입력해주세요</div>
       </div>
       <input type="text" class="addr-input" id="addrInput" placeholder="장소명 또는 주소 입력 (예: 해운대 스타벅스)">
-      <button type="button" class="search-btn" onclick="searchAddr()">🔍 검색 및 주변 고객 찾기</button>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button type="button" class="search-btn" style="flex:1;margin-top:0;" onclick="searchAddr()">🔍 검색</button>
+        <button type="button" class="myloc-btn" id="btnMyLoc">📍 내 위치</button>
+      </div>
       <div class="rrow">
         <span class="rlabel">반경</span>
         <div class="rchips" id="rchips">
@@ -160,14 +187,25 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
     <!-- 팝업 -->
     <div class="map-popup" id="mapPopup">
-      <button type="button" class="popup-close" id="btnClose">✕</button>
-      <div class="phead">
-        <span class="pname" id="popupName"></span>
-        <span class="ptag" id="popupTag"></span>
+      <div class="drag-handle" id="phead">
+        <div class="drag-bar"></div>
+        <div class="popup-inner-head">
+          <button type="button" class="popup-close" id="btnClose">✕</button>
+          <div class="pnamewrap">
+            <span class="pname" id="popupName"></span>
+            <span class="ptag" id="popupTag"></span>
+          </div>
+        </div>
       </div>
+      </div>
+      <div class="popup-body">
       <div class="prow" id="popupAddr"></div>
       <div class="prow" id="popupPhone"></div>
       <div class="prow" id="popupContact"></div>
+      <div class="event-section" id="popupEventSection" style="display:none">
+        <div class="divider"></div>
+        <div id="popupEventCards"></div>
+      </div>
       <div class="divider"></div>
       <div class="route-btns">
         <button type="button" class="route-btn btn-from" id="btnFrom">🚩 출발지 설정</button>
@@ -201,14 +239,19 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <a class="contact-btn btn-kakao" id="btnKakao" href="#">💬 카카오톡</a>
       </div>
       <button type="button" class="detail-btn" id="btnDetail">고객 상세 보기 →</button>
+      </div>
     </div>
 
     <!-- 범례 -->
     <div class="legend" id="mapLegend" style="display:none">
       <div class="lr"><div class="ldot" style="background:#3B82F6"></div>기준 위치</div>
+      <div class="lr"><div class="ldot" style="background:#FBBF24"></div>내 현재 위치</div>
       <div class="lr"><div class="ldot" style="background:#10B981"></div>계약 고객</div>
       <div class="lr"><div class="ldot" style="background:#8B5CF6"></div>관리 고객</div>
       <div class="lr"><div class="ldot" style="background:#F59E0B"></div>연락 필요</div>
+      <div style="border-top:1px solid rgba(255,255,255,.07);margin:5px 0"></div>
+      <div class="lr"><div class="ldot" style="background:#E8C97A"></div>D-3 이내 이벤트</div>
+      <div class="lr"><div class="ldot" style="background:#A78BFA"></div>커스텀 알림</div>
     </div>
   </div>
 </div>
@@ -224,6 +267,9 @@ var selectedCustomerId = null;
 var allCustomers = [];
 var routeFrom = null;
 var routeTo   = null;
+var myLocMarker  = null;
+var myLocOverlay = null;
+var myLat = null, myLng = null;
 
 // ── 초기화 ───────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', function() {
@@ -248,8 +294,45 @@ window.addEventListener('DOMContentLoaded', function() {
     loadKakaoScript(savedKey);
   }
 
-  // 팝업 버튼 이벤트 등록
-  var btnClose = document.getElementById('btnClose');
+  // 팝업 드래그 이동 (마우스 + 터치)
+  (function(){
+    var popup = document.getElementById('mapPopup');
+    var handle = document.getElementById('phead');
+    if(!popup || !handle) return;
+    var dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+
+    function dragStart(cx, cy){
+      dragging = true;
+      startX = cx; startY = cy;
+      origLeft = parseInt(popup.style.left) || 0;
+      origTop  = parseInt(popup.style.top)  || 0;
+      popup.style.transition = 'none';
+    }
+    function dragMove(cx, cy){
+      if(!dragging) return;
+      var dx = cx - startX, dy = cy - startY;
+      var mapWrap = document.querySelector('.map-wrap');
+      var mw = mapWrap ? mapWrap.offsetWidth  : window.innerWidth;
+      var mh = mapWrap ? mapWrap.offsetHeight : window.innerHeight;
+      var nx = Math.max(0, Math.min(origLeft + dx, mw - popup.offsetWidth));
+      var ny = Math.max(0, Math.min(origTop  + dy, mh - popup.offsetHeight));
+      popup.style.left = nx + 'px';
+      popup.style.top  = ny + 'px';
+    }
+    function dragEnd(){ dragging = false; }
+
+    handle.addEventListener('mousedown',  function(e){ dragStart(e.clientX, e.clientY); e.preventDefault(); });
+    document.addEventListener('mousemove', function(e){ dragMove(e.clientX, e.clientY); });
+    document.addEventListener('mouseup',   dragEnd);
+    handle.addEventListener('touchstart',  function(e){ var t=e.touches[0]; dragStart(t.clientX, t.clientY); }, {passive:true});
+    document.addEventListener('touchmove',  function(e){ if(!dragging) return; var t=e.touches[0]; dragMove(t.clientX, t.clientY); e.preventDefault(); }, {passive:false});
+    document.addEventListener('touchend',   dragEnd);
+  })();
+
+  // 내 위치 버튼
+  var btnMyLoc = document.getElementById('btnMyLoc');
+  if(btnMyLoc) btnMyLoc.addEventListener('click', findMyLocation);
+
   if(btnClose) btnClose.addEventListener('click', closePopup);
 
   var btnDetail = document.getElementById('btnDetail');
@@ -260,8 +343,13 @@ window.addEventListener('DOMContentLoaded', function() {
     if(!selectedCustomerId) return;
     var c = findCustomerById(selectedCustomerId);
     if(!c || !c.lat) { alert('이 고객은 좌표가 없어 출발지로 설정할 수 없습니다.'); return; }
-    routeFrom = c;
-    document.getElementById('btnFrom').className = 'route-btn btn-from active';
+    if(routeFrom && routeFrom.id === c.id) {
+      routeFrom = null;
+      document.getElementById('btnFrom').className = 'route-btn btn-from';
+    } else {
+      routeFrom = c;
+      document.getElementById('btnFrom').className = 'route-btn btn-from active';
+    }
     updateRouteStatus();
   });
 
@@ -270,8 +358,13 @@ window.addEventListener('DOMContentLoaded', function() {
     if(!selectedCustomerId) return;
     var c = findCustomerById(selectedCustomerId);
     if(!c || !c.lat) { alert('이 고객은 좌표가 없어 도착지로 설정할 수 없습니다.'); return; }
-    routeTo = c;
-    document.getElementById('btnTo').className = 'route-btn btn-to active';
+    if(routeTo && routeTo.id === c.id) {
+      routeTo = null;
+      document.getElementById('btnTo').className = 'route-btn btn-to';
+    } else {
+      routeTo = c;
+      document.getElementById('btnTo').className = 'route-btn btn-to active';
+    }
     updateRouteStatus();
   });
 });
@@ -432,9 +525,27 @@ function drawNearby(lat, lng) {
     markers.push(marker);
 
     // 이름 오버레이 (클릭 가능 - 큰 클릭 영역)
+    var evInfo = getUpcomingEvents(c);
     var labelEl = document.createElement('div');
-    labelEl.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
-    labelEl.textContent = c.name;
+    labelEl.style.cssText = 'position:relative;display:inline-flex;align-items:center;gap:0;background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+    var nameSpan = document.createElement('span');
+    nameSpan.textContent = c.name;
+    labelEl.appendChild(nameSpan);
+    if(evInfo.hasEvent || evInfo.hasCustom) {
+      var dotWrap = document.createElement('div');
+      dotWrap.style.cssText = 'display:inline-flex;gap:2px;margin-left:5px;align-items:center';
+      if(evInfo.hasEvent) {
+        var d1 = document.createElement('div');
+        d1.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#E8C97A;border:1px solid rgba(13,22,40,.8)';
+        dotWrap.appendChild(d1);
+      }
+      if(evInfo.hasCustom) {
+        var d2 = document.createElement('div');
+        d2.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#A78BFA;border:1px solid rgba(13,22,40,.8)';
+        dotWrap.appendChild(d2);
+      }
+      labelEl.appendChild(dotWrap);
+    }
     (function(customer, distance){
       function fire(e){
         if(e){ e.preventDefault(); e.stopPropagation(); }
@@ -484,6 +595,47 @@ function drawNearby(lat, lng) {
   });
 }
 
+// ── 이벤트 D-day 계산 (D-3 ~ D-0) ──────────────────
+function calcDday(dateStr, repeat) {
+  if(!dateStr) return null;
+  var today = new Date(); today.setHours(0,0,0,0);
+  var parts = dateStr.split('-');
+  if(parts.length < 2) return null;
+  var target;
+  if(repeat === '매년' || repeat === '매년반복') {
+    var m = parseInt(parts[1],10)-1;
+    var d = parseInt(parts[2]||1,10);
+    target = new Date(today.getFullYear(), m, d);
+    if(target < today) target.setFullYear(today.getFullYear()+1);
+  } else {
+    target = new Date(dateStr);
+  }
+  target.setHours(0,0,0,0);
+  var diff = Math.round((target - today) / 86400000);
+  return diff;
+}
+
+function getUpcomingEvents(c) {
+  var result = { events:[], hasEvent:false, hasCustom:false };
+  if(c.events && c.events.length) {
+    c.events.forEach(function(ev){
+      var d = calcDday(ev.alertDate || ev.date, ev.repeat || ev.trigger);
+      if(d !== null && d >= 0 && d <= 3) {
+        result.events.push({ name:ev.name, dday:d, date:ev.alertDate||ev.date, repeat:ev.repeat||ev.trigger, type:'event' });
+        result.hasEvent = true;
+      }
+    });
+  }
+  if(c.etcNote && c.etcNote.trim()) {
+    var noteLines = c.etcNote.split('\n').filter(function(l){ return l.trim(); });
+    noteLines.forEach(function(line){
+      result.events.push({ name:line.trim(), dday:null, date:'', repeat:'', type:'custom' });
+      result.hasCustom = true;
+    });
+  }
+  return result;
+}
+
 // ── 고객 ID로 찾기 ───────────────────────────────────
 function findCustomerById(id) {
   for(var i=0; i<allCustomers.length; i++){
@@ -523,6 +675,40 @@ function showPopup(c, dist, pixelX, pixelY) {
   if(elPhone) elPhone.innerHTML = c.phone ? '📞 '+c.phone : '';
   var elContact = document.getElementById('popupContact');
   if(elContact) elContact.textContent = c.lastContact ? '마지막 연락: '+c.lastContact : '';
+
+  // 이벤트 카드 렌더링
+  var evSection = document.getElementById('popupEventSection');
+  var evCards   = document.getElementById('popupEventCards');
+  var evInfo = getUpcomingEvents(c);
+  if(evSection && evCards) {
+    if(evInfo.events.length > 0) {
+      evSection.style.display = '';
+      var html = '';
+      evInfo.events.forEach(function(ev){
+        if(ev.type === 'event') {
+          var ddayStr = ev.dday === 0 ? '<span class="ev-dday-today">D-DAY</span>' : '<span class="ev-dday">D-'+ev.dday+'</span>';
+          var repeatStr = (ev.repeat === '매년' || ev.repeat === '매년반복') ? ' (매년)' : '';
+          html += '<div class="ev-card ev-card-event">'
+            +'<div class="ev-card-row"><span class="ev-card-name">'+ev.name+'</span>'+ddayStr+'</div>'
+            +'<div class="ev-date">'+ev.date+repeatStr+'</div>'
+            +'</div>';
+        } else {
+          html += '<div class="ev-card ev-card-custom">'
+            +'<div class="ev-section-label ev-section-label-custom">★ 커스텀 알림</div>'
+            +'<div class="ev-card-name">'+ev.name+'</div>'
+            +'</div>';
+        }
+      });
+      if(evInfo.hasEvent) {
+        evCards.innerHTML = '<div class="ev-section-label ev-section-label-event">🎂 이벤트</div>' + html;
+      } else {
+        evCards.innerHTML = html;
+      }
+    } else {
+      evSection.style.display = 'none';
+      evCards.innerHTML = '';
+    }
+  }
 
   // 단독 길찾기 (현재 위치 → 이 고객)
   var destLat = c.lat || '', destLng = c.lng || '';
@@ -613,6 +799,72 @@ function updateRouteStatus() {
   } else {
     rs.style.display = 'none';
   }
+}
+
+// ── 내 현재 위치 찾기 ────────────────────────────────
+function findMyLocation() {
+  if(!kakaoMap){ alert('먼저 지도를 불러주세요'); return; }
+  if(!navigator.geolocation){ alert('이 브라우저는 위치 정보를 지원하지 않습니다'); return; }
+  var btn = document.getElementById('btnMyLoc');
+  if(btn){ btn.textContent = '⏳ 위치 찾는 중...'; btn.className = 'myloc-btn loading'; }
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      myLat = pos.coords.latitude;
+      myLng = pos.coords.longitude;
+
+      // 기존 내 위치 마커/오버레이 제거
+      if(myLocMarker)  { myLocMarker.setMap(null);  myLocMarker  = null; }
+      if(myLocOverlay) { myLocOverlay.setMap(null); myLocOverlay = null; }
+
+      var myPos = new kakao.maps.LatLng(myLat, myLng);
+
+      // 내 위치 마커 (노란 별 모양)
+      var svgMe = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
+        +'<circle cx="16" cy="16" r="14" fill="#FBBF24" stroke="#fff" stroke-width="2"/>'
+        +'<circle cx="16" cy="16" r="6" fill="#fff" opacity=".9"/>'
+        +'</svg>';
+      var myImg = new kakao.maps.MarkerImage(
+        'data:image/svg+xml;base64,'+btoa(svgMe),
+        new kakao.maps.Size(32,32),
+        { offset: new kakao.maps.Point(16,16) }
+      );
+      myLocMarker = new kakao.maps.Marker({ position:myPos, map:kakaoMap, image:myImg, title:'내 위치' });
+
+      // 내 위치 라벨
+      var myLabelEl = document.createElement('div');
+      myLabelEl.style.cssText = 'background:rgba(251,191,36,.9);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;color:#1a1a1a;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+      myLabelEl.textContent = '📍 내 위치';
+      myLabelEl.addEventListener('click', function(){
+        // 내 위치를 출발지로 설정
+        routeFrom = { id:'MY_LOCATION', name:'내 위치', lat:String(myLat), lng:String(myLng) };
+        var bf = document.getElementById('btnFrom');
+        if(bf) bf.className = 'route-btn btn-from active';
+        updateRouteStatus();
+        alert('내 현재 위치가 출발지로 설정됐습니다.');
+      });
+      myLocOverlay = new kakao.maps.CustomOverlay({ position:myPos, content:myLabelEl, yAnchor:3.0, clickable:true });
+      myLocOverlay.setMap(kakaoMap);
+
+      // 지도 중심 이동 + 주변 고객 표시
+      centerLat = myLat; centerLng = myLng;
+      document.getElementById('targetName').textContent = '내 현재 위치';
+      document.getElementById('targetAddr').textContent = '위도 '+myLat.toFixed(4)+' / 경도 '+myLng.toFixed(4);
+      document.getElementById('headerSub').textContent  = '내 위치 주변 고객 찾기';
+      drawNearby(myLat, myLng);
+
+      if(btn){ btn.textContent = '📍 내 위치'; btn.className = 'myloc-btn'; }
+    },
+    function(err){
+      if(btn){ btn.textContent = '📍 내 위치'; btn.className = 'myloc-btn'; }
+      var msg = '위치를 가져올 수 없습니다.';
+      if(err.code === 1) msg = '위치 권한이 거부됐습니다.\n브라우저 주소창 옆 자물쇠 아이콘 → 위치 허용으로 바꿔주세요.';
+      if(err.code === 2) msg = '위치 신호를 찾을 수 없습니다. 잠시 후 다시 시도해주세요.';
+      if(err.code === 3) msg = '위치 요청 시간이 초과됐습니다.';
+      alert(msg);
+    },
+    { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+  );
 }
 
 function closePopup() {
