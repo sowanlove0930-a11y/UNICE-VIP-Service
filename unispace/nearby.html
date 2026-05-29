@@ -524,13 +524,7 @@ function drawNearby(lat, lng) {
       function fire(e){
         if(e){ e.preventDefault(); e.stopPropagation(); }
         console.log('[NEARBY] 라벨 클릭:', customer.name);
-        // 라벨 DOM 위치로 픽셀 좌표 계산
-        var mapWrap = document.querySelector('.map-wrap');
-        var rect = mapWrap ? mapWrap.getBoundingClientRect() : {left:0,top:0};
-        var lrect = labelEl.getBoundingClientRect();
-        var px = lrect.left - rect.left + lrect.width/2;
-        var py = lrect.top  - rect.top  + lrect.height;
-        showPopup(customer, distance, px, py);
+        showPopup(customer, distance);
       }
       labelEl.addEventListener('click', fire);
       labelEl.addEventListener('touchstart', fire);
@@ -543,15 +537,12 @@ function drawNearby(lat, lng) {
     });
     nameOverlay.setMap(kakaoMap);
 
-    // 마커 클릭 이벤트 (픽셀 좌표 = 지도 컨테이너 좌표계로 변환)
-    (function(customer, distance, markerEl, latLng){
+    (function(customer, distance, markerEl){
       kakao.maps.event.addListener(markerEl, 'click', function() {
         console.log('[NEARBY] 마커 클릭:', customer.name);
-        var proj = kakaoMap.getProjection();
-        var point = proj.containerPointFromCoords(latLng);
-        showPopup(customer, distance, point.x, point.y);
+        showPopup(customer, distance);
       });
-    })(c, dist, marker, pos);
+    })(c, dist, marker);
   });
 
   document.getElementById('clist').innerHTML = listHtml;
@@ -633,7 +624,7 @@ function selectCustomer(idx) {
 }
 
 // ── 팝업 표시 ────────────────────────────────────────
-function showPopup(c, dist, pixelX, pixelY) {
+function showPopup(c, dist) {
   console.log('[NEARBY] showPopup 호출:', c.name);
   selectedCustomerId = c.id;
   var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
@@ -723,33 +714,9 @@ function showPopup(c, dist, pixelX, pixelY) {
   if(popup){
     popup.style.display = 'block';
     popup.style.zIndex  = '9999';
-
-    // 팝업 실제 크기 측정
-    var pw = popup.offsetWidth  || 250;
-    var ph = popup.offsetHeight || 300;
-
-    var mapWrap = document.querySelector('.map-wrap');
-    var mw = mapWrap ? mapWrap.offsetWidth  : window.innerWidth;
-    var mh = mapWrap ? mapWrap.offsetHeight : window.innerHeight;
-
-    var px, py;
-    if(pixelX !== undefined && pixelY !== undefined) {
-      px = pixelX + 20;
-      py = pixelY + 20;
-      // 오른쪽 밖으로 나가면 왼쪽으로
-      if(px + pw > mw - 8) px = pixelX - pw - 20;
-      // 아래쪽 밖으로 나가면 위로
-      if(py + ph > mh - 8) py = pixelY - ph - 20;
-    } else {
-      px = 16; py = 60;
-    }
-    // 최소값 보정
-    if(px < 8) px = 8;
-    if(py < 8) py = 8;
-
-    popup.style.left = px + 'px';
-    popup.style.top  = py + 'px';
-    console.log('[NEARBY] 팝업 표시 완료 at', px, py);
+    popup.style.left    = '16px';
+    popup.style.top     = '16px';
+    console.log('[NEARBY] 팝업 표시 완료');
   } else {
     console.error('[NEARBY] mapPopup 요소 없음');
   }
