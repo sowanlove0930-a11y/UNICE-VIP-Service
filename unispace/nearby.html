@@ -89,6 +89,18 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .btn-kakao:hover{background:rgba(254,229,0,.18);}
 .detail-btn{width:100%;padding:8px;border-radius:8px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-size:12px;font-weight:700;text-align:center;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;}
 
+.route-btns{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px;}
+.route-btn{padding:6px 4px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;transition:all .2s;}
+.btn-from{background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.3);}
+.btn-from.active{background:rgba(59,130,246,.35);color:#fff;}
+.btn-to{background:rgba(239,68,68,.1);color:#F87171;border:1px solid rgba(239,68,68,.3);}
+.btn-to.active{background:rgba(239,68,68,.3);color:#fff;}
+.route-status{margin-top:6px;background:rgba(255,255,255,.04);border-radius:8px;padding:8px;margin-bottom:4px;}
+.route-info{font-size:11px;color:var(--text2);margin-bottom:6px;line-height:1.6;}
+.route-info b{color:var(--gold2);}
+.route-nav-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;}
+.route-nav-btn{padding:6px 2px;border-radius:6px;text-align:center;font-size:10px;font-weight:700;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.25);color:var(--gold2);text-decoration:none;display:block;}
+.route-nav-btn:hover{background:rgba(201,168,76,.25);}
 /* 범례 */
 .legend{position:absolute;bottom:12px;left:12px;background:rgba(13,22,40,.9);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;z-index:20;}
 .lr{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--text2);}
@@ -148,17 +160,29 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
     <!-- 팝업 -->
     <div class="map-popup" id="mapPopup">
-      <button type="button" class="popup-close" onclick="closePopup()">✕</button>
+      <button type="button" class="popup-close" id="btnClose">✕</button>
       <div class="phead">
         <span class="pname" id="popupName"></span>
         <span class="ptag" id="popupTag"></span>
       </div>
       <div class="prow" id="popupAddr"></div>
-      <div class="prow" id="popupDist"></div>
       <div class="prow" id="popupPhone"></div>
       <div class="prow" id="popupContact"></div>
       <div class="divider"></div>
-      <div class="section-label">🗺️ 길찾기</div>
+      <div class="route-btns">
+        <button type="button" class="route-btn btn-from" id="btnFrom">🚩 출발지 설정</button>
+        <button type="button" class="route-btn btn-to" id="btnTo">🏁 도착지 설정</button>
+      </div>
+      <div class="route-status" id="routeStatus" style="display:none">
+        <div class="route-info" id="routeInfo"></div>
+        <div class="route-nav-btns">
+          <a class="route-nav-btn" id="routeCar" href="#" target="_blank">🚗 자동차</a>
+          <a class="route-nav-btn" id="routeBus" href="#" target="_blank">🚌 대중교통</a>
+          <a class="route-nav-btn" id="routeWalk" href="#" target="_blank">🚶 도보</a>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="section-label">🗺️ 현재 위치로 길찾기</div>
       <div class="nav-btns">
         <a class="nav-btn" id="navCar" href="#" target="_blank">
           <span class="nav-icon">🚗</span><span class="nav-text">자동차</span>
@@ -174,9 +198,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <div class="section-label">📲 연락하기</div>
       <div class="contact-btns">
         <a class="contact-btn btn-call" id="btnCall" href="#">📞 전화걸기</a>
-        <a class="contact-btn btn-kakao" id="btnKakao" href="#" target="_blank">💬 카카오톡</a>
+        <a class="contact-btn btn-kakao" id="btnKakao" href="#">💬 카카오톡</a>
       </div>
-      <button type="button" class="detail-btn" id="btnDetail" onclick="goDetail()">고객 상세 보기 →</button>
+      <button type="button" class="detail-btn" id="btnDetail">고객 상세 보기 →</button>
     </div>
 
     <!-- 범례 -->
@@ -198,6 +222,8 @@ var radiusKm = 5;
 var centerLat = 0, centerLng = 0;
 var selectedCustomerId = null;
 var allCustomers = [];
+var routeFrom = null;
+var routeTo   = null;
 
 // ── 초기화 ───────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', function() {
@@ -221,6 +247,33 @@ window.addEventListener('DOMContentLoaded', function() {
     document.getElementById('apiKeyInput').value = savedKey;
     loadKakaoScript(savedKey);
   }
+
+  // 팝업 버튼 이벤트 등록
+  var btnClose = document.getElementById('btnClose');
+  if(btnClose) btnClose.addEventListener('click', closePopup);
+
+  var btnDetail = document.getElementById('btnDetail');
+  if(btnDetail) btnDetail.addEventListener('click', goDetail);
+
+  var btnFrom = document.getElementById('btnFrom');
+  if(btnFrom) btnFrom.addEventListener('click', function(){
+    if(!selectedCustomerId) return;
+    var c = findCustomerById(selectedCustomerId);
+    if(!c || !c.lat) { alert('이 고객은 좌표가 없어 출발지로 설정할 수 없습니다.'); return; }
+    routeFrom = c;
+    document.getElementById('btnFrom').className = 'route-btn btn-from active';
+    updateRouteStatus();
+  });
+
+  var btnTo = document.getElementById('btnTo');
+  if(btnTo) btnTo.addEventListener('click', function(){
+    if(!selectedCustomerId) return;
+    var c = findCustomerById(selectedCustomerId);
+    if(!c || !c.lat) { alert('이 고객은 좌표가 없어 도착지로 설정할 수 없습니다.'); return; }
+    routeTo = c;
+    document.getElementById('btnTo').className = 'route-btn btn-to active';
+    updateRouteStatus();
+  });
 });
 
 // ── 카카오맵 로드 ────────────────────────────────────
@@ -383,7 +436,17 @@ function drawNearby(lat, lng) {
     labelEl.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
     labelEl.textContent = c.name;
     (function(customer, distance){
-      function fire(e){ if(e){ e.preventDefault(); e.stopPropagation(); } console.log('[NEARBY] 라벨 클릭:', customer.name); showPopup(customer, distance); }
+      function fire(e){
+        if(e){ e.preventDefault(); e.stopPropagation(); }
+        console.log('[NEARBY] 라벨 클릭:', customer.name);
+        // 라벨 DOM 위치로 픽셀 좌표 계산
+        var mapWrap = document.querySelector('.map-wrap');
+        var rect = mapWrap ? mapWrap.getBoundingClientRect() : {left:0,top:0};
+        var lrect = labelEl.getBoundingClientRect();
+        var px = lrect.left - rect.left + lrect.width/2;
+        var py = lrect.top  - rect.top  + lrect.height;
+        showPopup(customer, distance, px, py);
+      }
       labelEl.addEventListener('click', fire);
       labelEl.addEventListener('touchstart', fire);
     })(c, dist);
@@ -395,13 +458,15 @@ function drawNearby(lat, lng) {
     });
     nameOverlay.setMap(kakaoMap);
 
-    // 마커 클릭 이벤트
-    (function(customer, distance, markerEl){
+    // 마커 클릭 이벤트 (픽셀 좌표 = 지도 컨테이너 좌표계로 변환)
+    (function(customer, distance, markerEl, latLng){
       kakao.maps.event.addListener(markerEl, 'click', function() {
         console.log('[NEARBY] 마커 클릭:', customer.name);
-        showPopup(customer, distance);
+        var proj = kakaoMap.getProjection();
+        var point = proj.containerPointFromCoords(latLng);
+        showPopup(customer, distance, point.x, point.y);
       });
-    })(c, dist, marker);
+    })(c, dist, marker, pos);
   });
 
   document.getElementById('clist').innerHTML = listHtml;
@@ -419,6 +484,19 @@ function drawNearby(lat, lng) {
   });
 }
 
+// ── 고객 ID로 찾기 ───────────────────────────────────
+function findCustomerById(id) {
+  for(var i=0; i<allCustomers.length; i++){
+    if(allCustomers[i].id === id) return allCustomers[i];
+  }
+  if(window._nearbyList){
+    for(var j=0; j<window._nearbyList.length; j++){
+      if(window._nearbyList[j].c.id === id) return window._nearbyList[j].c;
+    }
+  }
+  return null;
+}
+
 // ── 고객 선택 ────────────────────────────────────────
 function selectCustomer(idx) {
   document.querySelectorAll('.ci').forEach(function(el){ el.classList.remove('sel'); });
@@ -429,7 +507,7 @@ function selectCustomer(idx) {
 }
 
 // ── 팝업 표시 ────────────────────────────────────────
-function showPopup(c, dist) {
+function showPopup(c, dist, pixelX, pixelY) {
   console.log('[NEARBY] showPopup 호출:', c.name);
   selectedCustomerId = c.id;
   var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
@@ -446,7 +524,7 @@ function showPopup(c, dist) {
   var elContact = document.getElementById('popupContact');
   if(elContact) elContact.textContent = c.lastContact ? '마지막 연락: '+c.lastContact : '';
 
-  // 길찾기 URL (카카오맵)
+  // 단독 길찾기 (현재 위치 → 이 고객)
   var destLat = c.lat || '', destLng = c.lng || '';
   var destName = encodeURIComponent(c.name);
   if(destLat && destLng) {
@@ -456,6 +534,15 @@ function showPopup(c, dist) {
     var nw = document.getElementById('navWalk'); if(nw) nw.href = navUrl;
   }
 
+  // 출발/도착 버튼 상태 반영
+  var bf = document.getElementById('btnFrom');
+  var bt = document.getElementById('btnTo');
+  if(bf){ bf.className = 'route-btn btn-from' + (routeFrom && routeFrom.id===c.id?' active':''); }
+  if(bt){ bt.className = 'route-btn btn-to'   + (routeTo   && routeTo.id===c.id?' active':''); }
+
+  // 고객간 길찾기 상태 표시
+  updateRouteStatus();
+
   // 전화
   var bc = document.getElementById('btnCall');
   if(bc) bc.href = c.phone ? 'tel:'+c.phone.replace(/-/g,'') : '#';
@@ -463,34 +550,75 @@ function showPopup(c, dist) {
   // 카카오톡
   var bk = document.getElementById('btnKakao');
   if(bk){
-    bk.href = '#';
     bk.onclick = function() {
       if(typeof Kakao !== 'undefined' && Kakao.isInitialized()) {
-        Kakao.Share.sendDefault({
-          objectType: 'text',
-          text: '[유니스] '+c.name+' 고객님께 연락드립니다.',
-          link: { mobileWebUrl: window.location.href }
-        });
-      } else {
-        alert('카카오톡 공유는 카카오 SDK 연동 후 사용 가능합니다.');
-      }
+        Kakao.Share.sendDefault({ objectType:'text', text:'[유니스] '+c.name+' 고객님께 연락드립니다.', link:{ mobileWebUrl: window.location.href } });
+      } else { alert('카카오톡 공유는 카카오 SDK 연동 후 사용 가능합니다.'); }
       return false;
     };
   }
 
+  // 팝업 위치 — 핀 근처
   var popup = document.getElementById('mapPopup');
   if(popup){
     popup.style.display = 'block';
-    popup.style.left = '16px';
-    popup.style.top  = '60px';
-    popup.style.zIndex = '9999';
-    console.log('[NEARBY] 팝업 표시 완료');
+    popup.style.zIndex  = '9999';
+
+    var mapWrap = document.querySelector('.map-wrap');
+    var mw = mapWrap ? mapWrap.offsetWidth  : window.innerWidth;
+    var mh = mapWrap ? mapWrap.offsetHeight : window.innerHeight;
+    var pw = 240, ph = 380; // 팝업 예상 크기
+
+    var px = 16, py = 60;
+    if(pixelX !== undefined && pixelY !== undefined) {
+      px = pixelX + 16;
+      py = pixelY - ph / 2;
+    }
+    // 화면 밖으로 나가면 반대쪽으로
+    if(px + pw > mw - 10) px = (pixelX !== undefined ? pixelX : pw) - pw - 16;
+    if(py < 10)           py = 10;
+    if(py + ph > mh - 10) py = mh - ph - 10;
+    if(px < 10)           px = 10;
+
+    popup.style.left = px + 'px';
+    popup.style.top  = py + 'px';
+    console.log('[NEARBY] 팝업 표시 완료 at', px, py);
   } else {
-    console.error('[NEARBY] mapPopup 요소를 찾을 수 없음');
+    console.error('[NEARBY] mapPopup 요소 없음');
   }
 }
 
-function closePopup() { document.getElementById('mapPopup').style.display='none'; }
+// ── 고객간 길찾기 상태 갱신 ──────────────────────────
+function updateRouteStatus() {
+  var rs = document.getElementById('routeStatus');
+  var ri = document.getElementById('routeInfo');
+  if(!rs || !ri) return;
+  if(routeFrom && routeTo) {
+    rs.style.display = '';
+    ri.innerHTML = '<b>🚩 '+routeFrom.name+'</b> → <b>🏁 '+routeTo.name+'</b>';
+    var fromName = encodeURIComponent(routeFrom.name);
+    var toName   = encodeURIComponent(routeTo.name);
+    var base = 'https://map.kakao.com/link/from/'+fromName+','+routeFrom.lat+','+routeFrom.lng+'/to/'+toName+','+routeTo.lat+','+routeTo.lng;
+    var rc = document.getElementById('routeCar');  if(rc)  rc.href = base;
+    var rb = document.getElementById('routeBus');  if(rb)  rb.href = base;
+    var rw = document.getElementById('routeWalk'); if(rw)  rw.href = base;
+  } else if(routeFrom || routeTo) {
+    rs.style.display = '';
+    ri.innerHTML = routeFrom
+      ? '<b>🚩 '+routeFrom.name+'</b> 설정됨 · 도착지를 선택하세요'
+      : '출발지를 선택하세요 · <b>🏁 '+routeTo.name+'</b> 설정됨';
+    var rc2=document.getElementById('routeCar'); if(rc2) rc2.href='#';
+    var rb2=document.getElementById('routeBus'); if(rb2) rb2.href='#';
+    var rw2=document.getElementById('routeWalk'); if(rw2) rw2.href='#';
+  } else {
+    rs.style.display = 'none';
+  }
+}
+
+function closePopup() {
+  var p = document.getElementById('mapPopup');
+  if(p) p.style.display = 'none';
+}
 
 function goDetail() {
   if(selectedCustomerId) {
