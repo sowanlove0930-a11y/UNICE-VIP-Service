@@ -117,6 +117,26 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .ev-section-label{font-size:10px;font-weight:700;margin-bottom:4px;}
 .ev-section-label-event{color:#E8C97A;}
 .ev-section-label-custom{color:#A78BFA;}
+/* 선택 고객 카드 */
+.selected-customer-card{border-top:1px solid var(--bdr);padding:10px 14px;background:rgba(255,255,255,.02);flex-shrink:0;}
+.scc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.scc-info{display:flex;align-items:center;gap:6px;}
+.scc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.scc-name{font-size:12px;font-weight:700;color:var(--text);}
+.scc-tag{font-size:9px;padding:1px 6px;border-radius:5px;font-weight:700;}
+.scc-dist{font-size:10px;color:var(--text2);}
+.scc-btns{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.scc-btn{padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;transition:all .2s;}
+.scc-from{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);color:#60A5FA;}
+.scc-from.active{background:rgba(59,130,246,.3);color:#fff;}
+.scc-to{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#F87171;}
+.scc-to.active{background:rgba(239,68,68,.3);color:#fff;}
+/* 계약 요약 */
+.popup-contracts{margin-bottom:2px;}
+.pc-item{background:rgba(255,255,255,.04);border-radius:7px;padding:6px 8px;margin-bottom:4px;font-size:11px;}
+.pc-company{font-weight:700;color:var(--text);margin-bottom:1px;}
+.pc-detail{color:var(--text2);font-size:10px;}
+.pc-empty{font-size:11px;color:var(--text3);}
 /* 길찾기 패널 */
 .route-panel{border-top:1px solid var(--bdr);padding:12px 14px;flex-shrink:0;background:var(--bg2);}
 .rp-title{font-size:10px;font-weight:700;color:var(--gold2);letter-spacing:.06em;margin-bottom:8px;}
@@ -195,6 +215,22 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <div class="rcnt" id="resultCount">주소를 검색하면 주변 고객이 표시됩니다</div>
     <div class="clist" id="clist"><div class="empty">🔍 주소를 검색해주세요</div></div>
 
+    <!-- 선택 고객 카드 -->
+    <div class="selected-customer-card" id="selectedCustomerCard" style="display:none">
+      <div class="scc-header">
+        <div class="scc-info">
+          <div class="scc-dot" id="sccDot"></div>
+          <span class="scc-name" id="sccName"></span>
+          <span class="scc-tag" id="sccTag"></span>
+        </div>
+        <span class="scc-dist" id="sccDist"></span>
+      </div>
+      <div class="scc-btns">
+        <button type="button" class="scc-btn scc-from" id="sccFrom">🚩 출발지로</button>
+        <button type="button" class="scc-btn scc-to" id="sccTo">🏁 도착지로</button>
+      </div>
+    </div>
+
     <!-- 길찾기 섹션 -->
     <div class="route-panel" id="routePanel">
       <div class="rp-title">🗺️ 길찾기</div>
@@ -267,11 +303,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <div id="popupEventCards"></div>
       </div>
       <div class="divider"></div>
-      <div class="route-btns">
-        <button type="button" class="route-btn btn-from" id="btnFrom">🚩 출발지로</button>
-        <button type="button" class="route-btn btn-to" id="btnTo">🏁 도착지로</button>
-      </div>
-      <div style="font-size:10px;color:rgba(255,255,255,.25);text-align:center;margin-bottom:4px">좌측 패널 길찾기에 반영됩니다</div>
+      <div class="section-label">📋 계약 요약</div>
+      <div id="popupContracts" class="popup-contracts"></div>
       <div class="divider"></div>
       <div class="section-label">📲 연락하기</div>
       <div class="contact-btns">
@@ -315,6 +348,7 @@ var panelFrom = null;  // { name, lat, lng }
 var panelTo   = null;  // { name, lat, lng, address }
 var mapSelectMode = null; // 'from' | 'to' | null
 var mapSelectMarker = null;
+var selectedPanelCustomer = null;
 var myLocMarker  = null;
 var myLocOverlay = null;
 var myLat = null, myLng = null;
@@ -382,6 +416,27 @@ window.addEventListener('DOMContentLoaded', function() {
   var mapSelectCancel = document.getElementById('mapSelectCancel');
   if(mapSelectCancel) mapSelectCancel.addEventListener('click', exitMapSelectMode);
 
+  // 선택 고객 카드 버튼
+  var sccFrom = document.getElementById('sccFrom');
+  if(sccFrom) sccFrom.addEventListener('click', function(){
+    if(!selectedPanelCustomer || !selectedPanelCustomer.lat) return;
+    var c = selectedPanelCustomer;
+    panelFrom = { name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' };
+    document.getElementById('sccFrom').className = 'scc-btn scc-from active';
+    document.getElementById('sccTo').className   = 'scc-btn scc-to';
+    renderRoutePanel();
+  });
+
+  var sccTo = document.getElementById('sccTo');
+  if(sccTo) sccTo.addEventListener('click', function(){
+    if(!selectedPanelCustomer || !selectedPanelCustomer.lat) return;
+    var c = selectedPanelCustomer;
+    panelTo = { name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' };
+    document.getElementById('sccTo').className   = 'scc-btn scc-to active';
+    document.getElementById('sccFrom').className = 'scc-btn scc-from';
+    renderRoutePanel();
+  });
+
   // 내 위치 버튼
   var btnMyLoc = document.getElementById('btnMyLoc');
   if(btnMyLoc) btnMyLoc.addEventListener('click', findMyLocation);
@@ -427,40 +482,6 @@ window.addEventListener('DOMContentLoaded', function() {
 
   var btnDetail = document.getElementById('btnDetail');
   if(btnDetail) btnDetail.addEventListener('click', goDetail);
-
-  var btnFrom = document.getElementById('btnFrom');
-  if(btnFrom) btnFrom.addEventListener('click', function(){
-    if(!selectedCustomerId) return;
-    var c = findCustomerById(selectedCustomerId);
-    if(!c || !c.lat) { alert('이 고객은 좌표가 없어 출발지로 설정할 수 없습니다.'); return; }
-    if(routeFrom && routeFrom.id === c.id) {
-      routeFrom = null; panelFrom = null;
-      document.getElementById('btnFrom').className = 'route-btn btn-from';
-    } else {
-      routeFrom = c;
-      panelFrom = { name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' };
-      document.getElementById('btnFrom').className = 'route-btn btn-from active';
-    }
-    renderRoutePanel();
-    updateRouteStatus();
-  });
-
-  var btnTo = document.getElementById('btnTo');
-  if(btnTo) btnTo.addEventListener('click', function(){
-    if(!selectedCustomerId) return;
-    var c = findCustomerById(selectedCustomerId);
-    if(!c || !c.lat) { alert('이 고객은 좌표가 없어 도착지로 설정할 수 없습니다.'); return; }
-    if(routeTo && routeTo.id === c.id) {
-      routeTo = null; panelTo = null;
-      document.getElementById('btnTo').className = 'route-btn btn-to';
-    } else {
-      routeTo = c;
-      panelTo = { name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' };
-      document.getElementById('btnTo').className = 'route-btn btn-to active';
-    }
-    renderRoutePanel();
-    updateRouteStatus();
-  });
 });
 
 // ── 카카오맵 로드 ────────────────────────────────────
@@ -811,11 +832,27 @@ function showPopup(c, dist) {
     }
   }
 
-  // 출발/도착 버튼 상태 반영
-  var bf = document.getElementById('btnFrom');
-  var bt = document.getElementById('btnTo');
-  if(bf){ bf.className = 'route-btn btn-from' + (routeFrom && routeFrom.id===c.id?' active':''); }
-  if(bt){ bt.className = 'route-btn btn-to'   + (routeTo   && routeTo.id===c.id?' active':''); }
+  // 계약 요약 렌더링
+  var pcEl = document.getElementById('popupContracts');
+  if(pcEl) {
+    if(c.contracts && c.contracts.length > 0) {
+      var pcHtml = '';
+      c.contracts.slice(0,3).forEach(function(ct){
+        pcHtml += '<div class="pc-item">'
+          +'<div class="pc-company">'+(ct.company||ct.insurerName||'—')+'</div>'
+          +'<div class="pc-detail">'+(ct.productName||ct.product||'')+(ct.premium?' · 월 '+ct.premium:'')+'</div>'
+          +'</div>';
+      });
+      if(c.contracts.length > 3) pcHtml += '<div class="pc-detail" style="padding:2px 0;color:var(--text3)">외 '+(c.contracts.length-3)+'건 더보기</div>';
+      pcEl.innerHTML = pcHtml;
+    } else {
+      pcEl.innerHTML = '<div class="pc-empty">계약 정보 없음</div>';
+    }
+  }
+
+  // 선택 고객 카드 갱신
+  selectedPanelCustomer = c;
+  renderSelectedCustomerCard(c, dist);
 
   // 전화
   var bc = document.getElementById('btnCall');
@@ -832,7 +869,7 @@ function showPopup(c, dist) {
     };
   }
 
-  // 팝업 위치 — 핀 근처
+  // 팝업 위치
   var popup = document.getElementById('mapPopup');
   if(popup){
     popup.style.display = 'block';
@@ -845,13 +882,33 @@ function showPopup(c, dist) {
   }
 }
 
-// ── 팝업 출발/도착 버튼 상태만 갱신 ────────────────────
-function updateRouteStatus() {
-  var bf = document.getElementById('btnFrom');
-  var bt = document.getElementById('btnTo');
-  if(bf){ bf.className = 'route-btn btn-from' + (routeFrom && routeFrom.id===selectedCustomerId?' active':''); }
-  if(bt){ bt.className = 'route-btn btn-to'   + (routeTo   && routeTo.id===selectedCustomerId?' active':''); }
+// ── 선택 고객 카드 렌더 ──────────────────────────────
+function renderSelectedCustomerCard(c, dist) {
+  var card = document.getElementById('selectedCustomerCard');
+  if(!card) return;
+  card.style.display = '';
+  var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
+  var typeColor = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
+  var tagBg = c.customerType==='계약'?'rgba(16,185,129,.12)':c.customerType==='관리'?'rgba(139,92,246,.12)':'rgba(244,163,38,.12)';
+  var tagColor = c.customerType==='계약'?'#34D399':c.customerType==='관리'?'#A78BFA':'#FCD34D';
+  var dot  = document.getElementById('sccDot');
+  var name = document.getElementById('sccName');
+  var tag  = document.getElementById('sccTag');
+  var dstEl= document.getElementById('sccDist');
+  if(dot)  dot.style.background = typeColor;
+  if(name) name.textContent = c.name;
+  if(tag)  { tag.textContent = c.customerType||''; tag.style.background = tagBg; tag.style.color = tagColor; }
+  if(dstEl) dstEl.textContent = distStr;
+
+  // 버튼 활성 상태 반영
+  var sf = document.getElementById('sccFrom');
+  var st = document.getElementById('sccTo');
+  if(sf) sf.className = 'scc-btn scc-from' + (panelFrom && panelFrom.name===c.name?' active':'');
+  if(st) st.className = 'scc-btn scc-to'   + (panelTo   && panelTo.name===c.name?' active':'');
 }
+
+// ── 팝업 출발/도착 버튼 상태 갱신 (더 이상 팝업에 없음, 유지만) ──
+function updateRouteStatus() {}
 
 // ── 지도 선택 모드 ───────────────────────────────────
 function enterMapSelectMode(type) {
