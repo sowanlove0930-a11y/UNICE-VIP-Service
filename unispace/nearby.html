@@ -67,7 +67,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .api-link:hover{text-decoration:underline;}
 
 /* 팝업 */
-.map-popup{position:absolute;background:rgba(13,22,40,.96);border:1px solid var(--bdr2);border-radius:14px;padding:14px;min-width:210px;z-index:30;box-shadow:0 10px 30px rgba(0,0,0,.6);display:none;}
+.map-popup{position:absolute;background:rgba(13,22,40,.96);border:1px solid var(--bdr2);border-radius:14px;padding:14px;min-width:210px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.6);display:none;}
 .popup-close{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;}
 .phead{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
 .pname{font-size:14px;font-weight:700;color:var(--text);}
@@ -416,48 +416,64 @@ function selectCustomer(idx) {
 
 // ── 팝업 표시 ────────────────────────────────────────
 function showPopup(c, dist) {
+  console.log('[NEARBY] showPopup 호출:', c.name);
   selectedCustomerId = c.id;
   var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
   var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
 
-  document.getElementById('popupName').textContent = c.name;
-  document.getElementById('popupTag').textContent  = c.customerType||'고객';
-  document.getElementById('popupTag').className    = 'ptag '+tagClass;
-  document.getElementById('popupAddr').textContent = '📍 '+(c.address||'주소 미등록')+' · '+distStr;
-  document.getElementById('popupPhone').innerHTML  = c.phone ? '📞 '+c.phone : '';
-  document.getElementById('popupContact').textContent = c.lastContact ? '마지막 연락: '+c.lastContact : '';
+  var elName = document.getElementById('popupName');
+  if(elName) elName.textContent = c.name;
+  var elTag = document.getElementById('popupTag');
+  if(elTag){ elTag.textContent = c.customerType||'고객'; elTag.className = 'ptag '+tagClass; }
+  var elAddr = document.getElementById('popupAddr');
+  if(elAddr) elAddr.textContent = '📍 '+(c.address||'주소 미등록')+' · '+distStr;
+  var elPhone = document.getElementById('popupPhone');
+  if(elPhone) elPhone.innerHTML = c.phone ? '📞 '+c.phone : '';
+  var elContact = document.getElementById('popupContact');
+  if(elContact) elContact.textContent = c.lastContact ? '마지막 연락: '+c.lastContact : '';
 
   // 길찾기 URL (카카오맵)
   var destLat = c.lat || '', destLng = c.lng || '';
   var destName = encodeURIComponent(c.name);
   if(destLat && destLng) {
-    document.getElementById('navCar').href  = 'https://map.kakao.com/link/to/'+destName+','+destLat+','+destLng;
-    document.getElementById('navBus').href  = 'https://map.kakao.com/link/to/'+destName+','+destLat+','+destLng;
-    document.getElementById('navWalk').href = 'https://map.kakao.com/link/to/'+destName+','+destLat+','+destLng;
+    var navUrl = 'https://map.kakao.com/link/to/'+destName+','+destLat+','+destLng;
+    var nc = document.getElementById('navCar');  if(nc) nc.href = navUrl;
+    var nb = document.getElementById('navBus');  if(nb) nb.href = navUrl;
+    var nw = document.getElementById('navWalk'); if(nw) nw.href = navUrl;
   }
 
   // 전화
-  document.getElementById('btnCall').href = c.phone ? 'tel:'+c.phone.replace(/-/g,'') : '#';
+  var bc = document.getElementById('btnCall');
+  if(bc) bc.href = c.phone ? 'tel:'+c.phone.replace(/-/g,'') : '#';
 
   // 카카오톡
-  document.getElementById('btnKakao').href = '#';
-  document.getElementById('btnKakao').onclick = function() {
-    if(typeof Kakao !== 'undefined' && Kakao.isInitialized()) {
-      Kakao.Share.sendDefault({
-        objectType: 'text',
-        text: '[유니스] '+c.name+' 고객님께 연락드립니다.',
-        link: { mobileWebUrl: window.location.href }
-      });
-    } else {
-      alert('카카오톡 공유는 카카오 SDK 연동 후 사용 가능합니다.');
-    }
-    return false;
-  };
+  var bk = document.getElementById('btnKakao');
+  if(bk){
+    bk.href = '#';
+    bk.onclick = function() {
+      if(typeof Kakao !== 'undefined' && Kakao.isInitialized()) {
+        Kakao.Share.sendDefault({
+          objectType: 'text',
+          text: '[유니스] '+c.name+' 고객님께 연락드립니다.',
+          link: { mobileWebUrl: window.location.href }
+        });
+      } else {
+        alert('카카오톡 공유는 카카오 SDK 연동 후 사용 가능합니다.');
+      }
+      return false;
+    };
+  }
 
   var popup = document.getElementById('mapPopup');
-  popup.style.display = '';
-  popup.style.left = '16px';
-  popup.style.top  = '60px';
+  if(popup){
+    popup.style.display = 'block';
+    popup.style.left = '16px';
+    popup.style.top  = '60px';
+    popup.style.zIndex = '9999';
+    console.log('[NEARBY] 팝업 표시 완료');
+  } else {
+    console.error('[NEARBY] mapPopup 요소를 찾을 수 없음');
+  }
 }
 
 function closePopup() { document.getElementById('mapPopup').style.display='none'; }
