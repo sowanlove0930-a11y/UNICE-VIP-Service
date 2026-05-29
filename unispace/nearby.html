@@ -142,6 +142,14 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .rp-nav-btn span{font-size:9px;}
 .rp-nav-btn:hover{background:rgba(232,201,122,.18);}
 .rp-hint{font-size:10px;color:var(--text3);text-align:center;margin-top:5px;}
+.rp-mapsel{padding:5px 8px;border-radius:7px;border:1px solid rgba(232,201,122,.25);background:rgba(232,201,122,.08);color:var(--gold2);font-size:12px;cursor:pointer;flex-shrink:0;transition:all .2s;}
+.rp-mapsel:hover{background:rgba(232,201,122,.18);}
+.rp-mapsel.active{background:rgba(232,201,122,.3);border-color:var(--gold2);}
+.map-select-banner{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(37,99,235,.95);border-radius:20px;padding:9px 16px;display:flex;align-items:center;gap:8px;z-index:500;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4);}
+.msb-icon{font-size:14px;}
+.msb-text{font-size:12px;font-weight:700;color:#fff;}
+.msb-cancel{background:rgba(255,255,255,.2);border:none;border-radius:10px;padding:3px 10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;}
+.msb-cancel:hover{background:rgba(255,255,255,.35);}
 /* 내 위치 버튼 */
 .myloc-btn{padding:8px 10px;border:none;border-radius:8px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#60A5FA;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .2s;}
 .myloc-btn:hover{background:rgba(59,130,246,.28);}
@@ -198,6 +206,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           <button type="button" class="rp-clear" id="rpFromClear" style="display:none">✕</button>
         </div>
         <button type="button" class="rp-myloc" id="rpMyLoc">📍 내위치</button>
+        <button type="button" class="rp-mapsel" id="rpFromMapSel" title="지도에서 선택">🗺️</button>
       </div>
       <input type="text" class="rp-input" id="rpFromInput" placeholder="주소 직접 입력">
 
@@ -208,9 +217,12 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       </div>
 
       <div class="rp-label">도착지</div>
-      <div class="rp-slot" id="rpToSlot">
-        <span class="rp-slot-text" id="rpToText">고객 핀 클릭 시 자동 설정</span>
-        <button type="button" class="rp-clear" id="rpToClear" style="display:none">✕</button>
+      <div style="display:flex;gap:4px;margin-bottom:4px;">
+        <div class="rp-slot" id="rpToSlot" style="flex:1">
+          <span class="rp-slot-text" id="rpToText">고객 핀 또는 지도 선택</span>
+          <button type="button" class="rp-clear" id="rpToClear" style="display:none">✕</button>
+        </div>
+        <button type="button" class="rp-mapsel" id="rpToMapSel" title="지도에서 선택">🗺️</button>
       </div>
       <input type="text" class="rp-input" id="rpToInput" placeholder="주소 직접 입력">
 
@@ -226,6 +238,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   <!-- 지도 -->
   <div class="map-wrap">
     <div id="kakaoMap"></div>
+
+    <!-- 지도 선택 모드 배너 -->
+    <div class="map-select-banner" id="mapSelectBanner" style="display:none">
+      <span class="msb-icon" id="mapSelectIcon">🚩</span>
+      <span class="msb-text" id="mapSelectText">출발지를 지도에서 클릭해주세요</span>
+      <button type="button" class="msb-cancel" id="mapSelectCancel">취소</button>
+    </div>
 
     <!-- 팝업 -->
     <div class="map-popup" id="mapPopup">
@@ -294,6 +313,8 @@ var routeFrom = null;
 var routeTo   = null;
 var panelFrom = null;  // { name, lat, lng }
 var panelTo   = null;  // { name, lat, lng, address }
+var mapSelectMode = null; // 'from' | 'to' | null
+var mapSelectMarker = null;
 var myLocMarker  = null;
 var myLocOverlay = null;
 var myLat = null, myLng = null;
@@ -351,6 +372,15 @@ window.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('touchmove',  function(e){ if(!dragging) return; var t=e.touches[0]; dragMove(t.clientX, t.clientY); e.preventDefault(); }, {passive:false});
     document.addEventListener('touchend',   dragEnd);
   })();
+
+  var rpFromMapSel = document.getElementById('rpFromMapSel');
+  if(rpFromMapSel) rpFromMapSel.addEventListener('click', function(){ enterMapSelectMode('from'); });
+
+  var rpToMapSel = document.getElementById('rpToMapSel');
+  if(rpToMapSel) rpToMapSel.addEventListener('click', function(){ enterMapSelectMode('to'); });
+
+  var mapSelectCancel = document.getElementById('mapSelectCancel');
+  if(mapSelectCancel) mapSelectCancel.addEventListener('click', exitMapSelectMode);
 
   // 내 위치 버튼
   var btnMyLoc = document.getElementById('btnMyLoc');
@@ -452,6 +482,28 @@ function loadKakaoScript(key) {
       var options = { center: new kakao.maps.LatLng(35.1631, 129.1635), level: 7 };
       kakaoMap = new kakao.maps.Map(container, options);
       console.log('[NEARBY] 지도 로드 성공');
+
+      // 지도 클릭 → 선택 모드일 때 위치 설정
+      kakao.maps.event.addListener(kakaoMap, 'click', function(mouseEvent) {
+        if(!mapSelectMode) return;
+        var latlng = mouseEvent.latLng;
+        var geocoder = new kakao.maps.services.Geocoder();
+        geocoder.coord2Address(latlng.getLng(), latlng.getLat(), function(result, status) {
+          var addrStr = '';
+          if(status === kakao.maps.services.Status.OK && result.length > 0) {
+            var r = result[0];
+            addrStr = r.road_address ? r.road_address.address_name : r.address.address_name;
+          } else {
+            addrStr = latlng.getLat().toFixed(5) + ', ' + latlng.getLng().toFixed(5);
+          }
+          var obj = { name: addrStr, lat: String(latlng.getLat()), lng: String(latlng.getLng()), address: addrStr };
+          if(mapSelectMode === 'from') { panelFrom = obj; }
+          else { panelTo = obj; }
+          exitMapSelectMode();
+          renderRoutePanel();
+          showMapSelectMarker(latlng, mapSelectMode === 'from' ? 'from' : 'to', addrStr);
+        });
+      });
       var addr = document.getElementById('addrInput').value.trim();
       if(addr) searchAddr();
     });
@@ -799,6 +851,63 @@ function updateRouteStatus() {
   var bt = document.getElementById('btnTo');
   if(bf){ bf.className = 'route-btn btn-from' + (routeFrom && routeFrom.id===selectedCustomerId?' active':''); }
   if(bt){ bt.className = 'route-btn btn-to'   + (routeTo   && routeTo.id===selectedCustomerId?' active':''); }
+}
+
+// ── 지도 선택 모드 ───────────────────────────────────
+function enterMapSelectMode(type) {
+  if(!kakaoMap){ alert('먼저 지도를 불러주세요.'); return; }
+  mapSelectMode = type;
+  var banner = document.getElementById('mapSelectBanner');
+  var icon   = document.getElementById('mapSelectIcon');
+  var text   = document.getElementById('mapSelectText');
+  var fromBtn = document.getElementById('rpFromMapSel');
+  var toBtn   = document.getElementById('rpToMapSel');
+  if(banner){ banner.style.display = ''; }
+  if(type === 'from'){
+    if(icon) icon.textContent = '🚩';
+    if(text) text.textContent = '출발지를 지도에서 클릭해주세요';
+    if(fromBtn) fromBtn.className = 'rp-mapsel active';
+    if(toBtn)   toBtn.className   = 'rp-mapsel';
+  } else {
+    if(icon) icon.textContent = '🏁';
+    if(text) text.textContent = '도착지를 지도에서 클릭해주세요';
+    if(toBtn)   toBtn.className   = 'rp-mapsel active';
+    if(fromBtn) fromBtn.className = 'rp-mapsel';
+  }
+  // 지도 커서 변경
+  kakaoMap.setCursor('crosshair');
+}
+
+function exitMapSelectMode() {
+  mapSelectMode = null;
+  var banner = document.getElementById('mapSelectBanner');
+  if(banner) banner.style.display = 'none';
+  var fromBtn = document.getElementById('rpFromMapSel');
+  var toBtn   = document.getElementById('rpToMapSel');
+  if(fromBtn) fromBtn.className = 'rp-mapsel';
+  if(toBtn)   toBtn.className   = 'rp-mapsel';
+  if(kakaoMap) kakaoMap.setCursor('');
+}
+
+function showMapSelectMarker(latlng, type, label) {
+  if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
+  var color = type === 'from' ? '#3B82F6' : '#EF4444';
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
+    +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="'+color+'"/>'
+    +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>'
+    +'</svg>';
+  var img = new kakao.maps.MarkerImage(
+    'data:image/svg+xml;base64,'+btoa(svg),
+    new kakao.maps.Size(28,36),
+    { offset: new kakao.maps.Point(14,36) }
+  );
+  mapSelectMarker = new kakao.maps.Marker({ position:latlng, map:kakaoMap, image:img, title:label });
+  // 라벨 오버레이
+  var labelEl = document.createElement('div');
+  labelEl.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;max-width:160px;overflow:hidden;text-overflow:ellipsis';
+  labelEl.textContent = (type==='from'?'🚩 ':'🏁 ') + label;
+  var overlay = new kakao.maps.CustomOverlay({ position:latlng, content:labelEl, yAnchor:3.2 });
+  overlay.setMap(kakaoMap);
 }
 
 // ── 길찾기 패널 렌더 ─────────────────────────────────
