@@ -917,6 +917,40 @@ function getMyLocForPanel(type, btn) {
     if(type === 'from') panelFrom = obj; else panelTo = obj;
     if(btn) btn.textContent = origText;
     renderRoutePanel();
+
+    // 지도 이동 + 내 위치 마커 표시
+    if(kakaoMap) {
+      var myPos = new kakao.maps.LatLng(lat, lng);
+      kakaoMap.setCenter(myPos);
+      kakaoMap.setLevel(5);
+
+      // 기존 내 위치 마커/오버레이 제거
+      if(myLocMarker)  { myLocMarker.setMap(null);  myLocMarker  = null; }
+      if(myLocOverlay) { myLocOverlay.setMap(null); myLocOverlay = null; }
+
+      // 노란 마커
+      var svgMe = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
+        +'<circle cx="16" cy="16" r="14" fill="#FBBF24" stroke="#fff" stroke-width="2"/>'
+        +'<circle cx="16" cy="16" r="6" fill="#fff" opacity=".9"/>'
+        +'</svg>';
+      var myImg = new kakao.maps.MarkerImage(
+        'data:image/svg+xml;base64,'+btoa(svgMe),
+        new kakao.maps.Size(32,32),
+        { offset: new kakao.maps.Point(16,16) }
+      );
+      myLocMarker = new kakao.maps.Marker({ position:myPos, map:kakaoMap, image:myImg, title:'내 위치' });
+
+      // 라벨 오버레이
+      var labelEl = document.createElement('div');
+      labelEl.style.cssText = 'background:rgba(251,191,36,.9);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;color:#1a1a1a;white-space:nowrap;margin-bottom:2px';
+      labelEl.textContent = '📍 내 위치';
+      myLocOverlay = new kakao.maps.CustomOverlay({ position:myPos, content:labelEl, yAnchor:3.0 });
+      myLocOverlay.setMap(kakaoMap);
+
+      // 범례 표시
+      var legend = document.getElementById('mapLegend');
+      if(legend) legend.style.display = '';
+    }
   }
 
   function onError(err) {
