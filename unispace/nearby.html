@@ -1074,7 +1074,7 @@ function drawNearby(lat, lng) {
   });
   var baseName = document.getElementById('targetName').textContent || '';
   var baseAddr = document.getElementById('targetAddr').textContent || '';
-  var labelContent = '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;cursor:pointer;">'
+  var labelContent = '<div onclick="if(window._onCenterPinClick)window._onCenterPinClick();" style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;cursor:pointer;">'
     + (baseAddr ? '<div style="font-size:10px;opacity:.85;">'+baseAddr+'</div>' : '')
     + '<div style="font-size:11px;">📍 '+(baseName||'기준위치')+'</div>'
     + '</div>';
@@ -1106,7 +1106,7 @@ function drawNearby(lat, lng) {
       if(mlabelEl) mlabelEl.textContent = '📌 기준 위치';
 
       centerOverlay.setPosition(pos);
-      var dragLabel = '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;">'
+      var dragLabel = '<div onclick="if(window._onCenterPinClick)window._onCenterPinClick();" style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;cursor:pointer;">'
         + '<div style="font-size:10px;opacity:.85;">'+addrStr+'</div>'
         + '<div style="font-size:11px;">📍 기준위치</div>'
         + '</div>';
@@ -1116,8 +1116,8 @@ function drawNearby(lat, lng) {
     });
   });
 
-  // 파란 핀 클릭 → 길찾기 팝업에 기준위치 카드 표시
-  kakao.maps.event.addListener(centerMarkerGlobal, 'click', function() {
+  // 파란 핀 마커 클릭 이벤트 (draggable이라 click이 발화 안 될 수 있음 → 오버레이로도 처리)
+  function onCenterPinClick() {
     var name = document.getElementById('targetName').textContent || '기준위치';
     var addr = document.getElementById('targetAddr').textContent || '';
     var card = document.getElementById('selectedCustomerCard');
@@ -1127,7 +1127,6 @@ function drawNearby(lat, lng) {
     var sccDist = document.getElementById('sccDist');
     if(!card) return;
 
-    // 기준위치용 임시 고객 객체 세팅
     selectedPanelCustomer = {
       name: name,
       lat: String(centerLat),
@@ -1140,27 +1139,19 @@ function drawNearby(lat, lng) {
     if(sccTag)  { sccTag.textContent = '기준위치'; sccTag.style.background='rgba(59,130,246,.15)'; sccTag.style.color='#60A5FA'; }
     if(sccDot)  sccDot.style.background = '#3B82F6';
     if(sccDist) sccDist.textContent = addr.length > 16 ? addr.slice(0,16)+'...' : (addr||name);
-
-    // 핀 라벨 주소 업데이트
-    if(centerOverlay) {
-      var newContent = '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;cursor:pointer;">'
-        + (addr ? '<div style="font-size:10px;opacity:.85;">'+addr+'</div>' : '')
-        + '<div style="font-size:11px;">📍 '+(name||'기준위치')+'</div>'
-        + '</div>';
-      centerOverlay.setContent(newContent);
-    }
-
     card.style.display = '';
 
-    // 길찾기 팝업 열기
+    // 길찾기 팝업이 이미 열려있으면 스크롤만
     var routePopup = document.getElementById('routePopup');
-    if(routePopup) {
-      routePopup.style.display = 'flex';
-      // 팝업 바디 스크롤을 맨 아래로 (카드가 보이게)
+    if(routePopup && routePopup.style.display !== 'none') {
       var body = routePopup.querySelector('.route-popup-body');
-      if(body) setTimeout(function(){ body.scrollTop = body.scrollHeight; }, 50);
+      if(body) setTimeout(function(){ body.scrollTop = body.scrollHeight; }, 60);
     }
-  });
+  }
+
+  // 마커 클릭 + 오버레이 클릭 둘 다 연결
+  kakao.maps.event.addListener(centerMarkerGlobal, 'click', onCenterPinClick);
+  window._onCenterPinClick = onCenterPinClick;
 
   // 반경 원
   var circle = new kakao.maps.Circle({
