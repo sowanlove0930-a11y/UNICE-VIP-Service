@@ -592,6 +592,8 @@ window.addEventListener('DOMContentLoaded', function() {
       if(banner){ banner.style.display = 'none'; }
       kakaoMap.setCursor('');
       if(pinBaseMarker){ pinBaseMarker.setMap(null); pinBaseMarker = null; }
+      if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
+      if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
     }
   });
 
@@ -778,27 +780,57 @@ function loadKakaoScript(key) {
         // 길찾기 지도선택 모드 처리
         if(!mapSelectMode) return;
         var latlng = mouseEvent.latLng;
-        var geocoder = new kakao.maps.services.Geocoder();
-        geocoder.coord2Address(latlng.getLng(), latlng.getLat(), function(result, status) {
-          var addrStr = '';
-          if(status === kakao.maps.services.Status.OK && result.length > 0) {
-            var r = result[0];
-            addrStr = r.road_address ? r.road_address.address_name : r.address.address_name;
-          } else {
-            addrStr = latlng.getLat().toFixed(5) + ', ' + latlng.getLng().toFixed(5);
-          }
-          var obj = { name: addrStr, lat: String(latlng.getLat()), lng: String(latlng.getLng()), address: addrStr };
           var curMode = mapSelectMode;
-          if(curMode === 'from') { panelFrom = obj; }
-          else if(curMode === 'to') { panelTo = obj; }
-          else if(curMode && curMode.indexOf('via_') === 0) {
-            var vIdx = parseInt(curMode.split('_')[1], 10);
-            if(vIdx >= 0 && vIdx < panelVia.length) panelVia[vIdx] = obj;
-          }
           exitMapSelectMode();
-          renderRoutePanel();
-          showMapSelectMarker(latlng, curMode === 'from' ? 'from' : curMode === 'to' ? 'to' : 'via', addrStr);
-        });
+
+          // 드래그 가능한 핀 생성
+          var mColor = curMode === 'from' ? '#3B82F6' : curMode === 'to' ? '#EF4444' : '#A78BFA';
+          var mSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
+            +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="'+mColor+'"/>'
+            +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>'
+            +'</svg>';
+          var mImg = new kakao.maps.MarkerImage(
+            'data:image/svg+xml;base64,'+btoa(mSvg),
+            new kakao.maps.Size(28,36),
+            { offset: new kakao.maps.Point(14,36) }
+          );
+          if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
+          if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
+
+          mapSelectMarker = new kakao.maps.Marker({
+            position: latlng, map: kakaoMap, image: mImg, draggable: true
+          });
+
+          function applyRoutePos(pos) {
+            var gc = new kakao.maps.services.Geocoder();
+            gc.coord2Address(pos.getLng(), pos.getLat(), function(result, status) {
+              var a = pos.getLat().toFixed(4)+','+pos.getLng().toFixed(4);
+              if(status === kakao.maps.services.Status.OK && result.length > 0) {
+                var r = result[0];
+                a = r.road_address ? r.road_address.address_name : r.address.address_name;
+              }
+              var obj = { name:a, lat:String(pos.getLat()), lng:String(pos.getLng()), address:a };
+              if(curMode === 'from') panelFrom = obj;
+              else if(curMode === 'to') panelTo = obj;
+              else if(curMode && curMode.indexOf('via_') === 0) {
+                var vi = parseInt(curMode.split('_')[1], 10);
+                if(vi >= 0 && vi < panelVia.length) panelVia[vi] = obj;
+              }
+              // 라벨 업데이트
+              if(mapSelectOverlay) mapSelectOverlay.setMap(null);
+              var lEl = document.createElement('div');
+              lEl.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;max-width:180px;overflow:hidden;text-overflow:ellipsis';
+              lEl.textContent = (curMode==='from'?'🚩 ':curMode==='to'?'🏁 ':'◈ ') + a;
+              mapSelectOverlay = new kakao.maps.CustomOverlay({ position:pos, content:lEl, yAnchor:3.2 });
+              mapSelectOverlay.setMap(kakaoMap);
+              renderRoutePanel();
+            });
+          }
+
+          applyRoutePos(latlng);
+          kakao.maps.event.addListener(mapSelectMarker, 'dragend', function(){
+            applyRoutePos(mapSelectMarker.getPosition());
+          });
       });
       var addr = document.getElementById('addrInput').value.trim();
       if(addr) searchAddr();
