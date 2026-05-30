@@ -219,6 +219,23 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .myloc-btn:hover{background:rgba(59,130,246,.28);}
 .myloc-btn.loading{opacity:.6;cursor:wait;}
 
+/* 검색 결과 목록 */
+.search-result-list{background:rgba(13,22,40,.98);border:1px solid rgba(232,201,122,.25);border-radius:10px;margin-top:6px;overflow:hidden;}
+.srl-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.07);}
+.srl-title{font-size:10px;font-weight:700;color:var(--gold2);}
+.srl-cancel{background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;padding:0;}
+.srl-item{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;transition:background .15s;}
+.srl-item:hover{background:rgba(255,255,255,.05);}
+.srl-item.srl-first{background:rgba(59,130,246,.1);border-left:2px solid #60A5FA;}
+.srl-item-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
+.srl-item-name{font-size:12px;font-weight:700;color:#F0F4FF;}
+.srl-item.srl-first .srl-item-name{color:#60A5FA;}
+.srl-item-dist{font-size:10px;color:#8B98B8;}
+.srl-item.srl-first .srl-item-dist{color:#60A5FA;font-weight:700;}
+.srl-item-addr{font-size:10px;color:#8B98B8;}
+.srl-item-cat{font-size:10px;color:#4A5568;margin-top:1px;}
+.srl-hint{font-size:10px;color:#4A5568;text-align:center;padding:6px;}
+.srl-loading{padding:12px 10px;font-size:11px;color:#8B98B8;display:flex;align-items:center;gap:8px;}
 /* 반경 선택 */
 .radius-input{display:none;}
 </style>
@@ -242,6 +259,15 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <div class="maddr" id="targetAddr">주소를 입력해주세요</div>
       </div>
       <input type="text" class="addr-input" id="addrInput" placeholder="장소명 또는 주소 입력 (예: 해운대 스타벅스)">
+      <!-- 검색 결과 목록 -->
+      <div class="search-result-list" id="searchResultList" style="display:none">
+        <div class="srl-header">
+          <span class="srl-title" id="srlTitle">검색결과</span>
+          <button type="button" class="srl-cancel" id="srlCancel">✕ 취소</button>
+        </div>
+        <div id="srlItems"></div>
+        <div class="srl-hint">탭하면 기준 위치로 설정됩니다</div>
+      </div>
       <div style="display:flex;gap:5px;margin-top:6px;">
         <button type="button" class="search-btn" style="flex:1;margin-top:0;" onclick="searchAddr()">🔍 검색</button>
         <button type="button" class="myloc-btn" id="btnMyLoc" title="내 현재 위치">📍</button>
@@ -449,6 +475,12 @@ window.addEventListener('DOMContentLoaded', function() {
 
   // 내장 키로 자동 지도 로드
   loadKakaoScript(KAKAO_JS_KEY);
+
+  // 검색창 엔터키
+  var addrInput = document.getElementById('addrInput');
+  if(addrInput) addrInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter') searchAddr();
+  });
 
   // 팝업 드래그 이동 (마우스 + 터치)
   (function(){
@@ -765,34 +797,108 @@ function setRadius(km, el) {
 
 // ── 주소 검색 ────────────────────────────────────────
 function searchAddr() {
-  if(!kakaoMap) { alert('먼저 API 키를 입력하고 지도를 불러주세요'); return; }
+  if(!kakaoMap) { alert('먼저 지도를 불러주세요'); return; }
   var addr = document.getElementById('addrInput').value.trim();
   if(!addr) { alert('주소를 입력해주세요'); return; }
-  var geocoder = new kakao.maps.services.Geocoder();
-  var places   = new kakao.maps.services.Places();
-  // 장소명 검색 우선
+
+  var list = document.getElementById('searchResultList');
+  var items = document.getElementById('srlItems');
+  var title = document.getElementById('srlTitle');
+  if(!list || !items) return;
+
+  // 로딩 표시
+  list.style.display = '';
+  items.innerHTML = '<div class="srl-loading"><div style="width:12px;height:12px;border-radius:50%;border:2px solid #60A5FA;border-top-color:transparent;animation:srl-spin .7s linear infinite;flex-shrink:0;"></div>카카오맵 검색 중...</div>';
+  title.textContent = '"' + addr + '" 검색 중...';
+
+  var places = new kakao.maps.services.Places();
   places.keywordSearch(addr, function(result, status) {
     if(status === kakao.maps.services.Status.OK && result.length > 0) {
-      var p = result[0];
-      centerLat = parseFloat(p.y); centerLng = parseFloat(p.x);
-      document.getElementById('targetName').textContent = p.place_name;
-      document.getElementById('targetAddr').textContent = p.place_name + ' · ' + p.address_name;
-      drawNearby(centerLat, centerLng);
+      showSearchResults(result, addr);
     } else {
-      // 주소 검색으로 fallback
+      // 주소 검색 fallback
+      var geocoder = new kakao.maps.services.Geocoder();
       geocoder.addressSearch(addr, function(result2, status2) {
-        if(status2 === kakao.maps.services.Status.OK) {
-          centerLat = parseFloat(result2[0].y); centerLng = parseFloat(result2[0].x);
-          document.getElementById('targetName').textContent = addr;
-          document.getElementById('targetAddr').textContent = result2[0].address_name || addr;
-          drawNearby(centerLat, centerLng);
+        if(status2 === kakao.maps.services.Status.OK && result2.length > 0) {
+          showSearchResults(result2.map(function(r){
+            return { place_name: r.address_name, address_name: r.address_name, road_address_name:'', category_name:'주소', x: r.x, y: r.y, phone:'' };
+          }), addr);
         } else {
-          alert('주소를 찾을 수 없습니다. 더 구체적으로 입력해보세요.');
+          items.innerHTML = '<div class="srl-loading">😕 검색 결과가 없습니다</div>';
+          title.textContent = '"' + addr + '" 결과 없음';
         }
       });
     }
+  }, {
+    location: new kakao.maps.LatLng(centerLat || 35.1631, centerLng || 129.1635),
+    sort: kakao.maps.services.SortBy.DISTANCE
   });
 }
+
+function showSearchResults(results, keyword) {
+  var list = document.getElementById('searchResultList');
+  var items = document.getElementById('srlItems');
+  var title = document.getElementById('srlTitle');
+  if(!list || !items) return;
+
+  title.textContent = '"' + keyword + '" 검색결과 ' + results.length + '건';
+  items.innerHTML = '';
+
+  results.slice(0, 6).forEach(function(p, idx) {
+    var item = document.createElement('div');
+    item.className = 'srl-item' + (idx === 0 ? ' srl-first' : '');
+
+    var distStr = '';
+    if(p.distance) {
+      var d = parseInt(p.distance, 10);
+      distStr = d < 1000 ? d + 'm' : (d/1000).toFixed(1) + 'km';
+    }
+
+    item.innerHTML = '<div class="srl-item-top">'
+      +'<span class="srl-item-name">'+p.place_name+'</span>'
+      +(distStr ? '<span class="srl-item-dist">'+distStr+'</span>' : '')
+      +'</div>'
+      +'<div class="srl-item-addr">'+(p.road_address_name || p.address_name || '')+'</div>'
+      +(p.category_name ? '<div class="srl-item-cat">'+p.category_name.split(' > ').pop()+(p.phone?' · '+p.phone:'')+'</div>' : '');
+
+    (function(place){
+      item.addEventListener('click', function(){
+        // 기준 위치 설정
+        var lat = parseFloat(place.y);
+        var lng = parseFloat(place.x);
+        centerLat = lat; centerLng = lng;
+        document.getElementById('targetName').textContent = place.place_name;
+        document.getElementById('targetAddr').textContent = place.road_address_name || place.address_name || '';
+        // 결과 목록 닫기
+        document.getElementById('searchResultList').style.display = 'none';
+        document.getElementById('addrInput').value = '';
+        // 지도 이동 + 주변 재계산
+        drawNearby(lat, lng);
+      });
+    })(p);
+
+    items.appendChild(item);
+  });
+
+  // 취소 버튼
+  var cancel = document.getElementById('srlCancel');
+  if(cancel) {
+    cancel.onclick = function(){
+      list.style.display = 'none';
+      document.getElementById('addrInput').value = '';
+    };
+  }
+}
+
+// spin 애니메이션 (CSS에 없으면 동적 추가)
+(function(){
+  if(!document.getElementById('srl-style')) {
+    var s = document.createElement('style');
+    s.id = 'srl-style';
+    s.textContent = '@keyframes srl-spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(s);
+  }
+})();
 
 // ── 고객 마커+반경만 재계산 (기준 핀 유지) ──────────────
 function refreshNearbyOnly(lat, lng) {
