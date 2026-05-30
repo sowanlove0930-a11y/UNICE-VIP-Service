@@ -84,6 +84,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .btn-kakao{background:rgba(254,229,0,.1);border:1px solid rgba(254,229,0,.25);color:#FEE500;}
 .btn-call:hover{background:rgba(16,185,129,.2);}
 .btn-kakao:hover{background:rgba(254,229,0,.18);}
+.set-base-btn{width:100%;padding:7px;border-radius:8px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);color:#60A5FA;font-size:11px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;margin-bottom:5px;}
+.set-base-btn:hover{background:rgba(59,130,246,.22);}
 .detail-btn{width:100%;padding:8px;border-radius:8px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-size:12px;font-weight:700;text-align:center;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;}
 
 .route-btns{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px;}
@@ -387,6 +389,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <a class="contact-btn btn-call" id="btnCall" href="#">📞 전화걸기</a>
         <a class="contact-btn btn-kakao" id="btnKakao" href="#">💬 카카오톡</a>
       </div>
+      <button type="button" class="set-base-btn" id="btnSetBase">🎯 이 고객을 기준으로 설정</button>
       <button type="button" class="detail-btn" id="btnDetail">고객 상세 보기 →</button>
       </div>
     </div>
@@ -563,6 +566,9 @@ window.addEventListener('DOMContentLoaded', function() {
 
   var btnDetail = document.getElementById('btnDetail');
   if(btnDetail) btnDetail.addEventListener('click', goDetail);
+
+  var btnSetBase = document.getElementById('btnSetBase');
+  if(btnSetBase) btnSetBase.addEventListener('click', setAsBase);
 
   // 길찾기 팝업 열기/닫기
   var routeOpenBtn = document.getElementById('routeOpenBtn');
@@ -942,6 +948,39 @@ function showPopup(c, dist) {
   console.log('[NEARBY] events:', JSON.stringify(c.events || []));
   console.log('[NEARBY] etcNote:', c.etcNote || '없음');
   selectedCustomerId = c.id;
+
+  // 왼쪽 리스트 하이라이트 + 스크롤
+  if(window._nearbyList) {
+    document.querySelectorAll('.ci').forEach(function(el){ el.classList.remove('sel'); });
+    window._nearbyList.forEach(function(item, idx){
+      if(item.c.id === c.id) {
+        var el = document.getElementById('citem_'+idx);
+        if(el) {
+          el.classList.add('sel');
+          el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+        }
+        // 라벨 하이라이트도 동기화
+        if(window._nearbyMarkers && window._nearbyMarkers[idx]) {
+          window._nearbyMarkers.forEach(function(m){
+            if(m.labelEl) {
+              m.labelEl.style.background = 'rgba(13,22,40,.9)';
+              m.labelEl.style.border = '1px solid rgba(255,255,255,.16)';
+              m.labelEl.style.transform = 'scale(1)';
+              m.labelEl.style.zIndex = '';
+            }
+          });
+          var nm = window._nearbyMarkers[idx];
+          if(nm.labelEl) {
+            nm.labelEl.style.background = nm.color || 'rgba(16,185,129,.9)';
+            nm.labelEl.style.border = '1px solid rgba(255,255,255,.4)';
+            nm.labelEl.style.transform = 'scale(1.15)';
+            nm.labelEl.style.zIndex = '100';
+          }
+        }
+      }
+    });
+  }
+
   var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
   var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
 
@@ -1496,6 +1535,32 @@ function findMyLocation() {
 function closePopup() {
   var p = document.getElementById('mapPopup');
   if(p) p.style.display = 'none';
+}
+
+function setAsBase() {
+  var c = selectedCustomerId ? null : null;
+  if(window._nearbyList) {
+    window._nearbyList.forEach(function(item){
+      if(item.c.id === selectedCustomerId) c = item.c;
+    });
+  }
+  if(!c) { c = allCustomers.filter(function(a){ return a.id === selectedCustomerId; })[0]; }
+  if(!c || !c.lat || !c.lng) { alert('이 고객은 좌표가 없어 기준으로 설정할 수 없습니다.'); return; }
+
+  // 좌측 기준 고객 카드 업데이트
+  var tnEl = document.getElementById('targetName');
+  var taEl = document.getElementById('targetAddr');
+  if(tnEl) tnEl.textContent = c.name;
+  if(taEl) taEl.textContent = c.address || '';
+  document.getElementById('headerSub') && (document.getElementById('headerSub').textContent = c.name + ' 주변 고객 찾기');
+
+  // 팝업 닫기
+  closePopup();
+
+  // 지도 이동 + 주변 재계산
+  centerLat = parseFloat(c.lat);
+  centerLng = parseFloat(c.lng);
+  drawNearby(centerLat, centerLng);
 }
 
 function goDetail() {
