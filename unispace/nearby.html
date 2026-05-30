@@ -452,6 +452,7 @@ var panelTo   = null;  // { name, lat, lng, address }
 var panelVia  = [];    // [{ name, lat, lng }]
 var mapSelectMode = null; // 'from' | 'to' | null
 var mapSelectMarker = null;
+var mapSelectOverlay = null; // 오버레이 누적 방지용 전역변수
 var selectedPanelCustomer = null;
 var myLocMarker  = null;
 var myLocOverlay = null;
@@ -1686,10 +1687,13 @@ function exitMapSelectMode() {
   if(fromBtn) fromBtn.className = 'rp-mapsel';
   if(toBtn)   toBtn.className   = 'rp-mapsel';
   if(kakaoMap) kakaoMap.setCursor('');
+  if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
+  if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
 }
 
 function showMapSelectMarker(latlng, type, label) {
   if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
+  if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
   var color = type === 'from' ? '#3B82F6' : type === 'to' ? '#EF4444' : '#A78BFA';
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
     +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="'+color+'"/>'
@@ -1701,12 +1705,11 @@ function showMapSelectMarker(latlng, type, label) {
     { offset: new kakao.maps.Point(14,36) }
   );
   mapSelectMarker = new kakao.maps.Marker({ position:latlng, map:kakaoMap, image:img, title:label });
-  // 라벨 오버레이
   var labelEl = document.createElement('div');
   labelEl.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;max-width:160px;overflow:hidden;text-overflow:ellipsis';
-  labelEl.textContent = (type==='from'?'🚩 ':'🏁 ') + label;
-  var overlay = new kakao.maps.CustomOverlay({ position:latlng, content:labelEl, yAnchor:3.2 });
-  overlay.setMap(kakaoMap);
+  labelEl.textContent = (type==='from'?'🚩 ':type==='to'?'🏁 ':'◈ ') + label;
+  mapSelectOverlay = new kakao.maps.CustomOverlay({ position:latlng, content:labelEl, yAnchor:3.2 });
+  mapSelectOverlay.setMap(kakaoMap);
 }
 
 // ── 길찾기 패널 렌더 ─────────────────────────────────
