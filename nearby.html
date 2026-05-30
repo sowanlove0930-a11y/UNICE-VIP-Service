@@ -396,7 +396,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     </div>
 
     <!-- 팝업 -->
-    <div class="map-popup" id="mapPopup">
+    <div class="map-popup" id="mapPopup" style="display:none">
       <div class="drag-handle" id="phead">
         <div class="drag-bar"></div>
         <div class="popup-inner-head">
@@ -450,17 +450,97 @@ var routeTo   = null;
 var panelFrom = null;  // { name, lat, lng }
 var panelTo   = null;  // { name, lat, lng, address }
 var panelVia  = [];    // [{ name, lat, lng }]
-var mapSelectMode = null; // 'from' | 'to' | null
+var mapSelectMode = null;
 var mapSelectMarker = null;
-var mapSelectOverlay = null; // 오버레이 누적 방지용 전역변수
+var mapSelectOverlay = null;
+var routeFromMarker = null;   var routeFromOverlay = null;
+var routeToMarker   = null;   var routeToOverlay   = null;
+var routeViaMarkers = [];
 var selectedPanelCustomer = null;
 var myLocMarker  = null;
 var myLocOverlay = null;
 var centerOverlay = null;
-var centerMarkerGlobal = null; // 기준 파란 핀 (clearMarkers에서 제외)
-var pinBaseMode = false;  // 지도에서 기준 잡기 모드
-var pinBaseMarker = null; // 임시 기준 핀
+var centerMarkerGlobal = null;
+var pinBaseMode = false;
+var pinBaseMarker = null;
 var myLat = null, myLng = null;
+var isCustomerMode = false;
+
+// ── 길찾기 핀 헬퍼 ──────────────────────────────────
+function makeRoutePinImage(color, label) {
+  var lines = label.length > 3 ? [label.slice(0,3), label.slice(3)] : [label];
+  var lineH = 13, pad = 6, minW = 32;
+  var textW = Math.max(minW, label.length * 7 + pad * 2);
+  var boxH = lines.length > 1 ? 24 : 16;
+  var totalH = 36 + boxH + 4;
+  var cx = textW / 2;
+  var textEls = lines.map(function(t, i) {
+    return '<text x="' + cx + '" y="' + (boxH/2 + (i - (lines.length-1)/2) * lineH) + '" text-anchor="middle" dominant-baseline="middle" font-family="\'Noto Sans KR\',Arial,sans-serif" font-size="10" font-weight="700" fill="#0D1628">' + t + '</text>';
+  }).join('');
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + textW + '" height="' + totalH + '" viewBox="0 0 ' + textW + ' ' + totalH + '">'
+    + '<rect x="1" y="1" width="' + (textW-2) + '" height="' + (boxH-2) + '" rx="5" ry="5" fill="' + color + '" stroke="white" stroke-width="1.5"/>'
+    + textEls
+    + '<polygon points="' + (cx-6) + ',' + boxH + ' ' + (cx+6) + ',' + boxH + ' ' + cx + ',' + (boxH+4) + '" fill="' + color + '"/>'
+    + '<g transform="translate(' + (cx-14) + ',' + (boxH+4) + ')">'
+    + '<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="' + color + '"/>'
+    + '<circle cx="14" cy="14" r="5" fill="white" opacity="0.9"/>'
+    + '</g>'
+    + '</svg>';
+  return new kakao.maps.MarkerImage(
+    'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg))),
+    new kakao.maps.Size(textW, totalH),
+    { offset: new kakao.maps.Point(cx, totalH) }
+  );
+}
+
+function setRoutePin(type, pos, labelText) {
+  var color = type === 'from' ? '#3B82F6' : type === 'to' ? '#EF4444' : '#A78BFA';
+  var img = makeRoutePinImage(color, labelText);
+  if(type === 'from') {
+    if(routeFromMarker){ routeFromMarker.setMap(null); }
+    if(routeFromOverlay){ routeFromOverlay.setMap(null); }
+    routeFromMarker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText });
+    routeFromOverlay = null;
+  } else if(type === 'to') {
+    if(routeToMarker){ routeToMarker.setMap(null); }
+    if(routeToOverlay){ routeToOverlay.setMap(null); }
+    routeToMarker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText });
+    routeToOverlay = null;
+  } else if(type && type.indexOf('via_') === 0) {
+    var vi = parseInt(type.split('_')[1], 10);
+    if(routeViaMarkers[vi] && routeViaMarkers[vi].marker) routeViaMarkers[vi].marker.setMap(null);
+    routeViaMarkers[vi] = { marker: new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText }), overlay:null };
+  }
+}
+
+function clearRoutePin(type) {
+  if(type === 'from') {
+    if(routeFromMarker){ routeFromMarker.setMap(null); routeFromMarker = null; }
+    if(routeFromOverlay){ routeFromOverlay.setMap(null); routeFromOverlay = null; }
+  } else if(type === 'to') {
+    if(routeToMarker){ routeToMarker.setMap(null); routeToMarker = null; }
+    if(routeToOverlay){ routeToOverlay.setMap(null); routeToOverlay = null; }
+  } else if(type && type.indexOf('via_') === 0) {
+    var vi = parseInt(type.split('_')[1], 10);
+    if(routeViaMarkers[vi] && routeViaMarkers[vi].marker) { routeViaMarkers[vi].marker.setMap(null); routeViaMarkers[vi] = null; }
+  }
+}
+
+function clearAllRoutePins() {
+  clearRoutePin('from'); clearRoutePin('to');
+  routeViaMarkers.forEach(function(vm){ if(vm && vm.marker) vm.marker.setMap(null); });
+  routeViaMarkers = [];
+}
+
+function getRoutePinLabel(type) {
+  if(type === 'from') return '출발';
+  if(type === 'to') return '도착';
+  if(type && type.indexOf('via_') === 0) {
+    var n = parseInt(type.split('_')[1], 10) + 1;
+    return '경유' + n;
+  }
+  return '';
+}
 
 // ── 초기화 ───────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', function() {
@@ -471,6 +551,7 @@ window.addEventListener('DOMContentLoaded', function() {
   var target = null;
   try { target = JSON.parse(sessionStorage.getItem('nearbyTarget') || 'null'); } catch(e){}
   if(target) {
+    isCustomerMode = true;
     document.getElementById('targetName').textContent = target.name || '—';
     document.getElementById('targetAddr').textContent = target.address || '주소를 입력해주세요';
     document.getElementById('addrInput').value        = target.address || '';
@@ -637,10 +718,10 @@ window.addEventListener('DOMContentLoaded', function() {
   if(rpToMyLoc) rpToMyLoc.addEventListener('click', function(){ getMyLocForPanel('to', rpToMyLoc); });
 
   var rpFromClear = document.getElementById('rpFromClear');
-  if(rpFromClear) rpFromClear.addEventListener('click', function(){ panelFrom=null; renderRoutePanel(); });
+  if(rpFromClear) rpFromClear.addEventListener('click', function(){ panelFrom=null; clearRoutePin('from'); renderRoutePanel(); });
 
   var rpToClear = document.getElementById('rpToClear');
-  if(rpToClear) rpToClear.addEventListener('click', function(){ panelTo=null; renderRoutePanel(); });
+  if(rpToClear) rpToClear.addEventListener('click', function(){ panelTo=null; clearRoutePin('to'); renderRoutePanel(); });
 
   // + 경유지 추가 버튼
   var rpAddVia = document.getElementById('rpAddVia');
@@ -696,6 +777,7 @@ window.addEventListener('DOMContentLoaded', function() {
   var rpResetBtn = document.getElementById('rpResetBtn');
   if(rpResetBtn) rpResetBtn.addEventListener('click', function(){
     panelFrom = null; panelTo = null; panelVia = [];
+    clearAllRoutePins();
     selectedPanelCustomer = null;
     var card = document.getElementById('selectedCustomerCard');
     if(card) card.style.display = 'none';
@@ -781,7 +863,7 @@ function loadKakaoScript(key) {
               var mlabel = document.querySelector('.mlabel');
               if(mlabel) mlabel.textContent = '📌 기준 위치';
               document.getElementById('targetName').textContent = addrStr;
-              document.getElementById('targetAddr').textContent = addrStr;
+              document.getElementById('targetAddr').textContent = '';
               // pinBaseMarker 제거 후 drawNearby로 파란 핀 + 라벨 + 클릭 이벤트 생성
               if(pinBaseMarker){ pinBaseMarker.setMap(null); pinBaseMarker = null; }
               drawNearby(centerLat, centerLng);
@@ -814,63 +896,51 @@ function loadKakaoScript(key) {
         var latlng = mouseEvent.latLng;
           var curMode = mapSelectMode;
           exitMapSelectMode();
-          // 핀 찍은 후 버튼 active 유지 (한 번 더 누르면 취소)
-          if(curMode === 'from') {
-            var fb = document.getElementById('rpFromMapSel');
-            if(fb) fb.className = 'rp-mapsel active';
-          } else if(curMode === 'to') {
-            var tb = document.getElementById('rpToMapSel');
-            if(tb) tb.className = 'rp-mapsel active';
-          }
 
-          // 드래그 가능한 핀 생성
-          var mColor = curMode === 'from' ? '#3B82F6' : curMode === 'to' ? '#EF4444' : '#A78BFA';
-          var mSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
-            +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="'+mColor+'"/>'
-            +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>'
-            +'</svg>';
-          var mImg = new kakao.maps.MarkerImage(
-            'data:image/svg+xml;base64,'+btoa(mSvg),
-            new kakao.maps.Size(28,36),
-            { offset: new kakao.maps.Point(14,36) }
-          );
-          if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
-          if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
-
-          mapSelectMarker = new kakao.maps.Marker({
-            position: latlng, map: kakaoMap, image: mImg, draggable: true
-          });
-
-          function applyRoutePos(pos) {
+          (function(mode, pos) {
             var gc = new kakao.maps.services.Geocoder();
             gc.coord2Address(pos.getLng(), pos.getLat(), function(result, status) {
-              var a = pos.getLat().toFixed(4)+','+pos.getLng().toFixed(4);
+              var a = pos.getLat().toFixed(4) + ',' + pos.getLng().toFixed(4);
               if(status === kakao.maps.services.Status.OK && result.length > 0) {
                 var r = result[0];
                 a = r.road_address ? r.road_address.address_name : r.address.address_name;
               }
               var obj = { name:a, lat:String(pos.getLat()), lng:String(pos.getLng()), address:a };
-              if(curMode === 'from') panelFrom = obj;
-              else if(curMode === 'to') panelTo = obj;
-              else if(curMode && curMode.indexOf('via_') === 0) {
-                var vi = parseInt(curMode.split('_')[1], 10);
+              if(mode === 'from') panelFrom = obj;
+              else if(mode === 'to') panelTo = obj;
+              else if(mode && mode.indexOf('via_') === 0) {
+                var vi = parseInt(mode.split('_')[1], 10);
                 if(vi >= 0 && vi < panelVia.length) panelVia[vi] = obj;
               }
-              // 라벨 업데이트
-              if(mapSelectOverlay) mapSelectOverlay.setMap(null);
-              var lEl = document.createElement('div');
-              lEl.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;max-width:180px;overflow:hidden;text-overflow:ellipsis';
-              lEl.textContent = (curMode==='from'?'🚩 ':curMode==='to'?'🏁 ':'◈ ') + a;
-              mapSelectOverlay = new kakao.maps.CustomOverlay({ position:pos, content:lEl, yAnchor:2.4 });
-              mapSelectOverlay.setMap(kakaoMap);
+              var pinLabel = getRoutePinLabel(mode);
+              setRoutePin(mode, pos, pinLabel);
+              var pinMarker = mode === 'from' ? routeFromMarker : mode === 'to' ? routeToMarker : (routeViaMarkers[parseInt(mode.split('_')[1],10)] && routeViaMarkers[parseInt(mode.split('_')[1],10)].marker);
+              if(pinMarker) {
+                (function(m, md) {
+                  kakao.maps.event.addListener(m, 'dragend', function() {
+                    var np = m.getPosition();
+                    var gc2 = new kakao.maps.services.Geocoder();
+                    gc2.coord2Address(np.getLng(), np.getLat(), function(r2, s2) {
+                      var a2 = np.getLat().toFixed(4) + ',' + np.getLng().toFixed(4);
+                      if(s2 === kakao.maps.services.Status.OK && r2.length > 0) {
+                        var rr = r2[0];
+                        a2 = rr.road_address ? rr.road_address.address_name : rr.address.address_name;
+                      }
+                      var obj2 = { name:a2, lat:String(np.getLat()), lng:String(np.getLng()), address:a2 };
+                      if(md === 'from') panelFrom = obj2;
+                      else if(md === 'to') panelTo = obj2;
+                      else if(md && md.indexOf('via_') === 0) {
+                        var vi2 = parseInt(md.split('_')[1], 10);
+                        if(vi2 >= 0 && vi2 < panelVia.length) panelVia[vi2] = obj2;
+                      }
+                      renderRoutePanel();
+                    });
+                  });
+                })(pinMarker, md);
+              }
               renderRoutePanel();
             });
-          }
-
-          applyRoutePos(latlng);
-          kakao.maps.event.addListener(mapSelectMarker, 'dragend', function(){
-            applyRoutePos(mapSelectMarker.getPosition());
-          });
+          })(curMode, latlng);
       });
       var addr = document.getElementById('addrInput').value.trim();
       if(addr) searchAddr();
@@ -981,8 +1051,10 @@ function showSearchResults(results, keyword) {
         var lng = parseFloat(place.x);
         centerLat = lat; centerLng = lng;
         var mlabelEl3 = document.querySelector('.mlabel');
-        if(mlabelEl3) mlabelEl3.textContent = '🔍 기준 위치';
-        document.getElementById('targetName').textContent = place.place_name;
+        if(mlabelEl3) mlabelEl3.textContent = isCustomerMode ? '📅 기준 고객' : '🔍 기준 위치';
+        if(!isCustomerMode) {
+          document.getElementById('targetName').textContent = place.place_name;
+        }
         document.getElementById('targetAddr').textContent = place.road_address_name || place.address_name || '';
         // 결과 목록 닫기
         document.getElementById('searchResultList').style.display = 'none';
@@ -1080,7 +1152,11 @@ function refreshNearbyOnly(lat, lng) {
     var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
     var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
     var tagText  = c.customerType||'고객';
-    listHtml += '<div class="ci" id="citem_'+idx+'"><div class="ctop"><span class="cn">'+c.name+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div></div>';
+    var evInfo = getUpcomingEvents(c);
+    var evDots = '';
+    if(evInfo.hasEvent) evDots += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E8C97A;margin-left:3px;vertical-align:middle;"></span>';
+    if(evInfo.hasCustom) evDots += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-left:2px;vertical-align:middle;"></span>';
+    listHtml += '<div class="ci" id="citem_'+idx+'"><div class="ctop"><span class="cn">'+c.name+evDots+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div></div>';
 
     var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
     var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
@@ -1195,7 +1271,7 @@ function drawNearby(lat, lng) {
         addrStr = r.road_address ? r.road_address.address_name : r.address.address_name;
       }
       document.getElementById('targetName').textContent = addrStr;
-      document.getElementById('targetAddr').textContent = addrStr;
+      document.getElementById('targetAddr').textContent = '';
       var mlabelEl = document.querySelector('.mlabel');
       if(mlabelEl) mlabelEl.textContent = '📌 기준 위치';
 
@@ -1309,8 +1385,12 @@ function drawNearby(lat, lng) {
     var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
     var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
     var tagText  = c.customerType||'고객';
-    listHtml += '<div class="ci" id="citem_'+idx+'" onclick="selectCustomer('+idx+')">'
-      +'<div class="ctop"><span class="cn">'+c.name+'</span><span class="cd">'+distStr+'</span></div>'
+    var evInfo2 = getUpcomingEvents(c);
+    var evDots2 = '';
+    if(evInfo2.hasEvent) evDots2 += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E8C97A;margin-left:3px;vertical-align:middle;"></span>';
+    if(evInfo2.hasCustom) evDots2 += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-left:2px;vertical-align:middle;"></span>';
+    listHtml += '<div class="ci" id="citem_'+idx+'">'
+      +'<div class="ctop"><span class="cn">'+c.name+evDots2+'</span><span class="cd">'+distStr+'</span></div>'
       +'<div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div>'
       +'</div>';
 
@@ -1796,7 +1876,22 @@ function showMapSelectMarker(latlng, type, label) {
 }
 
 // ── 길찾기 패널 렌더 ─────────────────────────────────
+function refreshViaPins() {
+  routeViaMarkers.forEach(function(vm, i) {
+    if(vm && vm.marker) {
+      var v = panelVia[i];
+      if(v && v.lat && v.lng) {
+        var pos = new kakao.maps.LatLng(parseFloat(v.lat), parseFloat(v.lng));
+        var newImg = makeRoutePinImage('#A78BFA', '경유' + (i + 1));
+        vm.marker.setImage(newImg);
+        vm.marker.setPosition(pos);
+      }
+    }
+  });
+}
+
 function renderRoutePanel() {
+  refreshViaPins();
   var fromSlot  = document.getElementById('rpFromSlot');
   var fromText  = document.getElementById('rpFromText');
   var fromClear = document.getElementById('rpFromClear');
@@ -1883,7 +1978,7 @@ function renderRoutePanel() {
       del.type = 'button';
       del.className = 'rp-via-del';
       del.textContent = '✕';
-      (function(idx){ del.addEventListener('click', function(){ panelVia.splice(idx,1); renderRoutePanel(); }); })(i);
+      (function(idx){ del.addEventListener('click', function(){ clearRoutePin('via_'+idx); panelVia.splice(idx,1); routeViaMarkers.splice(idx,1); renderRoutePanel(); }); })(i);
 
       slot.appendChild(label);
       slot.appendChild(name);
