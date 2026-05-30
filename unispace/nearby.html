@@ -756,6 +756,7 @@ function drawNearby(lat, lng) {
 
   // 리스트 + 마커 렌더
   var listHtml = '';
+  var nearbyMarkers = []; // { marker, labelEl, pos } 인덱스별 저장
   nearby.forEach(function(item, idx) {
     var c    = item.c;
     var dist = item.dist;
@@ -780,6 +781,7 @@ function drawNearby(lat, lng) {
     );
     var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
     markers.push(marker);
+    nearbyMarkers.push({ marker:marker, labelEl:null, pos:pos, color:color });
 
     // 이름 오버레이 (클릭 가능 - 큰 클릭 영역)
     var evInfo = getUpcomingEvents(c);
@@ -819,6 +821,8 @@ function drawNearby(lat, lng) {
       clickable: true
     });
     nameOverlay.setMap(kakaoMap);
+    // nearbyMarkers에 labelEl 저장 (하이라이트용)
+    nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
 
     (function(customer, distance, markerEl){
       kakao.maps.event.addListener(markerEl, 'click', function() {
@@ -830,6 +834,7 @@ function drawNearby(lat, lng) {
 
   document.getElementById('clist').innerHTML = listHtml;
   window._nearbyList = nearby;
+  window._nearbyMarkers = nearbyMarkers;
 
   // 리스트 항목에 클릭 이벤트 직접 등록 (onclick 속성 의존 제거)
   nearby.forEach(function(item, idx){
@@ -904,6 +909,31 @@ function selectCustomer(idx) {
   if(el) el.classList.add('sel');
   var item = window._nearbyList[idx];
   if(item) showPopup(item.c, item.dist);
+
+  // 지도 이동 + 라벨 하이라이트
+  if(kakaoMap && window._nearbyMarkers && window._nearbyMarkers[idx]) {
+    var nm = window._nearbyMarkers[idx];
+    kakaoMap.setCenter(nm.pos);
+    kakaoMap.setLevel(4);
+
+    // 모든 라벨 원래 스타일로
+    window._nearbyMarkers.forEach(function(m){
+      if(m.labelEl) {
+        m.labelEl.style.background = 'rgba(13,22,40,.9)';
+        m.labelEl.style.border = '1px solid rgba(255,255,255,.16)';
+        m.labelEl.style.transform = 'scale(1)';
+        m.labelEl.style.zIndex = '';
+      }
+    });
+
+    // 선택된 라벨 하이라이트
+    if(nm.labelEl) {
+      nm.labelEl.style.background = nm.color || 'rgba(16,185,129,.9)';
+      nm.labelEl.style.border = '1px solid rgba(255,255,255,.4)';
+      nm.labelEl.style.transform = 'scale(1.15)';
+      nm.labelEl.style.zIndex = '100';
+    }
+  }
 }
 
 // ── 팝업 표시 ────────────────────────────────────────
