@@ -211,7 +211,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .msb-cancel{background:rgba(255,255,255,.2);border:none;border-radius:10px;padding:3px 10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;}
 .msb-cancel:hover{background:rgba(255,255,255,.35);}
 /* 내 위치 버튼 */
-.myloc-btn{padding:8px 10px;border:none;border-radius:8px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#60A5FA;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .2s;}
+.myloc-btn{padding:8px 11px;border:none;border-radius:8px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#60A5FA;font-family:'Noto Sans KR',sans-serif;font-size:14px;cursor:pointer;white-space:nowrap;transition:all .2s;}
+.myloc-btn:hover{background:rgba(59,130,246,.28);}
+.pinbase-btn{padding:8px 11px;border:none;border-radius:8px;background:rgba(232,201,122,.1);border:1px solid rgba(232,201,122,.3);color:var(--gold2);font-size:14px;cursor:pointer;white-space:nowrap;transition:all .2s;}
+.pinbase-btn:hover{background:rgba(232,201,122,.22);}
+.pinbase-btn.active{background:rgba(232,201,122,.3);border-color:var(--gold2);}
 .myloc-btn:hover{background:rgba(59,130,246,.28);}
 .myloc-btn.loading{opacity:.6;cursor:wait;}
 
@@ -238,9 +242,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <div class="maddr" id="targetAddr">주소를 입력해주세요</div>
       </div>
       <input type="text" class="addr-input" id="addrInput" placeholder="장소명 또는 주소 입력 (예: 해운대 스타벅스)">
-      <div style="display:flex;gap:6px;margin-top:6px;">
+      <div style="display:flex;gap:5px;margin-top:6px;">
         <button type="button" class="search-btn" style="flex:1;margin-top:0;" onclick="searchAddr()">🔍 검색</button>
-        <button type="button" class="myloc-btn" id="btnMyLoc">📍 내 위치</button>
+        <button type="button" class="myloc-btn" id="btnMyLoc" title="내 현재 위치">📍</button>
+        <button type="button" class="pinbase-btn" id="btnPinBase" title="지도에서 기준 잡기">📌</button>
       </div>
       <div class="rrow">
         <span class="rlabel">반경</span>
@@ -421,6 +426,9 @@ var mapSelectMarker = null;
 var selectedPanelCustomer = null;
 var myLocMarker  = null;
 var myLocOverlay = null;
+var centerOverlay = null;
+var pinBaseMode = false;  // 지도에서 기준 잡기 모드
+var pinBaseMarker = null; // 임시 기준 핀
 var myLat = null, myLng = null;
 
 // ── 초기화 ───────────────────────────────────────────
@@ -512,6 +520,30 @@ window.addEventListener('DOMContentLoaded', function() {
   // 내 위치 버튼
   var btnMyLoc = document.getElementById('btnMyLoc');
   if(btnMyLoc) btnMyLoc.addEventListener('click', findMyLocation);
+
+  // 📌 지도에서 기준 잡기 버튼
+  var btnPinBase = document.getElementById('btnPinBase');
+  if(btnPinBase) btnPinBase.addEventListener('click', function(){
+    if(!kakaoMap){ alert('먼저 지도를 불러주세요.'); return; }
+    pinBaseMode = !pinBaseMode;
+    btnPinBase.className = pinBaseMode ? 'pinbase-btn active' : 'pinbase-btn';
+
+    var banner = document.getElementById('mapSelectBanner');
+    var icon   = document.getElementById('mapSelectIcon');
+    var text   = document.getElementById('mapSelectText');
+
+    if(pinBaseMode) {
+      // 배너 표시
+      if(banner){ banner.style.display = ''; }
+      if(icon)  icon.textContent = '📌';
+      if(text)  text.textContent = '지도를 클릭해 기준 위치를 설정하세요';
+      kakaoMap.setCursor('crosshair');
+    } else {
+      if(banner){ banner.style.display = 'none'; }
+      kakaoMap.setCursor('');
+      if(pinBaseMarker){ pinBaseMarker.setMap(null); pinBaseMarker = null; }
+    }
+  });
 
   // 길찾기 패널 이벤트
   var rpMyLoc = document.getElementById('rpMyLoc');
@@ -627,6 +659,65 @@ function loadKakaoScript(key) {
 
       // 지도 클릭 → 선택 모드일 때 위치 설정
       kakao.maps.event.addListener(kakaoMap, 'click', function(mouseEvent) {
+        // 핀잡기 모드 처리
+        if(pinBaseMode) {
+          var latlng = mouseEvent.latLng;
+
+          // 기존 임시 핀 제거
+          if(pinBaseMarker){ pinBaseMarker.setMap(null); pinBaseMarker = null; }
+
+          // 파란 핀 생성 (draggable)
+          var svgCenter = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
+            +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="#3B82F6"/>'
+            +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.95"/>'
+            +'</svg>';
+          var centerImg = new kakao.maps.MarkerImage(
+            'data:image/svg+xml;base64,'+btoa(svgCenter),
+            new kakao.maps.Size(28,36),
+            { offset: new kakao.maps.Point(14,36) }
+          );
+          pinBaseMarker = new kakao.maps.Marker({
+            position: latlng,
+            map: kakaoMap,
+            image: centerImg,
+            draggable: true,
+            title: '기준 위치 (드래그로 이동)'
+          });
+
+          // 역지오코딩 후 기준 설정
+          function applyBase(pos) {
+            var geocoder2 = new kakao.maps.services.Geocoder();
+            geocoder2.coord2Address(pos.getLng(), pos.getLat(), function(result, status) {
+              var addrStr = pos.getLat().toFixed(4)+', '+pos.getLng().toFixed(4);
+              if(status === kakao.maps.services.Status.OK && result.length > 0) {
+                var r = result[0];
+                addrStr = r.road_address ? r.road_address.address_name : r.address.address_name;
+              }
+              centerLat = pos.getLat(); centerLng = pos.getLng();
+              document.getElementById('targetName').textContent = addrStr;
+              document.getElementById('targetAddr').textContent = addrStr;
+              refreshNearbyOnly(centerLat, centerLng);
+            });
+          }
+
+          applyBase(latlng);
+
+          // 드래그 완료 시에도 재적용
+          kakao.maps.event.addListener(pinBaseMarker, 'dragend', function(){
+            applyBase(pinBaseMarker.getPosition());
+          });
+
+          // 모드 종료
+          pinBaseMode = false;
+          var btn = document.getElementById('btnPinBase');
+          if(btn) btn.className = 'pinbase-btn';
+          var banner = document.getElementById('mapSelectBanner');
+          if(banner) banner.style.display = 'none';
+          kakaoMap.setCursor('');
+          return;
+        }
+
+        // 길찾기 지도선택 모드 처리
         if(!mapSelectMode) return;
         var latlng = mouseEvent.latLng;
         var geocoder = new kakao.maps.services.Geocoder();
@@ -834,7 +925,7 @@ function drawNearby(lat, lng) {
     draggable: true
   });
   var baseName = document.getElementById('targetName').textContent || '기준 위치';
-  var centerOverlay = new kakao.maps.CustomOverlay({
+  centerOverlay = new kakao.maps.CustomOverlay({
     position: centerPos,
     content: '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px">📍 '+baseName+'</div>',
     yAnchor: 2.8
@@ -1733,6 +1824,7 @@ function goDetail() {
 function clearMarkers() {
   markers.forEach(function(m){ m.setMap(null); });
   circles.forEach(function(c){ c.setMap(null); });
+  if(centerOverlay){ centerOverlay.setMap(null); centerOverlay = null; }
   markers=[]; circles=[];
 }
 
