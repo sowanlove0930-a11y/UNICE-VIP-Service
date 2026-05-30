@@ -149,11 +149,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .rp-dot-to{background:#EF4444;}
 .rp-dot-via{background:#A78BFA;}
 .rp-vline{flex:1;width:1.5px;background:rgba(255,255,255,.12);min-height:10px;}
-.rp-route-content{flex:1;padding-bottom:4px;}
+.rp-route-content{flex:1;min-width:0;padding-bottom:4px;overflow:hidden;}
 .rp-add-via{width:100%;padding:6px;border-radius:7px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.15);color:#8B98B8;font-size:11px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;margin:2px 0;}
 .rp-add-via:hover{background:rgba(255,255,255,.08);color:var(--text);}
 /* 경유지 슬롯 */
-.rp-via-row{display:flex;align-items:center;gap:4px;margin-bottom:4px;}
+.rp-via-row{display:flex;align-items:center;gap:4px;margin-bottom:4px;min-width:0;overflow:hidden;}
 .rp-via-slot{width:0;flex:1;min-width:0;display:flex;align-items:center;gap:5px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25);border-radius:7px;padding:5px 8px;overflow:hidden;}
 .rp-via-label{font-size:9px;color:#A78BFA;font-weight:700;flex-shrink:0;white-space:nowrap;}
 .rp-via-name{font-size:11px;font-weight:700;color:#F0F4FF;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -171,7 +171,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .route-open-btn:hover{background:rgba(232,201,122,.2);}
 .route-open-btn.has-route{background:rgba(232,201,122,.25);border-color:var(--gold2);}
 /* 길찾기 팝업 */
-.route-popup{position:absolute;background:rgba(13,22,40,.97);border:1px solid rgba(255,255,255,.14);border-radius:16px;width:280px;max-height:calc(100% - 24px);overflow:hidden;display:flex;flex-direction:column;z-index:8000;box-shadow:0 8px 32px rgba(0,0,0,.6);right:12px;bottom:12px;}
+.route-popup{position:absolute;background:rgba(13,22,40,.97);border:1px solid rgba(255,255,255,.14);border-radius:16px;width:280px;max-width:280px;min-width:280px;max-height:calc(100% - 24px);overflow:hidden;display:flex;flex-direction:column;z-index:8000;box-shadow:0 8px 32px rgba(0,0,0,.6);right:12px;bottom:12px;}
 .route-popup-header{background:rgba(255,255,255,.04);padding:8px 14px 8px;border-bottom:1px solid rgba(255,255,255,.07);cursor:grab;flex-shrink:0;user-select:none;}
 .route-popup-header:active{cursor:grabbing;}
 .route-popup-body{padding:12px 14px;overflow-y:auto;flex:1;}
@@ -355,7 +355,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           <div class="rp-route-line-col"><div class="rp-dot rp-dot-to"></div></div>
           <div class="rp-route-content">
             <div class="rp-label">도착지</div>
-            <div style="display:flex;gap:4px;margin-bottom:4px;">
+            <div style="display:flex;gap:4px;margin-bottom:4px;min-width:0;overflow:hidden;">
               <div class="rp-slot" id="rpToSlot" style="flex:1">
                 <span class="rp-slot-text" id="rpToText">고객 핀 또는 지도 선택</span>
                 <button type="button" class="rp-clear" id="rpToClear" style="display:none">✕</button>
@@ -594,20 +594,16 @@ window.addEventListener('DOMContentLoaded', function() {
   var btnPinBase = document.getElementById('btnPinBase');
   if(btnPinBase) btnPinBase.addEventListener('click', function(){
     if(!kakaoMap){ alert('먼저 지도를 불러주세요.'); return; }
-    pinBaseMode = !pinBaseMode;
-    btnPinBase.className = pinBaseMode ? 'pinbase-btn active' : 'pinbase-btn';
 
+    var isActive = this.className.indexOf('active') !== -1;
     var banner = document.getElementById('mapSelectBanner');
     var icon   = document.getElementById('mapSelectIcon');
     var text   = document.getElementById('mapSelectText');
 
-    if(pinBaseMode) {
-      // 배너 표시
-      if(banner){ banner.style.display = ''; }
-      if(icon)  icon.textContent = '📌';
-      if(text)  text.textContent = '지도를 클릭해 기준 위치를 설정하세요';
-      kakaoMap.setCursor('crosshair');
-    } else {
+    if(isActive) {
+      // 활성 → 취소: 핀+오버레이 모두 제거
+      pinBaseMode = false;
+      this.className = 'pinbase-btn';
       if(banner){ banner.style.display = 'none'; }
       kakaoMap.setCursor('');
       if(pinBaseMarker){ pinBaseMarker.setMap(null); pinBaseMarker = null; }
@@ -615,7 +611,6 @@ window.addEventListener('DOMContentLoaded', function() {
       if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
       if(centerMarkerGlobal){ centerMarkerGlobal.setMap(null); centerMarkerGlobal = null; }
       if(centerOverlay){ centerOverlay.setMap(null); centerOverlay = null; }
-      // 기준 위치 카드 초기화
       var mlabelEl = document.querySelector('.mlabel');
       if(mlabelEl) mlabelEl.textContent = '📅 기준 고객';
       var tn = document.getElementById('targetName');
@@ -623,6 +618,14 @@ window.addEventListener('DOMContentLoaded', function() {
       if(tn) tn.textContent = '—';
       if(ta) ta.textContent = '주소를 입력해주세요';
       centerLat = 0; centerLng = 0;
+    } else {
+      // 비활성 → 활성
+      pinBaseMode = true;
+      this.className = 'pinbase-btn active';
+      if(banner){ banner.style.display = ''; }
+      if(icon)  icon.textContent = '📌';
+      if(text)  text.textContent = '지도를 클릭해 기준 위치를 설정하세요';
+      kakaoMap.setCursor('crosshair');
     }
   });
 
@@ -796,10 +799,10 @@ function loadKakaoScript(key) {
             applyBase(pinBaseMarker.getPosition());
           });
 
-          // 모드 종료
+          // 모드 종료 — 버튼은 active 유지 (한 번 더 누르면 취소)
           pinBaseMode = false;
           var btn = document.getElementById('btnPinBase');
-          if(btn) btn.className = 'pinbase-btn';
+          if(btn) btn.className = 'pinbase-btn active';
           var banner = document.getElementById('mapSelectBanner');
           if(banner) banner.style.display = 'none';
           kakaoMap.setCursor('');
