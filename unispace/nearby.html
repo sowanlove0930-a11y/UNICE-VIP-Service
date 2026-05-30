@@ -1072,15 +1072,37 @@ function drawNearby(lat, lng) {
     title: '기준 위치',
     draggable: true
   });
-  var baseName = document.getElementById('targetName').textContent || '';
+
+  // 오버레이 — 주소 항상 표시 + 클릭 가능
+  function makeCenterLabel(addrText, nameText) {
+    var addr = addrText || '';
+    var nm   = nameText || '기준위치';
+    return '<div onclick="if(window._onCenterPinClick)window._onCenterPinClick();" '
+      + 'style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;'
+      + 'padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;'
+      + 'text-align:center;cursor:pointer;pointer-events:auto;">'
+      + (addr ? '<div style="font-size:10px;opacity:.85;">'+addr+'</div>' : '')
+      + '<div style="font-size:11px;">📍 '+nm+'</div>'
+      + '</div>';
+  }
+  window._makeCenterLabel = makeCenterLabel;
+
+  var baseName = document.getElementById('targetName').textContent || '기준위치';
   var baseAddr = document.getElementById('targetAddr').textContent || '';
-  var labelContent = '<div onclick="if(window._onCenterPinClick)window._onCenterPinClick();" style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;cursor:pointer;">'
-    + (baseAddr ? '<div style="font-size:10px;opacity:.85;">'+baseAddr+'</div>' : '')
-    + '<div style="font-size:11px;">📍 '+(baseName||'기준위치')+'</div>'
-    + '</div>';
+  if(!baseAddr) {
+    // 주소 없으면 역지오코딩으로 가져오기
+    var gc0 = new kakao.maps.services.Geocoder();
+    gc0.coord2Address(lng, lat, function(result, status) {
+      if(status === kakao.maps.services.Status.OK && result.length > 0) {
+        var r = result[0];
+        baseAddr = r.road_address ? r.road_address.address_name : r.address.address_name;
+        if(centerOverlay) centerOverlay.setContent(makeCenterLabel(baseAddr, baseName));
+      }
+    });
+  }
   centerOverlay = new kakao.maps.CustomOverlay({
     position: centerPos,
-    content: labelContent,
+    content: makeCenterLabel(baseAddr, baseName),
     yAnchor: 2.8,
     clickable: true
   });
@@ -1106,11 +1128,9 @@ function drawNearby(lat, lng) {
       if(mlabelEl) mlabelEl.textContent = '📌 기준 위치';
 
       centerOverlay.setPosition(pos);
-      var dragLabel = '<div onclick="if(window._onCenterPinClick)window._onCenterPinClick();" style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;cursor:pointer;">'
-        + '<div style="font-size:10px;opacity:.85;">'+addrStr+'</div>'
-        + '<div style="font-size:11px;">📍 기준위치</div>'
-        + '</div>';
-      centerOverlay.setContent(dragLabel);
+      if(window._makeCenterLabel) {
+        centerOverlay.setContent(window._makeCenterLabel(addrStr, addrStr));
+      }
 
       refreshNearbyOnly(newLat, newLng);
     });
