@@ -395,14 +395,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       </div>
     </div>
 
-    <!-- 범례 -->
-    <div class="legend" id="mapLegend" style="display:none">
-      <div class="lr"><div class="ldot" style="background:#3B82F6"></div>기준 위치</div>
-      <div class="lr"><div class="ldot" style="background:#FBBF24"></div>내 현재 위치</div>
-      <div class="lr"><div class="ldot" style="background:#10B981"></div>계약 고객</div>
-      <div class="lr"><div class="ldot" style="background:#8B5CF6"></div>관리 고객</div>
-      <div class="lr"><div class="ldot" style="background:#F59E0B"></div>연락 필요</div>
-    </div>
   </div>
 </div>
 
@@ -628,7 +620,6 @@ function loadKakaoScript(key) {
       return;
     }
     kakao.maps.load(function() {
-      document.getElementById('mapLegend').style.display = '';
       var container = document.getElementById('kakaoMap');
       var options = { center: new kakao.maps.LatLng(35.1631, 129.1635), level: 7 };
       kakaoMap = new kakao.maps.Map(container, options);
@@ -1167,9 +1158,6 @@ function getMyLocForPanel(type, btn) {
       myLocOverlay = new kakao.maps.CustomOverlay({ position:myPos, content:labelEl, yAnchor:3.0 });
       myLocOverlay.setMap(kakaoMap);
 
-      // 범례 표시
-      var legend = document.getElementById('mapLegend');
-      if(legend) legend.style.display = '';
     }
   }
 
@@ -1425,14 +1413,22 @@ function renderRoutePanel() {
   if(panelFrom && panelTo) {
     navBtns.className = 'rp-nav-btns active';
     hint.style.display = 'none';
-    var url = 'https://map.kakao.com/link/from/'+panelFrom.name+','+panelFrom.lat+','+panelFrom.lng;
-    validVia.forEach(function(v){
-      url += '/via/'+v.name+','+v.lat+','+v.lng;
+
+    // 카카오맵 파라미터 방식 URL
+    var sp = 'spx='+panelFrom.lng+'&spy='+panelFrom.lat+'&sname='+encodeURIComponent(panelFrom.name);
+    var ep = 'epx='+panelTo.lng+'&epy='+panelTo.lat+'&ename='+encodeURIComponent(panelTo.name);
+    var viaParam = '';
+    validVia.forEach(function(v, i){
+      viaParam += '&via'+(i+1)+'x='+v.lng+'&via'+(i+1)+'y='+v.lat+'&via'+(i+1)+'name='+encodeURIComponent(v.name);
     });
-    url += '/to/'+panelTo.name+','+panelTo.lat+','+panelTo.lng;
-    var rc = document.getElementById('rpCar');  if(rc)  rc.href = url;
-    var rb = document.getElementById('rpBus');  if(rb)  rb.href = url;
-    var rw = document.getElementById('rpWalk'); if(rw)  rw.href = url;
+
+    var carUrl  = 'https://map.kakao.com/link/car/'+encodeURIComponent(panelFrom.name)+','+panelFrom.lat+','+panelFrom.lng+'/'+encodeURIComponent(panelTo.name)+','+panelTo.lat+','+panelTo.lng;
+    var busUrl  = 'https://map.kakao.com/link/bus/'+encodeURIComponent(panelFrom.name)+','+panelFrom.lat+','+panelFrom.lng+'/'+encodeURIComponent(panelTo.name)+','+panelTo.lat+','+panelTo.lng;
+    var walkUrl = 'https://map.kakao.com/link/walk/'+encodeURIComponent(panelFrom.name)+','+panelFrom.lat+','+panelFrom.lng+'/'+encodeURIComponent(panelTo.name)+','+panelTo.lat+','+panelTo.lng;
+
+    var rc = document.getElementById('rpCar');  if(rc)  rc.href = carUrl;
+    var rb = document.getElementById('rpBus');  if(rb)  rb.href = busUrl;
+    var rw = document.getElementById('rpWalk'); if(rw)  rw.href = walkUrl;
   } else {
     navBtns.className = 'rp-nav-btns';
     hint.style.display = '';
