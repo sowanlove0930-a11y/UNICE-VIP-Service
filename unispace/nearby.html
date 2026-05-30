@@ -493,6 +493,74 @@ function makeRoutePinImage(color, label) {
   );
 }
 
+function makeRouteAddrOverlay(pos, addrText, color) {
+  var el = document.createElement('div');
+  el.style.cssText = 'background:' + color + ';color:#fff;font-size:10px;font-weight:700;'
+    + 'padding:2px 8px;border-radius:5px;white-space:nowrap;max-width:160px;overflow:hidden;'
+    + 'text-overflow:ellipsis;margin-bottom:2px;box-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none;';
+  el.textContent = addrText;
+  return new kakao.maps.CustomOverlay({ position:pos, content:el, yAnchor:5.8, zIndex:5 });
+}
+
+function updateRoutePinAddr(type, pos, addrText) {
+  var color = type === 'from' ? '#3B82F6' : type === 'to' ? '#EF4444' : '#A78BFA';
+  if(type === 'from') {
+    if(routeFromOverlay) routeFromOverlay.setMap(null);
+    routeFromOverlay = makeRouteAddrOverlay(pos, addrText, color);
+    routeFromOverlay.setMap(kakaoMap);
+  } else if(type === 'to') {
+    if(routeToOverlay) routeToOverlay.setMap(null);
+    routeToOverlay = makeRouteAddrOverlay(pos, addrText, color);
+    routeToOverlay.setMap(kakaoMap);
+  } else if(type && type.indexOf('via_') === 0) {
+    var vi = parseInt(type.split('_')[1], 10);
+    if(routeViaMarkers[vi]) {
+      if(routeViaMarkers[vi].overlay) routeViaMarkers[vi].overlay.setMap(null);
+      routeViaMarkers[vi].overlay = makeRouteAddrOverlay(pos, addrText, color);
+      routeViaMarkers[vi].overlay.setMap(kakaoMap);
+    }
+  }
+}
+
+function attachRoutePinDrag(marker, type) {
+  var geocoder = new kakao.maps.services.Geocoder();
+  var dragTimer = null;
+  kakao.maps.event.addListener(marker, 'drag', function() {
+    var p = marker.getPosition();
+    if(dragTimer) clearTimeout(dragTimer);
+    dragTimer = setTimeout(function() {
+      geocoder.coord2Address(p.getLng(), p.getLat(), function(result, status) {
+        var a = p.getLat().toFixed(4) + ',' + p.getLng().toFixed(4);
+        if(status === kakao.maps.services.Status.OK && result.length > 0) {
+          var r = result[0];
+          a = r.road_address ? r.road_address.address_name : r.address.address_name;
+        }
+        updateRoutePinAddr(type, marker.getPosition(), a);
+      });
+    }, 200);
+  });
+  kakao.maps.event.addListener(marker, 'dragend', function() {
+    if(dragTimer) clearTimeout(dragTimer);
+    var p = marker.getPosition();
+    geocoder.coord2Address(p.getLng(), p.getLat(), function(result, status) {
+      var a = p.getLat().toFixed(4) + ',' + p.getLng().toFixed(4);
+      if(status === kakao.maps.services.Status.OK && result.length > 0) {
+        var r = result[0];
+        a = r.road_address ? r.road_address.address_name : r.address.address_name;
+      }
+      var obj = { name:a, lat:String(p.getLat()), lng:String(p.getLng()), address:a };
+      if(type === 'from') panelFrom = obj;
+      else if(type === 'to') panelTo = obj;
+      else if(type && type.indexOf('via_') === 0) {
+        var vi = parseInt(type.split('_')[1], 10);
+        if(vi >= 0 && vi < panelVia.length) panelVia[vi] = obj;
+      }
+      updateRoutePinAddr(type, p, a);
+      renderRoutePanel();
+    });
+  });
+}
+
 function setRoutePin(type, pos, labelText) {
   var color = type === 'from' ? '#3B82F6' : type === 'to' ? '#EF4444' : '#A78BFA';
   var img = makeRoutePinImage(color, labelText);
@@ -500,16 +568,25 @@ function setRoutePin(type, pos, labelText) {
     if(routeFromMarker){ routeFromMarker.setMap(null); }
     if(routeFromOverlay){ routeFromOverlay.setMap(null); }
     routeFromMarker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText });
-    routeFromOverlay = null;
+    routeFromOverlay = makeRouteAddrOverlay(pos, labelText, color);
+    routeFromOverlay.setMap(kakaoMap);
+    attachRoutePinDrag(routeFromMarker, type);
   } else if(type === 'to') {
     if(routeToMarker){ routeToMarker.setMap(null); }
     if(routeToOverlay){ routeToOverlay.setMap(null); }
     routeToMarker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText });
-    routeToOverlay = null;
+    routeToOverlay = makeRouteAddrOverlay(pos, labelText, color);
+    routeToOverlay.setMap(kakaoMap);
+    attachRoutePinDrag(routeToMarker, type);
   } else if(type && type.indexOf('via_') === 0) {
     var vi = parseInt(type.split('_')[1], 10);
     if(routeViaMarkers[vi] && routeViaMarkers[vi].marker) routeViaMarkers[vi].marker.setMap(null);
-    routeViaMarkers[vi] = { marker: new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText }), overlay:null };
+    if(routeViaMarkers[vi] && routeViaMarkers[vi].overlay) routeViaMarkers[vi].overlay.setMap(null);
+    var vm = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText });
+    var vo = makeRouteAddrOverlay(pos, labelText, color);
+    vo.setMap(kakaoMap);
+    routeViaMarkers[vi] = { marker:vm, overlay:vo };
+    attachRoutePinDrag(vm, type);
   }
 }
 
@@ -522,13 +599,22 @@ function clearRoutePin(type) {
     if(routeToOverlay){ routeToOverlay.setMap(null); routeToOverlay = null; }
   } else if(type && type.indexOf('via_') === 0) {
     var vi = parseInt(type.split('_')[1], 10);
-    if(routeViaMarkers[vi] && routeViaMarkers[vi].marker) { routeViaMarkers[vi].marker.setMap(null); routeViaMarkers[vi] = null; }
+    if(routeViaMarkers[vi]) {
+      if(routeViaMarkers[vi].marker) routeViaMarkers[vi].marker.setMap(null);
+      if(routeViaMarkers[vi].overlay) routeViaMarkers[vi].overlay.setMap(null);
+      routeViaMarkers[vi] = null;
+    }
   }
 }
 
 function clearAllRoutePins() {
   clearRoutePin('from'); clearRoutePin('to');
-  routeViaMarkers.forEach(function(vm){ if(vm && vm.marker) vm.marker.setMap(null); });
+  routeViaMarkers.forEach(function(vm){
+    if(vm) {
+      if(vm.marker) vm.marker.setMap(null);
+      if(vm.overlay) vm.overlay.setMap(null);
+    }
+  });
   routeViaMarkers = [];
 }
 
@@ -618,12 +704,10 @@ window.addEventListener('DOMContentLoaded', function() {
 
   var rpFromMapSel = document.getElementById('rpFromMapSel');
   if(rpFromMapSel) rpFromMapSel.addEventListener('click', function(){
-    if(this.className.indexOf('active') !== -1) {
-      // 활성 상태 → 취소 + 마커 제거
+    if(mapSelectMode === 'from') {
       exitMapSelectMode();
-      if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
-      if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
-      this.className = 'rp-mapsel';
+    } else if(routeFromMarker) {
+      panelFrom = null; clearRoutePin('from'); renderRoutePanel();
     } else {
       enterMapSelectMode('from');
     }
@@ -631,11 +715,10 @@ window.addEventListener('DOMContentLoaded', function() {
 
   var rpToMapSel = document.getElementById('rpToMapSel');
   if(rpToMapSel) rpToMapSel.addEventListener('click', function(){
-    if(this.className.indexOf('active') !== -1) {
+    if(mapSelectMode === 'to') {
       exitMapSelectMode();
-      if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
-      if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
-      this.className = 'rp-mapsel';
+    } else if(routeToMarker) {
+      panelTo = null; clearRoutePin('to'); renderRoutePanel();
     } else {
       enterMapSelectMode('to');
     }
@@ -914,30 +997,7 @@ function loadKakaoScript(key) {
               }
               var pinLabel = getRoutePinLabel(mode);
               setRoutePin(mode, pos, pinLabel);
-              var pinMarker = mode === 'from' ? routeFromMarker : mode === 'to' ? routeToMarker : (routeViaMarkers[parseInt(mode.split('_')[1],10)] && routeViaMarkers[parseInt(mode.split('_')[1],10)].marker);
-              if(pinMarker) {
-                (function(m, md) {
-                  kakao.maps.event.addListener(m, 'dragend', function() {
-                    var np = m.getPosition();
-                    var gc2 = new kakao.maps.services.Geocoder();
-                    gc2.coord2Address(np.getLng(), np.getLat(), function(r2, s2) {
-                      var a2 = np.getLat().toFixed(4) + ',' + np.getLng().toFixed(4);
-                      if(s2 === kakao.maps.services.Status.OK && r2.length > 0) {
-                        var rr = r2[0];
-                        a2 = rr.road_address ? rr.road_address.address_name : rr.address.address_name;
-                      }
-                      var obj2 = { name:a2, lat:String(np.getLat()), lng:String(np.getLng()), address:a2 };
-                      if(md === 'from') panelFrom = obj2;
-                      else if(md === 'to') panelTo = obj2;
-                      else if(md && md.indexOf('via_') === 0) {
-                        var vi2 = parseInt(md.split('_')[1], 10);
-                        if(vi2 >= 0 && vi2 < panelVia.length) panelVia[vi2] = obj2;
-                      }
-                      renderRoutePanel();
-                    });
-                  });
-                })(pinMarker, md);
-              }
+              updateRoutePinAddr(mode, pos, a);
               renderRoutePanel();
             });
           })(curMode, latlng);
@@ -1181,9 +1241,10 @@ function refreshNearbyOnly(lat, lng) {
       labelEl.appendChild(dotWrap);
     }
     (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
-    var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:3.0, clickable:true });
+    var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:3.0, clickable:true, zIndex:1 });
     nameOverlay.setMap(kakaoMap);
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
+    nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
     (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ showPopup(customer, distance); }); })(c, dist, marker);
   });
 
@@ -1444,11 +1505,12 @@ function drawNearby(lat, lng) {
       position: pos,
       content: labelEl,
       yAnchor: 3.0,
-      clickable: true
+      clickable: true,
+      zIndex: 1
     });
     nameOverlay.setMap(kakaoMap);
-    // nearbyMarkers에 labelEl 저장 (하이라이트용)
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
+    nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
 
     (function(customer, distance, markerEl){
       kakao.maps.event.addListener(markerEl, 'click', function() {
@@ -1549,6 +1611,8 @@ function selectCustomer(idx) {
         m.labelEl.style.transform = 'scale(1)';
         m.labelEl.style.zIndex = '';
       }
+      if(m.overlay) m.overlay.setZIndex(1);
+      if(m.marker) m.marker.setZIndex(1);
     });
 
     // 선택된 라벨 하이라이트
@@ -1558,6 +1622,8 @@ function selectCustomer(idx) {
       nm.labelEl.style.transform = 'scale(1.15)';
       nm.labelEl.style.zIndex = '100';
     }
+    if(nm.overlay) nm.overlay.setZIndex(10);
+    if(nm.marker) nm.marker.setZIndex(10);
   }
 }
 
@@ -1599,6 +1665,8 @@ function showPopup(c, dist) {
               m.labelEl.style.transform = 'scale(1)';
               m.labelEl.style.zIndex = '';
             }
+            if(m.overlay) m.overlay.setZIndex(1);
+            if(m.marker) m.marker.setZIndex(1);
           });
           var nm = window._nearbyMarkers[idx];
           if(nm.labelEl) {
@@ -1607,6 +1675,8 @@ function showPopup(c, dist) {
             nm.labelEl.style.transform = 'scale(1.15)';
             nm.labelEl.style.zIndex = '100';
           }
+          if(nm.overlay) nm.overlay.setZIndex(10);
+          if(nm.marker) nm.marker.setZIndex(10);
         }
       }
     });
@@ -2005,8 +2075,10 @@ function renderRoutePanel() {
           var viaKey = 'via_'+idx;
           if(mapSelectMode === viaKey) {
             exitMapSelectMode();
-            if(mapSelectMarker){ mapSelectMarker.setMap(null); mapSelectMarker = null; }
-            if(mapSelectOverlay){ mapSelectOverlay.setMap(null); mapSelectOverlay = null; }
+          } else if(routeViaMarkers[idx] && routeViaMarkers[idx].marker) {
+            clearRoutePin(viaKey);
+            if(panelVia[idx]) { panelVia[idx] = { name:'', lat:'', lng:'' }; }
+            renderRoutePanel();
           } else {
             enterMapSelectMode(viaKey);
           }
