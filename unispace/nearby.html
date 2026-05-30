@@ -400,11 +400,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <div class="drag-handle" id="phead">
         <div class="drag-bar"></div>
         <div class="popup-inner-head">
-          <button type="button" class="popup-close" id="btnClose">✕</button>
           <div class="pnamewrap">
             <span class="pname" id="popupName"></span>
             <span class="ptag" id="popupTag"></span>
           </div>
+          <button type="button" class="popup-close" id="btnClose">✕</button>
         </div>
       </div>
       <div class="popup-body">
@@ -1484,6 +1484,13 @@ function selectCustomer(idx) {
 
 // ── 팝업 표시 ────────────────────────────────────────
 function showPopup(c, dist) {
+  // 이미 열린 팝업의 같은 고객 클릭 → 닫기
+  var popup = document.getElementById('mapPopup');
+  if(popup && popup.style.display !== 'none' && selectedCustomerId === c.id) {
+    closePopup();
+    return;
+  }
+
   console.log('[NEARBY] showPopup 호출:', c.name);
   console.log('[NEARBY] events:', JSON.stringify(c.events || []));
   console.log('[NEARBY] etcNote:', c.etcNote || '없음');
@@ -1967,15 +1974,21 @@ function renderRoutePanel() {
       viaParam += '&via'+(i+1)+'x='+v.lng+'&via'+(i+1)+'y='+v.lat+'&via'+(i+1)+'name='+encodeURIComponent(v.name);
     });
 
-    // 카카오맵 공식 URL: /link/by/{이동수단}/출발이름,위도,경도/도착이름,위도,경도
+    // 카카오맵 공식 URL: /link/by/{이동수단}/출발이름,위도,경도/경유이름,위도,경도/도착이름,위도,경도
     var fLat  = parseFloat(panelFrom.lat).toFixed(6);
     var fLng  = parseFloat(panelFrom.lng).toFixed(6);
     var tLat  = parseFloat(panelTo.lat).toFixed(6);
     var tLng  = parseFloat(panelTo.lng).toFixed(6);
     var fName = panelFrom.name;
     var tName = panelTo.name;
+
+    var viaRoute = '';
+    validVia.forEach(function(v){
+      viaRoute += '/'+v.name+','+parseFloat(v.lat).toFixed(6)+','+parseFloat(v.lng).toFixed(6);
+    });
+
     var base  = 'https://map.kakao.com/link/by/';
-    var route = fName+','+fLat+','+fLng+'/'+tName+','+tLat+','+tLng;
+    var route = fName+','+fLat+','+fLng + viaRoute + '/'+tName+','+tLat+','+tLng;
 
     var carUrl  = base + 'car/'     + route;
     var busUrl  = base + 'traffic/' + route;
