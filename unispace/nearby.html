@@ -254,7 +254,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   <div class="left">
     <div class="lhead">
       <div class="ltitle">기준 위치</div>
-      <div class="mcard" id="targetCard">
+      <div class="mcard" id="targetCard" style="cursor:pointer;" title="클릭하면 이 위치로 이동">
         <div class="mlabel">📅 기준 고객</div>
         <div class="mname" id="targetName">—</div>
         <div class="maddr" id="targetAddr">주소를 입력해주세요</div>
@@ -480,6 +480,16 @@ window.addEventListener('DOMContentLoaded', function() {
     }
     sessionStorage.removeItem('nearbyTarget');
   }
+
+  // 기준 고객 카드 클릭 → 지도 해당 위치로 이동
+  var targetCard = document.getElementById('targetCard');
+  if(targetCard) targetCard.addEventListener('click', function(){
+    if(!kakaoMap) return;
+    if(centerLat && centerLng && centerLat != 0 && centerLng != 0) {
+      kakaoMap.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
+      kakaoMap.setLevel(5);
+    }
+  });
 
   // 내장 키로 자동 지도 로드
   loadKakaoScript(KAKAO_JS_KEY);
@@ -1056,9 +1066,15 @@ function drawNearby(lat, lng) {
     title: '기준 위치',
     draggable: true
   });
+  var baseName = document.getElementById('targetName').textContent || '';
+  var baseAddr = document.getElementById('targetAddr').textContent || '';
+  var labelContent = '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;">'
+    + (baseAddr ? '<div style="font-size:10px;opacity:.85;">'+baseAddr+'</div>' : '')
+    + '<div style="font-size:11px;">📍 '+(baseName||'기준위치')+'</div>'
+    + '</div>';
   centerOverlay = new kakao.maps.CustomOverlay({
     position: centerPos,
-    content: '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px">📍 기준위치</div>',
+    content: labelContent,
     yAnchor: 2.8
   });
   centerOverlay.setMap(kakaoMap);
@@ -1081,7 +1097,11 @@ function drawNearby(lat, lng) {
       document.getElementById('targetAddr').textContent = addrStr;
 
       centerOverlay.setPosition(pos);
-      centerOverlay.setContent('<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px">📍 기준위치</div>');
+      var dragLabel = '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;">'
+        + '<div style="font-size:10px;opacity:.85;">'+addrStr+'</div>'
+        + '<div style="font-size:11px;">📍 기준위치</div>'
+        + '</div>';
+      centerOverlay.setContent(dragLabel);
 
       refreshNearbyOnly(newLat, newLng);
     });
