@@ -221,6 +221,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
 /* 검색 결과 목록 */
 .search-result-list{background:rgba(13,22,40,.98);border:1px solid rgba(232,201,122,.25);border-radius:10px;margin-top:6px;overflow:hidden;}
+.srl-items-wrap{max-height:260px;overflow-y:auto;}
 .srl-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.07);}
 .srl-title{font-size:10px;font-weight:700;color:var(--gold2);}
 .srl-cancel{background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;padding:0;}
@@ -265,7 +266,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           <span class="srl-title" id="srlTitle">검색결과</span>
           <button type="button" class="srl-cancel" id="srlCancel">✕ 취소</button>
         </div>
-        <div id="srlItems"></div>
+        <div class="srl-items-wrap">
+          <div id="srlItems"></div>
+        </div>
         <div class="srl-hint">탭하면 기준 위치로 설정됩니다</div>
       </div>
       <div style="display:flex;gap:5px;margin-top:6px;">
@@ -453,6 +456,7 @@ var selectedPanelCustomer = null;
 var myLocMarker  = null;
 var myLocOverlay = null;
 var centerOverlay = null;
+var centerMarkerGlobal = null; // 기준 파란 핀 (clearMarkers에서 제외)
 var pinBaseMode = false;  // 지도에서 기준 잡기 모드
 var pinBaseMarker = null; // 임시 기준 핀
 var myLat = null, myLng = null;
@@ -816,8 +820,8 @@ function searchAddr() {
   title.textContent = '"' + addr + '" 검색 중...';
 
   var places = new kakao.maps.services.Places();
-  var searchLat = (centerLat && centerLat != 0) ? centerLat : kakaoMap.getCenter().getLat();
-  var searchLng = (centerLng && centerLng != 0) ? centerLng : kakaoMap.getCenter().getLng();
+  var searchLat = (centerLat && centerLat != 0) ? centerLat : 35.1796;
+  var searchLng = (centerLng && centerLng != 0) ? centerLng : 129.0756;
   places.keywordSearch(addr, function(result, status) {
     if(status === kakao.maps.services.Status.OK && result.length > 0) {
       showSearchResults(result, addr);
@@ -850,8 +854,21 @@ function showSearchResults(results, keyword) {
   title.textContent = '"' + keyword + '" 검색결과 ' + results.length + '건';
   items.innerHTML = '';
 
-  results.slice(0, 6).forEach(function(p, idx) {
+  // 검색어 포함된 항목 상단으로 정렬
+  var kw = keyword.replace(/\s/g,'').toLowerCase();
+  var sorted = results.slice().sort(function(a, b) {
+    var an = a.place_name.replace(/\s/g,'').toLowerCase();
+    var bn = b.place_name.replace(/\s/g,'').toLowerCase();
+    var aMatch = an.indexOf(kw) !== -1 ? 0 : 1;
+    var bMatch = bn.indexOf(kw) !== -1 ? 0 : 1;
+    return aMatch - bMatch;
+  });
+
+  sorted.slice(0, 15).forEach(function(p, idx) {
     var item = document.createElement('div');
+    var kw2 = keyword.replace(/\s/g,'').toLowerCase();
+    var pn = p.place_name.replace(/\s/g,'').toLowerCase();
+    var isFirst = idx === 0 || pn.indexOf(kw2) !== -1;
     item.className = 'srl-item' + (idx === 0 ? ' srl-first' : '');
 
     var distStr = '';
@@ -1029,7 +1046,10 @@ function drawNearby(lat, lng) {
     new kakao.maps.Size(28,36),
     { offset: new kakao.maps.Point(14,36) }
   );
-  var centerMarker = new kakao.maps.Marker({
+  // 기존 기준 핀 제거
+  if(centerMarkerGlobal) { centerMarkerGlobal.setMap(null); centerMarkerGlobal = null; }
+
+  centerMarkerGlobal = new kakao.maps.Marker({
     position: centerPos,
     map: kakaoMap,
     image: centerImg,
@@ -1043,16 +1063,14 @@ function drawNearby(lat, lng) {
     yAnchor: 2.8
   });
   centerOverlay.setMap(kakaoMap);
-  markers.push(centerMarker);
 
   // 드래그 완료 시 기준 위치 업데이트
-  kakao.maps.event.addListener(centerMarker, 'dragend', function() {
-    var pos = centerMarker.getPosition();
+  kakao.maps.event.addListener(centerMarkerGlobal, 'dragend', function() {
+    var pos = centerMarkerGlobal.getPosition();
     var newLat = pos.getLat();
     var newLng = pos.getLng();
     centerLat = newLat; centerLng = newLng;
 
-    // 역지오코딩으로 주소 가져오기
     var geocoder = new kakao.maps.services.Geocoder();
     geocoder.coord2Address(newLng, newLat, function(result, status) {
       var addrStr = '드래그 위치';
@@ -1063,11 +1081,9 @@ function drawNearby(lat, lng) {
       document.getElementById('targetName').textContent = addrStr;
       document.getElementById('targetAddr').textContent = addrStr;
 
-      // 오버레이 위치/내용 업데이트
       centerOverlay.setPosition(pos);
       centerOverlay.setContent('<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px">📍 '+addrStr+'</div>');
 
-      // 주변 고객 재계산
       refreshNearbyOnly(newLat, newLng);
     });
   });
@@ -1937,6 +1953,7 @@ function clearMarkers() {
   markers.forEach(function(m){ m.setMap(null); });
   circles.forEach(function(c){ c.setMap(null); });
   if(centerOverlay){ centerOverlay.setMap(null); centerOverlay = null; }
+  if(centerMarkerGlobal){ centerMarkerGlobal.setMap(null); centerMarkerGlobal = null; }
   markers=[]; circles=[];
 }
 
