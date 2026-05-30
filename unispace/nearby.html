@@ -684,6 +684,7 @@ function searchAddr() {
     if(status === kakao.maps.services.Status.OK && result.length > 0) {
       var p = result[0];
       centerLat = parseFloat(p.y); centerLng = parseFloat(p.x);
+      document.getElementById('targetName').textContent = p.place_name;
       document.getElementById('targetAddr').textContent = p.place_name + ' · ' + p.address_name;
       drawNearby(centerLat, centerLng);
     } else {
@@ -691,6 +692,8 @@ function searchAddr() {
       geocoder.addressSearch(addr, function(result2, status2) {
         if(status2 === kakao.maps.services.Status.OK) {
           centerLat = parseFloat(result2[0].y); centerLng = parseFloat(result2[0].x);
+          document.getElementById('targetName').textContent = addr;
+          document.getElementById('targetAddr').textContent = result2[0].address_name || addr;
           drawNearby(centerLat, centerLng);
         } else {
           alert('주소를 찾을 수 없습니다. 더 구체적으로 입력해보세요.');
@@ -700,26 +703,171 @@ function searchAddr() {
   });
 }
 
+// ── 고객 마커+반경만 재계산 (기준 핀 유지) ──────────────
+function refreshNearbyOnly(lat, lng) {
+  // 고객 마커만 제거 (index 1 이후: 0은 기준마커)
+  // 실제론 markers[0]이 기준 마커 — nearbyMarkers만 지우기
+  if(window._nearbyMarkers) {
+    window._nearbyMarkers.forEach(function(nm){
+      if(nm.marker) nm.marker.setMap(null);
+    });
+    window._nearbyMarkers = [];
+  }
+  // 반경원 제거 후 재생성
+  circles.forEach(function(c){ c.setMap(null); });
+  circles = [];
+
+  var centerPos = new kakao.maps.LatLng(lat, lng);
+
+  // 반경 원 재생성
+  var circle = new kakao.maps.Circle({
+    center: centerPos,
+    radius: radiusKm * 1000,
+    strokeWeight: 2,
+    strokeColor: '#60A5FA',
+    strokeOpacity: 0.9,
+    strokeStyle: 'dashed',
+    fillColor: '#3B82F6',
+    fillOpacity: 0.06
+  });
+  circle.setMap(kakaoMap);
+  circles.push(circle);
+
+  // 반경 라벨
+  var labelLng = lng + (radiusKm * 1000 / 111320 / Math.cos(lat * Math.PI / 180));
+  var radiusLabelEl = document.createElement('div');
+  radiusLabelEl.style.cssText = 'background:rgba(96,165,250,.85);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;border:1px solid rgba(255,255,255,.3);';
+  radiusLabelEl.textContent = radiusKm + 'km';
+  var radiusOverlay = new kakao.maps.CustomOverlay({
+    position: new kakao.maps.LatLng(lat, labelLng),
+    content: radiusLabelEl,
+    yAnchor: 0.5
+  });
+  radiusOverlay.setMap(kakaoMap);
+  circles.push(radiusOverlay);
+
+  // 고객 필터 + 리스트 + 마커 재렌더
+  var nearby = [];
+  allCustomers.forEach(function(c) {
+    if(!c.lat || !c.lng) return;
+    var dist = getDistKm(lat, lng, parseFloat(c.lat), parseFloat(c.lng));
+    if(dist <= radiusKm) nearby.push({ c:c, dist:dist });
+  });
+  nearby.sort(function(a,b){ return a.dist-b.dist; });
+  document.getElementById('resultCount').innerHTML = '반경 '+radiusKm+'km 내 고객 <b>'+nearby.length+'명</b> 발견';
+
+  if(!nearby.length) {
+    document.getElementById('clist').innerHTML = '<div class="empty">😊 반경 '+radiusKm+'km 내<br>등록된 고객이 없습니다</div>';
+    return;
+  }
+
+  var listHtml = '';
+  var nearbyMarkers = [];
+  nearby.forEach(function(item, idx) {
+    var c = item.c; var dist = item.dist;
+    var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
+    var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
+    var tagText  = c.customerType||'고객';
+    listHtml += '<div class="ci" id="citem_'+idx+'"><div class="ctop"><span class="cn">'+c.name+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div></div>';
+
+    var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
+    var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
+    var svgContent = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
+      +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="'+color+'"/>'
+      +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>'
+      +'</svg>';
+    var markerImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(svgContent), new kakao.maps.Size(28,36));
+    var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
+    nearbyMarkers.push({ marker:marker, labelEl:null, pos:pos, color:color });
+
+    var evInfo = getUpcomingEvents(c);
+    var labelEl = document.createElement('div');
+    labelEl.style.cssText = 'position:relative;display:inline-flex;align-items:center;gap:0;background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+    var nameSpan = document.createElement('span'); nameSpan.textContent = c.name;
+    labelEl.appendChild(nameSpan);
+    if(evInfo.hasEvent || evInfo.hasCustom) {
+      var dotWrap = document.createElement('div');
+      dotWrap.style.cssText = 'display:inline-flex;gap:2px;margin-left:5px;align-items:center';
+      if(evInfo.hasEvent){ var d1=document.createElement('div'); d1.style.cssText='width:7px;height:7px;border-radius:50%;background:#E8C97A;border:1px solid rgba(13,22,40,.8)'; dotWrap.appendChild(d1); }
+      if(evInfo.hasCustom){ var d2=document.createElement('div'); d2.style.cssText='width:7px;height:7px;border-radius:50%;background:#A78BFA;border:1px solid rgba(13,22,40,.8)'; dotWrap.appendChild(d2); }
+      labelEl.appendChild(dotWrap);
+    }
+    (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
+    var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:3.0, clickable:true });
+    nameOverlay.setMap(kakaoMap);
+    nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
+    (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ showPopup(customer, distance); }); })(c, dist, marker);
+  });
+
+  document.getElementById('clist').innerHTML = listHtml;
+  window._nearbyList = nearby;
+  window._nearbyMarkers = nearbyMarkers;
+
+  nearby.forEach(function(item, idx){
+    var el = document.getElementById('citem_'+idx);
+    if(el){ el.style.cursor='pointer'; (function(i){ el.addEventListener('click', function(){ selectCustomer(i); }); })(idx); }
+  });
+}
+
 // ── 주변 고객 표시 ───────────────────────────────────
 function drawNearby(lat, lng) {
   clearMarkers();
   kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
   kakaoMap.setLevel(7);
 
-  // 기준 마커
+  // 기준 마커 (파란 핀)
   var centerPos = new kakao.maps.LatLng(lat, lng);
+  var svgCenter = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
+    +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="#3B82F6"/>'
+    +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.95"/>'
+    +'</svg>';
+  var centerImg = new kakao.maps.MarkerImage(
+    'data:image/svg+xml;base64,'+btoa(svgCenter),
+    new kakao.maps.Size(28,36),
+    { offset: new kakao.maps.Point(14,36) }
+  );
   var centerMarker = new kakao.maps.Marker({
     position: centerPos,
     map: kakaoMap,
-    title: '기준 위치'
+    image: centerImg,
+    title: '기준 위치',
+    draggable: true
   });
+  var baseName = document.getElementById('targetName').textContent || '기준 위치';
   var centerOverlay = new kakao.maps.CustomOverlay({
     position: centerPos,
-    content: '<div style="background:rgba(13,22,40,.9);border:1px solid rgba(59,130,246,.4);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#60A5FA;white-space:nowrap;margin-bottom:4px">'+document.getElementById('targetName').textContent+'</div>',
+    content: '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px">📍 '+baseName+'</div>',
     yAnchor: 2.8
   });
   centerOverlay.setMap(kakaoMap);
   markers.push(centerMarker);
+
+  // 드래그 완료 시 기준 위치 업데이트
+  kakao.maps.event.addListener(centerMarker, 'dragend', function() {
+    var pos = centerMarker.getPosition();
+    var newLat = pos.getLat();
+    var newLng = pos.getLng();
+    centerLat = newLat; centerLng = newLng;
+
+    // 역지오코딩으로 주소 가져오기
+    var geocoder = new kakao.maps.services.Geocoder();
+    geocoder.coord2Address(newLng, newLat, function(result, status) {
+      var addrStr = '드래그 위치';
+      if(status === kakao.maps.services.Status.OK && result.length > 0) {
+        var r = result[0];
+        addrStr = r.road_address ? r.road_address.address_name : r.address.address_name;
+      }
+      document.getElementById('targetName').textContent = addrStr;
+      document.getElementById('targetAddr').textContent = addrStr;
+
+      // 오버레이 위치/내용 업데이트
+      centerOverlay.setPosition(pos);
+      centerOverlay.setContent('<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px">📍 '+addrStr+'</div>');
+
+      // 주변 고객 재계산
+      refreshNearbyOnly(newLat, newLng);
+    });
+  });
 
   // 반경 원
   var circle = new kakao.maps.Circle({
