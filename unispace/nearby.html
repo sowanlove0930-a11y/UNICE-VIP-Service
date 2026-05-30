@@ -1074,14 +1074,15 @@ function drawNearby(lat, lng) {
   });
   var baseName = document.getElementById('targetName').textContent || '';
   var baseAddr = document.getElementById('targetAddr').textContent || '';
-  var labelContent = '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;">'
+  var labelContent = '<div style="background:rgba(59,130,246,.9);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:4px 10px;font-weight:700;color:#fff;white-space:nowrap;margin-bottom:4px;text-align:center;cursor:pointer;">'
     + (baseAddr ? '<div style="font-size:10px;opacity:.85;">'+baseAddr+'</div>' : '')
     + '<div style="font-size:11px;">📍 '+(baseName||'기준위치')+'</div>'
     + '</div>';
   centerOverlay = new kakao.maps.CustomOverlay({
     position: centerPos,
     content: labelContent,
-    yAnchor: 2.8
+    yAnchor: 2.8,
+    clickable: true
   });
   centerOverlay.setMap(kakaoMap);
 
@@ -1113,6 +1114,40 @@ function drawNearby(lat, lng) {
 
       refreshNearbyOnly(newLat, newLng);
     });
+  });
+
+  // 파란 핀 클릭 → 길찾기 팝업에 기준위치 카드 표시
+  kakao.maps.event.addListener(centerMarkerGlobal, 'click', function() {
+    var name = document.getElementById('targetName').textContent || '기준위치';
+    var addr = document.getElementById('targetAddr').textContent || '';
+    var card = document.getElementById('selectedCustomerCard');
+    var sccName = document.getElementById('sccName');
+    var sccTag  = document.getElementById('sccTag');
+    var sccDot  = document.getElementById('sccDot');
+    var sccDist = document.getElementById('sccDist');
+    if(!card) return;
+
+    // 기준위치용 임시 고객 객체 세팅
+    selectedPanelCustomer = {
+      name: name,
+      lat: String(centerLat),
+      lng: String(centerLng),
+      address: addr,
+      customerType: ''
+    };
+
+    if(sccName) sccName.textContent = name;
+    if(sccTag)  { sccTag.textContent = '기준위치'; sccTag.style.background='rgba(59,130,246,.15)'; sccTag.style.color='#60A5FA'; }
+    if(sccDot)  sccDot.style.background = '#3B82F6';
+    if(sccDist) sccDist.textContent = addr.length > 14 ? addr.slice(0,14)+'...' : addr;
+
+    card.style.display = '';
+
+    // 길찾기 팝업이 닫혀있으면 열기
+    var routePopup = document.getElementById('routePopup');
+    if(routePopup && routePopup.style.display === 'none') {
+      routePopup.style.display = 'flex';
+    }
   });
 
   // 반경 원
