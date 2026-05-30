@@ -310,13 +310,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <div class="route-popup" id="routePopup" style="display:none">
       <div class="route-popup-header" id="routePopupHeader">
         <div style="width:32px;height:3px;background:rgba(255,255,255,.2);border-radius:2px;margin:0 auto 6px;"></div>
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div style="display:flex;align-items:center;gap:7px;min-width:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">
             <span style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;">🗺️ 길찾기</span>
-            <span id="transitNotice" style="display:none;font-size:10px;color:#FCD34D;background:rgba(252,211,77,.1);border:1px solid rgba(252,211,77,.25);border-radius:5px;padding:2px 7px;white-space:nowrap;">🚌 대중교통 경유지 미적용</span>
+            <span id="transitNotice" style="display:none;font-size:10px;color:#FCD34D;background:rgba(252,211,77,.1);border:1px solid rgba(252,211,77,.25);border-radius:5px;padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🚌 경유지 미적용</span>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button type="button" class="rp-reset-btn" id="rpResetBtn">초기화</button>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <button type="button" class="rp-reset-btn" id="rpResetBtn" style="white-space:nowrap;">초기화</button>
             <button type="button" class="rp-popup-close" id="routePopupClose">✕</button>
           </div>
         </div>
@@ -500,9 +500,9 @@ function makeRouteAddrOverlay(pos, addrText, color) {
   var el = document.createElement('div');
   el.style.cssText = 'background:' + color + ';color:#fff;font-size:10px;font-weight:700;'
     + 'padding:2px 8px;border-radius:5px;white-space:nowrap;max-width:160px;overflow:hidden;'
-    + 'text-overflow:ellipsis;margin-bottom:2px;box-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none;';
+    + 'text-overflow:ellipsis;box-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none;';
   el.textContent = addrText;
-  return new kakao.maps.CustomOverlay({ position:pos, content:el, yAnchor:5.2, zIndex:5 });
+  return new kakao.maps.CustomOverlay({ position:pos, content:el, yAnchor:3.5, zIndex:5 });
 }
 
 function updateRoutePinAddr(type, pos, addrText) {
@@ -641,6 +641,13 @@ window.addEventListener('DOMContentLoaded', function() {
   try { target = JSON.parse(sessionStorage.getItem('nearbyTarget') || 'null'); } catch(e){}
   if(target) {
     isCustomerMode = true;
+    if(target.id) {
+      window._baseCustomerId = target.id;
+    } else if(target.name && target.lat) {
+      var matchedC = allCustomers.filter(function(a){ return a.name == target.name && String(a.lat) == String(parseFloat(target.lat).toFixed(4)).slice(0,7); })[0];
+      if(!matchedC) matchedC = allCustomers.filter(function(a){ return a.name == target.name; })[0];
+      if(matchedC) window._baseCustomerId = matchedC.id;
+    }
     document.getElementById('targetName').textContent = target.name || '—';
     document.getElementById('targetAddr').textContent = target.address || '주소를 입력해주세요';
     document.getElementById('addrInput').value        = target.address || '';
@@ -1527,6 +1534,23 @@ function drawNearby(lat, lng) {
   window._nearbyList = nearby;
   window._nearbyMarkers = nearbyMarkers;
 
+  // 기준 고객 마커 라벨 교체
+  if(window._baseCustomerId) {
+    nearby.forEach(function(item, idx) {
+      if(item.c.id === window._baseCustomerId) {
+        var nm = nearbyMarkers[idx];
+        if(nm && nm.labelEl) {
+          nm.labelEl.style.background = 'rgba(59,130,246,.9)';
+          nm.labelEl.style.border = '1px solid rgba(255,255,255,.4)';
+          nm.labelEl.innerHTML = '';
+          var bSpan = document.createElement('span');
+          bSpan.textContent = '📍 기준';
+          nm.labelEl.appendChild(bSpan);
+        }
+      }
+    });
+  }
+
   // 리스트 항목에 클릭 이벤트 직접 등록 (onclick 속성 의존 제거)
   nearby.forEach(function(item, idx){
     var el = document.getElementById('citem_'+idx);
@@ -2315,6 +2339,10 @@ function setAsBase() {
 
   // 팝업 닫기
   closePopup();
+
+  // 기준 고객 ID 기억 (drawNearby 후 마커 라벨 교체용)
+  window._baseCustomerId = c.id;
+  isCustomerMode = true;
 
   // 지도 이동 + 주변 재계산
   centerLat = parseFloat(c.lat);
