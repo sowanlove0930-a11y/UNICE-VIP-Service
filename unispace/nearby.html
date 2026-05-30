@@ -130,7 +130,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .scc-tag{font-size:9px;padding:1px 6px;border-radius:5px;font-weight:700;}
 .scc-dist{font-size:10px;color:var(--text2);}
 .scc-btns{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
-.scc-btn{padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;transition:all .2s;}
+.scc-btn{padding:8px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;font-family:'Noto Sans KR',sans-serif;transition:all .2s;}
 .scc-from{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);color:#60A5FA;}
 .scc-from:hover{background:rgba(59,130,246,.22);}
 .scc-to{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#F87171;}
@@ -387,16 +387,16 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
             <span class="scc-dist" id="sccDist"></span>
           </div>
           <div class="scc-btns">
-            <button type="button" class="scc-btn scc-from" id="sccFrom">🚩 출발지로</button>
-            <button type="button" class="scc-btn scc-via" id="sccVia">◈ 경유지로</button>
-            <button type="button" class="scc-btn scc-to" id="sccTo">🏁 도착지로</button>
+            <button type="button" class="scc-btn scc-from" id="sccFrom">출발지</button>
+            <button type="button" class="scc-btn scc-via" id="sccVia">경유지</button>
+            <button type="button" class="scc-btn scc-to" id="sccTo">도착지</button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 팝업 -->
-    <div class="map-popup" id="mapPopup">
+    <div class="map-popup" id="mapPopup" style="display:none">
       <div class="drag-handle" id="phead">
         <div class="drag-bar"></div>
         <div class="popup-inner-head">
@@ -1037,10 +1037,10 @@ function refreshNearbyOnly(lat, lng) {
     radius: radiusKm * 1000,
     strokeWeight: 2,
     strokeColor: '#60A5FA',
-    strokeOpacity: 0.9,
+    strokeOpacity: 1.0,
     strokeStyle: 'dashed',
     fillColor: '#3B82F6',
-    fillOpacity: 0.06
+    fillOpacity: 0.12
   });
   circle.setMap(kakaoMap);
   circles.push(circle);
@@ -1080,7 +1080,11 @@ function refreshNearbyOnly(lat, lng) {
     var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
     var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
     var tagText  = c.customerType||'고객';
-    listHtml += '<div class="ci" id="citem_'+idx+'"><div class="ctop"><span class="cn">'+c.name+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div></div>';
+    var evInfo = getUpcomingEvents(c);
+    var evDots = '';
+    if(evInfo.hasEvent) evDots += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E8C97A;margin-left:3px;vertical-align:middle;"></span>';
+    if(evInfo.hasCustom) evDots += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-left:2px;vertical-align:middle;"></span>';
+    listHtml += '<div class="ci" id="citem_'+idx+'"><div class="ctop"><span class="cn">'+c.name+evDots+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div></div>';
 
     var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
     var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
@@ -1261,10 +1265,10 @@ function drawNearby(lat, lng) {
     radius: radiusKm * 1000,
     strokeWeight: 2,
     strokeColor: '#60A5FA',
-    strokeOpacity: 0.9,
+    strokeOpacity: 1.0,
     strokeStyle: 'dashed',
     fillColor: '#3B82F6',
-    fillOpacity: 0.06
+    fillOpacity: 0.12
   });
   circle.setMap(kakaoMap);
   circles.push(circle);
@@ -1309,8 +1313,12 @@ function drawNearby(lat, lng) {
     var distStr = dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km';
     var tagClass = c.customerType==='계약'?'tc':c.customerType==='관리'?'tm':'tw';
     var tagText  = c.customerType||'고객';
+    var evInfo2 = getUpcomingEvents(c);
+    var evDots2 = '';
+    if(evInfo2.hasEvent) evDots2 += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E8C97A;margin-left:3px;vertical-align:middle;"></span>';
+    if(evInfo2.hasCustom) evDots2 += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-left:2px;vertical-align:middle;"></span>';
     listHtml += '<div class="ci" id="citem_'+idx+'" onclick="selectCustomer('+idx+')">'
-      +'<div class="ctop"><span class="cn">'+c.name+'</span><span class="cd">'+distStr+'</span></div>'
+      +'<div class="ctop"><span class="cn">'+c.name+evDots2+'</span><span class="cd">'+distStr+'</span></div>'
       +'<div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div>'
       +'</div>';
 
