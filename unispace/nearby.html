@@ -894,7 +894,7 @@ function injectDsRoleLabels() {
       pinNameDiv.textContent = shortAddr;
       pinLblEl.appendChild(pinBadge);
       pinLblEl.appendChild(pinNameDiv);
-      var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 2.6, zIndex: 7 });
+      var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 2.2, zIndex: 7 });
       pinLblOv.setMap(kakaoMap);
       dsRoleOverlays.push(pinLblOv);
       // 드래그 중 선 실시간 갱신
@@ -923,21 +923,8 @@ function injectDsRoleLabels() {
         });
       }); })(i, pinNameDiv, pinLblOv);
     } else {
-      // 일반 고객: labelEl은 숨긴 채, 역할+이름 복합 오버레이 생성
-      var custLbl = document.createElement('div');
-      custLbl.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:pointer;';
-      var custBadge = document.createElement('div');
-      custBadge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;pointer-events:none;';
-      custBadge.textContent = roleText;
-      var custName = document.createElement('div');
-      custName.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;pointer-events:none;';
-      custName.textContent = item.name;
-      custLbl.appendChild(custBadge);
-      custLbl.appendChild(custName);
-      (function(it){ custLbl.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); if(currentTab=='ds') addToDsQueue(it); }); })(item);
-      var custOv = new kakao.maps.CustomOverlay({ position: pos, content: custLbl, yAnchor: 2.6, zIndex: 7 });
-      custOv.setMap(kakaoMap);
-      dsRoleOverlays.push(custOv);
+      // 일반 고객: labelEl에 이미 역할 뱃지가 포함됨 (refreshNearbyOnly에서 처리)
+      // 추가 처리 불필요
     }
   });
 }
@@ -1133,13 +1120,8 @@ function applyNearbyMarkerOpacity() {
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
-    if(inQueue) {
-      if(nm.labelEl) nm.labelEl.style.display = 'none';
-      if(nm.marker) nm.marker.setOpacity(1.0);
-    } else {
-      if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '0.35'; }
-      if(nm.marker) nm.marker.setOpacity(0.35);
-    }
+    if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : 0.35);
+    if(nm.labelEl) nm.labelEl.style.opacity = inQueue ? '1' : '0.35';
   });
 }
 
@@ -2077,29 +2059,38 @@ function refreshNearbyOnly(lat, lng) {
     nearbyMarkers.push({ marker:marker, labelEl:null, pos:pos, color:color });
 
     var evInfo = getUpcomingEvents(c);
+    var queueIdx2 = currentTab == 'ds' ? dsQueue.findIndex(function(q){
+      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
+      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+    }) : -1;
     var labelEl = document.createElement('div');
-    labelEl.style.cssText = 'position:relative;display:inline-flex;align-items:center;gap:0;background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+    labelEl.style.cssText = 'position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:0;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+    if(queueIdx2 !== -1) {
+      var roleText2 = queueIdx2 == 0 ? '출발' : (queueIdx2 == dsQueue.length-1 && dsQueue.length > 1 ? '도착' : '경유' + queueIdx2);
+      var roleColor2 = queueIdx2 == 0 ? '#3B82F6' : (queueIdx2 == dsQueue.length-1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
+      var roleBadge2 = document.createElement('div');
+      roleBadge2.style.cssText = 'background:' + roleColor2 + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;pointer-events:none;';
+      roleBadge2.textContent = roleText2;
+      labelEl.appendChild(roleBadge2);
+    }
+    var nameBox = document.createElement('div');
+    nameBox.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;' + (queueIdx2 !== -1 ? 'opacity:1;' : '');
     var nameSpan = document.createElement('span'); nameSpan.textContent = c.name;
-    labelEl.appendChild(nameSpan);
+    nameBox.appendChild(nameSpan);
     if(evInfo.hasEvent || evInfo.hasCustom) {
       var dotWrap = document.createElement('div');
       dotWrap.style.cssText = 'display:inline-flex;gap:2px;margin-left:5px;align-items:center';
       if(evInfo.hasEvent){ var d1=document.createElement('div'); d1.style.cssText='width:7px;height:7px;border-radius:50%;background:#E8C97A;border:1px solid rgba(13,22,40,.8)'; dotWrap.appendChild(d1); }
       if(evInfo.hasCustom){ var d2=document.createElement('div'); d2.style.cssText='width:7px;height:7px;border-radius:50%;background:#A78BFA;border:1px solid rgba(13,22,40,.8)'; dotWrap.appendChild(d2); }
-      labelEl.appendChild(dotWrap);
+      nameBox.appendChild(dotWrap);
+    }
+    labelEl.appendChild(nameBox);
+    if(queueIdx2 === -1 && currentTab == 'ds') {
+      labelEl.style.opacity = '0.35';
     }
     (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
     var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:2.6, clickable:true, zIndex:1 });
-    var inQueueNow2 = currentTab == 'ds' && dsQueue.findIndex(function(q){
-      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
-      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
-    }) !== -1;
-    if(inQueueNow2) {
-      labelEl.style.display = 'none';
-      nameOverlay.setMap(kakaoMap);
-    } else {
-      nameOverlay.setMap(kakaoMap);
-    }
+    nameOverlay.setMap(kakaoMap);
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
     nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
     (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); }); })(c, dist, marker);
