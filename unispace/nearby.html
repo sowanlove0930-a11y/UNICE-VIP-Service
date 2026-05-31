@@ -329,8 +329,21 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     </div>
 
     <!-- 동선관리: 경로 미리보기 -->
-    <div class="ds-preview" id="dsPreview" style="display:none">
+    <div class="ds-preview" id="dsPreview" style="display:none;cursor:pointer;" title="클릭해 순서 편집">
       <span class="ds-hint" id="dsHintText">고객을 순서대로 클릭해 동선을 설정하세요</span>
+    </div>
+
+    <!-- 동선관리: 순서편집 시트 -->
+    <div id="dsEditSheet" style="display:none;position:absolute;left:0;right:0;bottom:0;background:#0D1628;border-top:2px solid rgba(232,201,122,.4);z-index:30;display:none;flex-direction:column;max-height:70%;">
+      <div style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+        <span style="font-size:11px;font-weight:700;color:#E8C97A;">✏️ 동선 순서 편집</span>
+        <button type="button" id="dsEditClose" style="font-size:9px;color:#8B98B8;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:3px 9px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">✕ 닫기</button>
+      </div>
+      <div id="dsEditList" style="flex:1;overflow-y:auto;"></div>
+      <div style="padding:7px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;flex-shrink:0;">
+        <button type="button" id="dsEditCancel" style="flex:1;padding:7px;border-radius:8px;font-size:10px;font-weight:800;background:rgba(255,255,255,.06);color:#8B98B8;border:1px solid rgba(255,255,255,.1);cursor:pointer;font-family:'Noto Sans KR',sans-serif;">취소</button>
+        <button type="button" id="dsEditApply" style="flex:1;padding:7px;border-radius:8px;font-size:10px;font-weight:800;background:linear-gradient(135deg,#E8C97A,#C9A84C);color:#080E1C;border:none;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">✓ 적용</button>
+      </div>
     </div>
 
     <!-- 오늘의 동선: 카드 -->
@@ -569,6 +582,73 @@ function switchTab(tab) {
   if(tab != 'today' && window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
 }
 
+function openDsEditSheet() {
+  window._dsEditTemp = dsQueue.slice();
+  var sheet = document.getElementById('dsEditSheet');
+  if(sheet) { sheet.style.display = 'flex'; }
+  renderDsEditList();
+}
+
+function closeDsEditSheet() {
+  window._dsEditTemp = null;
+  var sheet = document.getElementById('dsEditSheet');
+  if(sheet) sheet.style.display = 'none';
+}
+
+function renderDsEditList() {
+  var list = document.getElementById('dsEditList');
+  if(!list) return;
+  var q = window._dsEditTemp || dsQueue;
+  list.innerHTML = '';
+  q.forEach(function(item, i) {
+    var isFirst = i == 0;
+    var isLast = i == q.length - 1;
+    var seqCls = isFirst ? 'ds-f' : (isLast && q.length > 1 ? 'ds-t' : 'ds-v');
+    var seqColor = isFirst ? 'rgba(59,130,246,.25);color:#93C5FD' : (isLast && q.length > 1 ? 'rgba(239,68,68,.25);color:#FCA5A5' : 'rgba(167,139,250,.25);color:#C4B5FD');
+    var label = isFirst ? '출발' : (isLast && q.length > 1 ? '도착' : '경유');
+    if(i == 0 || (i > 0 && (i == 1 || (i == q.length - 1 && q.length > 2) || (i > 0 && i < q.length - 1)))) {
+      if(i == 0 || (i > 0 && q[i-1] && ((i == q.length-1) != (i-1 == q.length-1)))) {
+        var secLabel = document.createElement('div');
+        secLabel.style.cssText = 'font-size:9px;color:#8B98B8;padding:4px 12px 2px;border-top:1px solid rgba(255,255,255,.04);';
+        secLabel.textContent = i == 0 ? '출발지' : (i == q.length-1 && q.length > 1 ? '도착지' : '경유지');
+        list.appendChild(secLabel);
+      }
+    }
+    var row = document.createElement('div');
+    row.style.cssText = 'padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:8px;' + (i % 2 == 0 ? '' : 'background:rgba(255,255,255,.02);');
+    row.innerHTML = '<div style="width:20px;height:20px;border-radius:50%;background:' + seqColor + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">' + (i+1) + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + item.name + '</div>'
+      + '<div style="font-size:9px;color:#8B98B8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.address || '') + '</div>'
+      + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">'
+      + '<button type="button" data-action="up" data-idx="' + i + '" style="width:22px;height:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:3px;font-size:9px;color:#8B98B8;cursor:pointer;' + (isFirst ? 'opacity:.25;pointer-events:none;' : '') + '">▲</button>'
+      + '<button type="button" data-action="down" data-idx="' + i + '" style="width:22px;height:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:3px;font-size:9px;color:#8B98B8;cursor:pointer;' + (isLast ? 'opacity:.25;pointer-events:none;' : '') + '">▼</button>'
+      + '</div>'
+      + '<button type="button" data-action="del" data-idx="' + i + '" style="width:18px;height:18px;border-radius:4px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);font-size:9px;color:#F87171;cursor:pointer;flex-shrink:0;">✕</button>';
+    row.querySelectorAll('button').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var action = btn.dataset.action;
+        var idx = parseInt(btn.dataset.idx, 10);
+        var q2 = window._dsEditTemp;
+        if(action == 'up' && idx > 0) {
+          var tmp = q2[idx]; q2[idx] = q2[idx-1]; q2[idx-1] = tmp;
+        } else if(action == 'down' && idx < q2.length-1) {
+          var tmp2 = q2[idx]; q2[idx] = q2[idx+1]; q2[idx+1] = tmp2;
+        } else if(action == 'del') {
+          q2.splice(idx, 1);
+        }
+        renderDsEditList();
+      });
+    });
+    list.appendChild(row);
+  });
+  if(q.length == 0) {
+    list.innerHTML = '<div style="text-align:center;padding:20px;font-size:11px;color:#8B98B8;">동선이 비어있습니다</div>';
+  }
+}
+
 function renderDsPreview() {
   var el = document.getElementById('dsPreview');
   if(!el) return;
@@ -649,14 +729,10 @@ function renderDsPreview() {
 
     var hint = document.createElement('span');
     hint.className = 'ds-hint';
-    hint.textContent = '(재클릭: 제거 / 드래그: 순서변경)';
+    hint.style.cssText = 'margin-left:auto;color:rgba(232,201,122,.5);font-size:9px;white-space:nowrap;';
+    hint.textContent = dsQueue.length > 0 ? '✏️ 순서편집' : '재클릭: 제거';
     el.appendChild(hint);
   }
-
-  el.addEventListener('dragover', function(e){ e.preventDefault(); });
-  el.addEventListener('dragleave', function(e){
-    if(!el.contains(e.relatedTarget)) dropIndicator.style.display = 'none';
-  });
 
   buildChips();
 }
@@ -792,8 +868,9 @@ function makeRouteAddrOverlay(pos, addrText, color, yAnchorVal) {
 }
 
 function updateRoutePinAddr(type, pos, addrText) {
+  if(currentTab == 'ds') return;
   var color = type === 'from' ? '#3B82F6' : type === 'to' ? '#EF4444' : '#A78BFA';
-  var ya = currentTab == 'ds' ? 6.2 : 4.2;
+  var ya = 4.2;
   if(type === 'from') {
     if(routeFromOverlay) routeFromOverlay.setMap(null);
     routeFromOverlay = makeRouteAddrOverlay(pos, addrText, color, ya);
@@ -880,32 +957,31 @@ function attachRoutePinDsClick(marker, queueIdx) {
 function setRoutePin(type, pos, labelText) {
   var color = type === 'from' ? '#3B82F6' : type === 'to' ? '#EF4444' : '#A78BFA';
   var img = makeRoutePinImage(color, labelText);
+  var isDsTab = currentTab == 'ds';
   if(type === 'from') {
     if(routeFromMarker){ routeFromMarker.setMap(null); }
-    if(routeFromOverlay){ routeFromOverlay.setMap(null); }
+    if(routeFromOverlay){ routeFromOverlay.setMap(null); routeFromOverlay = null; }
     routeFromMarker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText });
-    routeFromOverlay = makeRouteAddrOverlay(pos, labelText, color);
-    routeFromOverlay.setMap(kakaoMap);
+    if(!isDsTab) { routeFromOverlay = makeRouteAddrOverlay(pos, labelText, color); routeFromOverlay.setMap(kakaoMap); }
     attachRoutePinDrag(routeFromMarker, type);
-    if(currentTab == 'ds') attachRoutePinDsClick(routeFromMarker, 0);
+    if(isDsTab) attachRoutePinDsClick(routeFromMarker, 0);
   } else if(type === 'to') {
     if(routeToMarker){ routeToMarker.setMap(null); }
-    if(routeToOverlay){ routeToOverlay.setMap(null); }
+    if(routeToOverlay){ routeToOverlay.setMap(null); routeToOverlay = null; }
     routeToMarker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText });
-    routeToOverlay = makeRouteAddrOverlay(pos, labelText, color);
-    routeToOverlay.setMap(kakaoMap);
+    if(!isDsTab) { routeToOverlay = makeRouteAddrOverlay(pos, labelText, color); routeToOverlay.setMap(kakaoMap); }
     attachRoutePinDrag(routeToMarker, type);
-    if(currentTab == 'ds') attachRoutePinDsClick(routeToMarker, dsQueue.length - 1);
+    if(isDsTab) attachRoutePinDsClick(routeToMarker, dsQueue.length - 1);
   } else if(type && type.indexOf('via_') === 0) {
     var vi = parseInt(type.split('_')[1], 10);
     if(routeViaMarkers[vi] && routeViaMarkers[vi].marker) routeViaMarkers[vi].marker.setMap(null);
     if(routeViaMarkers[vi] && routeViaMarkers[vi].overlay) routeViaMarkers[vi].overlay.setMap(null);
     var vm = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:img, draggable:true, title:labelText });
-    var vo = makeRouteAddrOverlay(pos, labelText, color);
-    vo.setMap(kakaoMap);
+    var vo = null;
+    if(!isDsTab) { vo = makeRouteAddrOverlay(pos, labelText, color); vo.setMap(kakaoMap); }
     routeViaMarkers[vi] = { marker:vm, overlay:vo };
     attachRoutePinDrag(vm, type);
-    if(currentTab == 'ds') attachRoutePinDsClick(vm, vi + 1);
+    if(isDsTab) attachRoutePinDsClick(vm, vi + 1);
   }
 }
 
@@ -1010,13 +1086,13 @@ function drawDsPolylines() {
       var midLng = (lng1 + lng2) / 2;
       var midPos = new kakao.maps.LatLng(midLat, midLng);
       var badgeEl = document.createElement('div');
-      badgeEl.style.cssText = 'width:26px;height:26px;border-radius:50%;background:#0D1628;border:2px solid #E8C97A;text-align:center;line-height:22px;font-size:13px;font-weight:900;color:#E8C97A;font-family:\'Noto Sans KR\',Arial,sans-serif;pointer-events:none;';
+      badgeEl.style.cssText = 'width:24px;height:24px;border-radius:50%;background:#0D1628;border:2px solid #E8C97A;text-align:center;line-height:20px;font-size:12px;font-weight:900;color:#E8C97A;font-family:\'Noto Sans KR\',Arial,sans-serif;pointer-events:none;';
       badgeEl.textContent = String(segIdx + 1);
       var badge = new kakao.maps.CustomOverlay({
         position: midPos,
         content: badgeEl,
         yAnchor: 0.5,
-        zIndex: 6
+        zIndex: 3
       });
       badge.setMap(kakaoMap);
       dsBadges.push(badge);
@@ -1353,6 +1429,30 @@ function loadKakaoScript(key) {
       if(tabNearby) tabNearby.addEventListener('click', function(){ switchTab('nearby'); });
       if(tabDs) tabDs.addEventListener('click', function(){ switchTab('ds'); });
       if(tabToday) tabToday.addEventListener('click', function(){ switchTab('today'); });
+
+      // 동선 미리보기 바 클릭 → 편집 시트 오픈
+      var dsPreviewEl = document.getElementById('dsPreview');
+      if(dsPreviewEl) dsPreviewEl.addEventListener('click', function(e) {
+        if(dsQueue.length == 0) return;
+        openDsEditSheet();
+      });
+
+      // 편집 시트 닫기/취소/적용
+      var dsEditClose = document.getElementById('dsEditClose');
+      var dsEditCancel = document.getElementById('dsEditCancel');
+      var dsEditApply = document.getElementById('dsEditApply');
+      if(dsEditClose) dsEditClose.addEventListener('click', closeDsEditSheet);
+      if(dsEditCancel) dsEditCancel.addEventListener('click', closeDsEditSheet);
+      if(dsEditApply) dsEditApply.addEventListener('click', function() {
+        dsQueue = window._dsEditTemp ? window._dsEditTemp.slice() : dsQueue;
+        window._dsEditTemp = null;
+        closeDsEditSheet();
+        syncDsQueueToRoute();
+        drawDsPolylines();
+        if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+        applyNearbyMarkerOpacity();
+        renderDsPreview();
+      });
 
       // 지도 클릭 → 선택 모드일 때 위치 설정
       kakao.maps.event.addListener(kakaoMap, 'click', function(mouseEvent) {
