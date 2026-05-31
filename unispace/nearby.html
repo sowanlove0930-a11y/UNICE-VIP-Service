@@ -819,12 +819,14 @@ function addToDsQueue(customer) {
     dsQueue.splice(idx, 1);
     syncDsQueueToRoute();
     if(window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+    else applyNearbyMarkerOpacity();
     renderDsEditList();
     return;
   }
   dsQueue.push({ id: customer.id, name: customer.name, lat: customer.lat, lng: customer.lng, address: customer.address || '' });
   syncDsQueueToRoute();
   if(window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+  else applyNearbyMarkerOpacity();
   renderDsEditList();
   setTimeout(function(){ flashHighlightInList(customer); }, 100);
 }
@@ -1078,21 +1080,18 @@ function applyNearbyMarkerOpacity() {
   if(!window._nearbyMarkers || !window._nearbyList) return;
   window._nearbyMarkers.forEach(function(nm, i) {
     var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
-    var inQueue = c && dsQueue.findIndex(function(q){
+    if(!c) return;
+    var inQueue = dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
-    if(inQueue) {
-      // 큐에 담긴 고객: 이름 라벨만 숨김 (역할 라벨이 위에 표시됨), 마커는 유지
-      if(nm.labelEl) nm.labelEl.style.display = 'none';
-      if(nm.overlay) nm.overlay.setMap(null);
-      if(nm.marker) { nm.marker.setMap(kakaoMap); nm.marker.setOpacity(1); }
-    } else {
-      // 미담긴 고객: 반투명 처리
-      if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '0.35'; }
-      if(nm.overlay) nm.overlay.setMap(kakaoMap);
-      if(nm.marker) { nm.marker.setMap(kakaoMap); nm.marker.setOpacity(0.35); }
+    var opacity = inQueue ? 1.0 : 0.35;
+    if(nm.labelEl) {
+      nm.labelEl.style.opacity = inQueue ? '1' : '0.35';
+      nm.labelEl.style.display = inQueue ? 'none' : '';
     }
+    if(nm.overlay) nm.overlay.setMap(inQueue ? null : kakaoMap);
+    if(nm.marker) { nm.marker.setMap(kakaoMap); nm.marker.setOpacity(opacity); }
   });
 }
 
@@ -2062,12 +2061,12 @@ function refreshNearbyOnly(lat, lng) {
   document.getElementById('clist').innerHTML = pinHtml + listHtml;
   window._nearbyList = nearby;
   window._nearbyMarkers = nearbyMarkers;
-  if(currentTab == 'ds') applyNearbyMarkerOpacity();
 
   nearby.forEach(function(item, idx){
     var el = document.getElementById('citem_'+idx);
     if(el){ el.style.cursor='pointer'; (function(i){ el.addEventListener('click', function(){ selectCustomer(i); }); })(idx); }
   });
+  if(currentTab == 'ds') applyNearbyMarkerOpacity();
 }
 
 // ── 주변 고객 표시 ───────────────────────────────────
