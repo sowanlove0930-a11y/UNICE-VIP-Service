@@ -1801,12 +1801,12 @@ function refreshNearbyOnly(lat, lng) {
       if(evInfo.hasCustom){ var d2=document.createElement('div'); d2.style.cssText='width:7px;height:7px;border-radius:50%;background:#A78BFA;border:1px solid rgba(13,22,40,.8)'; dotWrap.appendChild(d2); }
       labelEl.appendChild(dotWrap);
     }
-    (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
+    (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
     var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:3.0, clickable:true, zIndex:1 });
     nameOverlay.setMap(kakaoMap);
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
     nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
-    (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ showPopup(customer, distance); }); })(c, dist, marker);
+    (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); }); })(c, dist, marker);
   });
 
 
@@ -2096,7 +2096,10 @@ function drawNearby(lat, lng) {
     (function(customer, distance){
       function fire(e){
         if(e){ e.preventDefault(); e.stopPropagation(); }
-        console.log('[NEARBY] 라벨 클릭:', customer.name);
+        if(currentTab == 'ds') {
+          addToDsQueue(customer);
+          return;
+        }
         showPopup(customer, distance);
       }
       labelEl.addEventListener('click', fire);
@@ -2115,7 +2118,10 @@ function drawNearby(lat, lng) {
 
     (function(customer, distance, markerEl){
       kakao.maps.event.addListener(markerEl, 'click', function() {
-        console.log('[NEARBY] 마커 클릭:', customer.name);
+        if(currentTab == 'ds') {
+          addToDsQueue(customer);
+          return;
+        }
         showPopup(customer, distance);
       });
     })(c, dist, marker);
@@ -2919,7 +2925,25 @@ function findMyLocation() {
       myLabelEl.style.cssText = 'background:rgba(251,191,36,.9);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;color:#1a1a1a;white-space:nowrap;margin-bottom:2px;cursor:pointer';
       myLabelEl.textContent = '📍 내 위치';
       myLabelEl.addEventListener('click', function(){
-        // 내 위치를 출발지로 설정
+        if(currentTab == 'ds') {
+          var myId = 'MY_LOC_FIXED';
+          var existing = dsQueue.findIndex(function(q){ return q.id == myId; });
+          if(existing !== -1) {
+            dsQueue.splice(existing, 1);
+            syncDsQueueToRoute();
+            if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+            applyNearbyMarkerOpacity();
+            renderDsPreview();
+          } else {
+            var obj = { id: myId, name:'내 위치', lat:String(myLat), lng:String(myLng), address:'내 현재 위치' };
+            dsQueue.push(obj);
+            syncDsQueueToRoute();
+            if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+            applyNearbyMarkerOpacity();
+            renderDsPreview();
+          }
+          return;
+        }
         routeFrom = { id:'MY_LOCATION', name:'내 위치', lat:String(myLat), lng:String(myLng) };
         var bf = document.getElementById('btnFrom');
         if(bf) bf.className = 'route-btn btn-from active';
