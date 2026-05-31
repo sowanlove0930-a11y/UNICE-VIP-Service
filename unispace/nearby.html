@@ -867,17 +867,6 @@ function injectDsRoleLabels() {
   dsRoleOverlays = [];
   dsRoleMarkers.forEach(function(m){ m.setMap(null); });
   dsRoleMarkers = [];
-  // 모든 nearbyMarker labelEl에서 기존 역할 뱃지 제거
-  if(window._nearbyMarkers) {
-    window._nearbyMarkers.forEach(function(nm) {
-      if(nm.labelEl) {
-        var old = nm.labelEl.querySelector('.ds-role-badge');
-        if(old) old.remove();
-        nm.labelEl.style.flexDirection = '';
-        nm.labelEl.style.alignItems = '';
-      }
-    });
-  }
   if(!kakaoMap || currentTab != 'ds') return;
   dsQueue.forEach(function(item, i) {
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
@@ -932,29 +921,21 @@ function injectDsRoleLabels() {
         });
       }); })(i, pinNameDiv, pinLblOv);
     } else {
-      // 일반 고객: 기존 nearbyMarker labelEl에 역할 뱃지 주입
-      if(window._nearbyMarkers && window._nearbyList) {
-        window._nearbyList.forEach(function(ni, ni_idx) {
-          if(!ni || !ni.c) return;
-          var c = ni.c;
-          var match = (item.id && c.id) ? item.id == c.id : (item.name == c.name && String(item.lat).slice(0,7) == String(c.lat).slice(0,7));
-          if(!match) return;
-          var nm = window._nearbyMarkers[ni_idx];
-          if(!nm || !nm.labelEl) return;
-          // 기존 라벨 내용 앞에 역할 뱃지 삽입
-          var existing = nm.labelEl.querySelector('.ds-role-badge');
-          if(existing) existing.remove();
-          var badge = document.createElement('div');
-          badge.className = 'ds-role-badge';
-          badge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;text-align:center;pointer-events:none;';
-          badge.textContent = roleText;
-          nm.labelEl.style.flexDirection = 'column';
-          nm.labelEl.style.alignItems = 'center';
-          nm.labelEl.style.display = 'inline-flex';
-          nm.labelEl.insertBefore(badge, nm.labelEl.firstChild);
-          if(nm.marker) nm.marker.setOpacity(1.0);
-        });
-      }
+      // 일반 고객: labelEl은 숨긴 채, 역할+이름 복합 오버레이 생성
+      var custLbl = document.createElement('div');
+      custLbl.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:pointer;';
+      var custBadge = document.createElement('div');
+      custBadge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;pointer-events:none;';
+      custBadge.textContent = roleText;
+      var custName = document.createElement('div');
+      custName.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;pointer-events:none;';
+      custName.textContent = item.name;
+      custLbl.appendChild(custBadge);
+      custLbl.appendChild(custName);
+      (function(it){ custLbl.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); if(currentTab=='ds') addToDsQueue(it); }); })(item);
+      var custOv = new kakao.maps.CustomOverlay({ position: pos, content: custLbl, yAnchor: 2.6, zIndex: 7 });
+      custOv.setMap(kakaoMap);
+      dsRoleOverlays.push(custOv);
     }
   });
 }
@@ -1151,11 +1132,9 @@ function applyNearbyMarkerOpacity() {
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
     if(inQueue) {
-      // 큐에 담긴 고객: 이름 라벨 숨김(역할 라벨로 대체), 마커 선명
       if(nm.labelEl) nm.labelEl.style.display = 'none';
       if(nm.marker) nm.marker.setOpacity(1.0);
     } else {
-      // 미담긴 고객: 이름 라벨 + 마커 반투명
       if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '0.35'; }
       if(nm.marker) nm.marker.setOpacity(0.35);
     }
@@ -1165,14 +1144,7 @@ function applyNearbyMarkerOpacity() {
 function restoreNearbyMarkerOpacity() {
   if(!window._nearbyMarkers) return;
   window._nearbyMarkers.forEach(function(nm) {
-    if(nm.labelEl) {
-      nm.labelEl.style.display = '';
-      nm.labelEl.style.opacity = '1';
-      nm.labelEl.style.flexDirection = '';
-      nm.labelEl.style.alignItems = '';
-      var badge = nm.labelEl.querySelector('.ds-role-badge');
-      if(badge) badge.remove();
-    }
+    if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '1'; }
     if(nm.marker) nm.marker.setOpacity(1);
   });
 }
