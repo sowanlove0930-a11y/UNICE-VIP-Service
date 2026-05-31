@@ -524,6 +524,7 @@ var isCustomerMode = false;
 var currentTab = 'nearby'; // 'nearby' | 'ds' | 'today'
 var dsQueue = []; // 동선관리 큐: [{ name, lat, lng, id, address }, ...]
 var dsPolylines = []; // 동선 연결선
+var dsBadges = []; // 동선 구간 번호 배지
 
 function switchTab(tab) {
   currentTab = tab;
@@ -922,6 +923,8 @@ function restoreNearbyMarkerOpacity() {
 function clearDsPolylines() {
   dsPolylines.forEach(function(p){ p.setMap(null); });
   dsPolylines = [];
+  dsBadges.forEach(function(b){ b.setMap(null); });
+  dsBadges = [];
 }
 
 function drawDsPolylines() {
@@ -952,6 +955,23 @@ function drawDsPolylines() {
     });
     fgLine.setMap(kakaoMap);
     dsPolylines.push(fgLine);
+    // 선 중앙 원형 숫자 배지
+    (function(segIdx, lat1, lng1, lat2, lng2) {
+      var midLat = (lat1 + lat2) / 2;
+      var midLng = (lng1 + lng2) / 2;
+      var midPos = new kakao.maps.LatLng(midLat, midLng);
+      var badgeEl = document.createElement('div');
+      badgeEl.style.cssText = 'width:26px;height:26px;border-radius:50%;background:#0D1628;border:2px solid #E8C97A;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#E8C97A;font-family:\'Noto Sans KR\',Arial,sans-serif;pointer-events:none;';
+      badgeEl.textContent = String(segIdx + 1);
+      var badge = new kakao.maps.CustomOverlay({
+        position: midPos,
+        content: badgeEl,
+        yAnchor: 0.5,
+        zIndex: 6
+      });
+      badge.setMap(kakaoMap);
+      dsBadges.push(badge);
+    })(i, parseFloat(validItems[i].lat), parseFloat(validItems[i].lng), parseFloat(validItems[i+1].lat), parseFloat(validItems[i+1].lng));
   }
 }
 
@@ -2805,6 +2825,26 @@ function findMyLocation() {
 function closePopup() {
   var p = document.getElementById('mapPopup');
   if(p) p.style.display = 'none';
+  // 길찾기 패널 하단 선택 고객 카드 해제
+  var card = document.getElementById('selectedCustomerCard');
+  if(card) card.style.display = 'none';
+  selectedPanelCustomer = null;
+  selectedCustomerId = null;
+  // 리스트 하이라이트 해제
+  document.querySelectorAll('.ci').forEach(function(el){ el.classList.remove('sel'); });
+  // 마커 zIndex 원상복구
+  if(window._nearbyMarkers) {
+    window._nearbyMarkers.forEach(function(m){
+      if(m.labelEl) {
+        m.labelEl.style.background = 'rgba(13,22,40,.9)';
+        m.labelEl.style.border = '1px solid rgba(255,255,255,.16)';
+        m.labelEl.style.transform = 'scale(1)';
+        m.labelEl.style.zIndex = '';
+      }
+      if(m.overlay) m.overlay.setZIndex(1);
+      if(m.marker) m.marker.setZIndex(1);
+    });
+  }
 }
 
 function setAsBase() {
