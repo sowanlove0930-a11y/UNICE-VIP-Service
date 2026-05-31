@@ -291,7 +291,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <div class="mname" id="targetName">—</div>
         <div class="maddr" id="targetAddr">주소를 입력해주세요</div>
       </div>
-      <input type="text" class="addr-input" id="addrInput" placeholder="장소명 또는 주소 입력 (예: 해운대 스타벅스)">
+      <input type="text" class="addr-input" id="addrInput" placeholder="장소명, 주소 또는 고객명 입력">
       <!-- 검색 결과 목록 -->
       <div class="search-result-list" id="searchResultList" style="display:none">
         <div class="srl-header">
@@ -552,10 +552,13 @@ function switchTab(tab) {
     clearDsPolylines();
     restoreNearbyMarkerOpacity();
     panelFrom = null; panelTo = null; panelVia = [];
+    renderRoutePanel();
     var rp2 = document.getElementById('routePopup');
     if(rp2) rp2.style.display = 'none';
     var ob = document.getElementById('routeOpenBtn');
-    if(ob) ob.className = 'route-open-btn';
+    if(ob) { ob.className = 'route-open-btn'; ob.textContent = '🗺️ 길찾기 열기'; }
+    var tn2 = document.getElementById('transitNotice');
+    if(tn2) tn2.style.display = 'none';
   }
   var clistEl = document.getElementById('clist');
   var rcntEl = document.getElementById('resultCount');
@@ -1466,36 +1469,42 @@ function setRadius(km, el) {
 function searchAddr() {
   if(!kakaoMap) { alert('먼저 지도를 불러주세요'); return; }
   var addr = document.getElementById('addrInput').value.trim();
-  if(!addr) { alert('주소를 입력해주세요'); return; }
+  if(!addr) { alert('검색어를 입력해주세요'); return; }
 
   var list = document.getElementById('searchResultList');
   var items = document.getElementById('srlItems');
   var title = document.getElementById('srlTitle');
   if(!list || !items) return;
 
-  // 로딩 표시
   list.style.display = '';
-  items.innerHTML = '<div class="srl-loading"><div style="width:12px;height:12px;border-radius:50%;border:2px solid #60A5FA;border-top-color:transparent;animation:srl-spin .7s linear infinite;flex-shrink:0;"></div>카카오맵 검색 중...</div>';
+  items.innerHTML = '<div class="srl-loading"><div style="width:12px;height:12px;border-radius:50%;border:2px solid #60A5FA;border-top-color:transparent;animation:srl-spin .7s linear infinite;flex-shrink:0;"></div>검색 중...</div>';
   title.textContent = '"' + addr + '" 검색 중...';
+
+  // 고객 이름 매칭
+  var kw = addr.replace(/\s/g, '').toLowerCase();
+  var customers = [];
+  try { customers = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e){}
+  var matched = customers.filter(function(c) {
+    return c.name && c.name.replace(/\s/g,'').toLowerCase().indexOf(kw) !== -1;
+  });
 
   var places = new kakao.maps.services.Places();
   var searchLat = (centerLat && centerLat != 0) ? centerLat : 35.1796;
   var searchLng = (centerLng && centerLng != 0) ? centerLng : 129.0756;
   places.keywordSearch(addr, function(result, status) {
+    var placeResults = [];
     if(status === kakao.maps.services.Status.OK && result.length > 0) {
-      showSearchResults(result, addr);
+      placeResults = result;
+      showSearchResultsCombined(matched, placeResults, addr);
     } else {
-      // 주소 검색 fallback
       var geocoder = new kakao.maps.services.Geocoder();
       geocoder.addressSearch(addr, function(result2, status2) {
         if(status2 === kakao.maps.services.Status.OK && result2.length > 0) {
-          showSearchResults(result2.map(function(r){
+          placeResults = result2.map(function(r){
             return { place_name: r.address_name, address_name: r.address_name, road_address_name:'', category_name:'주소', x: r.x, y: r.y, phone:'' };
-          }), addr);
-        } else {
-          items.innerHTML = '<div class="srl-loading">😕 검색 결과가 없습니다</div>';
-          title.textContent = '"' + addr + '" 결과 없음';
+          });
         }
+        showSearchResultsCombined(matched, placeResults, addr);
       });
     }
   }, {
@@ -1504,14 +1513,114 @@ function searchAddr() {
   });
 }
 
-function showSearchResults(results, keyword) {
+function showSearchResultsCombined(customerMatches, placeResults, keyword) {
   var list = document.getElementById('searchResultList');
   var items = document.getElementById('srlItems');
   var title = document.getElementById('srlTitle');
   if(!list || !items) return;
 
-  title.textContent = '"' + keyword + '" 검색결과 ' + results.length + '건';
+  var total = customerMatches.length + placeResults.length;
+  title.textContent = '"' + keyword + '" 검색결과 ' + total + '건';
   items.innerHTML = '';
+
+  // 고객 섹션
+  var custSec = document.createElement('div');
+  custSec.style.cssText = 'font-size:10px;font-weight:700;color:#8B98B8;padding:5px 12px 3px;border-top:1px solid rgba(255,255,255,.05);letter-spacing:.3px;';
+  custSec.innerHTML = '👤 내 고객 <span style="background:rgba(52,211,153,.1);color:#34D399;border-radius:4px;padding:1px 5px;margin-left:3px;">' + customerMatches.length + '명</span>';
+  items.appendChild(custSec);
+
+  if(customerMatches.length == 0) {
+    var noC = document.createElement('div');
+    noC.style.cssText = 'text-align:center;padding:8px;font-size:10px;color:#8B98B8;';
+    noC.textContent = '일치하는 고객 없음';
+    items.appendChild(noC);
+  } else {
+    customerMatches.forEach(function(c) {
+      var item = document.createElement('div');
+      item.style.cssText = 'padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer;display:flex;align-items:center;gap:8px;';
+      item.addEventListener('mouseover', function(){ item.style.background='rgba(255,255,255,.04)'; });
+      item.addEventListener('mouseout', function(){ item.style.background=''; });
+      var tagClass = c.customerType=='계약' ? 'rgba(16,185,129,.12);color:#34D399' : c.customerType=='관리' ? 'rgba(139,92,246,.12);color:#A78BFA' : 'rgba(244,163,38,.12);color:#FCD34D';
+      var dist = '';
+      if(centerLat && centerLng && c.lat && c.lng) {
+        var dlat = (parseFloat(c.lat) - centerLat) * 111;
+        var dlng = (parseFloat(c.lng) - centerLng) * 111 * Math.cos(centerLat * Math.PI / 180);
+        var d = Math.sqrt(dlat*dlat + dlng*dlng);
+        dist = d < 1 ? Math.round(d*1000) + 'm' : d.toFixed(1) + 'km';
+      }
+      item.innerHTML = '<div style="width:28px;height:28px;border-radius:50%;background:rgba(139,92,246,.2);color:#A78BFA;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">' + (c.name ? c.name.charAt(0) : '?') + '</div>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:12px;font-weight:700;color:#F0F4FF;">' + c.name + ' <span style="font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700;background:' + tagClass + '">' + (c.customerType||'고객') + '</span></div>'
+        + '<div style="font-size:10px;color:#8B98B8;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (c.address||'주소 미등록') + '</div>'
+        + '</div>'
+        + (dist ? '<div style="font-size:10px;color:#60A5FA;flex-shrink:0;">' + dist + '</div>' : '');
+      item.addEventListener('click', function() {
+        if(c.lat && c.lng) {
+          // 좌표 있으면 바로 이동
+          centerLat = parseFloat(c.lat); centerLng = parseFloat(c.lng);
+          isCustomerMode = true;
+          window._baseCustomerId = c.id;
+          document.getElementById('targetName').textContent = c.name;
+          document.getElementById('targetAddr').textContent = c.address || '';
+          document.getElementById('headerSub') && (document.getElementById('headerSub').textContent = c.name + ' 주변 고객 찾기');
+          var ml = document.querySelector('.mlabel');
+          if(ml) ml.textContent = '📅 기준 고객';
+          document.getElementById('searchResultList').style.display = 'none';
+          document.getElementById('addrInput').value = '';
+          drawNearby(centerLat, centerLng);
+        } else if(c.address) {
+          // 주소 → 좌표 변환
+          var gc = new kakao.maps.services.Geocoder();
+          gc.addressSearch(c.address, function(r, s) {
+            if(s === kakao.maps.services.Status.OK && r.length > 0) {
+              centerLat = parseFloat(r[0].y); centerLng = parseFloat(r[0].x);
+              isCustomerMode = true;
+              window._baseCustomerId = c.id;
+              document.getElementById('targetName').textContent = c.name;
+              document.getElementById('targetAddr').textContent = c.address;
+              var ml2 = document.querySelector('.mlabel');
+              if(ml2) ml2.textContent = '📅 기준 고객';
+              document.getElementById('searchResultList').style.display = 'none';
+              document.getElementById('addrInput').value = '';
+              drawNearby(centerLat, centerLng);
+            } else {
+              alert(c.name + ' 고객의 주소를 지도에서 찾을 수 없습니다.');
+            }
+          });
+        } else {
+          alert(c.name + ' 고객의 주소 정보가 없습니다.');
+        }
+      });
+      items.appendChild(item);
+    });
+  }
+
+  // 장소 섹션
+  var placeSec = document.createElement('div');
+  placeSec.style.cssText = 'font-size:10px;font-weight:700;color:#8B98B8;padding:5px 12px 3px;border-top:1px solid rgba(255,255,255,.07);letter-spacing:.3px;';
+  placeSec.innerHTML = '🔍 장소 검색 <span style="background:rgba(255,193,68,.1);color:#FCD34D;border-radius:4px;padding:1px 5px;margin-left:3px;">카카오</span>';
+  items.appendChild(placeSec);
+
+  if(placeResults.length == 0) {
+    var noP = document.createElement('div');
+    noP.style.cssText = 'text-align:center;padding:8px;font-size:10px;color:#8B98B8;';
+    noP.textContent = '장소 검색 결과 없음';
+    items.appendChild(noP);
+  } else {
+    showSearchResults(placeResults, keyword, items);
+  }
+}
+
+function showSearchResults(results, keyword, containerEl) {
+  var list = document.getElementById('searchResultList');
+  var items = containerEl || document.getElementById('srlItems');
+  var title = document.getElementById('srlTitle');
+  if(!list || !items) return;
+
+  if(!containerEl) {
+    title.textContent = '"' + keyword + '" 검색결과 ' + results.length + '건';
+    items.innerHTML = '';
+  }
 
   // 검색어 포함된 항목 상단으로 정렬
   var kw = keyword.replace(/\s/g,'').toLowerCase();
