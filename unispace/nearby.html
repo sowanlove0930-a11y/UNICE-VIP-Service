@@ -328,14 +328,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <button type="button" class="ptab" id="tabToday">📅 오늘의 동선</button>
     </div>
 
-    <!-- 동선관리: 순서편집 시트 (항상 열림, 실시간 반영) -->
-    <div id="dsEditSheet" style="display:none;position:absolute;left:0;right:0;bottom:44px;background:#0D1628;border-top:2px solid rgba(232,201,122,.35);z-index:30;flex-direction:column;height:220px;">
-      <div style="padding:6px 12px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-        <span style="font-size:11px;font-weight:700;color:#E8C97A;">🗺️ 동선 순서</span>
-        <span id="dsEditCount" style="font-size:9px;color:#8B98B8;"></span>
-      </div>
-      <div id="dsEditList" style="flex:1;overflow-y:auto;"></div>
-    </div>
+    <!-- 동선관리: 순서편집은 지도 위 팝업으로 표시 -->
 
     <!-- 오늘의 동선: 카드 -->
     <div id="todayCard" style="display:none">
@@ -357,6 +350,15 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   <!-- 지도 -->
   <div class="map-wrap">
     <div id="kakaoMap"></div>
+
+    <!-- 동선 순서 팝업 -->
+    <div id="dsOrderPopup" style="display:none;position:absolute;top:12px;left:12px;background:rgba(13,22,40,.96);border:1px solid rgba(232,201,122,.3);border-radius:14px;width:250px;max-height:340px;z-index:9000;overflow:hidden;display:none;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.6);">
+      <div id="dsOrderPopupHeader" style="background:rgba(255,255,255,.04);padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12px;font-weight:700;color:#E8C97A;">🗺️ 동선 순서</span>
+        <span id="dsOrderCount" style="font-size:10px;color:#8B98B8;"></span>
+      </div>
+      <div id="dsOrderList" style="flex:1;overflow-y:auto;max-height:270px;"></div>
+    </div>
 
     <!-- 지도 선택 모드 배너 -->
     <div class="map-select-banner" id="mapSelectBanner" style="display:none">
@@ -576,33 +578,34 @@ function switchTab(tab) {
 }
 
 function openDsEditSheet() {
-  var sheet = document.getElementById('dsEditSheet');
-  if(sheet) { sheet.style.display = 'flex'; }
+  var popup = document.getElementById('dsOrderPopup');
+  if(popup) { popup.style.display = 'flex'; }
   renderDsEditList();
 }
 
 function closeDsEditSheet() {
-  var sheet = document.getElementById('dsEditSheet');
-  if(sheet) sheet.style.display = 'none';
+  var popup = document.getElementById('dsOrderPopup');
+  if(popup) popup.style.display = 'none';
 }
 
 function renderDsEditList() {
-  var list = document.getElementById('dsEditList');
-  var countEl = document.getElementById('dsEditCount');
+  var list = document.getElementById('dsOrderList');
+  var countEl = document.getElementById('dsOrderCount');
   if(!list) return;
-  if(countEl) countEl.textContent = dsQueue.length > 0 ? dsQueue.length + String.fromCharCode(44) + ' 재클릭: 제거' : '';
+  if(countEl) countEl.textContent = dsQueue.length > 0 ? dsQueue.length + '개' : '';
   list.innerHTML = '';
   if(dsQueue.length == 0) {
-    list.innerHTML = '<div style="text-align:center;padding:16px;font-size:11px;color:#8B98B8;">고객 또는 장소를 클릭해 동선을 추가하세요</div>';
+    list.innerHTML = '<div style="text-align:center;padding:16px;font-size:11px;color:#8B98B8;">고객을 클릭해 동선을 추가하세요</div>';
     return;
   }
   dsQueue.forEach(function(item, i) {
     var isFirst = i == 0;
     var isLast = i == dsQueue.length - 1 && dsQueue.length > 1;
-    var seqColor = isFirst ? 'rgba(59,130,246,.25);color:#93C5FD' : (isLast ? 'rgba(239,68,68,.25);color:#FCA5A5' : 'rgba(167,139,250,.25);color:#C4B5FD');
+    var seqBg = isFirst ? 'rgba(59,130,246,.25)' : (isLast ? 'rgba(239,68,68,.25)' : 'rgba(167,139,250,.25)');
+    var seqClr = isFirst ? '#93C5FD' : (isLast ? '#FCA5A5' : '#C4B5FD');
     var row = document.createElement('div');
     row.style.cssText = 'padding:6px 12px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:8px;';
-    row.innerHTML = '<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;text-align:center;line-height:20px;font-size:10px;font-weight:700;background:' + seqColor + '">' + (i+1) + '</div>'
+    row.innerHTML = '<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;text-align:center;line-height:20px;font-size:10px;font-weight:700;background:' + seqBg + ';color:' + seqClr + ';">' + (i+1) + '</div>'
       + '<div style="flex:1;min-width:0;">'
       + '<div style="font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + item.name + '</div>'
       + (item.address && item.address != item.name ? '<div style="font-size:9px;color:#8B98B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + item.address + '</div>' : '')
@@ -611,7 +614,7 @@ function renderDsEditList() {
       + '<button type="button" data-action="up" data-idx="' + i + '" style="width:22px;height:15px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:3px;font-size:8px;color:#8B98B8;cursor:pointer;' + (isFirst ? 'opacity:.2;pointer-events:none;' : '') + '">&#9650;</button>'
       + '<button type="button" data-action="down" data-idx="' + i + '" style="width:22px;height:15px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:3px;font-size:8px;color:#8B98B8;cursor:pointer;' + (i == dsQueue.length-1 ? 'opacity:.2;pointer-events:none;' : '') + '">&#9660;</button>'
       + '</div>'
-      + '<button type="button" data-action="del" data-idx="' + i + '" style="width:18px;height:18px;border-radius:4px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);font-size:9px;color:#F87171;cursor:pointer;flex-shrink:0;">X</button>';
+      + '<button type="button" data-action="del" data-idx="' + i + '" style="width:18px;height:18px;border-radius:4px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);font-size:9px;color:#F87171;cursor:pointer;flex-shrink:0;">&#10005;</button>';
     row.querySelectorAll('button').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -1435,29 +1438,19 @@ function loadKakaoScript(key) {
       if(tabDs) tabDs.addEventListener('click', function(){ switchTab('ds'); });
       if(tabToday) tabToday.addEventListener('click', function(){ switchTab('today'); });
 
-      // 동선 미리보기 바 클릭 → 편집 시트 오픈
-      var dsPreviewEl = document.getElementById('dsPreview');
-      if(dsPreviewEl) dsPreviewEl.addEventListener('click', function(e) {
-        if(dsQueue.length == 0) return;
-        openDsEditSheet();
-      });
-
-      // 편집 시트 닫기/취소/적용
-      var dsEditClose = document.getElementById('dsEditClose');
-      var dsEditCancel = document.getElementById('dsEditCancel');
-      var dsEditApply = document.getElementById('dsEditApply');
-      if(dsEditClose) dsEditClose.addEventListener('click', closeDsEditSheet);
-      if(dsEditCancel) dsEditCancel.addEventListener('click', closeDsEditSheet);
-      if(dsEditApply) dsEditApply.addEventListener('click', function() {
-        dsQueue = window._dsEditTemp ? window._dsEditTemp.slice() : dsQueue;
-        window._dsEditTemp = null;
-        closeDsEditSheet();
-        syncDsQueueToRoute();
-        drawDsPolylines();
-        if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
-        applyNearbyMarkerOpacity();
-        renderDsEditList();
-      });
+      // 동선 팝업 드래그
+      (function(){
+        var pop = document.getElementById('dsOrderPopup');
+        var hd = document.getElementById('dsOrderPopupHeader');
+        if(!pop || !hd) return;
+        var dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+        function ds(cx,cy){ dragging=true; sx=cx; sy=cy; ox=parseInt(pop.style.left||12)||12; oy=parseInt(pop.style.top||12)||12; pop.style.transition='none'; }
+        function dm(cx,cy){ if(!dragging)return; pop.style.left=(ox+(cx-sx))+'px'; pop.style.top=(oy+(cy-sy))+'px'; }
+        function du(){ dragging=false; pop.style.transition=''; }
+        hd.addEventListener('mousedown',function(e){ ds(e.clientX,e.clientY); });
+        document.addEventListener('mousemove',function(e){ dm(e.clientX,e.clientY); });
+        document.addEventListener('mouseup',du);
+      })();
 
       // 지도 클릭 → 선택 모드일 때 위치 설정
       kakao.maps.event.addListener(kakaoMap, 'click', function(mouseEvent) {
