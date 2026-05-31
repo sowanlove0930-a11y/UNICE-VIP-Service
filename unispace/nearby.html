@@ -352,10 +352,16 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <div id="kakaoMap"></div>
 
     <!-- 동선 순서 팝업 -->
-    <div id="dsOrderPopup" style="display:none;position:absolute;top:12px;left:12px;background:rgba(13,22,40,.96);border:1px solid rgba(232,201,122,.3);border-radius:14px;width:250px;max-height:340px;z-index:9000;overflow:hidden;display:none;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.6);">
-      <div id="dsOrderPopupHeader" style="background:rgba(255,255,255,.04);padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-size:12px;font-weight:700;color:#E8C97A;">🗺️ 동선 순서</span>
-        <span id="dsOrderCount" style="font-size:10px;color:#8B98B8;"></span>
+    <div id="dsOrderPopup" style="display:none;position:absolute;top:12px;left:12px;background:rgba(13,22,40,.96);border:1px solid rgba(232,201,122,.3);border-radius:14px;width:250px;max-height:340px;z-index:9000;overflow:hidden;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.6);">
+      <div id="dsOrderPopupHeader" style="background:rgba(255,255,255,.04);padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:grab;user-select:none;">
+        <div style="width:32px;height:3px;background:rgba(255,255,255,.2);border-radius:2px;margin:0 auto 7px;"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:12px;font-weight:700;color:#E8C97A;">🗺️ 동선 순서</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="dsOrderCount" style="font-size:10px;color:#8B98B8;"></span>
+            <button type="button" id="dsOrderReset" style="font-size:9px;color:#8B98B8;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:2px 7px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">초기화</button>
+          </div>
+        </div>
       </div>
       <div id="dsOrderList" style="flex:1;overflow-y:auto;max-height:270px;"></div>
     </div>
@@ -769,7 +775,7 @@ function applyTodayToRoute(acts) {
     if(c && c.lat && c.lng) {
       var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
       var type = i == 0 ? 'from' : (i == acts.length - 1 ? 'to' : 'via_' + (i-1));
-      var label = i == 0 ? '출발' : (i == acts.length - 1 ? '도착' : '경유' + i);
+      var label = String(i+1) + ' ' + a.customerName;
       setRoutePin(type, pos, label);
       updateRoutePinAddr(type, pos, obj.address || obj.name);
     }
@@ -829,7 +835,7 @@ function syncDsQueueToRoute() {
     else panelVia.push(obj);
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
     var type = i == 0 ? 'from' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? 'to' : 'via_' + (panelVia.length - 1));
-    var label = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + (panelVia.length));
+    var label = currentTab == 'ds' ? (String(i+1) + ' ' + item.name) : (i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + (panelVia.length)));
     setRoutePin(type, pos, label);
     updateRoutePinAddr(type, pos, item.address || item.name);
   });
@@ -1438,10 +1444,24 @@ function loadKakaoScript(key) {
       if(tabDs) tabDs.addEventListener('click', function(){ switchTab('ds'); });
       if(tabToday) tabToday.addEventListener('click', function(){ switchTab('today'); });
 
-      // 동선 팝업 드래그
+      // 동선 팝업 드래그 + 초기화 버튼
       (function(){
         var pop = document.getElementById('dsOrderPopup');
         var hd = document.getElementById('dsOrderPopupHeader');
+        var resetBtn = document.getElementById('dsOrderReset');
+        if(resetBtn) resetBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          dsQueue = [];
+          clearAllRoutePins();
+          clearDsPolylines();
+          restoreNearbyMarkerOpacity();
+          panelFrom = null; panelTo = null; panelVia = [];
+          renderRoutePanel();
+          renderDsEditList();
+          if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+          var ob = document.getElementById('routeOpenBtn');
+          if(ob) ob.className = 'route-open-btn';
+        });
         if(!pop || !hd) return;
         var dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
         function ds(cx,cy){ dragging=true; sx=cx; sy=cy; ox=parseInt(pop.style.left||12)||12; oy=parseInt(pop.style.top||12)||12; pop.style.transition='none'; }
