@@ -2365,11 +2365,25 @@ function drawNearby(lat, lng) {
 
     // 이름 오버레이 (클릭 가능 - 큰 클릭 영역)
     var evInfo = getUpcomingEvents(c);
+    var queueIdxDn = currentTab == 'ds' ? dsQueue.findIndex(function(q){
+      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
+      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+    }) : -1;
     var labelEl = document.createElement('div');
-    labelEl.style.cssText = 'position:relative;display:inline-flex;align-items:center;gap:0;background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+    labelEl.style.cssText = 'position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:0;white-space:nowrap;margin-bottom:2px;cursor:pointer';
+    if(queueIdxDn !== -1) {
+      var roleTextDn = queueIdxDn == 0 ? '출발' : (queueIdxDn == dsQueue.length-1 && dsQueue.length > 1 ? '도착' : '경유' + queueIdxDn);
+      var roleColorDn = queueIdxDn == 0 ? '#3B82F6' : (queueIdxDn == dsQueue.length-1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
+      var roleBadgeDn = document.createElement('div');
+      roleBadgeDn.style.cssText = 'background:' + roleColorDn + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;pointer-events:none;';
+      roleBadgeDn.textContent = roleTextDn;
+      labelEl.appendChild(roleBadgeDn);
+    }
+    var nameBoxDn = document.createElement('div');
+    nameBoxDn.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;';
     var nameSpan = document.createElement('span');
     nameSpan.textContent = c.name;
-    labelEl.appendChild(nameSpan);
+    nameBoxDn.appendChild(nameSpan);
     if(evInfo.hasEvent || evInfo.hasCustom) {
       var dotWrap = document.createElement('div');
       dotWrap.style.cssText = 'display:inline-flex;gap:2px;margin-left:5px;align-items:center';
@@ -2383,8 +2397,10 @@ function drawNearby(lat, lng) {
         d2.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#A78BFA;border:1px solid rgba(13,22,40,.8)';
         dotWrap.appendChild(d2);
       }
-      labelEl.appendChild(dotWrap);
+      nameBoxDn.appendChild(dotWrap);
     }
+    labelEl.appendChild(nameBoxDn);
+    if(queueIdxDn === -1 && currentTab == 'ds') labelEl.style.opacity = '0.35';
     (function(customer, distance){
       function fire(e){
         if(e){ e.preventDefault(); e.stopPropagation(); }
