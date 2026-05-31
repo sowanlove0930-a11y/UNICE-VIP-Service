@@ -850,34 +850,43 @@ function syncDsQueueToRoute() {
       var roleColor = i == 0 ? '#3B82F6' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
       var isPinType = item.id && (String(item.id).indexOf('DS_PIN_') === 0 || String(item.id).indexOf('MY_LOC_') === 0 || item.id === 'MY_LOC_FIXED');
       if(isPinType) {
-        // 임의좌표/내위치: 직접 마커 + 이름 라벨 생성
         var pinSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="' + roleColor + '"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/></svg>';
         var pinImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(pinSvg))), new kakao.maps.Size(28, 36));
         var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name });
         dsRoleMarkers.push(pinMarker);
-        // 이름 라벨
-        var nameEl2 = document.createElement('div');
-        nameEl2.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;pointer-events:none;';
-        nameEl2.textContent = item.name;
-        var nameOverlay2 = new kakao.maps.CustomOverlay({ position: pos, content: nameEl2, yAnchor: 2.6, zIndex: 2 });
-        nameOverlay2.setMap(kakaoMap);
-        dsRoleMarkers.push(nameOverlay2);
-        // 클릭으로 큐 제거
-        (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); drawDsPolylines(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); applyNearbyMarkerOpacity(); renderDsEditList(); } }); })(i);
+        var pinLabelEl = document.createElement('div');
+        pinLabelEl.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;';
+        pinLabelEl.innerHTML = '<div style="background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:1px;">' + roleText + '</div>'
+          + '<div style="background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;">' + item.name + '</div>';
+        var pinLabelOverlay = new kakao.maps.CustomOverlay({ position: pos, content: pinLabelEl, yAnchor: 2.9, zIndex: 7 });
+        pinLabelOverlay.setMap(kakaoMap);
+        dsRoleMarkers.push(pinLabelOverlay);
+        (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); drawDsPolylines(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); renderDsEditList(); } }); })(i);
+      } else {
+        // 일반 고객: _nearbyMarkers에서 찾아 labelEl에 역할 뱃지 주입
+        if(window._nearbyMarkers && window._nearbyList) {
+          window._nearbyList.forEach(function(ni, ni_idx) {
+            if(!ni || !ni.c) return;
+            var c = ni.c;
+            var match = (item.id && c.id) ? item.id == c.id : (item.name == c.name && String(item.lat).slice(0,7) == String(c.lat).slice(0,7));
+            if(!match) return;
+            var nm = window._nearbyMarkers[ni_idx];
+            if(!nm || !nm.labelEl) return;
+            // 기존 라벨 숨기고 역할+이름 라벨로 교체
+            nm.labelEl.style.display = 'none';
+            nm.marker.setOpacity(1.0);
+            // 역할+이름 복합 라벨 생성
+            var roleEl = document.createElement('div');
+            roleEl.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:pointer;';
+            roleEl.innerHTML = '<div style="background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:1px;pointer-events:none;">' + roleText + '</div>'
+              + '<div style="background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;pointer-events:none;">' + item.name + '</div>';
+            (function(customer){ roleEl.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); if(currentTab=='ds'){ addToDsQueue(customer); } }); })(c);
+            var roleOverlay = new kakao.maps.CustomOverlay({ position: pos, content: roleEl, yAnchor: 2.9, zIndex: 7 });
+            roleOverlay.setMap(kakaoMap);
+            dsRoleOverlays.push(roleOverlay);
+          });
+        }
       }
-      // 역할 라벨 — isPinType이면 nameEl 위(yAnchor 3.9), 고객이면 이름 라벨 위(yAnchor 3.9)
-      var roleEl = document.createElement('div');
-      roleEl.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:4px;white-space:nowrap;pointer-events:none;margin-bottom:2px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.5);letter-spacing:.3px;';
-      roleEl.textContent = roleText;
-      var roleOverlay = new kakao.maps.CustomOverlay({
-        position: pos,
-        content: roleEl,
-        yAnchor: 3.9,
-        zIndex: 7
-      });
-      roleOverlay.setMap(kakaoMap);
-      dsRoleOverlays.push(roleOverlay);
-      attachRoutePinDsClick2(pos, i);
     } else {
       var label = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + (panelVia.length));
       setRoutePin(type, pos, label);
@@ -1085,12 +1094,10 @@ function applyNearbyMarkerOpacity() {
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
-    // overlay는 setMap 조작하지 않고 labelEl DOM만 제어
-    if(nm.labelEl) {
-      nm.labelEl.style.display = inQueue ? 'none' : '';
-      nm.labelEl.style.opacity = inQueue ? '1' : '0.35';
+    if(!inQueue) {
+      if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '0.35'; }
+      if(nm.marker) nm.marker.setOpacity(0.35);
     }
-    if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : 0.35);
   });
 }
 
