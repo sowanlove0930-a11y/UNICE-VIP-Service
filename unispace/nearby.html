@@ -539,6 +539,7 @@ var currentTab = 'nearby'; // 'nearby' | 'ds' | 'today'
 var dsQueue = []; // 동선관리 큐: [{ name, lat, lng, id, address }, ...]
 var dsPolylines = []; // 동선 연결선
 var dsBadges = []; // 동선 구간 번호 배지
+var dsRoleOverlays = []; // 동선 역할 라벨 오버레이 (출발/경유/도착)
 
 function switchTab(tab) {
   currentTab = tab;
@@ -566,6 +567,8 @@ function switchTab(tab) {
     closeDsEditSheet();
     clearAllRoutePins();
     clearDsPolylines();
+    dsRoleOverlays.forEach(function(o){ o.setMap(null); });
+    dsRoleOverlays = [];
     restoreNearbyMarkerOpacity();
     panelFrom = null; panelTo = null; panelVia = [];
     renderRoutePanel();
@@ -828,6 +831,8 @@ function addToDsQueue(customer) {
 function syncDsQueueToRoute() {
   panelFrom = null; panelTo = null; panelVia = [];
   clearAllRoutePins();
+  dsRoleOverlays.forEach(function(o){ o.setMap(null); });
+  dsRoleOverlays = [];
   dsQueue.forEach(function(item, i) {
     var obj = { name: item.name, lat: item.lat, lng: item.lng, address: item.address };
     if(i == 0) panelFrom = obj;
@@ -835,14 +840,37 @@ function syncDsQueueToRoute() {
     else panelVia.push(obj);
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
     var type = i == 0 ? 'from' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? 'to' : 'via_' + (panelVia.length - 1));
-    var label = currentTab == 'ds' ? (String(i+1) + ' ' + item.name) : (i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + (panelVia.length)));
-    setRoutePin(type, pos, label);
-    updateRoutePinAddr(type, pos, item.address || item.name);
+    if(currentTab == 'ds') {
+      // 동선관리 탭: 번호핀 없이 역할 라벨 오버레이만 생성
+      var roleText = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + panelVia.length);
+      var roleColor = i == 0 ? '#3B82F6' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
+      var roleEl = document.createElement('div');
+      roleEl.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;margin-bottom:1px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4);';
+      roleEl.textContent = roleText;
+      var roleOverlay = new kakao.maps.CustomOverlay({
+        position: pos,
+        content: roleEl,
+        yAnchor: 4.6,
+        zIndex: 7
+      });
+      roleOverlay.setMap(kakaoMap);
+      dsRoleOverlays.push(roleOverlay);
+      // 길찾기 패널용 핀은 등록 (지도에는 표시 안 함 - setMap 없이)
+      attachRoutePinDsClick2(pos, i);
+    } else {
+      var label = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + (panelVia.length));
+      setRoutePin(type, pos, label);
+      updateRoutePinAddr(type, pos, item.address || item.name);
+    }
   });
   renderRoutePanel();
   var ob = document.getElementById('routeOpenBtn');
   if(ob) ob.className = 'route-open-btn' + (dsQueue.length > 1 ? ' has-route' : '');
   drawDsPolylines();
+}
+
+function attachRoutePinDsClick2(pos, queueIdx) {
+  // 역할 라벨 클릭으로 큐 제거 — 근처 고객 마커 클릭으로 처리
 }
 
 // ── 길찾기 핀 헬퍼 ──────────────────────────────────
@@ -1064,6 +1092,8 @@ function clearDsPolylines() {
   dsPolylines = [];
   dsBadges.forEach(function(b){ b.setMap(null); });
   dsBadges = [];
+  dsRoleOverlays.forEach(function(o){ o.setMap(null); });
+  dsRoleOverlays = [];
 }
 
 function drawDsPolylines() {
@@ -1863,6 +1893,17 @@ function showSearchResults(results, keyword, containerEl) {
 })();
 
 // ── 고객 마커+반경만 재계산 (기준 핀 유지) ──────────────
+function getTodayMeeting(customerName) {
+  var acts = {};
+  try { acts = JSON.parse(localStorage.getItem('unispace_activities') || '{}'); } catch(e){}
+  var today = new Date().toISOString().slice(0,10);
+  var fpId = window._myFpId || '';
+  var match = Object.values(acts).filter(function(a) {
+    return a.date == today && a.customerName == customerName && (!fpId || a.fpId == fpId);
+  }).sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); })[0];
+  return match || null;
+}
+
 function refreshNearbyOnly(lat, lng) {
   // 고객 마커만 제거 (index 1 이후: 0은 기준마커)
   // 실제론 markers[0]이 기준 마커 — nearbyMarkers만 지우기
@@ -1944,7 +1985,10 @@ function refreshNearbyOnly(lat, lng) {
         seqHtml2 = '<div class="ds-seq ' + seqCls2 + '">' + (dsIdx2+1) + '</div>';
       }
     }
-    listHtml += '<div class="ci" id="citem_'+idx+'" style="display:flex;align-items:center;"><div style="flex:1;min-width:0;"><div class="ctop"><span class="cn">'+c.name+evDots+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div></div>'+seqHtml2+'</div>';
+    var mtg = getTodayMeeting(c.name);
+    var mtgHtml = mtg ? '<div style="margin-top:3px;display:flex;align-items:center;gap:5px;padding-left:1px"><span style="font-size:10px;color:#E8C97A;font-weight:700;">📅 오늘 ' + (mtg.time||'') + '</span>' + (mtg.place ? '<span style="font-size:9px;color:#8B98B8;">' + mtg.place + '</span>' : '') + '</div>' : '';
+    var borderStyle = mtg ? 'border-left:3px solid rgba(232,201,122,.6);padding-left:9px;' : '';
+    listHtml += '<div class="ci" id="citem_'+idx+'" style="display:flex;align-items:center;' + borderStyle + '"><div style="flex:1;min-width:0;"><div class="ctop"><span class="cn">'+c.name+evDots+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div>' + mtgHtml + '</div>'+seqHtml2+'</div>';
 
     var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
     var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
@@ -1969,7 +2013,7 @@ function refreshNearbyOnly(lat, lng) {
       labelEl.appendChild(dotWrap);
     }
     (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
-    var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:3.5, clickable:true, zIndex:1 });
+    var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:2.6, clickable:true, zIndex:1 });
     nameOverlay.setMap(kakaoMap);
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
     nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
@@ -2215,10 +2259,14 @@ function drawNearby(lat, lng) {
         seqHtml = '<div class="ds-seq ' + seqCls + '">' + (dsIdx+1) + '</div>';
       }
     }
-    listHtml += '<div class="ci" id="citem_'+idx+'" style="display:flex;align-items:center;">'
+    var mtg2 = getTodayMeeting(c.name);
+    var mtgHtml2 = mtg2 ? '<div style="margin-top:3px;display:flex;align-items:center;gap:5px;padding-left:1px"><span style="font-size:10px;color:#E8C97A;font-weight:700;">📅 오늘 ' + (mtg2.time||'') + '</span>' + (mtg2.place ? '<span style="font-size:9px;color:#8B98B8;">' + mtg2.place + '</span>' : '') + '</div>' : '';
+    var borderStyle2 = mtg2 ? 'border-left:3px solid rgba(232,201,122,.6);padding-left:9px;' : '';
+    listHtml += '<div class="ci" id="citem_'+idx+'" style="display:flex;align-items:center;' + borderStyle2 + '">'
       +'<div style="flex:1;min-width:0;">'
       +'<div class="ctop"><span class="cn">'+c.name+evDots2+'</span><span class="cd">'+distStr+'</span></div>'
       +'<div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div>'
+      + mtgHtml2
       +'</div>'
       + seqHtml
       +'</div>';
@@ -2275,7 +2323,7 @@ function drawNearby(lat, lng) {
     var nameOverlay = new kakao.maps.CustomOverlay({
       position: pos,
       content: labelEl,
-      yAnchor: 3.5,
+      yAnchor: 2.6,
       clickable: true,
       zIndex: 1
     });
