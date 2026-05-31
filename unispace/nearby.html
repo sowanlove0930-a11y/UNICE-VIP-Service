@@ -899,15 +899,16 @@ function applyNearbyMarkerOpacity() {
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
-    var opacity = inQueue ? 1.0 : 0.35;
-    if(nm.labelEl) nm.labelEl.style.opacity = String(opacity);
-    if(nm.marker) {
-      var img = nm.marker.getImage();
-      if(img) {
-        var canvas = document.createElement('canvas');
-        canvas.width = 1; canvas.height = 1;
-      }
-      nm.marker.setOpacity(opacity);
+    if(inQueue) {
+      // 큐에 담긴 고객: 기존 라벨/마커 숨김 (번호핀으로 대체됨)
+      if(nm.labelEl) nm.labelEl.style.display = 'none';
+      if(nm.overlay) nm.overlay.setMap(null);
+      if(nm.marker) nm.marker.setMap(null);
+    } else {
+      // 미담긴 고객: 반투명 처리
+      if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '0.35'; }
+      if(nm.overlay) nm.overlay.setMap(kakaoMap);
+      if(nm.marker) { nm.marker.setMap(kakaoMap); nm.marker.setOpacity(0.35); }
     }
   });
 }
@@ -915,8 +916,9 @@ function applyNearbyMarkerOpacity() {
 function restoreNearbyMarkerOpacity() {
   if(!window._nearbyMarkers) return;
   window._nearbyMarkers.forEach(function(nm) {
-    if(nm.labelEl) nm.labelEl.style.opacity = '1';
-    if(nm.marker) nm.marker.setOpacity(1);
+    if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '1'; }
+    if(nm.overlay) nm.overlay.setMap(kakaoMap);
+    if(nm.marker) { nm.marker.setMap(kakaoMap); nm.marker.setOpacity(1); }
   });
 }
 
