@@ -540,6 +540,7 @@ var dsQueue = []; // 동선관리 큐: [{ name, lat, lng, id, address }, ...]
 var dsPolylines = []; // 동선 연결선
 var dsBadges = []; // 동선 구간 번호 배지
 var dsRoleOverlays = []; // 동선 역할 라벨 오버레이 (출발/경유/도착)
+var dsRoleMarkers = []; // 동선 임의좌표/내위치 마커
 
 function switchTab(tab) {
   currentTab = tab;
@@ -841,21 +842,37 @@ function syncDsQueueToRoute() {
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
     var type = i == 0 ? 'from' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? 'to' : 'via_' + (panelVia.length - 1));
     if(currentTab == 'ds') {
-      // 동선관리 탭: 번호핀 없이 역할 라벨 오버레이만 생성
       var roleText = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + panelVia.length);
       var roleColor = i == 0 ? '#3B82F6' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
+      var isPinType = item.id && (String(item.id).indexOf('DS_PIN_') === 0 || String(item.id).indexOf('MY_LOC_') === 0 || item.id === 'MY_LOC_FIXED');
+      if(isPinType) {
+        // 임의좌표/내위치: 직접 마커 + 이름 라벨 생성
+        var pinSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="' + roleColor + '"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/></svg>';
+        var pinImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(pinSvg))), new kakao.maps.Size(28, 36));
+        var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name });
+        dsRoleMarkers.push(pinMarker);
+        // 이름 라벨
+        var nameEl2 = document.createElement('div');
+        nameEl2.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;margin-bottom:2px;pointer-events:none;';
+        nameEl2.textContent = item.name;
+        var nameOverlay2 = new kakao.maps.CustomOverlay({ position: pos, content: nameEl2, yAnchor: 2.6, zIndex: 2 });
+        nameOverlay2.setMap(kakaoMap);
+        dsRoleMarkers.push(nameOverlay2);
+        // 클릭으로 큐 제거
+        (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); drawDsPolylines(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); applyNearbyMarkerOpacity(); renderDsEditList(); } }); })(i);
+      }
+      // 역할 라벨 — isPinType이면 nameEl 위(yAnchor 3.9), 고객이면 이름 라벨 위(yAnchor 3.9)
       var roleEl = document.createElement('div');
-      roleEl.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;margin-bottom:1px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4);';
+      roleEl.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:4px;white-space:nowrap;pointer-events:none;margin-bottom:2px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.5);letter-spacing:.3px;';
       roleEl.textContent = roleText;
       var roleOverlay = new kakao.maps.CustomOverlay({
         position: pos,
         content: roleEl,
-        yAnchor: 4.6,
+        yAnchor: 3.9,
         zIndex: 7
       });
       roleOverlay.setMap(kakaoMap);
       dsRoleOverlays.push(roleOverlay);
-      // 길찾기 패널용 핀은 등록 (지도에는 표시 안 함 - setMap 없이)
       attachRoutePinDsClick2(pos, i);
     } else {
       var label = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + (panelVia.length));
@@ -1093,6 +1110,8 @@ function clearDsPolylines() {
   dsBadges = [];
   dsRoleOverlays.forEach(function(o){ o.setMap(null); });
   dsRoleOverlays = [];
+  dsRoleMarkers.forEach(function(m){ m.setMap(null); });
+  dsRoleMarkers = [];
 }
 
 function drawDsPolylines() {
