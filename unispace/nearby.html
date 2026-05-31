@@ -874,20 +874,28 @@ function injectDsRoleLabels() {
     var roleColor = i == 0 ? '#3B82F6' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
     var isPinType = item.id && (String(item.id).indexOf('DS_PIN_') === 0 || String(item.id).indexOf('MY_LOC_') === 0 || item.id === 'MY_LOC_FIXED');
     if(isPinType) {
-      // 임의좌표/내위치: 마커 생성
+      // 임의좌표/내위치: 고객과 동일한 물방울 마커 (역할 색상)
       var pinSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="' + roleColor + '"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/></svg>';
       var pinImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(pinSvg))), new kakao.maps.Size(28, 36));
       var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name });
       dsRoleMarkers.push(pinMarker);
       (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); drawDsPolylines(); injectDsRoleLabels(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); renderDsEditList(); } }); })(i);
-      // 임의좌표: 역할+이름 라벨
-      var pinLbl = document.createElement('div');
-      pinLbl.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;';
-      pinLbl.innerHTML = '<div style="background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;">' + roleText + '</div>'
-        + '<div style="background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;">' + item.name + '</div>';
-      var pinOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLbl, yAnchor: 2.9, zIndex: 7 });
-      pinOv.setMap(kakaoMap);
-      dsRoleOverlays.push(pinOv);
+      // 임의좌표: 역할 뱃지 + 이름(주소 앞부분) 라벨 — 고객과 동일 스타일
+      var shortName = item.name.length > 12 ? item.name.slice(item.name.lastIndexOf(' ')+1) : item.name;
+      var pinLblEl = document.createElement('div');
+      pinLblEl.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;pointer-events:none;';
+      var pinBadge = document.createElement('div');
+      pinBadge.className = 'ds-role-badge';
+      pinBadge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;';
+      pinBadge.textContent = roleText;
+      var pinNameDiv = document.createElement('div');
+      pinNameDiv.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;';
+      pinNameDiv.textContent = shortName;
+      pinLblEl.appendChild(pinBadge);
+      pinLblEl.appendChild(pinNameDiv);
+      var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 2.6, zIndex: 7 });
+      pinLblOv.setMap(kakaoMap);
+      dsRoleOverlays.push(pinLblOv);
     } else {
       // 일반 고객: 기존 nearbyMarker labelEl에 역할 뱃지 주입
       if(window._nearbyMarkers && window._nearbyList) {
