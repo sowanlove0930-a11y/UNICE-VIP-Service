@@ -817,6 +817,12 @@ function attachRoutePinDrag(marker, type) {
   var dragTimer = null;
   kakao.maps.event.addListener(marker, 'drag', function() {
     var p = marker.getPosition();
+    // 실시간 연결선 갱신 (dsQueue 좌표 임시 업데이트)
+    if(currentTab == 'ds') {
+      var qIdx = type === 'from' ? 0 : type === 'to' ? dsQueue.length - 1 : (parseInt(type.split('_')[1], 10) + 1);
+      if(dsQueue[qIdx]) { dsQueue[qIdx].lat = String(p.getLat()); dsQueue[qIdx].lng = String(p.getLng()); }
+      drawDsPolylines();
+    }
     if(dragTimer) clearTimeout(dragTimer);
     dragTimer = setTimeout(function() {
       geocoder.coord2Address(p.getLng(), p.getLat(), function(result, status) {
@@ -845,9 +851,29 @@ function attachRoutePinDrag(marker, type) {
         var vi = parseInt(type.split('_')[1], 10);
         if(vi >= 0 && vi < panelVia.length) panelVia[vi] = obj;
       }
+      // dsQueue 좌표 동기화
+      if(currentTab == 'ds') {
+        var qIdx2 = type === 'from' ? 0 : type === 'to' ? dsQueue.length - 1 : (parseInt(type.split('_')[1], 10) + 1);
+        if(dsQueue[qIdx2]) { dsQueue[qIdx2].lat = String(p.getLat()); dsQueue[qIdx2].lng = String(p.getLng()); dsQueue[qIdx2].address = a; dsQueue[qIdx2].name = a; }
+        drawDsPolylines();
+        renderDsPreview();
+      }
       updateRoutePinAddr(type, p, a);
       renderRoutePanel();
     });
+  });
+}
+
+function attachRoutePinDsClick(marker, queueIdx) {
+  kakao.maps.event.addListener(marker, 'click', function() {
+    if(currentTab != 'ds') return;
+    if(queueIdx >= 0 && queueIdx < dsQueue.length) {
+      dsQueue.splice(queueIdx, 1);
+      syncDsQueueToRoute();
+      if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+      applyNearbyMarkerOpacity();
+      renderDsPreview();
+    }
   });
 }
 
@@ -861,6 +887,7 @@ function setRoutePin(type, pos, labelText) {
     routeFromOverlay = makeRouteAddrOverlay(pos, labelText, color);
     routeFromOverlay.setMap(kakaoMap);
     attachRoutePinDrag(routeFromMarker, type);
+    if(currentTab == 'ds') attachRoutePinDsClick(routeFromMarker, 0);
   } else if(type === 'to') {
     if(routeToMarker){ routeToMarker.setMap(null); }
     if(routeToOverlay){ routeToOverlay.setMap(null); }
@@ -868,6 +895,7 @@ function setRoutePin(type, pos, labelText) {
     routeToOverlay = makeRouteAddrOverlay(pos, labelText, color);
     routeToOverlay.setMap(kakaoMap);
     attachRoutePinDrag(routeToMarker, type);
+    if(currentTab == 'ds') attachRoutePinDsClick(routeToMarker, dsQueue.length - 1);
   } else if(type && type.indexOf('via_') === 0) {
     var vi = parseInt(type.split('_')[1], 10);
     if(routeViaMarkers[vi] && routeViaMarkers[vi].marker) routeViaMarkers[vi].marker.setMap(null);
@@ -877,6 +905,7 @@ function setRoutePin(type, pos, labelText) {
     vo.setMap(kakaoMap);
     routeViaMarkers[vi] = { marker:vm, overlay:vo };
     attachRoutePinDrag(vm, type);
+    if(currentTab == 'ds') attachRoutePinDsClick(vm, vi + 1);
   }
 }
 
@@ -920,7 +949,8 @@ function applyNearbyMarkerOpacity() {
       // 큐에 담긴 고객: 기존 라벨/마커 숨김 (번호핀으로 대체됨)
       if(nm.labelEl) nm.labelEl.style.display = 'none';
       if(nm.overlay) nm.overlay.setMap(null);
-      if(nm.marker) nm.marker.setMap(null);
+      // 마커는 숨기지 않고 반투명만 (클릭 가능하게 유지)
+      if(nm.marker) { nm.marker.setMap(kakaoMap); nm.marker.setOpacity(0.01); }
     } else {
       // 미담긴 고객: 반투명 처리
       if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '0.35'; }
@@ -1821,7 +1851,7 @@ function refreshNearbyOnly(lat, lng) {
       labelEl.appendChild(dotWrap);
     }
     (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
-    var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:3.0, clickable:true, zIndex:1 });
+    var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:2.6, clickable:true, zIndex:1 });
     nameOverlay.setMap(kakaoMap);
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
     nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
@@ -2127,7 +2157,7 @@ function drawNearby(lat, lng) {
     var nameOverlay = new kakao.maps.CustomOverlay({
       position: pos,
       content: labelEl,
-      yAnchor: 3.0,
+      yAnchor: 2.6,
       clickable: true,
       zIndex: 1
     });
