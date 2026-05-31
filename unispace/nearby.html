@@ -1077,11 +1077,7 @@ function clearAllRoutePins() {
 }
 
 function applyNearbyMarkerOpacity() {
-  if(!window._nearbyMarkers || !window._nearbyList) {
-    console.log('[DS] applyNearbyMarkerOpacity: markers or list missing', !!window._nearbyMarkers, !!window._nearbyList);
-    return;
-  }
-  console.log('[DS] applyNearbyMarkerOpacity: dsQueue=', dsQueue.length, 'markers=', window._nearbyMarkers.length);
+  if(!window._nearbyMarkers || !window._nearbyList) return;
   window._nearbyMarkers.forEach(function(nm, i) {
     var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
     if(!c) return;
@@ -1089,14 +1085,12 @@ function applyNearbyMarkerOpacity() {
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
-    console.log('[DS]', c.name, 'inQueue:', inQueue, 'labelEl:', !!nm.labelEl, 'overlay:', !!nm.overlay);
-    var opacity = inQueue ? 1.0 : 0.35;
+    // overlay는 setMap 조작하지 않고 labelEl DOM만 제어
     if(nm.labelEl) {
-      nm.labelEl.style.opacity = inQueue ? '1' : '0.35';
       nm.labelEl.style.display = inQueue ? 'none' : '';
+      nm.labelEl.style.opacity = inQueue ? '1' : '0.35';
     }
-    if(nm.overlay) nm.overlay.setMap(inQueue ? null : kakaoMap);
-    if(nm.marker) { nm.marker.setMap(kakaoMap); nm.marker.setOpacity(opacity); }
+    if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : 0.35);
   });
 }
 
@@ -1104,8 +1098,7 @@ function restoreNearbyMarkerOpacity() {
   if(!window._nearbyMarkers) return;
   window._nearbyMarkers.forEach(function(nm) {
     if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '1'; }
-    if(nm.overlay) nm.overlay.setMap(kakaoMap);
-    if(nm.marker) { nm.marker.setMap(kakaoMap); nm.marker.setOpacity(1); }
+    if(nm.marker) nm.marker.setOpacity(1);
   });
 }
 
@@ -2043,12 +2036,7 @@ function refreshNearbyOnly(lat, lng) {
     }
     (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
     var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:2.6, clickable:true, zIndex:1 });
-    var alreadyInQueue = currentTab == 'ds' && dsQueue.findIndex(function(q){
-      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
-      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
-    }) !== -1;
-    if(!alreadyInQueue) nameOverlay.setMap(kakaoMap);
-    else labelEl.style.display = 'none';
+    nameOverlay.setMap(kakaoMap);
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
     nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
     (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); }); })(c, dist, marker);
