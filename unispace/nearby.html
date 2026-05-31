@@ -863,7 +863,6 @@ function syncDsQueueToRoute() {
 function attachRoutePinDsClick2(pos, queueIdx) {}
 
 function injectDsRoleLabels() {
-  // 이전 역할 오버레이 제거
   dsRoleOverlays.forEach(function(o){ o.setMap(null); });
   dsRoleOverlays = [];
   dsRoleMarkers.forEach(function(m){ m.setMap(null); });
@@ -875,33 +874,44 @@ function injectDsRoleLabels() {
     var roleColor = i == 0 ? '#3B82F6' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
     var isPinType = item.id && (String(item.id).indexOf('DS_PIN_') === 0 || String(item.id).indexOf('MY_LOC_') === 0 || item.id === 'MY_LOC_FIXED');
     if(isPinType) {
-      // 임의좌표/내위치: 마커 + 라벨
+      // 임의좌표/내위치: 마커 생성
       var pinSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="' + roleColor + '"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/></svg>';
       var pinImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(pinSvg))), new kakao.maps.Size(28, 36));
       var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name });
       dsRoleMarkers.push(pinMarker);
       (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); drawDsPolylines(); injectDsRoleLabels(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); renderDsEditList(); } }); })(i);
-    }
-    // 역할+이름 복합 라벨 오버레이
-    var lbl = document.createElement('div');
-    lbl.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:pointer;';
-    lbl.innerHTML = '<div style="background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:1px;pointer-events:none;">' + roleText + '</div>'
-      + '<div style="background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;pointer-events:none;">' + item.name + '</div>';
-    (function(it){ lbl.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); if(currentTab=='ds'){ addToDsQueue(it); } }); })(item);
-    var ov = new kakao.maps.CustomOverlay({ position: pos, content: lbl, yAnchor: 2.9, zIndex: 7 });
-    ov.setMap(kakaoMap);
-    dsRoleOverlays.push(ov);
-    // 기존 nearbyMarker 이름 라벨 숨김 (중복 방지)
-    if(!isPinType && window._nearbyMarkers && window._nearbyList) {
-      window._nearbyList.forEach(function(ni, ni_idx) {
-        if(!ni || !ni.c) return;
-        var c = ni.c;
-        var match = (item.id && c.id) ? item.id == c.id : (item.name == c.name && String(item.lat).slice(0,7) == String(c.lat).slice(0,7));
-        if(!match) return;
-        var nm = window._nearbyMarkers[ni_idx];
-        if(nm && nm.labelEl) nm.labelEl.style.display = 'none';
-        if(nm && nm.marker) nm.marker.setOpacity(1.0);
-      });
+      // 임의좌표: 역할+이름 라벨
+      var pinLbl = document.createElement('div');
+      pinLbl.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;';
+      pinLbl.innerHTML = '<div style="background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;">' + roleText + '</div>'
+        + '<div style="background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;">' + item.name + '</div>';
+      var pinOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLbl, yAnchor: 2.9, zIndex: 7 });
+      pinOv.setMap(kakaoMap);
+      dsRoleOverlays.push(pinOv);
+    } else {
+      // 일반 고객: 기존 nearbyMarker labelEl에 역할 뱃지 주입
+      if(window._nearbyMarkers && window._nearbyList) {
+        window._nearbyList.forEach(function(ni, ni_idx) {
+          if(!ni || !ni.c) return;
+          var c = ni.c;
+          var match = (item.id && c.id) ? item.id == c.id : (item.name == c.name && String(item.lat).slice(0,7) == String(c.lat).slice(0,7));
+          if(!match) return;
+          var nm = window._nearbyMarkers[ni_idx];
+          if(!nm || !nm.labelEl) return;
+          // 기존 라벨 내용 앞에 역할 뱃지 삽입
+          var existing = nm.labelEl.querySelector('.ds-role-badge');
+          if(existing) existing.remove();
+          var badge = document.createElement('div');
+          badge.className = 'ds-role-badge';
+          badge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;text-align:center;pointer-events:none;';
+          badge.textContent = roleText;
+          nm.labelEl.style.flexDirection = 'column';
+          nm.labelEl.style.alignItems = 'center';
+          nm.labelEl.style.display = 'inline-flex';
+          nm.labelEl.insertBefore(badge, nm.labelEl.firstChild);
+          if(nm.marker) nm.marker.setOpacity(1.0);
+        });
+      }
     }
   });
 }
@@ -1112,7 +1122,14 @@ function applyNearbyMarkerOpacity() {
 function restoreNearbyMarkerOpacity() {
   if(!window._nearbyMarkers) return;
   window._nearbyMarkers.forEach(function(nm) {
-    if(nm.labelEl) { nm.labelEl.style.display = ''; nm.labelEl.style.opacity = '1'; }
+    if(nm.labelEl) {
+      nm.labelEl.style.display = '';
+      nm.labelEl.style.opacity = '1';
+      nm.labelEl.style.flexDirection = '';
+      nm.labelEl.style.alignItems = '';
+      var badge = nm.labelEl.querySelector('.ds-role-badge');
+      if(badge) badge.remove();
+    }
     if(nm.marker) nm.marker.setOpacity(1);
   });
 }
