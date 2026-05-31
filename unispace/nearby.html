@@ -1540,7 +1540,20 @@ function refreshNearbyOnly(lat, lng) {
     var evDots = '';
     if(evInfo.hasEvent) evDots += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E8C97A;margin-left:3px;vertical-align:middle;"></span>';
     if(evInfo.hasCustom) evDots += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-left:2px;vertical-align:middle;"></span>';
-    listHtml += '<div class="ci" id="citem_'+idx+'"><div class="ctop"><span class="cn">'+c.name+evDots+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div></div>';
+    var dsIdx2 = dsQueue.findIndex(function(q){
+      if(c.id && q.id) return q.id == c.id;
+      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+    });
+    var seqHtml2 = '';
+    if(currentTab == 'ds') {
+      if(dsIdx2 === -1) {
+        seqHtml2 = '<div class="ds-seq ds-sm">+</div>';
+      } else {
+        var seqCls2 = dsIdx2 == 0 ? 'ds-s0' : (dsIdx2 == dsQueue.length-1 && dsQueue.length > 1 ? 'ds-s2' : 'ds-s1');
+        seqHtml2 = '<div class="ds-seq ' + seqCls2 + '">' + (dsIdx2+1) + '</div>';
+      }
+    }
+    listHtml += '<div class="ci" id="citem_'+idx+'" style="display:flex;align-items:center;"><div style="flex:1;min-width:0;"><div class="ctop"><span class="cn">'+c.name+evDots+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div></div>'+seqHtml2+'</div>';
 
     var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
     var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
@@ -1572,7 +1585,26 @@ function refreshNearbyOnly(lat, lng) {
     (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ showPopup(customer, distance); }); })(c, dist, marker);
   });
 
-  document.getElementById('clist').innerHTML = listHtml;
+
+  // 동선관리 탭: 내위치/임의좌표 항목 리스트 상단 추가
+  var pinHtml = '';
+  if(currentTab == 'ds') {
+    dsQueue.forEach(function(q, qi) {
+      var isPinType = q.id && (q.id.indexOf('MY_LOC_') === 0 || q.id.indexOf('DS_PIN_') === 0);
+      if(!isPinType) return;
+      var seqCls = qi == 0 ? 'ds-s0' : (qi == dsQueue.length-1 && dsQueue.length > 1 ? 'ds-s2' : 'ds-s1');
+      var icon = q.id.indexOf('MY_LOC_') === 0 ? '📍' : '📌';
+      var label = q.id.indexOf('MY_LOC_') === 0 ? '내 위치' : '임의 좌표';
+      pinHtml += '<div class="ci" style="display:flex;align-items:center;background:rgba(232,201,122,.04);border-left:2px solid rgba(232,201,122,.3);">'
+        +'<div style="flex:1;min-width:0;">'
+        +'<div class="ctop"><span class="cn">' + icon + ' ' + label + '</span></div>'
+        +'<div class="ci2">' + (q.address || q.name) + '</div>'
+        +'</div>'
+        +'<div class="ds-seq ' + seqCls + '">' + (qi+1) + '</div>'
+        +'</div>';
+    });
+  }
+  document.getElementById('clist').innerHTML = pinHtml + listHtml;
   window._nearbyList = nearby;
   window._nearbyMarkers = nearbyMarkers;
 
@@ -1860,7 +1892,26 @@ function drawNearby(lat, lng) {
     })(c, dist, marker);
   });
 
-  document.getElementById('clist').innerHTML = listHtml;
+
+  // 동선관리 탭: 내위치/임의좌표 항목 리스트 상단 추가
+  var pinHtml = '';
+  if(currentTab == 'ds') {
+    dsQueue.forEach(function(q, qi) {
+      var isPinType = q.id && (q.id.indexOf('MY_LOC_') === 0 || q.id.indexOf('DS_PIN_') === 0);
+      if(!isPinType) return;
+      var seqCls = qi == 0 ? 'ds-s0' : (qi == dsQueue.length-1 && dsQueue.length > 1 ? 'ds-s2' : 'ds-s1');
+      var icon = q.id.indexOf('MY_LOC_') === 0 ? '📍' : '📌';
+      var label = q.id.indexOf('MY_LOC_') === 0 ? '내 위치' : '임의 좌표';
+      pinHtml += '<div class="ci" style="display:flex;align-items:center;background:rgba(232,201,122,.04);border-left:2px solid rgba(232,201,122,.3);">'
+        +'<div style="flex:1;min-width:0;">'
+        +'<div class="ctop"><span class="cn">' + icon + ' ' + label + '</span></div>'
+        +'<div class="ci2">' + (q.address || q.name) + '</div>'
+        +'</div>'
+        +'<div class="ds-seq ' + seqCls + '">' + (qi+1) + '</div>'
+        +'</div>';
+    });
+  }
+  document.getElementById('clist').innerHTML = pinHtml + listHtml;
   window._nearbyList = nearby;
   window._nearbyMarkers = nearbyMarkers;
 
