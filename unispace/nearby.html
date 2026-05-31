@@ -587,7 +587,10 @@ function switchTab(tab) {
   var rcntEl = document.getElementById('resultCount');
   if(clistEl) clistEl.style.display = tab == 'today' ? 'none' : '';
   if(rcntEl) rcntEl.style.display = tab == 'today' ? 'none' : '';
-  if(tab != 'today' && window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+  if(tab != 'today' && window._nearbyList && centerLat && centerLng) {
+    refreshNearbyOnly(centerLat, centerLng);
+    if(tab == 'ds') { injectDsRoleLabels(); updateDsMarkerLabels(); }
+  }
 }
 
 function openDsEditSheet() {
@@ -820,25 +823,29 @@ function addToDsQueue(customer) {
     dsQueue.splice(idx, 1);
     syncDsQueueToRoute();
     drawDsPolylines();
-    updateDsMarkerLabels();
     injectDsRoleLabels();
+    updateDsMarkerLabels();
     renderDsEditList();
     return;
   }
   dsQueue.push({ id: customer.id, name: customer.name, lat: customer.lat, lng: customer.lng, address: customer.address || '' });
   syncDsQueueToRoute();
   drawDsPolylines();
-  updateDsMarkerLabels();
   injectDsRoleLabels();
+  updateDsMarkerLabels();
   renderDsEditList();
   setTimeout(function(){ flashHighlightInList(customer); }, 100);
 }
 
 function updateDsMarkerLabels() {
-  // nearbyMarker 라벨은 opacity만 조작 (역할 표시는 dsRoleOverlays로 완전 분리)
-  // 기존 역할 오버레이 제거
-  dsRoleOverlays.forEach(function(o){ o.setMap(null); });
-  dsRoleOverlays = [];
+  // nearbyMarker labels: opacity only. Role badges live in dsRoleOverlays.
+  // Remove only normal-customer role overlays (tagged _dsRoleKind=cust); keep pin overlays.
+  var kept = [];
+  dsRoleOverlays.forEach(function(o){
+    if(o._dsRoleKind == 'cust'){ o.setMap(null); }
+    else { kept.push(o); }
+  });
+  dsRoleOverlays = kept;
   if(!window._nearbyMarkers || !window._nearbyList) return;
   window._nearbyMarkers.forEach(function(nm, i) {
     var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
@@ -848,10 +855,10 @@ function updateDsMarkerLabels() {
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     });
     var inQueue = queueIdx !== -1;
-    // 이름 라벨 opacity만 조작 (구조 변경 없음)
+    // name label opacity only (no structure change)
     if(nm.labelEl) nm.labelEl.style.opacity = inQueue ? '1' : '0.35';
     if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : 0.35);
-    // 큐에 있는 고객: 역할 라벨 오버레이 생성
+    // queued customer: role label overlay above the name
     if(inQueue && kakaoMap) {
       var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
       var roleText = queueIdx == 0 ? '출발' : (queueIdx == dsQueue.length-1 && dsQueue.length > 1 ? '도착' : '경유' + queueIdx);
@@ -859,7 +866,8 @@ function updateDsMarkerLabels() {
       var roleEl = document.createElement('div');
       roleEl.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;pointer-events:none;white-space:nowrap;';
       roleEl.textContent = roleText;
-      var roleOv = new kakao.maps.CustomOverlay({ position: pos, content: roleEl, yAnchor: -0.3, zIndex: 7 });
+      var roleOv = new kakao.maps.CustomOverlay({ position: pos, content: roleEl, yAnchor: 4.6, zIndex: 7 });
+      roleOv._dsRoleKind = 'cust';
       roleOv.setMap(kakaoMap);
       dsRoleOverlays.push(roleOv);
     }
@@ -927,18 +935,18 @@ function injectDsRoleLabels() {
       pinLblEl.appendChild(pinBadge);
       pinLblEl.appendChild(pinNameDiv);
       var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 2.2, zIndex: 7 });
+      pinLblOv._dsRoleKind = 'pin';
       pinLblOv.setMap(kakaoMap);
       dsRoleOverlays.push(pinLblOv);
-      // 드래그 중 선 실시간 갱신
+      // drag live line update
       (function(qIdx3){ kakao.maps.event.addListener(pinMarker, 'drag', function(){
         var p3 = pinMarker.getPosition();
         dsQueue[qIdx3].lat = String(p3.getLat()); dsQueue[qIdx3].lng = String(p3.getLng());
         drawDsPolylines();
       }); })(i);
-      // 드래그 완료 시 주소 갱신 + 라벨 이동
-      (function(qIdx2, nDiv, lOv){ kakao.maps.event.addListener(pinMarker, 'dragend', function(){
+      // dragend: update address then rebuild role layer cleanly
+      (function(qIdx2){ kakao.maps.event.addListener(pinMarker, 'dragend', function(){
         var p2 = pinMarker.getPosition();
-        lOv.setPosition(p2);
         var gc2 = new kakao.maps.services.Geocoder();
         gc2.coord2Address(p2.getLng(), p2.getLat(), function(result2, status2){
           var a2 = p2.getLat().toFixed(4) + ',' + p2.getLng().toFixed(4);
@@ -948,11 +956,13 @@ function injectDsRoleLabels() {
           }
           dsQueue[qIdx2].name = a2; dsQueue[qIdx2].address = a2;
           dsQueue[qIdx2].lat = String(p2.getLat()); dsQueue[qIdx2].lng = String(p2.getLng());
-          nDiv.textContent = a2.length > 14 ? a2.replace(/^[^\s]+\s[^\s]+\s/, '') : a2;
-          syncDsQueueToRoute(); drawDsPolylines();
+          syncDsQueueToRoute();
+          injectDsRoleLabels();
+          updateDsMarkerLabels();
+          drawDsPolylines();
           renderDsEditList();
         });
-      }); })(i, pinNameDiv, pinLblOv);
+      }); })(i);
     } else {
       // 일반 고객: updateDsMarkerLabels에서 처리
     }
@@ -1600,6 +1610,7 @@ function loadKakaoScript(key) {
             if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
             applyNearbyMarkerOpacity();
             injectDsRoleLabels();
+            updateDsMarkerLabels();
             renderDsEditList();
           });
           window._dsPinMode = false;
@@ -1931,6 +1942,7 @@ function showSearchResults(results, keyword, containerEl) {
           if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
           applyNearbyMarkerOpacity();
           injectDsRoleLabels();
+          updateDsMarkerLabels();
           renderDsEditList();
           document.getElementById('searchResultList').style.display = 'none';
           document.getElementById('addrInput').value = '';
@@ -2095,16 +2107,8 @@ function refreshNearbyOnly(lat, lng) {
     }) : -1;
     var labelEl = document.createElement('div');
     labelEl.style.cssText = 'position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:0;white-space:nowrap;margin-bottom:2px;cursor:pointer';
-    if(queueIdx2 !== -1) {
-      var roleText2 = queueIdx2 == 0 ? '출발' : (queueIdx2 == dsQueue.length-1 && dsQueue.length > 1 ? '도착' : '경유' + queueIdx2);
-      var roleColor2 = queueIdx2 == 0 ? '#3B82F6' : (queueIdx2 == dsQueue.length-1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
-      var roleBadge2 = document.createElement('div');
-      roleBadge2.style.cssText = 'background:' + roleColor2 + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;pointer-events:none;';
-      roleBadge2.textContent = roleText2;
-      labelEl.appendChild(roleBadge2);
-    }
     var nameBox = document.createElement('div');
-    nameBox.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;' + (queueIdx2 !== -1 ? 'opacity:1;' : '');
+    nameBox.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#F0F4FF;white-space:nowrap;';
     var nameSpan = document.createElement('span'); nameSpan.textContent = c.name;
     nameBox.appendChild(nameSpan);
     if(evInfo.hasEvent || evInfo.hasCustom) {
