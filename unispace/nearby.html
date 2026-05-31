@@ -891,6 +891,18 @@ function injectDsRoleLabels() {
     var ov = new kakao.maps.CustomOverlay({ position: pos, content: lbl, yAnchor: 2.9, zIndex: 7 });
     ov.setMap(kakaoMap);
     dsRoleOverlays.push(ov);
+    // 기존 nearbyMarker 이름 라벨 숨김 (중복 방지)
+    if(!isPinType && window._nearbyMarkers && window._nearbyList) {
+      window._nearbyList.forEach(function(ni, ni_idx) {
+        if(!ni || !ni.c) return;
+        var c = ni.c;
+        var match = (item.id && c.id) ? item.id == c.id : (item.name == c.name && String(item.lat).slice(0,7) == String(c.lat).slice(0,7));
+        if(!match) return;
+        var nm = window._nearbyMarkers[ni_idx];
+        if(nm && nm.labelEl) nm.labelEl.style.display = 'none';
+        if(nm && nm.marker) nm.marker.setOpacity(1.0);
+      });
+    }
   });
 }
 
@@ -1538,7 +1550,10 @@ function loadKakaoScript(key) {
             var obj = { id:'DS_PIN_' + Date.now(), name:a, lat:String(latlng.getLat()), lng:String(latlng.getLng()), address:a };
             dsQueue.push(obj);
             syncDsQueueToRoute();
+            drawDsPolylines();
             if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+            applyNearbyMarkerOpacity();
+            injectDsRoleLabels();
             renderDsEditList();
           });
           window._dsPinMode = false;
@@ -1866,8 +1881,10 @@ function showSearchResults(results, keyword, containerEl) {
           var obj = { id:'DS_PIN_' + Date.now(), name: place.place_name, lat: String(place.y), lng: String(place.x), address: place.road_address_name || place.address_name || place.place_name };
           dsQueue.push(obj);
           syncDsQueueToRoute();
+          drawDsPolylines();
           if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
           applyNearbyMarkerOpacity();
+          injectDsRoleLabels();
           renderDsEditList();
           document.getElementById('searchResultList').style.display = 'none';
           document.getElementById('addrInput').value = '';
