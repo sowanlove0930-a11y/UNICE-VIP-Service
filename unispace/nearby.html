@@ -571,8 +571,8 @@ function switchTab(tab) {
     closeDsEditSheet();
     clearAllRoutePins();
     clearDsPolylines();
-    dsRoleOverlays.forEach(function(o){ o.setMap(null); });
-    dsRoleOverlays = [];
+    clearDsRoleLayer();
+    clearInlineRoleBadges();
     restoreNearbyMarkerOpacity();
     panelFrom = null; panelTo = null; panelVia = [];
     renderRoutePanel();
@@ -644,9 +644,11 @@ function renderDsEditList() {
           dsQueue.splice(idx, 1);
         }
         syncDsQueueToRoute();
-        drawDsPolylines();
         if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
         applyNearbyMarkerOpacity();
+        injectDsRoleLabels();
+        updateDsMarkerLabels();
+        drawDsPolylines();
         renderDsEditList();
       });
     });
@@ -719,6 +721,9 @@ function renderDsPreview() {
         syncDsQueueToRoute();
         if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
         applyNearbyMarkerOpacity();
+        injectDsRoleLabels();
+        updateDsMarkerLabels();
+        drawDsPolylines();
         renderDsEditList();
       });
 
@@ -838,38 +843,33 @@ function addToDsQueue(customer) {
 }
 
 function updateDsMarkerLabels() {
-  // nearbyMarker labels: opacity only. Role badges live in dsRoleOverlays.
-  // Remove only normal-customer role overlays (tagged _dsRoleKind=cust); keep pin overlays.
-  var kept = [];
-  dsRoleOverlays.forEach(function(o){
-    if(o._dsRoleKind == 'cust'){ o.setMap(null); }
-    else { kept.push(o); }
-  });
-  dsRoleOverlays = kept;
+  // Role badge is attached as a child element ABOVE nameBox inside labelEl
+  // (column flex), so it always sits directly above the name with no overlap.
+  // nameBox structure itself is never modified.
   if(!window._nearbyMarkers || !window._nearbyList) return;
   window._nearbyMarkers.forEach(function(nm, i) {
     var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
-    if(!c) return;
+    if(!c || !nm.labelEl) return;
     var queueIdx = dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     });
     var inQueue = queueIdx !== -1;
-    // name label opacity only (no structure change)
-    if(nm.labelEl) nm.labelEl.style.opacity = inQueue ? '1' : '0.35';
-    if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : 0.35);
-    // queued customer: role label overlay above the name
-    if(inQueue && kakaoMap) {
-      var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
+    // remove any existing role badge child first
+    var oldBadge = nm.labelEl.querySelector('.ds-role-badge-inline');
+    if(oldBadge) oldBadge.parentNode.removeChild(oldBadge);
+    // opacity only on name label / marker
+    nm.labelEl.style.opacity = inQueue ? '1' : (currentTab == 'ds' ? '0.35' : '1');
+    if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : (currentTab == 'ds' ? 0.35 : 1.0));
+    // queued customer: insert role badge as first child (above name)
+    if(inQueue) {
       var roleText = queueIdx == 0 ? '출발' : (queueIdx == dsQueue.length-1 && dsQueue.length > 1 ? '도착' : '경유' + queueIdx);
       var roleColor = queueIdx == 0 ? '#3B82F6' : (queueIdx == dsQueue.length-1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
-      var roleEl = document.createElement('div');
-      roleEl.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;pointer-events:none;white-space:nowrap;';
-      roleEl.textContent = roleText;
-      var roleOv = new kakao.maps.CustomOverlay({ position: pos, content: roleEl, yAnchor: 4.6, zIndex: 7 });
-      roleOv._dsRoleKind = 'cust';
-      roleOv.setMap(kakaoMap);
-      dsRoleOverlays.push(roleOv);
+      var badge = document.createElement('div');
+      badge.className = 'ds-role-badge-inline';
+      badge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;pointer-events:none;white-space:nowrap;';
+      badge.textContent = roleText;
+      nm.labelEl.insertBefore(badge, nm.labelEl.firstChild);
     }
   });
 }
@@ -877,10 +877,7 @@ function updateDsMarkerLabels() {
 function syncDsQueueToRoute() {
   panelFrom = null; panelTo = null; panelVia = [];
   clearAllRoutePins();
-  dsRoleOverlays.forEach(function(o){ o.setMap(null); });
-  dsRoleOverlays = [];
-  dsRoleMarkers.forEach(function(m){ m.setMap(null); });
-  dsRoleMarkers = [];
+  clearDsRoleLayer();
   dsQueue.forEach(function(item, i) {
     var obj = { name: item.name, lat: item.lat, lng: item.lng, address: item.address };
     if(i == 0) panelFrom = obj;
@@ -903,10 +900,7 @@ function syncDsQueueToRoute() {
 function attachRoutePinDsClick2(pos, queueIdx) {}
 
 function injectDsRoleLabels() {
-  dsRoleOverlays.forEach(function(o){ o.setMap(null); });
-  dsRoleOverlays = [];
-  dsRoleMarkers.forEach(function(m){ m.setMap(null); });
-  dsRoleMarkers = [];
+  clearDsRoleLayer();
   if(!kakaoMap || currentTab != 'ds') return;
   dsQueue.forEach(function(item, i) {
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
@@ -919,7 +913,7 @@ function injectDsRoleLabels() {
       var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name, draggable: true });
       dsRoleMarkers.push(pinMarker);
       // 클릭 제거
-      (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); drawDsPolylines(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); renderDsEditList(); } }); })(i);
+      (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); injectDsRoleLabels(); updateDsMarkerLabels(); drawDsPolylines(); renderDsEditList(); } }); })(i);
       // 라벨 — 주소 표시 (앞 시/구 제거하고 도로명만)
       var addrText = item.address || item.name;
       var shortAddr = addrText.length > 14 ? addrText.replace(/^[^\s]+\s[^\s]+\s/, '') : addrText;
@@ -938,15 +932,20 @@ function injectDsRoleLabels() {
       pinLblOv._dsRoleKind = 'pin';
       pinLblOv.setMap(kakaoMap);
       dsRoleOverlays.push(pinLblOv);
-      // drag live line update
-      (function(qIdx3){ kakao.maps.event.addListener(pinMarker, 'drag', function(){
+      // drag live: move label overlay + line with the pin, update queue coords
+      (function(qIdx3, lOv){ kakao.maps.event.addListener(pinMarker, 'drag', function(){
         var p3 = pinMarker.getPosition();
+        if(!dsQueue[qIdx3]) return;
         dsQueue[qIdx3].lat = String(p3.getLat()); dsQueue[qIdx3].lng = String(p3.getLng());
+        lOv.setPosition(p3);
         drawDsPolylines();
-      }); })(i);
-      // dragend: update address then rebuild role layer cleanly
-      (function(qIdx2){ kakao.maps.event.addListener(pinMarker, 'dragend', function(){
+      }); })(i, pinLblOv);
+      // dragend: update address + queue data in place; do NOT destroy/rebuild markers
+      (function(qIdx2, nDiv, lOv){ kakao.maps.event.addListener(pinMarker, 'dragend', function(){
         var p2 = pinMarker.getPosition();
+        lOv.setPosition(p2);
+        if(dsQueue[qIdx2]){ dsQueue[qIdx2].lat = String(p2.getLat()); dsQueue[qIdx2].lng = String(p2.getLng()); }
+        drawDsPolylines();
         var gc2 = new kakao.maps.services.Geocoder();
         gc2.coord2Address(p2.getLng(), p2.getLat(), function(result2, status2){
           var a2 = p2.getLat().toFixed(4) + ',' + p2.getLng().toFixed(4);
@@ -954,15 +953,14 @@ function injectDsRoleLabels() {
             var r2 = result2[0];
             a2 = r2.road_address ? r2.road_address.address_name : r2.address.address_name;
           }
+          if(!dsQueue[qIdx2]) return;
           dsQueue[qIdx2].name = a2; dsQueue[qIdx2].address = a2;
           dsQueue[qIdx2].lat = String(p2.getLat()); dsQueue[qIdx2].lng = String(p2.getLng());
-          syncDsQueueToRoute();
-          injectDsRoleLabels();
-          updateDsMarkerLabels();
-          drawDsPolylines();
+          if(nDiv) nDiv.textContent = a2.length > 14 ? a2.replace(/^[^\s]+\s[^\s]+\s/, '') : a2;
+          renderRoutePanel();
           renderDsEditList();
         });
-      }); })(i);
+      }); })(i, pinNameDiv, pinLblOv);
     } else {
       // 일반 고객: updateDsMarkerLabels에서 처리
     }
@@ -1087,6 +1085,9 @@ function attachRoutePinDsClick(marker, queueIdx) {
       syncDsQueueToRoute();
       if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
       applyNearbyMarkerOpacity();
+      injectDsRoleLabels();
+      updateDsMarkerLabels();
+      drawDsPolylines();
       renderDsEditList();
     }
   });
@@ -1178,10 +1179,23 @@ function clearDsPolylines() {
   dsPolylines = [];
   dsBadges.forEach(function(b){ b.setMap(null); });
   dsBadges = [];
+}
+
+function clearDsRoleLayer() {
   dsRoleOverlays.forEach(function(o){ o.setMap(null); });
   dsRoleOverlays = [];
   dsRoleMarkers.forEach(function(m){ m.setMap(null); });
   dsRoleMarkers = [];
+}
+
+function clearInlineRoleBadges() {
+  if(!window._nearbyMarkers) return;
+  window._nearbyMarkers.forEach(function(nm){
+    if(nm.labelEl){
+      var b = nm.labelEl.querySelector('.ds-role-badge-inline');
+      if(b) b.parentNode.removeChild(b);
+    }
+  });
 }
 
 function drawDsPolylines() {
@@ -1507,6 +1521,8 @@ window.addEventListener('DOMContentLoaded', function() {
     dsQueue = [];
     clearAllRoutePins();
     clearDsPolylines();
+    clearDsRoleLayer();
+    clearInlineRoleBadges();
     restoreNearbyMarkerOpacity();
     selectedPanelCustomer = null;
     var card = document.getElementById('selectedCustomerCard');
@@ -1572,6 +1588,8 @@ function loadKakaoScript(key) {
           dsQueue = [];
           clearAllRoutePins();
           clearDsPolylines();
+          clearDsRoleLayer();
+          clearInlineRoleBadges();
           restoreNearbyMarkerOpacity();
           panelFrom = null; panelTo = null; panelVia = [];
           renderRoutePanel();
@@ -3229,6 +3247,9 @@ function findMyLocation() {
         dsQueue.push(obj);
         syncDsQueueToRoute();
         if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+        injectDsRoleLabels();
+        updateDsMarkerLabels();
+        drawDsPolylines();
         renderDsEditList();
 
         // 지도 내 위치 표시 (노란 마커 유지)
@@ -3275,6 +3296,9 @@ function findMyLocation() {
             syncDsQueueToRoute();
             if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
             applyNearbyMarkerOpacity();
+            injectDsRoleLabels();
+            updateDsMarkerLabels();
+            drawDsPolylines();
             renderDsEditList();
           } else {
             var obj = { id: myId, name:'내 위치', lat:String(myLat), lng:String(myLng), address:'내 현재 위치' };
@@ -3282,6 +3306,9 @@ function findMyLocation() {
             syncDsQueueToRoute();
             if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
             applyNearbyMarkerOpacity();
+            injectDsRoleLabels();
+            updateDsMarkerLabels();
+            drawDsPolylines();
             renderDsEditList();
           }
           return;
