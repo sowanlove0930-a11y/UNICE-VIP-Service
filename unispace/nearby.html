@@ -821,7 +821,7 @@ function addToDsQueue(customer) {
     syncDsQueueToRoute();
     if(window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
     applyNearbyMarkerOpacity();
-    injectDsRoleLabels();
+    setTimeout(function(){ injectDsRoleLabels(); }, 0);
     renderDsEditList();
     return;
   }
@@ -829,7 +829,7 @@ function addToDsQueue(customer) {
   syncDsQueueToRoute();
   if(window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
   applyNearbyMarkerOpacity();
-  injectDsRoleLabels();
+  setTimeout(function(){ injectDsRoleLabels(); }, 0);
   renderDsEditList();
   setTimeout(function(){ flashHighlightInList(customer); }, 100);
 }
@@ -891,23 +891,6 @@ function injectDsRoleLabels() {
       dsRoleMarkers.push(pinMarker);
       // 클릭 제거
       (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); drawDsPolylines(); injectDsRoleLabels(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); renderDsEditList(); } }); })(i);
-      // 드래그 완료 시 주소 갱신
-      (function(qIdx, nameDiv, lblOv){ kakao.maps.event.addListener(pinMarker, 'dragend', function(){
-        var p = pinMarker.getPosition();
-        lblOv.setPosition(p);
-        var gc = new kakao.maps.services.Geocoder();
-        gc.coord2Address(p.getLng(), p.getLat(), function(result, status){
-          var a = p.getLat().toFixed(4) + ',' + p.getLng().toFixed(4);
-          if(status === kakao.maps.services.Status.OK && result.length > 0){
-            var r = result[0];
-            a = r.road_address ? r.road_address.address_name : r.address.address_name;
-          }
-          dsQueue[qIdx].name = a; dsQueue[qIdx].address = a;
-          dsQueue[qIdx].lat = String(p.getLat()); dsQueue[qIdx].lng = String(p.getLng());
-          nameDiv.textContent = a.length > 14 ? a.slice(a.indexOf(' ')+1) : a;
-          syncDsQueueToRoute(); drawDsPolylines(); renderDsEditList();
-        });
-      }); })(i, null, null);
       // 라벨 — 주소 표시 (앞 시/구 제거하고 도로명만)
       var addrText = item.address || item.name;
       var shortAddr = addrText.length > 14 ? addrText.replace(/^[^\s]+\s[^\s]+\s/, '') : addrText;
@@ -925,7 +908,13 @@ function injectDsRoleLabels() {
       var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 2.6, zIndex: 7 });
       pinLblOv.setMap(kakaoMap);
       dsRoleOverlays.push(pinLblOv);
-      // 드래그 시 라벨도 따라오도록 재연결
+      // 드래그 중 선 실시간 갱신
+      (function(qIdx3){ kakao.maps.event.addListener(pinMarker, 'drag', function(){
+        var p3 = pinMarker.getPosition();
+        dsQueue[qIdx3].lat = String(p3.getLat()); dsQueue[qIdx3].lng = String(p3.getLng());
+        drawDsPolylines();
+      }); })(i);
+      // 드래그 완료 시 주소 갱신 + 라벨 이동
       (function(qIdx2, nDiv, lOv){ kakao.maps.event.addListener(pinMarker, 'dragend', function(){
         var p2 = pinMarker.getPosition();
         lOv.setPosition(p2);
