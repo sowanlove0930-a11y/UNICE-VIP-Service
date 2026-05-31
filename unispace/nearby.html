@@ -563,7 +563,8 @@ function switchTab(tab) {
       syncDsQueueToRoute();
     }
     drawDsPolylines();
-    applyNearbyMarkerOpacity();
+    if(dsQueue.length > 0) injectDsRoleLabels();
+    updateDsMarkerLabels();
     var rp = document.getElementById('routePopup');
     if(rp && dsQueue.length > 0) rp.style.display = '';
   } else {
@@ -818,17 +819,51 @@ function addToDsQueue(customer) {
   if(idx !== -1) {
     dsQueue.splice(idx, 1);
     syncDsQueueToRoute();
-    if(window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
-    applyNearbyMarkerOpacity();
+    drawDsPolylines();
+    updateDsMarkerLabels();
     renderDsEditList();
     return;
   }
   dsQueue.push({ id: customer.id, name: customer.name, lat: customer.lat, lng: customer.lng, address: customer.address || '' });
   syncDsQueueToRoute();
-  if(window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
-  applyNearbyMarkerOpacity();
+  drawDsPolylines();
+  updateDsMarkerLabels();
   renderDsEditList();
   setTimeout(function(){ flashHighlightInList(customer); }, 100);
+}
+
+function updateDsMarkerLabels() {
+  if(!window._nearbyMarkers || !window._nearbyList) return;
+  window._nearbyMarkers.forEach(function(nm, i) {
+    var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
+    if(!c || !nm.labelEl) return;
+    var queueIdx = dsQueue.findIndex(function(q){
+      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
+      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+    });
+    var inQueue = queueIdx !== -1;
+    // 기존 역할 뱃지 제거
+    var oldBadge = nm.labelEl.querySelector('.ds-role-badge');
+    if(oldBadge) oldBadge.remove();
+    if(inQueue) {
+      var roleText = queueIdx == 0 ? '출발' : (queueIdx == dsQueue.length-1 && dsQueue.length > 1 ? '도착' : '경유' + queueIdx);
+      var roleColor = queueIdx == 0 ? '#3B82F6' : (queueIdx == dsQueue.length-1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
+      var badge = document.createElement('div');
+      badge.className = 'ds-role-badge';
+      badge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;pointer-events:none;text-align:center;';
+      badge.textContent = roleText;
+      nm.labelEl.style.flexDirection = 'column';
+      nm.labelEl.style.alignItems = 'center';
+      nm.labelEl.insertBefore(badge, nm.labelEl.firstChild);
+      nm.labelEl.style.opacity = '1';
+      if(nm.marker) nm.marker.setOpacity(1.0);
+    } else {
+      nm.labelEl.style.flexDirection = '';
+      nm.labelEl.style.alignItems = '';
+      nm.labelEl.style.opacity = currentTab == 'ds' ? '0.35' : '1';
+      if(nm.marker) nm.marker.setOpacity(currentTab == 'ds' ? 0.35 : 1.0);
+    }
+  });
 }
 
 function syncDsQueueToRoute() {
