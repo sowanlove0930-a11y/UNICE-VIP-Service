@@ -172,11 +172,15 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .ptab:hover:not(.active){color:var(--text2);}
 /* 동선관리 탭 */
 .ds-preview{padding:5px 14px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-height:28px;}
-.ds-pi{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;}
-.ds-pf{background:rgba(59,130,246,.2);color:#60A5FA;}
-.ds-pv{background:rgba(167,139,250,.2);color:#A78BFA;}
-.ds-pt{background:rgba(239,68,68,.2);color:#F87171;}
+.ds-pi{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;cursor:grab;user-select:none;transition:opacity .15s;display:inline-flex;align-items:center;gap:3px;}
+.ds-pi:active{cursor:grabbing;}
+.ds-pi.dragging{opacity:.35;}
+.ds-pi .ds-seq-n{font-size:9px;opacity:.7;}
+.ds-pf{background:rgba(59,130,246,.2);color:#60A5FA;border:1px solid rgba(59,130,246,.3);}
+.ds-pv{background:rgba(167,139,250,.2);color:#A78BFA;border:1px solid rgba(167,139,250,.3);}
+.ds-pt{background:rgba(239,68,68,.2);color:#F87171;border:1px solid rgba(239,68,68,.3);}
 .ds-hint{font-size:9px;color:var(--text3);margin-left:2px;}
+.ds-drop-indicator{width:2px;height:18px;background:#E8C97A;border-radius:1px;flex-shrink:0;}
 .ds-seq{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-left:6px;}
 .ds-s0{background:rgba(59,130,246,.25);color:#60A5FA;}
 .ds-s1{background:rgba(167,139,250,.25);color:#A78BFA;}
@@ -548,23 +552,87 @@ function renderDsPreview() {
     el.innerHTML = '<span class="ds-hint">고객을 순서대로 클릭해 동선을 설정하세요</span>';
     return;
   }
-  dsQueue.forEach(function(item, i) {
-    var cls = i == 0 ? 'ds-pi ds-pf' : (i == dsQueue.length - 1 ? 'ds-pi ds-pt' : 'ds-pi ds-pv');
-    var sp = document.createElement('span');
-    sp.className = cls;
-    sp.textContent = item.name;
-    el.appendChild(sp);
-    if(i < dsQueue.length - 1) {
-      var arr = document.createElement('span');
-      arr.className = 'ds-hint';
-      arr.textContent = '→';
-      el.appendChild(arr);
-    }
+
+  var dragSrcIdx = null;
+  var dropIndicator = document.createElement('div');
+  dropIndicator.className = 'ds-drop-indicator';
+  dropIndicator.style.display = 'none';
+
+  function getChipCls(i) {
+    return 'ds-pi ' + (i == 0 ? 'ds-pf' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? 'ds-pt' : 'ds-pv'));
+  }
+
+  function buildChips() {
+    el.innerHTML = '';
+    dsQueue.forEach(function(item, i) {
+      var chip = document.createElement('span');
+      chip.className = getChipCls(i);
+      chip.draggable = true;
+      chip.dataset.idx = i;
+      chip.innerHTML = '<span class="ds-seq-n">' + (i+1) + '</span>' + item.name;
+
+      chip.addEventListener('dragstart', function(e) {
+        dragSrcIdx = i;
+        setTimeout(function(){ chip.classList.add('dragging'); }, 0);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      chip.addEventListener('dragend', function() {
+        chip.classList.remove('dragging');
+        dropIndicator.style.display = 'none';
+        dragSrcIdx = null;
+      });
+      chip.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        var rect = chip.getBoundingClientRect();
+        var mid = rect.left + rect.width / 2;
+        var targetIdx = e.clientX < mid ? i : i + 1;
+        if(targetIdx != dragSrcIdx && targetIdx != dragSrcIdx + 1) {
+          dropIndicator.style.display = '';
+          if(e.clientX < mid) {
+            el.insertBefore(dropIndicator, chip);
+          } else {
+            el.insertBefore(dropIndicator, chip.nextSibling);
+          }
+        }
+      });
+      chip.addEventListener('drop', function(e) {
+        e.preventDefault();
+        if(dragSrcIdx == null || dragSrcIdx == i) return;
+        var rect = chip.getBoundingClientRect();
+        var mid = rect.left + rect.width / 2;
+        var toIdx = e.clientX < mid ? i : i + 1;
+        if(toIdx > dragSrcIdx) toIdx--;
+        if(toIdx == dragSrcIdx) return;
+        var moved = dsQueue.splice(dragSrcIdx, 1)[0];
+        dsQueue.splice(toIdx, 0, moved);
+        syncDsQueueToRoute();
+        if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+        renderDsPreview();
+      });
+
+      el.appendChild(chip);
+
+      if(i < dsQueue.length - 1) {
+        var arr = document.createElement('span');
+        arr.className = 'ds-hint';
+        arr.textContent = '→';
+        el.appendChild(arr);
+      }
+    });
+
+    var hint = document.createElement('span');
+    hint.className = 'ds-hint';
+    hint.textContent = '(재클릭: 제거 / 드래그: 순서변경)';
+    el.appendChild(hint);
+  }
+
+  el.addEventListener('dragover', function(e){ e.preventDefault(); });
+  el.addEventListener('dragleave', function(e){
+    if(!el.contains(e.relatedTarget)) dropIndicator.style.display = 'none';
   });
-  var hint = document.createElement('span');
-  hint.className = 'ds-hint';
-  hint.textContent = '(재클릭: 제거)';
-  el.appendChild(hint);
+
+  buildChips();
 }
 
 function renderTodayCard() {
@@ -622,7 +690,10 @@ function applyTodayToRoute(acts) {
 
 function addToDsQueue(customer) {
   if(!customer || !customer.lat || !customer.lng) return;
-  var idx = dsQueue.findIndex(function(q){ return q.id == customer.id; });
+  var idx = dsQueue.findIndex(function(q){
+    if(customer.id && q.id) return q.id == customer.id;
+    return q.name == customer.name && String(q.lat).slice(0,7) == String(customer.lat).slice(0,7);
+  });
   if(idx !== -1) {
     dsQueue.splice(idx, 1);
     syncDsQueueToRoute();
@@ -955,6 +1026,29 @@ window.addEventListener('DOMContentLoaded', function() {
   if(btnPinBase) btnPinBase.addEventListener('click', function(){
     if(!kakaoMap){ alert('먼저 지도를 불러주세요.'); return; }
 
+    // 동선관리 탭: 지도 클릭 → 임의좌표를 큐에 추가
+    if(currentTab == 'ds') {
+      var isActive = this.className.indexOf('active') !== -1;
+      var banner = document.getElementById('mapSelectBanner');
+      var icon   = document.getElementById('mapSelectIcon');
+      var text   = document.getElementById('mapSelectText');
+      if(isActive) {
+        this.className = 'pinbase-btn';
+        if(banner) banner.style.display = 'none';
+        kakaoMap.setCursor('');
+        window._dsPinMode = false;
+      } else {
+        this.className = 'pinbase-btn active';
+        if(banner) banner.style.display = '';
+        if(icon)   icon.textContent = '📌';
+        if(text)   text.textContent = '지도를 클릭해 동선에 위치를 추가하세요';
+        kakaoMap.setCursor('crosshair');
+        window._dsPinMode = true;
+      }
+      return;
+    }
+    window._dsPinMode = false;
+
     var isActive = this.className.indexOf('active') !== -1;
     var banner = document.getElementById('mapSelectBanner');
     var icon   = document.getElementById('mapSelectIcon');
@@ -1112,6 +1206,32 @@ function loadKakaoScript(key) {
 
       // 지도 클릭 → 선택 모드일 때 위치 설정
       kakao.maps.event.addListener(kakaoMap, 'click', function(mouseEvent) {
+
+        // 동선관리 임의좌표 모드
+        if(window._dsPinMode) {
+          var latlng = mouseEvent.latLng;
+          var gc = new kakao.maps.services.Geocoder();
+          gc.coord2Address(latlng.getLng(), latlng.getLat(), function(result, status) {
+            var a = latlng.getLat().toFixed(4) + ',' + latlng.getLng().toFixed(4);
+            if(status === kakao.maps.services.Status.OK && result.length > 0) {
+              var r = result[0];
+              a = r.road_address ? r.road_address.address_name : r.address.address_name;
+            }
+            var obj = { id:'DS_PIN_' + Date.now(), name:a, lat:String(latlng.getLat()), lng:String(latlng.getLng()), address:a };
+            dsQueue.push(obj);
+            syncDsQueueToRoute();
+            if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+            renderDsPreview();
+          });
+          window._dsPinMode = false;
+          var btn2 = document.getElementById('btnPinBase');
+          if(btn2) btn2.className = 'pinbase-btn';
+          var banner2 = document.getElementById('mapSelectBanner');
+          if(banner2) banner2.style.display = 'none';
+          kakaoMap.setCursor('');
+          return;
+        }
+
         // 핀잡기 모드 처리
         if(pinBaseMode) {
           var latlng = mouseEvent.latLng;
@@ -1654,7 +1774,10 @@ function drawNearby(lat, lng) {
     var evDots2 = '';
     if(evInfo2.hasEvent) evDots2 += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E8C97A;margin-left:3px;vertical-align:middle;"></span>';
     if(evInfo2.hasCustom) evDots2 += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-left:2px;vertical-align:middle;"></span>';
-    var dsIdx = dsQueue.findIndex(function(q){ return q.id == c.id; });
+    var dsIdx = dsQueue.findIndex(function(q){
+      if(c.id && q.id) return q.id == c.id;
+      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+    });
     var seqHtml = '';
     if(currentTab == 'ds') {
       if(dsIdx === -1) {
@@ -2470,6 +2593,29 @@ function findMyLocation() {
       myLat = pos.coords.latitude;
       myLng = pos.coords.longitude;
 
+      if(btn){ btn.textContent = '📍'; btn.className = 'myloc-btn'; }
+
+      // 동선관리 탭: 큐에 추가
+      if(currentTab == 'ds') {
+        var obj = { id:'MY_LOC_' + Date.now(), name:'내 위치', lat:String(myLat), lng:String(myLng), address:'내 현재 위치' };
+        dsQueue.push(obj);
+        syncDsQueueToRoute();
+        if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+        renderDsPreview();
+
+        // 지도 내 위치 표시 (노란 마커 유지)
+        if(myLocMarker)  { myLocMarker.setMap(null);  myLocMarker  = null; }
+        if(myLocOverlay) { myLocOverlay.setMap(null); myLocOverlay = null; }
+        var myPos = new kakao.maps.LatLng(myLat, myLng);
+        var svgMe = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#FBBF24" stroke="#fff" stroke-width="2"/><circle cx="16" cy="16" r="6" fill="#fff" opacity=".9"/></svg>';
+        var myImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(svgMe), new kakao.maps.Size(32,32), { offset: new kakao.maps.Point(16,16) });
+        myLocMarker = new kakao.maps.Marker({ position:myPos, map:kakaoMap, image:myImg, title:'내 위치' });
+        kakaoMap.setCenter(myPos);
+        return;
+      }
+
+      var myPos = new kakao.maps.LatLng(myLat, myLng);
+
       // 기존 내 위치 마커/오버레이 제거
       if(myLocMarker)  { myLocMarker.setMap(null);  myLocMarker  = null; }
       if(myLocOverlay) { myLocOverlay.setMap(null); myLocOverlay = null; }
@@ -2511,8 +2657,6 @@ function findMyLocation() {
       document.getElementById('targetAddr').textContent = '위도 '+myLat.toFixed(4)+' / 경도 '+myLng.toFixed(4);
       document.getElementById('headerSub').textContent  = '내 위치 주변 고객 찾기';
       drawNearby(myLat, myLng);
-
-      if(btn){ btn.textContent = '📍 내 위치'; btn.className = 'myloc-btn'; }
     },
     function(err){
       if(btn){ btn.textContent = '📍 내 위치'; btn.className = 'myloc-btn'; }
