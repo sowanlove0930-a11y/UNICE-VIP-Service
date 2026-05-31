@@ -867,6 +867,17 @@ function injectDsRoleLabels() {
   dsRoleOverlays = [];
   dsRoleMarkers.forEach(function(m){ m.setMap(null); });
   dsRoleMarkers = [];
+  // 모든 nearbyMarker labelEl에서 기존 역할 뱃지 제거
+  if(window._nearbyMarkers) {
+    window._nearbyMarkers.forEach(function(nm) {
+      if(nm.labelEl) {
+        var old = nm.labelEl.querySelector('.ds-role-badge');
+        if(old) old.remove();
+        nm.labelEl.style.flexDirection = '';
+        nm.labelEl.style.alignItems = '';
+      }
+    });
+  }
   if(!kakaoMap || currentTab != 'ds') return;
   dsQueue.forEach(function(item, i) {
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
@@ -874,14 +885,32 @@ function injectDsRoleLabels() {
     var roleColor = i == 0 ? '#3B82F6' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
     var isPinType = item.id && (String(item.id).indexOf('DS_PIN_') === 0 || String(item.id).indexOf('MY_LOC_') === 0 || item.id === 'MY_LOC_FIXED');
     if(isPinType) {
-      // 임의좌표/내위치: 고객과 동일한 물방울 마커 (역할 색상)
       var pinSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="' + roleColor + '"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/></svg>';
       var pinImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(pinSvg))), new kakao.maps.Size(28, 36));
-      var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name });
+      var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name, draggable: true });
       dsRoleMarkers.push(pinMarker);
+      // 클릭 제거
       (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); drawDsPolylines(); injectDsRoleLabels(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); renderDsEditList(); } }); })(i);
-      // 임의좌표: 역할 뱃지 + 이름(주소 앞부분) 라벨 — 고객과 동일 스타일
-      var shortName = item.name.length > 12 ? item.name.slice(item.name.lastIndexOf(' ')+1) : item.name;
+      // 드래그 완료 시 주소 갱신
+      (function(qIdx, nameDiv, lblOv){ kakao.maps.event.addListener(pinMarker, 'dragend', function(){
+        var p = pinMarker.getPosition();
+        lblOv.setPosition(p);
+        var gc = new kakao.maps.services.Geocoder();
+        gc.coord2Address(p.getLng(), p.getLat(), function(result, status){
+          var a = p.getLat().toFixed(4) + ',' + p.getLng().toFixed(4);
+          if(status === kakao.maps.services.Status.OK && result.length > 0){
+            var r = result[0];
+            a = r.road_address ? r.road_address.address_name : r.address.address_name;
+          }
+          dsQueue[qIdx].name = a; dsQueue[qIdx].address = a;
+          dsQueue[qIdx].lat = String(p.getLat()); dsQueue[qIdx].lng = String(p.getLng());
+          nameDiv.textContent = a.length > 14 ? a.slice(a.indexOf(' ')+1) : a;
+          syncDsQueueToRoute(); drawDsPolylines(); renderDsEditList();
+        });
+      }); })(i, null, null);
+      // 라벨 — 주소 표시 (앞 시/구 제거하고 도로명만)
+      var addrText = item.address || item.name;
+      var shortAddr = addrText.length > 14 ? addrText.replace(/^[^\s]+\s[^\s]+\s/, '') : addrText;
       var pinLblEl = document.createElement('div');
       pinLblEl.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;pointer-events:none;';
       var pinBadge = document.createElement('div');
@@ -889,13 +918,30 @@ function injectDsRoleLabels() {
       pinBadge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;';
       pinBadge.textContent = roleText;
       var pinNameDiv = document.createElement('div');
-      pinNameDiv.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;';
-      pinNameDiv.textContent = shortName;
+      pinNameDiv.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:2px 7px;font-size:10px;font-weight:800;color:#F0F4FF;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;';
+      pinNameDiv.textContent = shortAddr;
       pinLblEl.appendChild(pinBadge);
       pinLblEl.appendChild(pinNameDiv);
       var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 2.6, zIndex: 7 });
       pinLblOv.setMap(kakaoMap);
       dsRoleOverlays.push(pinLblOv);
+      // 드래그 시 라벨도 따라오도록 재연결
+      (function(qIdx2, nDiv, lOv){ kakao.maps.event.addListener(pinMarker, 'dragend', function(){
+        var p2 = pinMarker.getPosition();
+        lOv.setPosition(p2);
+        var gc2 = new kakao.maps.services.Geocoder();
+        gc2.coord2Address(p2.getLng(), p2.getLat(), function(result2, status2){
+          var a2 = p2.getLat().toFixed(4) + ',' + p2.getLng().toFixed(4);
+          if(status2 === kakao.maps.services.Status.OK && result2.length > 0){
+            var r2 = result2[0];
+            a2 = r2.road_address ? r2.road_address.address_name : r2.address.address_name;
+          }
+          dsQueue[qIdx2].name = a2; dsQueue[qIdx2].address = a2;
+          dsQueue[qIdx2].lat = String(p2.getLat()); dsQueue[qIdx2].lng = String(p2.getLng());
+          nDiv.textContent = a2.length > 14 ? a2.replace(/^[^\s]+\s[^\s]+\s/, '') : a2;
+          syncDsQueueToRoute(); drawDsPolylines(); renderDsEditList();
+        });
+      }); })(i, pinNameDiv, pinLblOv);
     } else {
       // 일반 고객: 기존 nearbyMarker labelEl에 역할 뱃지 주입
       if(window._nearbyMarkers && window._nearbyList) {
