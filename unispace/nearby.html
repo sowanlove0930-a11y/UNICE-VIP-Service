@@ -917,7 +917,9 @@ function injectDsRoleLabels() {
           dsQueue[qIdx2].name = a2; dsQueue[qIdx2].address = a2;
           dsQueue[qIdx2].lat = String(p2.getLat()); dsQueue[qIdx2].lng = String(p2.getLng());
           nDiv.textContent = a2.length > 14 ? a2.replace(/^[^\s]+\s[^\s]+\s/, '') : a2;
-          syncDsQueueToRoute(); drawDsPolylines(); renderDsEditList();
+          syncDsQueueToRoute(); drawDsPolylines();
+          injectDsRoleLabels();
+          renderDsEditList();
         });
       }); })(i, pinNameDiv, pinLblOv);
     } else {
@@ -2088,7 +2090,16 @@ function refreshNearbyOnly(lat, lng) {
     }
     (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
     var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:2.6, clickable:true, zIndex:1 });
-    nameOverlay.setMap(kakaoMap);
+    var inQueueNow2 = currentTab == 'ds' && dsQueue.findIndex(function(q){
+      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
+      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+    }) !== -1;
+    if(inQueueNow2) {
+      labelEl.style.display = 'none';
+      nameOverlay.setMap(kakaoMap);
+    } else {
+      nameOverlay.setMap(kakaoMap);
+    }
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
     nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
     (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); }); })(c, dist, marker);
