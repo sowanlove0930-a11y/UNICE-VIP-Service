@@ -523,6 +523,7 @@ var myLat = null, myLng = null;
 var isCustomerMode = false;
 var currentTab = 'nearby'; // 'nearby' | 'ds' | 'today'
 var dsQueue = []; // 동선관리 큐: [{ name, lat, lng, id, address }, ...]
+var dsPolylines = []; // 동선 연결선
 
 function switchTab(tab) {
   currentTab = tab;
@@ -536,7 +537,14 @@ function switchTab(tab) {
   if(dsPreview) dsPreview.style.display = tab == 'ds' ? '' : 'none';
   if(todayCard) todayCard.style.display = tab == 'today' ? '' : 'none';
   if(tab == 'today') renderTodayCard();
-  if(tab == 'ds') renderDsPreview();
+  if(tab == 'ds') {
+    renderDsPreview();
+    drawDsPolylines();
+    applyNearbyMarkerOpacity();
+  } else {
+    clearDsPolylines();
+    restoreNearbyMarkerOpacity();
+  }
   var clistEl = document.getElementById('clist');
   var rcntEl = document.getElementById('resultCount');
   if(clistEl) clistEl.style.display = tab == 'today' ? 'none' : '';
@@ -608,6 +616,7 @@ function renderDsPreview() {
         dsQueue.splice(toIdx, 0, moved);
         syncDsQueueToRoute();
         if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+        applyNearbyMarkerOpacity();
         renderDsPreview();
       });
 
@@ -698,12 +707,14 @@ function addToDsQueue(customer) {
     dsQueue.splice(idx, 1);
     syncDsQueueToRoute();
     if(window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+    applyNearbyMarkerOpacity();
     renderDsPreview();
     return;
   }
   dsQueue.push({ id: customer.id, name: customer.name, lat: customer.lat, lng: customer.lng, address: customer.address || '' });
   syncDsQueueToRoute();
   if(window._nearbyList && centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+  applyNearbyMarkerOpacity();
   renderDsPreview();
 }
 
@@ -724,6 +735,7 @@ function syncDsQueueToRoute() {
   renderRoutePanel();
   var ob = document.getElementById('routeOpenBtn');
   if(ob) ob.className = 'route-open-btn' + (dsQueue.length > 1 ? ' has-route' : '');
+  drawDsPolylines();
 }
 
 // ── 길찾기 핀 헬퍼 ──────────────────────────────────
@@ -876,6 +888,71 @@ function clearAllRoutePins() {
     }
   });
   routeViaMarkers = [];
+}
+
+function applyNearbyMarkerOpacity() {
+  if(!window._nearbyMarkers || !window._nearbyList) return;
+  window._nearbyMarkers.forEach(function(nm, i) {
+    var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
+    var inQueue = c && dsQueue.findIndex(function(q){
+      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
+      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+    }) !== -1;
+    var opacity = inQueue ? 1.0 : 0.35;
+    if(nm.labelEl) nm.labelEl.style.opacity = String(opacity);
+    if(nm.marker) {
+      var img = nm.marker.getImage();
+      if(img) {
+        var canvas = document.createElement('canvas');
+        canvas.width = 1; canvas.height = 1;
+      }
+      nm.marker.setOpacity(opacity);
+    }
+  });
+}
+
+function restoreNearbyMarkerOpacity() {
+  if(!window._nearbyMarkers) return;
+  window._nearbyMarkers.forEach(function(nm) {
+    if(nm.labelEl) nm.labelEl.style.opacity = '1';
+    if(nm.marker) nm.marker.setOpacity(1);
+  });
+}
+
+function clearDsPolylines() {
+  dsPolylines.forEach(function(p){ p.setMap(null); });
+  dsPolylines = [];
+}
+
+function drawDsPolylines() {
+  clearDsPolylines();
+  if(!kakaoMap || dsQueue.length < 2) return;
+  var validItems = dsQueue.filter(function(q){ return q.lat && q.lng; });
+  if(validItems.length < 2) return;
+  for(var i = 0; i < validItems.length - 1; i++) {
+    var p1 = new kakao.maps.LatLng(parseFloat(validItems[i].lat), parseFloat(validItems[i].lng));
+    var p2 = new kakao.maps.LatLng(parseFloat(validItems[i+1].lat), parseFloat(validItems[i+1].lng));
+    // 흰 테두리 선 (배경)
+    var bgLine = new kakao.maps.Polyline({
+      path: [p1, p2],
+      strokeWeight: 9,
+      strokeColor: '#FFFFFF',
+      strokeOpacity: 0.6,
+      strokeStyle: 'solid'
+    });
+    bgLine.setMap(kakaoMap);
+    dsPolylines.push(bgLine);
+    // 골드 실선 (전경)
+    var fgLine = new kakao.maps.Polyline({
+      path: [p1, p2],
+      strokeWeight: 5,
+      strokeColor: '#E8C97A',
+      strokeOpacity: 0.95,
+      strokeStyle: 'solid'
+    });
+    fgLine.setMap(kakaoMap);
+    dsPolylines.push(fgLine);
+  }
 }
 
 function getRoutePinLabel(type) {
@@ -1150,11 +1227,15 @@ window.addEventListener('DOMContentLoaded', function() {
   var rpResetBtn = document.getElementById('rpResetBtn');
   if(rpResetBtn) rpResetBtn.addEventListener('click', function(){
     panelFrom = null; panelTo = null; panelVia = [];
+    dsQueue = [];
     clearAllRoutePins();
+    clearDsPolylines();
+    restoreNearbyMarkerOpacity();
     selectedPanelCustomer = null;
     var card = document.getElementById('selectedCustomerCard');
     if(card) card.style.display = 'none';
     renderRoutePanel();
+    renderDsPreview();
     var ob = document.getElementById('routeOpenBtn');
     if(ob) ob.className = 'route-open-btn';
   });
