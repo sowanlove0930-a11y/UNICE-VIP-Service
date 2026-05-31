@@ -821,6 +821,7 @@ function addToDsQueue(customer) {
     syncDsQueueToRoute();
     drawDsPolylines();
     updateDsMarkerLabels();
+    injectDsRoleLabels();
     renderDsEditList();
     return;
   }
@@ -828,39 +829,39 @@ function addToDsQueue(customer) {
   syncDsQueueToRoute();
   drawDsPolylines();
   updateDsMarkerLabels();
+  injectDsRoleLabels();
   renderDsEditList();
   setTimeout(function(){ flashHighlightInList(customer); }, 100);
 }
 
 function updateDsMarkerLabels() {
+  // nearbyMarker 라벨은 opacity만 조작 (역할 표시는 dsRoleOverlays로 완전 분리)
+  // 기존 역할 오버레이 제거
+  dsRoleOverlays.forEach(function(o){ o.setMap(null); });
+  dsRoleOverlays = [];
   if(!window._nearbyMarkers || !window._nearbyList) return;
   window._nearbyMarkers.forEach(function(nm, i) {
     var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
-    if(!c || !nm.labelEl) return;
+    if(!c) return;
     var queueIdx = dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     });
     var inQueue = queueIdx !== -1;
-    // 기존 역할 뱃지 제거
-    var oldBadge = nm.labelEl.querySelector('.ds-role-badge');
-    if(oldBadge) oldBadge.remove();
-    if(inQueue) {
+    // 이름 라벨 opacity만 조작 (구조 변경 없음)
+    if(nm.labelEl) nm.labelEl.style.opacity = inQueue ? '1' : '0.35';
+    if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : 0.35);
+    // 큐에 있는 고객: 역할 라벨 오버레이 생성
+    if(inQueue && kakaoMap) {
+      var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
       var roleText = queueIdx == 0 ? '출발' : (queueIdx == dsQueue.length-1 && dsQueue.length > 1 ? '도착' : '경유' + queueIdx);
       var roleColor = queueIdx == 0 ? '#3B82F6' : (queueIdx == dsQueue.length-1 && dsQueue.length > 1 ? '#EF4444' : '#A78BFA');
-      var badge = document.createElement('div');
-      badge.className = 'ds-role-badge';
-      badge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-bottom:2px;pointer-events:none;text-align:center;display:block;';
-      badge.textContent = roleText;
-      nm.labelEl.style.cssText = nm.labelEl.style.cssText + ';display:flex;flex-direction:column;align-items:center;';
-      nm.labelEl.insertBefore(badge, nm.labelEl.firstChild);
-      nm.labelEl.style.opacity = '1';
-      if(nm.marker) nm.marker.setOpacity(1.0);
-    } else {
-      nm.labelEl.style.flexDirection = '';
-      nm.labelEl.style.alignItems = '';
-      nm.labelEl.style.opacity = currentTab == 'ds' ? '0.35' : '1';
-      if(nm.marker) nm.marker.setOpacity(currentTab == 'ds' ? 0.35 : 1.0);
+      var roleEl = document.createElement('div');
+      roleEl.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;pointer-events:none;white-space:nowrap;';
+      roleEl.textContent = roleText;
+      var roleOv = new kakao.maps.CustomOverlay({ position: pos, content: roleEl, yAnchor: -0.3, zIndex: 7 });
+      roleOv.setMap(kakaoMap);
+      dsRoleOverlays.push(roleOv);
     }
   });
 }
@@ -953,8 +954,7 @@ function injectDsRoleLabels() {
         });
       }); })(i, pinNameDiv, pinLblOv);
     } else {
-      // 일반 고객: labelEl에 이미 역할 뱃지가 포함됨 (refreshNearbyOnly에서 처리)
-      // 추가 처리 불필요
+      // 일반 고객: updateDsMarkerLabels에서 처리
     }
   });
 }
