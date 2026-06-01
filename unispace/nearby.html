@@ -575,9 +575,10 @@ function setRouteMode(mode){
     }
   }
   if(kakaoMap) kakaoMap.setCursor('');
-  // 모드 변경 시 마커 투명도 즉시 반영
-  if((currentTab=='ds'||currentTab=='today') && window._nearbyList && centerLat && centerLng){
-    if(typeof applyNearbyMarkerOpacity === 'function') applyNearbyMarkerOpacity();
+  // 모드 변경 시 마커/핀 즉시 반영
+  if(isRouteTab()){
+    if(window._nearbyList && centerLat && centerLng && typeof applyNearbyMarkerOpacity === 'function') applyNearbyMarkerOpacity();
+    if(dsQueue.length > 0){ injectDsRoleLabels(); updateDsMarkerLabels(); drawDsPolylines(); }
   }
 }
 
@@ -1314,7 +1315,8 @@ function injectDsRoleLabels() {
         cNameDiv.textContent = item.name;
         cLblEl.appendChild(cBadge);
         cLblEl.appendChild(cNameDiv);
-        var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: 2.6, zIndex: 7 });
+        cLblEl.style.pointerEvents = 'auto';
+        var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: 2.6, zIndex: 7, clickable: true });
         cLblOv._dsRoleKind = 'pin';
         cLblOv.setMap(kakaoMap);
         dsRoleOverlays.push(cLblOv);
@@ -1808,6 +1810,10 @@ window.addEventListener('DOMContentLoaded', function() {
         kakaoMap.setCursor('');
         window._dsPinMode = false;
         clearNearbyMarkersAll();
+        // 동선만 깔끔히 다시 표시 (검색 잔상 제거)
+        injectDsRoleLabels();
+        updateDsMarkerLabels();
+        drawDsPolylines();
       } else {
         this.className = 'pinbase-btn active';
         if(banner) banner.style.display = '';
