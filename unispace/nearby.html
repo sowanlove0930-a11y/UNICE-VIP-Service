@@ -749,6 +749,55 @@ function renderDsPreview() {
   buildChips();
 }
 
+function renderRouteFromData(route){
+  var inner = document.getElementById('todayInner');
+  if(!inner || !route || !route.stops) return;
+  var stops = route.stops;
+  var header = '📅 ' + (route.fpName||'') + ' ' + (route.date||'') + ' 동선 (' + stops.length + '곳)';
+  var html = '<div class="today-hd">' + header + '</div>';
+  stops.forEach(function(s, i) {
+    var seqCls = i == 0 ? 'ds-seq ds-s0' : (i == stops.length - 1 ? 'ds-seq ds-s2' : 'ds-seq ds-s1');
+    var supTxt = '';
+    if(s.support){
+      var sIcon = s.support=='지점장' ? '🎯' : '👤';
+      var sReq = s.supportReqTime ? ' ' + s.supportReqTime + (s.supportReqEndTime?'~'+s.supportReqEndTime:'') : '';
+      supTxt = ' <span style="color:#93C5FD;font-size:9px">' + sIcon + s.support + sReq + '</span>';
+    }
+    html += '<div class="today-row">'
+      + '<span class="today-time">' + (s.time || '—') + '</span>'
+      + '<span class="today-name">' + s.name + supTxt + '</span>'
+      + '<span class="today-place">' + (s.address || '') + '</span>'
+      + '<div class="' + seqCls + '">' + (i+1) + '</div>'
+      + '</div>';
+  });
+  if(route.skipped) html += '<div style="font-size:10px;color:var(--text3);padding:6px 0 0">※ 좌표 없는 활동 ' + route.skipped + '건은 지도에서 제외됨</div>';
+  inner.innerHTML = html;
+
+  // build route pins + lines directly from stop coords
+  panelFrom = null; panelTo = null; panelVia = [];
+  clearAllRoutePins();
+  stops.forEach(function(s, i) {
+    var obj = { name: s.name, lat: s.lat||'', lng: s.lng||'', address: s.address||s.name };
+    if(i == 0) panelFrom = obj;
+    else if(i == stops.length - 1) panelTo = obj;
+    else panelVia.push(obj);
+    if(s.lat && s.lng) {
+      var pos = new kakao.maps.LatLng(parseFloat(s.lat), parseFloat(s.lng));
+      var type = i == 0 ? 'from' : (i == stops.length - 1 ? 'to' : 'via_' + (i-1));
+      var label = String(i+1) + ' ' + s.name;
+      setRoutePin(type, pos, label);
+      updateRoutePinAddr(type, pos, obj.address || obj.name);
+    }
+  });
+  renderRoutePanel();
+  var ob = document.getElementById('routeOpenBtn');
+  if(ob && (panelFrom || panelTo)) ob.className = 'route-open-btn has-route';
+  // center map to fit first stop
+  if(stops[0] && stops[0].lat && stops[0].lng && kakaoMap){
+    kakaoMap.setCenter(new kakao.maps.LatLng(parseFloat(stops[0].lat), parseFloat(stops[0].lng)));
+  }
+}
+
 function renderTodayCard() {
   var inner = document.getElementById('todayInner');
   if(!inner) return;
@@ -1288,6 +1337,18 @@ window.addEventListener('DOMContentLoaded', function() {
     sessionStorage.removeItem('nearbyTarget');
   }
 
+  // sessionStorage에서 하루 동선 (index 주간현황에서 전달)
+  try { window._pendingRoute = JSON.parse(sessionStorage.getItem('nearbyRoute') || 'null'); } catch(e){ window._pendingRoute = null; }
+  if(window._pendingRoute){
+    sessionStorage.removeItem('nearbyRoute');
+    // center map on first stop
+    var st0 = window._pendingRoute.stops && window._pendingRoute.stops[0];
+    if(st0 && st0.lat && st0.lng){ centerLat = parseFloat(st0.lat); centerLng = parseFloat(st0.lng); }
+    var fpn = window._pendingRoute.fpName || '';
+    var dt = window._pendingRoute.date || '';
+    document.getElementById('headerSub').textContent = fpn + ' ' + dt + ' 동선';
+  }
+
   // 기준 고객 카드 클릭 → 지도 해당 위치로 이동
   var targetCard = document.getElementById('targetCard');
   if(targetCard) targetCard.addEventListener('click', function(){
@@ -1740,6 +1801,12 @@ function loadKakaoScript(key) {
       });
       var addr = document.getElementById('addrInput').value.trim();
       if(addr) searchAddr();
+
+      // index 주간현황에서 전달된 하루 동선 자동 표시
+      if(window._pendingRoute && window._pendingRoute.stops && window._pendingRoute.stops.length){
+        switchTab('today');
+        renderRouteFromData(window._pendingRoute);
+      }
     });
   };
   s.onerror = function() {
@@ -2222,13 +2289,29 @@ function drawNearby(lat, lng) {
 
   var baseName = document.getElementById('targetName').textContent || '';
   var baseAddr = document.getElementById('targetAddr').textContent || '';
-  // 고객 모드: 파란 핀에는 주소 표시 (고객명 중복 방지)
-  if(isCustomerMode && !baseAddr && window._baseCustomerId) {
+  // customer mode: show NAME on the blue pin (the regular name label is hidden to avoid duplicate)
+  var baseSub = '';
+  if(isCustomerMode && window._baseCustomerId) {
     var bc = allCustomers.filter(function(a){ return a.id == window._baseCustomerId; })[0];
-    if(bc && bc.address) baseAddr = bc.address;
+    if(bc) {
+      if(bc.name) baseName = bc.name;
+      if(bc.address) baseSub = bc.address;
+    }
+  }
+  // build label: customer mode -> name (+ address subtext); location mode -> address
+  function makeCenterLabelFull() {
+    if(isCustomerMode && baseName) {
+      var nameLine = '<div style="font-size:11px;font-weight:800;color:#fff;line-height:1.25;">📍 ' + baseName + '</div>';
+      var subLine = baseSub ? '<div style="font-size:9px;font-weight:600;color:rgba(255,255,255,.82);line-height:1.2;margin-top:1px;">' + baseSub + '</div>' : '';
+      return '<div onclick="if(window._onCenterPinClick)window._onCenterPinClick();" '
+        + 'style="background:rgba(59,130,246,.92);border:1px solid rgba(255,255,255,.32);border-radius:8px;'
+        + 'padding:4px 10px;white-space:nowrap;margin-bottom:2px;cursor:pointer;pointer-events:auto;'
+        + 'box-shadow:0 3px 10px rgba(0,0,0,.4);text-align:center;">' + nameLine + subLine + '</div>';
+    }
+    return makeCenterLabel(baseAddr || baseName || '');
   }
   var initLabel = baseAddr || baseName || '';
-  if(!initLabel) {
+  if(!isCustomerMode && !initLabel) {
     // 주소 없으면 역지오코딩으로 가져오기
     var gc0 = new kakao.maps.services.Geocoder();
     gc0.coord2Address(lng, lat, function(result, status) {
@@ -2241,7 +2324,7 @@ function drawNearby(lat, lng) {
   }
   centerOverlay = new kakao.maps.CustomOverlay({
     position: centerPos,
-    content: makeCenterLabel(initLabel),
+    content: makeCenterLabelFull(),
     yAnchor: 2.2,
     clickable: true
   });

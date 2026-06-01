@@ -4183,6 +4183,48 @@ function openNearbyFromPopup() {
 }
 
 function closeActPopup(){document.getElementById('actPopup').style.display='none'; _currentActId=null;}
+
+function openRouteFromPopup() {
+  if(!_currentActId) return;
+  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var act=db[_currentActId]; if(!act) return;
+  openDayRoute(act.fpId, act.fpName, act.date);
+}
+
+// FP의 특정 날짜 활동을 동선으로 모아 nearby로 전달
+function openDayRoute(fpId, fpName, dateStr) {
+  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var customers=[]; try{customers=JSON.parse(localStorage.getItem('unispace_customers')||'[]');}catch(e){}
+  function findCust(nm){ for(var i=0;i<customers.length;i++){ if(customers[i] && customers[i].name==nm) return customers[i]; } return null; }
+
+  var acts = Object.values(db).filter(function(a){ return a.fpId===fpId && a.date===dateStr; });
+  acts.sort(function(a,b){ return (a.time||'99:99').localeCompare(b.time||'99:99'); });
+
+  var stops=[]; var skipped=0;
+  acts.forEach(function(a){
+    var la=a.lat, ln=a.lng, addr=a.place||a.placeAddr||'';
+    if(!la || !ln){
+      var c=findCust(a.customerName);
+      if(c && c.lat && c.lng){ la=c.lat; ln=c.lng; if(!addr) addr=c.address||''; }
+    }
+    if(!la || !ln){ skipped++; return; }
+    stops.push({
+      id: a.id, name: a.customerName, address: addr,
+      lat: String(la), lng: String(ln),
+      time: a.time||'', type: a.type||'', status: a.status||'',
+      support: a.support||'', supportReqTime: a.supportReqTime||'', supportReqEndTime: a.supportReqEndTime||''
+    });
+  });
+
+  if(!stops.length){
+    showToast('이 날 좌표가 등록된 활동이 없습니다 (미팅 장소에 주소 입력 필요)');
+    return;
+  }
+  sessionStorage.setItem('nearbyRoute', JSON.stringify({
+    fpId: fpId, fpName: fpName||'', date: dateStr, stops: stops, skipped: skipped
+  }));
+  window.location.href = 'nearby.html';
+}
 document.addEventListener('click',function(e){
   var popup=document.getElementById('actPopup');
   if(popup&&popup.style.display!=='none'&&!popup.contains(e.target)) closeActPopup();
@@ -4366,6 +4408,7 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" onclick="switchActEdit()" style="flex:1;padding:6px;border-radius:8px;border:1px solid rgba(201,168,76,.3);background:rgba(201,168,76,.08);color:var(--gold2);font-size:11px;font-weight:700;cursor:pointer">✏️ 수정</button>
       <button type="button" onclick="openResultFromPopup()" style="flex:1;padding:6px;border-radius:8px;border:1px solid rgba(59,130,246,.3);background:rgba(59,130,246,.08);color:#60A5FA;font-size:11px;font-weight:700;cursor:pointer">📋 결과입력</button>
       <button type="button" onclick="openNearbyFromPopup()" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(201,168,76,.25);background:rgba(201,168,76,.06);color:var(--gold2);font-size:11px;font-weight:700;cursor:pointer">📍</button>
+      <button type="button" onclick="openRouteFromPopup()" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(96,165,250,.3);background:rgba(96,165,250,.08);color:#60A5FA;font-size:11px;font-weight:700;cursor:pointer">🗺️ 동선</button>
       <button type="button" onclick="deleteActFromPopup()" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(239,68,68,.2);background:rgba(239,68,68,.08);color:#FCA5A5;font-size:11px;font-weight:700;cursor:pointer">🗑️</button>
     </div>
   </div>
