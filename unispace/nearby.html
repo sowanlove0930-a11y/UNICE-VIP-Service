@@ -612,6 +612,10 @@ function switchTab(tab) {
     clearRouteLayer();
   }
   if(tab == 'ds') {
+    // 동선조회에서 넘어온 동선(RT_ 항목)이 섞이지 않도록 정리
+    if(dsQueue.some(function(q){ return q.id && String(q.id).indexOf('RT_')===0; })){
+      dsQueue = dsQueue.filter(function(q){ return !(q.id && String(q.id).indexOf('RT_')===0); });
+    }
     openDsEditSheet();
     renderDsEditList();
     if(dsQueue.length > 0) {
@@ -916,6 +920,8 @@ function renderRouteFromData(route){
     if(!s.lat || !s.lng) return;
     dsQueue.push({ id: s.id || ('RT_'+s.name+'_'+s.lat), name: s.name, lat: String(s.lat), lng: String(s.lng), address: s.address || s.name });
   });
+  // 원본 동선 스냅샷 저장 (임의좌표 해제 시 복원용)
+  window._baseRouteQueue = dsQueue.map(function(q){ return { id:q.id, name:q.name, lat:q.lat, lng:q.lng, address:q.address }; });
   syncDsQueueToRoute();
   injectDsRoleLabels();
   updateDsMarkerLabels();
@@ -1819,10 +1825,15 @@ window.addEventListener('DOMContentLoaded', function() {
         kakaoMap.setCursor('');
         window._dsPinMode = false;
         clearNearbyMarkersAll();
-        // 동선만 깔끔히 다시 표시 (검색 잔상 제거)
-        injectDsRoleLabels();
-        updateDsMarkerLabels();
-        drawDsPolylines();
+        if(currentTab == 'today' && window._activeRoute){
+          // 동선조회: 원본 동선으로 복원 (핀+이름+이음선 다시 표시)
+          renderRouteFromData(window._activeRoute);
+        } else {
+          // 동선관리: 현재 dsQueue 기준 동선만 깔끔히 다시 표시
+          injectDsRoleLabels();
+          updateDsMarkerLabels();
+          drawDsPolylines();
+        }
       } else {
         this.className = 'pinbase-btn active';
         if(banner) banner.style.display = '';
@@ -2187,13 +2198,14 @@ function loadKakaoScript(key) {
             });
           })(curMode, latlng);
       });
-      var addr = document.getElementById('addrInput').value.trim();
-      if(addr) searchAddr();
-
       // index 주간현황에서 전달된 하루 동선 자동 표시
       if(window._pendingRoute && window._pendingRoute.stops && window._pendingRoute.stops.length){
         window._activeRoute = window._pendingRoute;
         switchTab('today');
+      } else {
+        // 동선 진입이 아니면(고객 주변조회 등) 주소 자동 검색
+        var addr = document.getElementById('addrInput').value.trim();
+        if(addr) searchAddr();
       }
     });
   };
