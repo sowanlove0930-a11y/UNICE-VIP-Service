@@ -557,7 +557,13 @@ function switchTab(tab) {
   var todayCard = document.getElementById('todayCard');
   if(dsPreview) dsPreview.style.display = 'none';
   if(todayCard) todayCard.style.display = tab == 'today' ? '' : 'none';
-  if(tab == 'today') renderTodayCard();
+  if(tab == 'today') {
+    if(window._activeRoute && window._activeRoute.stops && window._activeRoute.stops.length) {
+      renderRouteFromData(window._activeRoute);
+    } else {
+      renderTodayCard();
+    }
+  }
   if(tab == 'ds') {
     openDsEditSheet();
     renderDsEditList();
@@ -752,6 +758,7 @@ function renderDsPreview() {
 function renderRouteFromData(route){
   var inner = document.getElementById('todayInner');
   if(!inner || !route || !route.stops) return;
+  window._activeRoute = route;
   var stops = route.stops;
   var header = '📅 ' + (route.fpName||'') + ' ' + (route.date||'') + ' 동선 (' + stops.length + '곳)';
   var html = '<div class="today-hd">' + header + '</div>';
@@ -784,9 +791,10 @@ function renderRouteFromData(route){
     if(s.lat && s.lng) {
       var pos = new kakao.maps.LatLng(parseFloat(s.lat), parseFloat(s.lng));
       var type = i == 0 ? 'from' : (i == stops.length - 1 ? 'to' : 'via_' + (i-1));
-      var label = String(i+1) + ' ' + s.name;
-      setRoutePin(type, pos, label);
-      updateRoutePinAddr(type, pos, obj.address || obj.name);
+      var pinNum = String(i+1);
+      var overlayTxt = (i+1) + '. ' + s.name + (s.address ? ' · ' + s.address : '');
+      setRoutePin(type, pos, pinNum);
+      updateRoutePinAddr(type, pos, overlayTxt);
     }
   });
   renderRoutePanel();
@@ -841,9 +849,10 @@ function applyTodayToRoute(acts) {
     if(c && c.lat && c.lng) {
       var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
       var type = i == 0 ? 'from' : (i == acts.length - 1 ? 'to' : 'via_' + (i-1));
-      var label = String(i+1) + ' ' + a.customerName;
-      setRoutePin(type, pos, label);
-      updateRoutePinAddr(type, pos, obj.address || obj.name);
+      var pinNum = String(i+1);
+      var overlayTxt = (i+1) + '. ' + a.customerName + (obj.address ? ' · ' + obj.address : '');
+      setRoutePin(type, pos, pinNum);
+      updateRoutePinAddr(type, pos, overlayTxt);
     }
   });
   renderRoutePanel();
@@ -1804,8 +1813,8 @@ function loadKakaoScript(key) {
 
       // index 주간현황에서 전달된 하루 동선 자동 표시
       if(window._pendingRoute && window._pendingRoute.stops && window._pendingRoute.stops.length){
+        window._activeRoute = window._pendingRoute;
         switchTab('today');
-        renderRouteFromData(window._pendingRoute);
       }
     });
   };
