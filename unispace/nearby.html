@@ -553,6 +553,7 @@ var myLat = null, myLng = null;
 var isCustomerMode = false;
 var currentTab = 'nearby'; // 'nearby' | 'ds' | 'today'
 var routeMode = 'view'; // 'view'(조회) | 'add'(담기) — 동선 짜기/조회 공통
+function isRouteTab(){ return currentTab == 'ds' || currentTab == 'today'; }
 var dsQueue = []; // 동선관리 큐: [{ name, lat, lng, id, address }, ...]
 var dsPolylines = []; // 동선 연결선
 var dsBadges = []; // 동선 구간 번호 배지
@@ -841,6 +842,36 @@ function makeRouteStopOverlay(pos, roleText, name, roleColor){
   return new kakao.maps.CustomOverlay({ position:pos, content:wrap, yAnchor:3.0, zIndex:6, clickable:true });
 }
 
+function renderTodayListFromQueue(){
+  var inner = document.getElementById('todayInner');
+  if(!inner) return;
+  var fpName = (window._activeRoute && window._activeRoute.fpName) || '';
+  var dateStr = (window._activeRoute && window._activeRoute.date) || '';
+  var header = '📅 ' + fpName + ' ' + dateStr + ' 동선 (' + dsQueue.length + '곳)';
+  var html = '<div class="today-hd">' + header + '</div>';
+  if(!dsQueue.length){
+    html += '<div class="today-empty">동선이 비어있습니다 · 담기 모드로 추가하세요</div>';
+    inner.innerHTML = html;
+    return;
+  }
+  dsQueue.forEach(function(q, i){
+    var seqCls = i == 0 ? 'ds-seq ds-s0' : (i == dsQueue.length - 1 ? 'ds-seq ds-s2' : 'ds-seq ds-s1');
+    html += '<div class="today-row" style="cursor:pointer" data-qlat="' + q.lat + '" data-qlng="' + q.lng + '">'
+      + '<span class="today-time">' + (i+1) + '</span>'
+      + '<span class="today-name">' + q.name + '</span>'
+      + '<span class="today-place">' + (q.address || '') + '</span>'
+      + '<div class="' + seqCls + '">' + (i+1) + '</div>'
+      + '</div>';
+  });
+  inner.innerHTML = html;
+  inner.querySelectorAll('.today-row').forEach(function(rowEl){
+    rowEl.addEventListener('click', function(){
+      var la = rowEl.getAttribute('data-qlat'), ln = rowEl.getAttribute('data-qlng');
+      if(la && ln && kakaoMap) kakaoMap.setCenter(new kakao.maps.LatLng(parseFloat(la), parseFloat(ln)));
+    });
+  });
+}
+
 function renderRouteFromData(route){
   var inner = document.getElementById('todayInner');
   if(!inner || !route || !route.stops) return;
@@ -872,30 +903,21 @@ function renderRouteFromData(route){
   if(route.skipped) html += '<div style="font-size:10px;color:var(--text3);padding:6px 0 0">※ 좌표 없는 활동 ' + route.skipped + '건은 지도에서 제외됨</div>';
   inner.innerHTML = html;
 
+  // 동선을 dsQueue로 적재 → 동선관리와 동일한 렌더링 시스템 사용 (담기/이음선/투명도 통일)
   clearRouteLayer();
   if(!kakaoMap) return;
-  var path = [];
-  stops.forEach(function(s, i) {
+  dsQueue = [];
+  stops.forEach(function(s){
     if(!s.lat || !s.lng) return;
-    var pos = new kakao.maps.LatLng(parseFloat(s.lat), parseFloat(s.lng));
-    path.push(pos);
-    var isFrom = (i == 0), isTo = (i == stops.length - 1);
-    var roleText = isFrom ? '출발' : (isTo ? '도착' : '경유' + i);
-    var color = isFrom ? '#3B82F6' : (isTo ? '#EF4444' : '#A78BFA');
-    var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:makeRouteStopMarker(String(i+1), color), title:s.name, zIndex:5 });
-    var overlay = makeRouteStopOverlay(pos, roleText, s.name, color);
-    overlay.setMap(kakaoMap);
-    (function(stop){
-      kakao.maps.event.addListener(marker, 'click', function(){ showRouteStopInfo(stop); });
-      overlay.getContent().addEventListener('click', function(){ showRouteStopInfo(stop); });
-    })(s);
-    _routeMarkers.push({ marker:marker, overlay:overlay });
+    dsQueue.push({ id: s.id || ('RT_'+s.name+'_'+s.lat), name: s.name, lat: String(s.lat), lng: String(s.lng), address: s.address || s.name });
   });
-  if(path.length > 1){
-    var poly = new kakao.maps.Polyline({ path:path, strokeWeight:4, strokeColor:'#E8C97A', strokeOpacity:0.85, strokeStyle:'solid' });
-    poly.setMap(kakaoMap);
-    _routePolylines.push(poly);
-  }
+  syncDsQueueToRoute();
+  injectDsRoleLabels();
+  updateDsMarkerLabels();
+  drawDsPolylines();
+  // 리스트 행 클릭 → 해당 위치로 이동
+  var path = [];
+  stops.forEach(function(s){ if(s.lat && s.lng) path.push(new kakao.maps.LatLng(parseFloat(s.lat), parseFloat(s.lng))); });
   inner.querySelectorAll('.route-row').forEach(function(rowEl){
     rowEl.addEventListener('click', function(){
       var ri = parseInt(rowEl.getAttribute('data-ri'));
@@ -1128,6 +1150,7 @@ function addToDsQueue(customer) {
     updateDsMarkerLabels();
     drawDsPolylines();
     renderDsEditList();
+    if(currentTab == 'today') renderTodayListFromQueue();
     return;
   }
   dsQueue.push({ id: customer.id, name: customer.name, lat: customer.lat, lng: customer.lng, address: customer.address || '' });
@@ -1137,6 +1160,7 @@ function addToDsQueue(customer) {
   updateDsMarkerLabels();
   drawDsPolylines();
   renderDsEditList();
+  if(currentTab == 'today') renderTodayListFromQueue();
   setTimeout(function(){ flashHighlightInList(customer); }, 100);
 }
 
@@ -1184,7 +1208,7 @@ function syncDsQueueToRoute() {
     else panelVia.push(obj);
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
     var type = i == 0 ? 'from' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? 'to' : 'via_' + (panelVia.length - 1));
-    if(currentTab != 'ds') {
+    if(!isRouteTab()) {
       var label = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + (panelVia.length));
       setRoutePin(type, pos, label);
       updateRoutePinAddr(type, pos, item.address || item.name);
@@ -1200,7 +1224,7 @@ function attachRoutePinDsClick2(pos, queueIdx) {}
 
 function injectDsRoleLabels() {
   clearDsRoleLayer();
-  if(!kakaoMap || currentTab != 'ds') return;
+  if(!kakaoMap || !isRouteTab()) return;
   dsQueue.forEach(function(item, i) {
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
     var roleText = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + i);
