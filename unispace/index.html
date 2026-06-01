@@ -3614,7 +3614,7 @@ function renderWeekActTable() {
       if(!dayActs.length){
         html += '<div class="week-empty-cell" style="padding-top:10px;font-size:13px;opacity:0;transition:opacity .2s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0">+</div>';
       } else {
-        dayActs.slice(0,2).forEach(function(a){
+        dayActs.slice(0,3).forEach(function(a){
           var cls  = a.status==='완료' ? 'wac-done' : 'wac-ongoing';
           var icon = a.status==='완료' ? '✅' : (a.type==='1차'?'①':a.type==='2차'?'②':a.type==='3차'?'③':'●');
           var typeLabel = ['1차','2차','3차'].indexOf(a.type)>=0 ? a.type+'상담' : a.type;
@@ -3635,7 +3635,7 @@ function renderWeekActTable() {
             subLine+
           '</div>';
         });
-        if(dayActs.length>2) html += '<div style="font-size:9px;color:var(--text3)">+'+(dayActs.length-2)+'건</div>';
+        if(dayActs.length>3) html += '<div class="week-more" data-more-fp="'+row.fp.id+'" data-more-dt="'+ds+'" style="font-size:9px;color:#60A5FA;font-weight:700;cursor:pointer;padding:2px 0;text-decoration:underline">+'+(dayActs.length-3)+'건 더보기</div>';
       }
       html += '</td>';
     });
@@ -3694,6 +3694,11 @@ function renderWeekActTable() {
     tbl.onclick = function(e) {
       var el = e.target;
       while(el && el !== tbl) {
+        if(el.className && el.className.indexOf('week-more')>=0 && el.dataset && el.dataset.moreFp) {
+          e.stopPropagation();
+          openDayListPopup(el.dataset.moreFp, el.dataset.moreDt);
+          return;
+        }
         if(el.className && el.className.indexOf('week-act-chip')>=0 && el.dataset && el.dataset.aid) {
           showActPopup(e, el.dataset.aid); return;
         }
@@ -3983,6 +3988,9 @@ function _pkBindTimeTriggers(){
   var ov=document.getElementById('pkTimeOverlay'); if(ov) ov.addEventListener('click', function(e){ if(e.target===this) closeTimePicker(); });
   var qLoad=document.getElementById('qaLoadCustAddr'); if(qLoad) qLoad.addEventListener('click', qaLoadCustomerAddr);
   var qP=document.getElementById('qaPlace'); if(qP) qP.addEventListener('input', qaResetGeo);
+  var dlc=document.getElementById('dayListClose'); if(dlc) dlc.addEventListener('click', closeDayListPopup);
+  var dlr=document.getElementById('dayListRoute'); if(dlr) dlr.addEventListener('click', function(){ if(_dayListCtx){ openDayRoute(_dayListCtx.fpId, _dayListCtx.fpName, _dayListCtx.date); } });
+  var dlo=document.getElementById('dayListOverlay'); if(dlo) dlo.addEventListener('click', function(e){ if(e.target===this) closeDayListPopup(); });
 }
 
 // ── 빠른입력 미팅장소 좌표 ────────────────────────────
@@ -4183,6 +4191,54 @@ function openNearbyFromPopup() {
 }
 
 function closeActPopup(){document.getElementById('actPopup').style.display='none'; _currentActId=null;}
+
+var _dayListCtx = null;
+function openDayListPopup(fpId, dateStr){
+  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var acts = Object.values(db).filter(function(a){ return a.fpId===fpId && a.date===dateStr; });
+  acts.sort(function(a,b){ return (a.time||'99:99').localeCompare(b.time||'99:99'); });
+  if(!acts.length) return;
+  var fpName = acts[0].fpName || '';
+  _dayListCtx = { fpId:fpId, fpName:fpName, date:dateStr };
+  var parts = dateStr.split('-');
+  var days = ['일','월','화','수','목','금','토'];
+  var dow = new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2])).getDay();
+  document.getElementById('dayListTitle').textContent = fpName + ' · ' + parts[1]+'/'+parts[2]+'('+days[dow]+') ' + acts.length + '건';
+  var body = document.getElementById('dayListBody');
+  var h = '';
+  acts.forEach(function(a){
+    var icon = a.status==='완료' ? '✅' : (a.type==='1차'?'①':a.type==='2차'?'②':a.type==='3차'?'③':'●');
+    var typeLabel = ['1차','2차','3차'].indexOf(a.type)>=0 ? a.type+'상담' : a.type;
+    var stCls = a.status==='완료' ? '#34D399' : '#93C5FD';
+    var supTxt = '';
+    if(a.support){
+      var sIcon = a.support==='지점장' ? '🎯' : '👤';
+      var sReq = a.supportReqTime ? ' '+a.supportReqTime+(a.supportReqEndTime?'~'+a.supportReqEndTime:'') : '';
+      supTxt = '<span style="color:#93C5FD;font-size:10px;margin-left:4px">'+sIcon+a.support+sReq+'</span>';
+    }
+    var moneyTxt = a.chungyakAmount ? '<span style="color:#FCD34D;font-size:10px;margin-left:4px">'+a.type+' '+a.chungyakAmount+'</span>' : '';
+    h += '<div class="day-list-item" data-aid="'+a.id+'" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:9px 12px;cursor:pointer">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">'
+      + '<span style="font-weight:700;font-size:13px">'+icon+' '+a.customerName+' <span style="font-size:10px;opacity:.6;font-weight:400">'+typeLabel+'</span>'+supTxt+moneyTxt+'</span>'
+      + '<span style="font-size:11px;color:'+stCls+';font-weight:700;flex-shrink:0">'+a.status+'</span>'
+      + '</div>'
+      + '<div style="font-size:10px;color:var(--text3);margin-top:3px">'+(a.time?'⏰ '+a.time+'  ':'')+(a.place?'📍 '+a.place:'')+'</div>'
+      + '</div>';
+  });
+  body.innerHTML = h;
+  body.querySelectorAll('.day-list-item').forEach(function(it){
+    it.addEventListener('click', function(){
+      closeDayListPopup();
+      showActPopupById(it.dataset.aid);
+    });
+  });
+  document.getElementById('dayListOverlay').classList.add('open');
+}
+function closeDayListPopup(){ document.getElementById('dayListOverlay').classList.remove('open'); }
+function showActPopupById(actId){
+  var fake = { target:{ getBoundingClientRect:function(){ return { left:window.innerWidth/2-140, right:window.innerWidth/2+140, top:window.innerHeight/2-100, bottom:window.innerHeight/2 }; } }, stopPropagation:function(){} };
+  showActPopup(fake, actId);
+}
 
 function openRouteFromPopup() {
   if(!_currentActId) return;
@@ -4491,6 +4547,18 @@ function doCheckin() { doSmartCheckin(); }
     <div style="display:flex;gap:6px">
       <button type="button" onclick="switchActView()" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--bdr);background:var(--sur);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">취소</button>
       <button type="button" onclick="saveActEdit()" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-size:12px;font-weight:700;cursor:pointer">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 하루 활동 목록 팝업 -->
+<div class="pk-overlay" id="dayListOverlay">
+  <div class="pk-sheet" style="max-width:380px">
+    <div class="pk-title" id="dayListTitle">하루 일정</div>
+    <div id="dayListBody" style="display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto"></div>
+    <div class="pk-btns">
+      <button type="button" class="pk-btn pk-cancel" id="dayListClose">닫기</button>
+      <button type="button" class="pk-btn pk-ok" id="dayListRoute">🗺️ 이날 전체 동선</button>
     </div>
   </div>
 </div>
