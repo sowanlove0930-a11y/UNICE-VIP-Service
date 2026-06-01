@@ -158,6 +158,41 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(13,22,40,.95);border:1px solid var(--bdr2);border-radius:12px;padding:12px 22px;font-size:13px;font-weight:600;color:var(--text);opacity:0;transition:all .3s;z-index:999;white-space:nowrap;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.4);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+/* 커스텀 피커 트리거 */
+.picker-trigger{display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 12px;background:rgba(255,255,255,.05);border:1px solid var(--bdr2);border-radius:10px;color:var(--text);font-size:13px;cursor:pointer;box-sizing:border-box;transition:border-color .15s;}
+.picker-trigger:hover{border-color:rgba(201,168,76,.4);}
+.picker-trigger .picker-ph{color:var(--text3);}
+.picker-trigger .picker-ico{font-size:13px;opacity:.7;margin-left:8px;}
+/* 피커 오버레이/시트 */
+.pk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;display:none;align-items:center;justify-content:center;padding:20px;}
+.pk-overlay.open{display:flex;}
+.pk-sheet{background:#0D1628;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:20px;width:100%;max-width:340px;box-shadow:0 20px 60px rgba(0,0,0,.5);}
+.pk-title{font-size:15px;font-weight:800;color:var(--gold2);margin-bottom:14px;text-align:center;}
+.pk-btns{display:flex;gap:8px;margin-top:16px;}
+.pk-btn{flex:1;padding:11px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:none;}
+.pk-cancel{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid rgba(255,255,255,.14);}
+.pk-ok{background:linear-gradient(135deg,#E8C97A,#C9A84C);color:#080E1C;}
+/* 휠 */
+.pk-wheels{display:flex;gap:10px;justify-content:center;align-items:stretch;}
+.pk-wheel{flex:1;height:160px;overflow-y:scroll;scroll-snap-type:y mandatory;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.03);position:relative;-webkit-overflow-scrolling:touch;}
+.pk-wheel::-webkit-scrollbar{width:0;height:0;}
+.pk-wheel-pad{height:64px;}
+.pk-opt{height:32px;line-height:32px;text-align:center;font-size:16px;font-weight:700;color:var(--text3);scroll-snap-align:center;cursor:pointer;}
+.pk-opt.sel{color:var(--gold2);font-size:18px;}
+.pk-wheel-label{text-align:center;font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:700;}
+.pk-colon{display:flex;align-items:center;font-size:20px;font-weight:800;color:var(--text2);padding:0 2px;}
+/* 달력 */
+.pk-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.pk-cal-nav{background:rgba(255,255,255,.06);border:none;color:var(--text);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:15px;}
+.pk-cal-ym{font-size:14px;font-weight:800;color:var(--text);}
+.pk-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.pk-cal-dow{text-align:center;font-size:10px;color:var(--text3);font-weight:700;padding:4px 0;}
+.pk-cal-day{text-align:center;font-size:13px;padding:8px 0;border-radius:8px;cursor:pointer;color:var(--text);}
+.pk-cal-day:hover{background:rgba(255,255,255,.07);}
+.pk-cal-day.sel{background:linear-gradient(135deg,#E8C97A,#C9A84C);color:#080E1C;font-weight:800;}
+.pk-cal-day.empty{cursor:default;}
+.pk-cal-day.today{border:1px solid rgba(201,168,76,.5);}
+
 /* GAS 배너 */
 .gas-banner{display:flex;align-items:center;gap:10px;background:rgba(244,163,38,.06);border:1px solid rgba(244,163,38,.2);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:12px;color:var(--orange);}
 
@@ -260,37 +295,45 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       </div>
       <div class="modal-field">
         <label class="modal-label">날짜</label>
-        <input type="date" class="modal-input" id="addDate">
+        <div class="picker-trigger" id="addDateTrig"><span id="addDateDisp" class="picker-ph">날짜 선택</span><span class="picker-ico">📅</span></div>
+        <input type="hidden" id="addDate">
       </div>
       <div class="modal-field">
-        <label class="modal-label">시간</label>
-        <input type="time" class="modal-input" id="addTime">
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">장소</label>
-        <input type="text" class="modal-input" id="addPlace" placeholder="예) 강남 카페">
-      </div>
-      <div class="modal-field full">
         <label class="modal-label">고객명 <span style="color:var(--red);font-size:10px">* 필수</span></label>
         <input type="text" class="modal-input" id="addCustomer" placeholder="고객 이름 입력">
       </div>
+      <div class="modal-field">
+        <label class="modal-label">시간</label>
+        <div class="picker-trigger" id="addTimeTrig"><span id="addTimeDisp" class="picker-ph">시간 선택</span><span class="picker-ico">🕐</span></div>
+        <input type="hidden" id="addTime">
+      </div>
+      <div class="modal-field full">
+        <label class="modal-label">미팅 장소 <span style="font-size:10px;color:var(--text3);font-weight:400">(주소 입력 시 동선 지도에 표기)</span></label>
+        <div style="display:flex;gap:6px;align-items:stretch">
+          <input type="text" class="modal-input" id="addPlace" placeholder="예) 부산 해운대구 우동 1407 또는 해운대 스벅" style="flex:1">
+          <button type="button" id="btnLoadCustAddr" style="padding:0 12px;border:1px solid rgba(96,165,250,.35);background:rgba(96,165,250,.1);color:#93C5FD;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif">👤 고객주소</button>
+        </div>
+        <div id="addGeoStatus" style="font-size:10px;margin-top:5px;color:var(--text3)">등록 시 주소를 자동으로 좌표 변환합니다</div>
+        <input type="hidden" id="addLat"><input type="hidden" id="addLng">
+      </div>
 
-      <!-- 헬퍼/지원 탭 -->
+      <!-- 지원 구분 -->
       <div class="modal-field full">
         <label class="modal-label">지원 구분 <span style="font-size:10px;color:var(--text3);font-weight:400">(선택)</span></label>
         <div style="display:flex;gap:6px;margin-bottom:8px">
-          <button type="button" class="support-tab active" id="tabNone"    onclick="setSupportTab('none',this)">없음</button>
-          <button type="button" class="support-tab"        id="tabHelper"  onclick="setSupportTab('helper',this)">👤 헬퍼</button>
-          <button type="button" class="support-tab"        id="tabSupport" onclick="setSupportTab('support',this)">🤝 지원</button>
+          <button type="button" class="support-tab"        id="tabSupport" data-sup="support">🎯 지점장</button>
+          <button type="button" class="support-tab"        id="tabHelper"  data-sup="helper">👤 헬퍼</button>
+          <button type="button" class="support-tab active" id="tabNone"    data-sup="none">없음</button>
         </div>
-        <div id="helperArea"  style="display:none">
-          <input type="text" class="modal-input" id="addHelper" placeholder="헬퍼 이름 입력 (예: 김명옥)">
-        </div>
-        <div id="supportArea" style="display:none">
-          <select class="modal-select" id="addSupport">
-            <option value="지점장">지점장</option>
-            <option value="매니저">매니저</option>
-          </select>
+        <div id="reqTimeArea" style="display:none">
+          <label class="modal-label" style="font-size:11px">지원요청시간 <span style="font-size:10px;color:var(--text3);font-weight:400">(시작 필수 · 종료 선택)</span></label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div class="picker-trigger" id="reqStartTrig" style="flex:1"><span id="reqStartDisp" class="picker-ph">시작 시각</span><span class="picker-ico">🕐</span></div>
+            <span style="color:var(--text3);font-weight:700">~</span>
+            <div class="picker-trigger" id="reqEndTrig" style="flex:1"><span id="reqEndDisp" class="picker-ph">종료 (선택)</span><span class="picker-ico">🕐</span></div>
+          </div>
+          <input type="hidden" id="addReqTime"><input type="hidden" id="addReqEndTime">
+          <div style="font-size:10px;margin-top:4px;color:var(--text3)">주간 활동현황에 표기되어 지점장·동료가 일정을 조율합니다</div>
         </div>
       </div>
 
@@ -306,7 +349,47 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   </div>
 </div>
 
-<!-- 결과 입력 모달 -->
+<!-- 커스텀 날짜 피커 -->
+<div class="pk-overlay" id="pkDateOverlay">
+  <div class="pk-sheet">
+    <div class="pk-title" id="pkDateTitle">날짜 선택</div>
+    <div class="pk-cal-head">
+      <button type="button" class="pk-cal-nav" id="pkCalPrev">‹</button>
+      <div class="pk-cal-ym" id="pkCalYm"></div>
+      <button type="button" class="pk-cal-nav" id="pkCalNext">›</button>
+    </div>
+    <div class="pk-cal-grid" id="pkCalDow"></div>
+    <div class="pk-cal-grid" id="pkCalGrid"></div>
+    <div class="pk-btns">
+      <button type="button" class="pk-btn pk-cancel" id="pkDateCancel">취소</button>
+      <button type="button" class="pk-btn pk-ok" id="pkDateOk">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 커스텀 시간 피커 (휠) -->
+<div class="pk-overlay" id="pkTimeOverlay">
+  <div class="pk-sheet">
+    <div class="pk-title" id="pkTimeTitle">시간 선택</div>
+    <div class="pk-wheels">
+      <div style="flex:1">
+        <div class="pk-wheel-label">시</div>
+        <div class="pk-wheel" id="pkWheelH"></div>
+      </div>
+      <div class="pk-colon" style="padding-top:18px">:</div>
+      <div style="flex:1">
+        <div class="pk-wheel-label">분</div>
+        <div class="pk-wheel" id="pkWheelM"></div>
+      </div>
+    </div>
+    <div class="pk-btns">
+      <button type="button" class="pk-btn pk-cancel" id="pkTimeClear" style="flex:0 0 auto;padding-left:14px;padding-right:14px">지우기</button>
+      <button type="button" class="pk-btn pk-cancel" id="pkTimeCancel">취소</button>
+      <button type="button" class="pk-btn pk-ok" id="pkTimeOk">확인</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="resultModal">
   <div class="modal-box">
     <div class="modal-title">RESULT INPUT</div>
@@ -402,6 +485,41 @@ window.addEventListener('DOMContentLoaded', function() {
 
   // 오늘 날짜 자동 선택
   selectDate(now.getFullYear(), now.getMonth(), now.getDate());
+
+  var bL=document.getElementById('btnLoadCustAddr');
+  if(bL) bL.addEventListener('click', loadCustomerAddr);
+  var addrInp=document.getElementById('addPlace');
+  if(addrInp) addrInp.addEventListener('input', resetAddGeo);
+  ['tabNone','tabHelper','tabSupport'].forEach(function(tid){
+    var btn=document.getElementById(tid);
+    if(btn) btn.addEventListener('click', function(){ setSupportTab(btn.getAttribute('data-sup'), btn); });
+  });
+
+  // 커스텀 피커 트리거
+  var dTrig=document.getElementById('addDateTrig');
+  if(dTrig) dTrig.addEventListener('click', function(){ openDatePicker('addDate','addDateDisp'); });
+  var tTrig=document.getElementById('addTimeTrig');
+  if(tTrig) tTrig.addEventListener('click', function(){ openTimePicker('addTime','addTimeDisp','미팅 시간'); });
+  var rsTrig=document.getElementById('reqStartTrig');
+  if(rsTrig) rsTrig.addEventListener('click', function(){ openTimePicker('addReqTime','reqStartDisp','지원요청 시작'); });
+  var reTrig=document.getElementById('reqEndTrig');
+  if(reTrig) reTrig.addEventListener('click', function(){ openTimePicker('addReqEndTime','reqEndDisp','지원요청 종료'); });
+  // data-ph for clearable displays
+  var rsD=document.getElementById('reqStartDisp'); if(rsD) rsD.setAttribute('data-ph','시작 시각');
+  var reD=document.getElementById('reqEndDisp'); if(reD) reD.setAttribute('data-ph','종료 (선택)');
+  var atD=document.getElementById('addTimeDisp'); if(atD) atD.setAttribute('data-ph','시간 선택');
+
+  // 피커 모달 버튼
+  renderPkCalDow();
+  document.getElementById('pkDateCancel').addEventListener('click', closeDatePicker);
+  document.getElementById('pkDateOk').addEventListener('click', confirmDatePicker);
+  document.getElementById('pkCalPrev').addEventListener('click', function(){ _pkCalM--; if(_pkCalM<0){_pkCalM=11;_pkCalY--;} renderPkCal(); });
+  document.getElementById('pkCalNext').addEventListener('click', function(){ _pkCalM++; if(_pkCalM>11){_pkCalM=0;_pkCalY++;} renderPkCal(); });
+  document.getElementById('pkTimeCancel').addEventListener('click', closeTimePicker);
+  document.getElementById('pkTimeOk').addEventListener('click', confirmTimePicker);
+  document.getElementById('pkTimeClear').addEventListener('click', clearTimePicker);
+  document.getElementById('pkDateOverlay').addEventListener('click', function(e){ if(e.target===this) closeDatePicker(); });
+  document.getElementById('pkTimeOverlay').addEventListener('click', function(e){ if(e.target===this) closeTimePicker(); });
 });
 
 // ── 유틸 ────────────────────────────────────────────
@@ -491,7 +609,11 @@ function renderActivityList(){
       : '';
     var supportBadge = '';
     if(a.helper)  supportBadge = '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(139,92,246,.12);color:#A78BFA;border:1px solid rgba(139,92,246,.2);margin-left:6px">👤 '+a.helper+'</span>';
-    if(a.support) supportBadge = '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(59,130,246,.1);color:#60A5FA;border:1px solid rgba(59,130,246,.2);margin-left:6px">🤝 '+a.support+'</span>';
+    if(a.support) {
+      var supIcon = a.support==='지점장' ? '🎯' : (a.support==='헬퍼' ? '👤' : '🤝');
+      var reqTxt  = a.supportReqTime ? ' '+formatTime(a.supportReqTime)+(a.supportReqEndTime?'~'+formatTime(a.supportReqEndTime):'')+' 요청' : '';
+      supportBadge = '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(59,130,246,.1);color:#60A5FA;border:1px solid rgba(59,130,246,.2);margin-left:6px">'+supIcon+' '+a.support+reqTxt+'</span>';
+    }
     var footerBtns = a.status!=='완료'
       ? '<button type="button" class="act-btn act-btn-result" onclick="openResultModal(\''+a.id+'\')">결과 입력</button>'
       : '<span style="font-size:11px;color:#34D399;font-weight:700">✅ 상담 완료</span>';
@@ -504,7 +626,7 @@ function renderActivityList(){
         '<div class="act-customer">'+a.customerName+supportBadge+'</div>'+
         '<div class="act-info">'+
           (a.time?'<div class="act-info-item">⏰ '+formatTime(a.time)+'</div>':'')+
-          (a.place?'<div class="act-info-item">📍 '+a.place+'</div>':'')+
+          (a.place?'<div class="act-info-item">📍 '+a.place+(a.lat&&a.lng?' <span style="color:#34D399;font-size:10px">●동선</span>':'')+'</div>':'')+
           (a.note?'<div class="act-info-item">💬 '+a.note+'</div>':'')+
         '</div>'+
       '</div>'+
@@ -518,11 +640,147 @@ function renderActivityList(){
 }
 
 // ── 헬퍼/지원 탭 ─────────────────────────────────────
+// ── 커스텀 피커 (날짜 달력 + 시간 휠) ─────────────────
+var _pkDateTarget=null, _pkTimeTarget=null, _pkCalY=0, _pkCalM=0, _pkSelDate='';
+var _pkWheelH=null, _pkWheelM=null;
+
+function pad2(n){ return String(n).length<2 ? '0'+n : String(n); }
+function getTodayStr(){ var d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+
+function fmtDateDisp(ymd){
+  if(!ymd) return '';
+  var p=ymd.split('-'); if(p.length<3) return ymd;
+  return p[0]+'. '+p[1]+'. '+p[2];
+}
+
+// 날짜 피커
+function openDatePicker(hiddenId, dispId){
+  _pkDateTarget={ hidden:hiddenId, disp:dispId };
+  var cur=document.getElementById(hiddenId).value;
+  var d = cur ? new Date(cur+'T00:00:00') : new Date();
+  if(isNaN(d.getTime())) d=new Date();
+  _pkCalY=d.getFullYear(); _pkCalM=d.getMonth(); _pkSelDate=cur||'';
+  renderPkCal();
+  document.getElementById('pkDateOverlay').classList.add('open');
+}
+function renderPkCalDow(){
+  var dows=['일','월','화','수','목','금','토'];
+  var h='';
+  for(var i=0;i<7;i++) h+='<div class="pk-cal-dow">'+dows[i]+'</div>';
+  document.getElementById('pkCalDow').innerHTML=h;
+}
+function renderPkCal(){
+  document.getElementById('pkCalYm').textContent=_pkCalY+'년 '+(_pkCalM+1)+'월';
+  var first=new Date(_pkCalY,_pkCalM,1).getDay();
+  var days=new Date(_pkCalY,_pkCalM+1,0).getDate();
+  var todayStr=getTodayStr();
+  var h='';
+  for(var i=0;i<first;i++) h+='<div class="pk-cal-day empty"></div>';
+  for(var dd=1;dd<=days;dd++){
+    var ymd=_pkCalY+'-'+pad2(_pkCalM+1)+'-'+pad2(dd);
+    var cls='pk-cal-day';
+    if(ymd==_pkSelDate) cls+=' sel';
+    if(ymd==todayStr) cls+=' today';
+    h+='<div class="'+cls+'" data-ymd="'+ymd+'">'+dd+'</div>';
+  }
+  document.getElementById('pkCalGrid').innerHTML=h;
+  var grid=document.getElementById('pkCalGrid');
+  grid.querySelectorAll('.pk-cal-day[data-ymd]').forEach(function(el){
+    el.addEventListener('click', function(){
+      _pkSelDate=el.getAttribute('data-ymd');
+      renderPkCal();
+    });
+  });
+}
+function closeDatePicker(){ document.getElementById('pkDateOverlay').classList.remove('open'); }
+function confirmDatePicker(){
+  if(!_pkDateTarget) return;
+  if(_pkSelDate){
+    document.getElementById(_pkDateTarget.hidden).value=_pkSelDate;
+    var disp=document.getElementById(_pkDateTarget.disp);
+    disp.textContent=fmtDateDisp(_pkSelDate);
+    disp.classList.remove('picker-ph');
+  }
+  closeDatePicker();
+}
+
+// 시간 피커 (휠)
+function buildWheel(el, count, selVal){
+  var h='<div class="pk-wheel-pad"></div>';
+  for(var i=0;i<count;i++) h+='<div class="pk-opt" data-v="'+i+'">'+pad2(i)+'</div>';
+  h+='<div class="pk-wheel-pad"></div>';
+  el.innerHTML=h;
+  el.querySelectorAll('.pk-opt').forEach(function(o){
+    o.addEventListener('click', function(){
+      el.scrollTo({ top:o.offsetTop-64, behavior:'smooth' });
+    });
+  });
+  // scroll to selected
+  setTimeout(function(){
+    var target=el.querySelector('.pk-opt[data-v="'+selVal+'"]');
+    if(target) el.scrollTop=target.offsetTop-64;
+    markWheelCenter(el);
+  },30);
+  el.addEventListener('scroll', function(){
+    clearTimeout(el._st);
+    el._st=setTimeout(function(){ markWheelCenter(el); },60);
+  });
+}
+function markWheelCenter(el){
+  var center=el.scrollTop+64;
+  var opts=el.querySelectorAll('.pk-opt'), best=null, bd=99999;
+  opts.forEach(function(o){
+    var oc=o.offsetTop+16;
+    var dist=Math.abs(oc-center);
+    if(dist<bd){ bd=dist; best=o; }
+    o.classList.remove('sel');
+  });
+  if(best) best.classList.add('sel');
+}
+function getWheelVal(el){
+  var sel=el.querySelector('.pk-opt.sel');
+  return sel ? parseInt(sel.getAttribute('data-v')) : 0;
+}
+function openTimePicker(hiddenId, dispId, title){
+  _pkTimeTarget={ hidden:hiddenId, disp:dispId };
+  var cur=document.getElementById(hiddenId).value;
+  var hh=9, mm=0;
+  if(cur && cur.indexOf(':')>-1){ var pp=cur.split(':'); hh=parseInt(pp[0])||0; mm=parseInt(pp[1])||0; }
+  document.getElementById('pkTimeTitle').textContent=title||'시간 선택';
+  buildWheel(document.getElementById('pkWheelH'),24,hh);
+  buildWheel(document.getElementById('pkWheelM'),60,mm);
+  document.getElementById('pkTimeOverlay').classList.add('open');
+}
+function closeTimePicker(){ document.getElementById('pkTimeOverlay').classList.remove('open'); }
+function confirmTimePicker(){
+  if(!_pkTimeTarget) return;
+  var hh=getWheelVal(document.getElementById('pkWheelH'));
+  var mm=getWheelVal(document.getElementById('pkWheelM'));
+  var val=pad2(hh)+':'+pad2(mm);
+  document.getElementById(_pkTimeTarget.hidden).value=val;
+  var disp=document.getElementById(_pkTimeTarget.disp);
+  disp.textContent=val;
+  disp.classList.remove('picker-ph');
+  closeTimePicker();
+  refreshReqDisp();
+}
+function clearTimePicker(){
+  if(!_pkTimeTarget) return;
+  document.getElementById(_pkTimeTarget.hidden).value='';
+  var disp=document.getElementById(_pkTimeTarget.disp);
+  disp.textContent=disp.getAttribute('data-ph')||'선택';
+  disp.classList.add('picker-ph');
+  closeTimePicker();
+  refreshReqDisp();
+}
+function refreshReqDisp(){ /* placeholder for future range validation */ }
+
 function setSupportTab(type, el) {
   document.querySelectorAll('.support-tab').forEach(function(b){ b.classList.remove('active'); });
-  el.classList.add('active');
-  document.getElementById('helperArea').style.display  = type==='helper'  ? '' : 'none';
-  document.getElementById('supportArea').style.display = type==='support' ? '' : 'none';
+  if(el) el.classList.add('active');
+  var ra = document.getElementById('reqTimeArea');
+  if(ra) ra.style.display = (type==='helper' || type==='support') ? '' : 'none';
+  if(type==='none'){ var rt=document.getElementById('addReqTime'); if(rt) rt.value=''; }
 }
 
 // ── 활동 추가 모달 ───────────────────────────────────
@@ -531,14 +789,77 @@ function openAddModal(){
   document.getElementById('addNote').value     = '';
   document.getElementById('addTime').value     = '';
   document.getElementById('addPlace').value    = '';
+  resetAddGeo();
   document.getElementById('addType').value     = '1차';
+  // date: default to selectedDate
   document.getElementById('addDate').value     = selectedDate || '';
-  document.getElementById('addHelper').value   = '';
+  var dDisp=document.getElementById('addDateDisp');
+  if(selectedDate){ dDisp.textContent=fmtDateDisp(selectedDate); dDisp.classList.remove('picker-ph'); }
+  else { dDisp.textContent='날짜 선택'; dDisp.classList.add('picker-ph'); }
+  // time display reset
+  var tDisp=document.getElementById('addTimeDisp'); tDisp.textContent='시간 선택'; tDisp.classList.add('picker-ph');
+  // request time reset
+  var rt=document.getElementById('addReqTime'); if(rt) rt.value='';
+  var ret=document.getElementById('addReqEndTime'); if(ret) ret.value='';
+  var rsD=document.getElementById('reqStartDisp'); if(rsD){ rsD.textContent='시작 시각'; rsD.classList.add('picker-ph'); }
+  var reD=document.getElementById('reqEndDisp'); if(reD){ reD.textContent='종료 (선택)'; reD.classList.add('picker-ph'); }
   setSupportTab('none', document.getElementById('tabNone'));
   document.getElementById('addModal').classList.add('open');
   setTimeout(function(){ document.getElementById('addCustomer').focus(); },100);
 }
 function closeAddModal(){ document.getElementById('addModal').classList.remove('open'); }
+
+function resetAddGeo(){
+  var lat=document.getElementById('addLat'), lng=document.getElementById('addLng');
+  if(lat) lat.value=''; if(lng) lng.value='';
+  var st=document.getElementById('addGeoStatus');
+  if(st){ st.textContent='등록 시 주소를 자동으로 좌표 변환합니다'; st.style.color='var(--text3)'; }
+}
+
+function getCustomerDB(){
+  var arr=[];
+  try { arr=JSON.parse(localStorage.getItem('unispace_customers')||'[]'); } catch(e){ arr=[]; }
+  if(!Array.isArray(arr)) arr=[];
+  return arr;
+}
+
+function loadCustomerAddr(){
+  var name=document.getElementById('addCustomer').value.trim();
+  var st=document.getElementById('addGeoStatus');
+  if(!name){ showToast('먼저 고객명을 입력해 주세요'); return; }
+  var db=getCustomerDB();
+  var hit=null;
+  for(var i=0;i<db.length;i++){ if(db[i] && db[i].name==name){ hit=db[i]; break; } }
+  if(!hit){ showToast('등록된 고객이 아닙니다 (' + name + ') — 주소를 직접 입력해 주세요'); return; }
+  if(hit.address) document.getElementById('addPlace').value=hit.address;
+  if(hit.lat && hit.lng){
+    document.getElementById('addLat').value=hit.lat;
+    document.getElementById('addLng').value=hit.lng;
+    if(st){ st.textContent='고객 등록좌표 적용됨 · 동선 표기 가능'; st.style.color='#34D399'; }
+    showToast('고객 등록주소/좌표를 불러왔습니다');
+  } else {
+    document.getElementById('addLat').value=''; document.getElementById('addLng').value='';
+    if(st){ st.textContent='고객 주소 적용됨 · 등록 시 좌표 변환'; st.style.color='var(--text3)'; }
+    showToast('고객 주소를 불러왔습니다');
+  }
+}
+
+// geocode an address string; calls cb(lat, lng) or cb(null, null) on failure
+function geocodeAddr(addr, cb){
+  var kakaoKey=localStorage.getItem('kakao_map_key')||'';
+  if(!addr || !kakaoKey){ cb(null, null); return; }
+  fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(addr), {
+    headers:{ 'Authorization':'KakaoAK '+kakaoKey }
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(data.documents && data.documents.length>0){ cb(data.documents[0].y, data.documents[0].x); return null; }
+    return fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr), {
+      headers:{ 'Authorization':'KakaoAK '+kakaoKey }
+    }).then(function(r){ return r.json(); }).then(function(d2){
+      if(d2.documents && d2.documents.length>0){ cb(d2.documents[0].y, d2.documents[0].x); }
+      else { cb(null, null); }
+    });
+  }).catch(function(){ cb(null, null); });
+}
 
 function saveActivity(){
   var customer = document.getElementById('addCustomer').value.trim();
@@ -549,36 +870,60 @@ function saveActivity(){
   // 헬퍼/지원 값 추출
   var helperTab  = document.getElementById('tabHelper').classList.contains('active');
   var supportTab = document.getElementById('tabSupport').classList.contains('active');
-  var helperVal  = helperTab  ? document.getElementById('addHelper').value.trim()  : '';
-  var supportVal = supportTab ? document.getElementById('addSupport').value         : '';
+  // support: '헬퍼' / '지점장' / '' (없음)
+  var supportVal = helperTab ? '헬퍼' : (supportTab ? '지점장' : '');
+  var reqTimeVal = (helperTab || supportTab) ? document.getElementById('addReqTime').value : '';
+  var reqEndVal  = (helperTab || supportTab) ? document.getElementById('addReqEndTime').value : '';
+  if(supportVal && !reqTimeVal){ showToast('⚠️ 지원요청 시작시간을 선택해 주세요'); return; }
 
-  var db  = getActDB();
-  var id  = genId();
-  db[id]  = {
-    id:           id,
-    fpId:         currentUser.id,
-    fpName:       currentUser.name,
-    branch:       currentUser.branch,
-    date:         date,
-    time:         document.getElementById('addTime').value,
-    place:        document.getElementById('addPlace').value.trim(),
-    customerName: customer,
-    type:         document.getElementById('addType').value,
-    status:       '진행중',
-    helper:       helperVal,
-    support:      supportVal,
-    nextDate:     '', nextTime:'', nextPlace:'',
-    note:         document.getElementById('addNote').value.trim(),
-    parentId:     '',
-    createdAt:    new Date().toISOString()
-  };
-  saveActDB(db);
-  // TODO_GAS_ACT_1: GAS POST
-  sessionStorage.setItem('openWeekAcc','1');
-  closeAddModal();
-  if(selectedDate === date) renderActivityList();
-  renderCalendar();
-  showToast('✅ 활동이 등록되었습니다');
+  var placeStr = document.getElementById('addPlace').value.trim();
+  var preLat = document.getElementById('addLat').value;
+  var preLng = document.getElementById('addLng').value;
+
+  function persist(latVal, lngVal){
+    var db  = getActDB();
+    var id  = genId();
+    db[id]  = {
+      id:           id,
+      fpId:         currentUser.id,
+      fpName:       currentUser.name,
+      branch:       currentUser.branch,
+      date:         date,
+      time:         document.getElementById('addTime').value,
+      place:        placeStr,
+      placeAddr:    placeStr,
+      lat:          latVal || '',
+      lng:          lngVal || '',
+      customerName: customer,
+      type:         document.getElementById('addType').value,
+      status:       '진행중',
+      helper:       '',
+      support:      supportVal,
+      supportReqTime: reqTimeVal,
+      supportReqEndTime: reqEndVal,
+      nextDate:     '', nextTime:'', nextPlace:'',
+      note:         document.getElementById('addNote').value.trim(),
+      parentId:     '',
+      createdAt:    new Date().toISOString()
+    };
+    saveActDB(db);
+    // TODO_GAS_ACT_1: GAS POST
+    sessionStorage.setItem('openWeekAcc','1');
+    closeAddModal();
+    if(selectedDate === date) renderActivityList();
+    renderCalendar();
+    if(placeStr && !(latVal && lngVal)) showToast('✅ 등록 완료 (주소 좌표 변환 실패 — 동선 지도엔 미표기)');
+    else showToast('✅ 활동이 등록되었습니다');
+  }
+
+  // coords already set (고객주소 with coords) -> save directly
+  if(preLat && preLng){ persist(preLat, preLng); return; }
+  // no place text -> nothing to geocode
+  if(!placeStr){ persist('', ''); return; }
+  // geocode on save; save regardless of result
+  var st=document.getElementById('addGeoStatus');
+  if(st){ st.textContent='좌표 변환 중...'; st.style.color='var(--text2)'; }
+  geocodeAddr(placeStr, function(la, ln){ persist(la, ln); });
 }
 
 // ── 결과 입력 모달 ───────────────────────────────────
@@ -652,6 +997,9 @@ function saveResult(){
       date:         nextDate,
       time:         nextTime,
       place:        nextPlace,
+      placeAddr:    act.placeAddr || '',
+      lat:          act.lat || '',
+      lng:          act.lng || '',
       customerName: act.customerName,
       type:         document.getElementById('nextType').value,
       status:       '진행중',
