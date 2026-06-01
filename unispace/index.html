@@ -1510,6 +1510,27 @@ body::after {
 }
 .transfer-execute-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(201,168,76,.4); }
 .transfer-execute-btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+/* 커스텀 시간 피커 (휠) */
+.pk-trigger{display:flex;align-items:center;justify-content:space-between;width:100%;padding:6px 10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--text);font-size:12px;cursor:pointer;box-sizing:border-box;transition:border-color .15s;}
+.pk-trigger:hover{border-color:rgba(201,168,76,.4);}
+.pk-trigger .pk-ph{color:var(--text3);}
+.pk-trigger .pk-ico{font-size:12px;opacity:.7;margin-left:8px;}
+.pk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:none;align-items:center;justify-content:center;padding:20px;}
+.pk-overlay.open{display:flex;}
+.pk-sheet{background:#0D1628;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:20px;width:100%;max-width:320px;box-shadow:0 20px 60px rgba(0,0,0,.5);}
+.pk-title{font-size:15px;font-weight:800;color:var(--gold2);margin-bottom:14px;text-align:center;}
+.pk-btns{display:flex;gap:8px;margin-top:16px;}
+.pk-btn{flex:1;padding:11px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:none;}
+.pk-cancel{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid rgba(255,255,255,.14);}
+.pk-ok{background:linear-gradient(135deg,#E8C97A,#C9A84C);color:#080E1C;}
+.pk-wheels{display:flex;gap:10px;justify-content:center;align-items:stretch;}
+.pk-wheel{flex:1;height:160px;overflow-y:scroll;scroll-snap-type:y mandatory;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.03);position:relative;-webkit-overflow-scrolling:touch;}
+.pk-wheel::-webkit-scrollbar{width:0;height:0;}
+.pk-wheel-pad{height:64px;}
+.pk-opt{height:32px;line-height:32px;text-align:center;font-size:16px;font-weight:700;color:var(--text3);scroll-snap-align:center;cursor:pointer;}
+.pk-opt.sel{color:var(--gold2);font-size:18px;}
+.pk-wheel-label{text-align:center;font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:700;}
+.pk-colon{display:flex;align-items:center;font-size:20px;font-weight:800;color:var(--text2);padding:0 2px;}
 </style>
 </head>
 <body>
@@ -1674,12 +1695,18 @@ body::after {
       </div>
       <div class="quick-field">
         <label class="quick-label">시간</label>
-        <input type="time" class="quick-input" id="qaTime">
+        <div class="pk-trigger" id="qaTimeTrig"><span id="qaTimeDisp" class="pk-ph">시간 선택</span><span class="pk-ico">🕐</span></div>
+        <input type="hidden" id="qaTime">
       </div>
     </div>
     <div class="quick-field">
-      <label class="quick-label">장소</label>
-      <input type="text" class="quick-input" id="qaPlace" placeholder="예) 서면 카페">
+      <label class="quick-label">미팅 장소 <span style="font-size:9px;color:var(--text3);font-weight:400">(주소 입력 시 동선 지도에 표기)</span></label>
+      <div style="display:flex;gap:5px;align-items:stretch">
+        <input type="text" class="quick-input" id="qaPlace" placeholder="예) 부산 해운대구 우동 1407 또는 해운대 스벅" style="flex:1">
+        <button type="button" id="qaLoadCustAddr" style="padding:0 10px;border:1px solid rgba(96,165,250,.35);background:rgba(96,165,250,.1);color:#93C5FD;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif">👤 고객주소</button>
+      </div>
+      <div id="qaGeoStatus" style="font-size:9px;margin-top:4px;color:var(--text3)">등록 시 주소를 자동으로 좌표 변환합니다</div>
+      <input type="hidden" id="qaLat"><input type="hidden" id="qaLng">
     </div>
     <!-- 상태 -->
     <div class="quick-field">
@@ -1709,16 +1736,18 @@ body::after {
     <div class="quick-field">
       <label class="quick-label">지원 구분 <span style="font-size:9px;color:var(--text3);font-weight:400">(선택)</span></label>
       <div style="display:flex;gap:5px;margin-bottom:6px">
+        <button type="button" id="qaTabSupport" onclick="setQaSupport('support',this)" style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">🎯 지점장</button>
+        <button type="button" id="qaTabHelper"  onclick="setQaSupport('helper',this)"  style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">👤 헬퍼</button>
         <button type="button" id="qaTabNone"    onclick="setQaSupport('none',this)"    style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid rgba(201,168,76,.3);background:rgba(201,168,76,.12);color:var(--gold2);font-family:'Noto Sans KR',sans-serif">없음</button>
-        <button type="button" id="qaTabHelper"  onclick="setQaSupport('helper',this)"  style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">헬퍼</button>
-        <button type="button" id="qaTabSupport" onclick="setQaSupport('support',this)" style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">지원</button>
       </div>
-      <div id="qaHelperArea"  style="display:none"><input type="text" class="quick-input" id="qaHelper" placeholder="헬퍼 이름"></div>
-      <div id="qaSupportArea" style="display:none">
-        <select class="quick-select" id="qaSupport">
-          <option value="지점장">지점장</option>
-          <option value="매니저">매니저</option>
-        </select>
+      <div id="qaReqArea" style="display:none">
+        <div style="font-size:9px;color:var(--text3);font-weight:700;margin-bottom:4px">지원요청시간 (시작 필수 · 종료 선택)</div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <div class="pk-trigger" id="qaReqStartTrig" style="flex:1"><span id="qaReqStartDisp" class="pk-ph">시작</span><span class="pk-ico">🕐</span></div>
+          <span style="color:var(--text3);font-weight:700">~</span>
+          <div class="pk-trigger" id="qaReqEndTrig" style="flex:1"><span id="qaReqEndDisp" class="pk-ph">종료(선택)</span><span class="pk-ico">🕐</span></div>
+        </div>
+        <input type="hidden" id="qaReqStart"><input type="hidden" id="qaReqEnd">
       </div>
     </div>
     <div class="quick-field">
@@ -2238,6 +2267,7 @@ function saveFpOverride(id, key, val) {
 // ── 초기화 ──────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', function() {
   startClock();
+  _pkBindTimeTriggers();
   // ── 개발모드: 로그인 자동 통과 ──
   currentUser = getMergedFpList()[0]; // 김태규 대표
   localStorage.setItem('unispace_user', JSON.stringify(currentUser)); // attendance.html 연동용
@@ -3592,8 +3622,14 @@ function renderWeekActTable() {
           if(a.time)  sub.push(a.time.slice(0,5));
           if(a.place) sub.push(a.place);
           var subLine = sub.length ? '<div style="font-size:9px;opacity:.7;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sub.join(' · ')+'</div>' : '';
-          var supportTag = a.helper  ? ' <span style="opacity:.8">(헬퍼 '+a.helper+')</span>'
-                         : a.support ? ' <span style="opacity:.8">(지원 '+a.support+')</span>' : '';
+          var supportTag = '';
+          if(a.support) {
+            var sIcon = a.support==='지점장' ? '🎯' : '👤';
+            var sReq  = a.supportReqTime ? ' '+a.supportReqTime.slice(0,5)+(a.supportReqEndTime?'~'+a.supportReqEndTime.slice(0,5):'') : '';
+            supportTag = ' <span style="opacity:.85;color:#93C5FD">('+sIcon+a.support+sReq+')</span>';
+          } else if(a.helper) {
+            supportTag = ' <span style="opacity:.8">(헬퍼 '+a.helper+')</span>';
+          }
           html += '<div class="week-act-chip '+cls+'" data-aid="'+a.id+'">' +
             '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+icon+' '+a.customerName+' <span style="opacity:.65;font-size:9px">'+typeLabel+'</span>'+supportTag+'</div>'+
             subLine+
@@ -3713,14 +3749,17 @@ function switchActView(){
   document.getElementById('actPopupView').style.display='';
   document.getElementById('actPopupEdit').style.display='none';
 }
+var _pSupport = '';
 function setPSupportTab(type, el) {
   ['pTabNone','pTabHelper','pTabSupport'].forEach(function(id){
     var b=document.getElementById(id);
     if(b){b.style.background='var(--sur)';b.style.borderColor='var(--bdr2)';b.style.color='var(--text2)';}
   });
   el.style.background='rgba(201,168,76,.15)';el.style.borderColor='var(--gold)';el.style.color='var(--gold2)';
-  document.getElementById('pHelperArea').style.display  = type==='helper'  ? '' : 'none';
-  document.getElementById('pSupportArea').style.display = type==='support' ? '' : 'none';
+  _pSupport = (type==='support') ? '지점장' : (type==='helper' ? '헬퍼' : '');
+  var ra=document.getElementById('pReqArea');
+  if(ra) ra.style.display = (type==='helper'||type==='support') ? '' : 'none';
+  if(type==='none'){ _pkSetTimeDisp('editReqStartDisp','editReqStart','','시작'); _pkSetTimeDisp('editReqEndDisp','editReqEnd','','종료(선택)'); }
 }
 function toggleChungyakFields(type) {
   var area = document.getElementById('editChungyakArea');
@@ -3732,7 +3771,7 @@ function switchActEdit(){
   var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId];if(!act)return;
   document.getElementById('editActType').value  = act.type  ||'1차';
-  document.getElementById('editActTime').value  = act.time  ||'';
+  _pkSetTimeDisp('editActTimeDisp','editActTime', act.time||'', '시간 선택');
   document.getElementById('editActPlace').value = act.place ||'';
   document.getElementById('editActNote').value  = act.note  ||'';
   toggleChungyakFields(act.type||'1차');
@@ -3741,15 +3780,15 @@ function switchActEdit(){
   if(compEl) compEl.value = act.chungyakCompany||'';
   if(amtEl)  amtEl.value  = act.chungyakAmount ||'';
   setEditStatus(act.status || '진행중');
-  if(act.helper) {
-    setPSupportTab('helper', document.getElementById('pTabHelper'));
-    document.getElementById('editActHelper').value = act.helper;
-  } else if(act.support) {
+  if(act.support==='지점장' || (act.support && act.support!=='헬퍼' && !act.helper)) {
     setPSupportTab('support', document.getElementById('pTabSupport'));
-    document.getElementById('editActSupport').value = act.support;
+  } else if(act.support==='헬퍼' || act.helper) {
+    setPSupportTab('helper', document.getElementById('pTabHelper'));
   } else {
     setPSupportTab('none', document.getElementById('pTabNone'));
   }
+  _pkSetTimeDisp('editReqStartDisp','editReqStart', act.supportReqTime||'', '시작');
+  _pkSetTimeDisp('editReqEndDisp','editReqEnd', act.supportReqEndTime||'', '종료(선택)');
   document.getElementById('actPopupView').style.display='none';
   document.getElementById('actPopupEdit').style.display='';
 }
@@ -3771,16 +3810,23 @@ function saveActEdit(){
   var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
   if(!db[_currentActId]) return;
   var status = document.getElementById('editStatusComplete').dataset.selected ? '완료' : '진행중';
-  var helperActive  = document.getElementById('pHelperArea').style.display  !== 'none';
-  var supportActive = document.getElementById('pSupportArea').style.display !== 'none';
+  var supportVal = _pSupport;
+  var reqStart = supportVal ? document.getElementById('editReqStart').value : '';
+  var reqEnd   = supportVal ? document.getElementById('editReqEnd').value : '';
+  if(supportVal && !reqStart){ showToast('⚠️ 지원요청 시작시간을 선택해 주세요'); return; }
   var type = document.getElementById('editActType').value;
   db[_currentActId].type    = type;
+  var newPlace = document.getElementById('editActPlace').value.trim();
+  var prevPlace = db[_currentActId].place || '';
   db[_currentActId].time    = document.getElementById('editActTime').value;
-  db[_currentActId].place   = document.getElementById('editActPlace').value.trim();
+  db[_currentActId].place   = newPlace;
+  db[_currentActId].placeAddr = newPlace;
   db[_currentActId].note    = document.getElementById('editActNote').value.trim();
   db[_currentActId].status  = status;
-  db[_currentActId].helper  = helperActive  ? document.getElementById('editActHelper').value.trim()  : '';
-  db[_currentActId].support = supportActive ? document.getElementById('editActSupport').value         : '';
+  db[_currentActId].helper  = '';
+  db[_currentActId].support = supportVal;
+  db[_currentActId].supportReqTime = reqStart;
+  db[_currentActId].supportReqEndTime = reqEnd;
   if(type === '청약' || type === 'PT') {
     db[_currentActId].chungyakCompany = document.getElementById('editChungyakCompany').value.trim();
     db[_currentActId].chungyakAmount  = document.getElementById('editChungyakAmount').value.trim();
@@ -3788,9 +3834,23 @@ function saveActEdit(){
     db[_currentActId].chungyakCompany = '';
     db[_currentActId].chungyakAmount  = '';
   }
-  localStorage.setItem('unispace_activities', JSON.stringify(db));
-  closeActPopup(); renderWeekActTable();
-  showToast('✅ 활동이 수정되었습니다');
+  function finishEdit(){
+    localStorage.setItem('unispace_activities', JSON.stringify(db));
+    closeActPopup(); renderWeekActTable();
+    showToast('✅ 활동이 수정되었습니다');
+  }
+  // place changed (or coords missing) and place present -> geocode
+  var hasCoords = db[_currentActId].lat && db[_currentActId].lng;
+  if(newPlace && (newPlace !== prevPlace || !hasCoords)){
+    qaGeocode(newPlace, function(la, ln){
+      db[_currentActId].lat = la || '';
+      db[_currentActId].lng = ln || '';
+      finishEdit();
+    });
+  } else {
+    if(!newPlace){ db[_currentActId].lat=''; db[_currentActId].lng=''; }
+    finishEdit();
+  }
 }
 function deleteActFromPopup(){
   if(!_currentActId) return;
@@ -3833,14 +3893,157 @@ function setQaStatus(status) {
   on.dataset.sel = status==='진행중' ? '1' : '';
   co.dataset.sel = status==='완료'   ? '1' : '';
 }
+// ── 커스텀 시간 피커 (휠) ─────────────────────────────
+var _pkTimeTarget=null;
+function _pkPad2(n){ return String(n).length<2 ? '0'+n : String(n); }
+function _pkBuildWheel(el, count, selVal){
+  var h='<div class="pk-wheel-pad"></div>';
+  for(var i=0;i<count;i++) h+='<div class="pk-opt" data-v="'+i+'">'+_pkPad2(i)+'</div>';
+  h+='<div class="pk-wheel-pad"></div>';
+  el.innerHTML=h;
+  el.querySelectorAll('.pk-opt').forEach(function(o){
+    o.addEventListener('click', function(){ el.scrollTo({ top:o.offsetTop-64, behavior:'smooth' }); });
+  });
+  setTimeout(function(){
+    var t=el.querySelector('.pk-opt[data-v="'+selVal+'"]');
+    if(t) el.scrollTop=t.offsetTop-64;
+    _pkMarkCenter(el);
+  },30);
+  el.addEventListener('scroll', function(){
+    clearTimeout(el._st);
+    el._st=setTimeout(function(){ _pkMarkCenter(el); },60);
+  });
+}
+function _pkMarkCenter(el){
+  var center=el.scrollTop+64, best=null, bd=99999;
+  el.querySelectorAll('.pk-opt').forEach(function(o){
+    var oc=o.offsetTop+16, dist=Math.abs(oc-center);
+    if(dist<bd){ bd=dist; best=o; }
+    o.classList.remove('sel');
+  });
+  if(best) best.classList.add('sel');
+}
+function _pkGetVal(el){
+  var sel=el.querySelector('.pk-opt.sel');
+  return sel ? parseInt(sel.getAttribute('data-v')) : 0;
+}
+function openTimePicker(hiddenId, dispId, title){
+  _pkTimeTarget={ hidden:hiddenId, disp:dispId };
+  var cur=document.getElementById(hiddenId).value;
+  var hh=9, mm=0;
+  if(cur && cur.indexOf(':')>-1){ var pp=cur.split(':'); hh=parseInt(pp[0])||0; mm=parseInt(pp[1])||0; }
+  document.getElementById('pkTimeTitle').textContent=title||'시간 선택';
+  _pkBuildWheel(document.getElementById('pkWheelH'),24,hh);
+  _pkBuildWheel(document.getElementById('pkWheelM'),60,mm);
+  document.getElementById('pkTimeOverlay').classList.add('open');
+}
+function closeTimePicker(){ document.getElementById('pkTimeOverlay').classList.remove('open'); }
+function confirmTimePicker(){
+  if(!_pkTimeTarget) return;
+  var hh=_pkGetVal(document.getElementById('pkWheelH'));
+  var mm=_pkGetVal(document.getElementById('pkWheelM'));
+  var val=_pkPad2(hh)+':'+_pkPad2(mm);
+  document.getElementById(_pkTimeTarget.hidden).value=val;
+  var disp=document.getElementById(_pkTimeTarget.disp);
+  disp.textContent=val; disp.classList.remove('pk-ph');
+  closeTimePicker();
+}
+function clearTimePicker(){
+  if(!_pkTimeTarget) return;
+  document.getElementById(_pkTimeTarget.hidden).value='';
+  var disp=document.getElementById(_pkTimeTarget.disp);
+  disp.textContent=disp.getAttribute('data-ph')||'선택'; disp.classList.add('pk-ph');
+  closeTimePicker();
+}
+function _pkSetTimeDisp(dispId, hiddenId, val, phText){
+  var disp=document.getElementById(dispId), hid=document.getElementById(hiddenId);
+  if(hid) hid.value=val||'';
+  if(!disp) return;
+  if(val){ disp.textContent=val; disp.classList.remove('pk-ph'); }
+  else { disp.textContent=phText||'선택'; disp.classList.add('pk-ph'); }
+}
+function _pkBindTimeTriggers(){
+  var map=[
+    ['qaTimeTrig','qaTime','qaTimeDisp','미팅 시간','시간 선택'],
+    ['qaReqStartTrig','qaReqStart','qaReqStartDisp','지원요청 시작','시작'],
+    ['qaReqEndTrig','qaReqEnd','qaReqEndDisp','지원요청 종료','종료(선택)'],
+    ['editActTimeTrig','editActTime','editActTimeDisp','미팅 시간','시간 선택'],
+    ['editReqStartTrig','editReqStart','editReqStartDisp','지원요청 시작','시작'],
+    ['editReqEndTrig','editReqEnd','editReqEndDisp','지원요청 종료','종료(선택)']
+  ];
+  map.forEach(function(m){
+    var trig=document.getElementById(m[0]);
+    var disp=document.getElementById(m[2]);
+    if(disp) disp.setAttribute('data-ph', m[4]);
+    if(trig) trig.addEventListener('click', function(){ openTimePicker(m[1], m[2], m[3]); });
+  });
+  var ok=document.getElementById('pkTimeOk'); if(ok) ok.addEventListener('click', confirmTimePicker);
+  var cc=document.getElementById('pkTimeCancel'); if(cc) cc.addEventListener('click', closeTimePicker);
+  var cl=document.getElementById('pkTimeClear'); if(cl) cl.addEventListener('click', clearTimePicker);
+  var ov=document.getElementById('pkTimeOverlay'); if(ov) ov.addEventListener('click', function(e){ if(e.target===this) closeTimePicker(); });
+  var qLoad=document.getElementById('qaLoadCustAddr'); if(qLoad) qLoad.addEventListener('click', qaLoadCustomerAddr);
+  var qP=document.getElementById('qaPlace'); if(qP) qP.addEventListener('input', qaResetGeo);
+}
+
+// ── 빠른입력 미팅장소 좌표 ────────────────────────────
+function qaResetGeo(){
+  var la=document.getElementById('qaLat'), ln=document.getElementById('qaLng');
+  if(la) la.value=''; if(ln) ln.value='';
+  var st=document.getElementById('qaGeoStatus');
+  if(st){ st.textContent='등록 시 주소를 자동으로 좌표 변환합니다'; st.style.color='var(--text3)'; }
+}
+function qaGetCustomerDB(){
+  var arr=[];
+  try { arr=JSON.parse(localStorage.getItem('unispace_customers')||'[]'); } catch(e){ arr=[]; }
+  if(!Array.isArray(arr)) arr=[];
+  return arr;
+}
+function qaLoadCustomerAddr(){
+  var name=document.getElementById('qaCustomer').value.trim();
+  var st=document.getElementById('qaGeoStatus');
+  if(!name){ showToast('먼저 고객명을 입력해 주세요'); return; }
+  var db=qaGetCustomerDB(), hit=null;
+  for(var i=0;i<db.length;i++){ if(db[i] && db[i].name==name){ hit=db[i]; break; } }
+  if(!hit){ showToast('등록된 고객이 아닙니다 (' + name + ') — 주소를 직접 입력해 주세요'); return; }
+  if(hit.address) document.getElementById('qaPlace').value=hit.address;
+  if(hit.lat && hit.lng){
+    document.getElementById('qaLat').value=hit.lat;
+    document.getElementById('qaLng').value=hit.lng;
+    if(st){ st.textContent='고객 등록좌표 적용됨 · 동선 표기 가능'; st.style.color='#34D399'; }
+    showToast('고객 등록주소/좌표를 불러왔습니다');
+  } else {
+    document.getElementById('qaLat').value=''; document.getElementById('qaLng').value='';
+    if(st){ st.textContent='고객 주소 적용됨 · 등록 시 좌표 변환'; st.style.color='var(--text3)'; }
+    showToast('고객 주소를 불러왔습니다');
+  }
+}
+function qaGeocode(addr, cb){
+  var kakaoKey=localStorage.getItem('kakao_map_key')||'';
+  if(!addr || !kakaoKey){ cb(null, null); return; }
+  fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(addr), {
+    headers:{ 'Authorization':'KakaoAK '+kakaoKey }
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(data.documents && data.documents.length>0){ cb(data.documents[0].y, data.documents[0].x); return null; }
+    return fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr), {
+      headers:{ 'Authorization':'KakaoAK '+kakaoKey }
+    }).then(function(r){ return r.json(); }).then(function(d2){
+      if(d2.documents && d2.documents.length>0){ cb(d2.documents[0].y, d2.documents[0].x); }
+      else { cb(null, null); }
+    });
+  }).catch(function(){ cb(null, null); });
+}
+
+var _qaSupport = '';
 function setQaSupport(type, el) {
   ['qaTabNone','qaTabHelper','qaTabSupport'].forEach(function(id){
     var b=document.getElementById(id);
     if(b){b.style.background='var(--sur)';b.style.borderColor='var(--bdr2)';b.style.color='var(--text2)';}
   });
   el.style.background='rgba(201,168,76,.15)'; el.style.borderColor='var(--gold)'; el.style.color='var(--gold2)';
-  document.getElementById('qaHelperArea').style.display  = type==='helper'  ? '' : 'none';
-  document.getElementById('qaSupportArea').style.display = type==='support' ? '' : 'none';
+  _qaSupport = (type==='support') ? '지점장' : (type==='helper' ? '헬퍼' : '');
+  var ra=document.getElementById('qaReqArea');
+  if(ra) ra.style.display = (type==='helper'||type==='support') ? '' : 'none';
+  if(type==='none'){ _pkSetTimeDisp('qaReqStartDisp','qaReqStart','','시작'); _pkSetTimeDisp('qaReqEndDisp','qaReqEnd','','종료(선택)'); }
 }
 
 function openQuickAddModal(dateStr, preselectedFpId) {
@@ -3851,9 +4054,11 @@ function openQuickAddModal(dateStr, preselectedFpId) {
   document.getElementById('quickAddDate').textContent = parts[1]+'월 '+parts[2]+'일 ('+days[dow]+')';
   document.getElementById('qaCustomer').value = '';
   document.getElementById('qaType').value     = '1차';
-  document.getElementById('qaTime').value     = '';
+  _pkSetTimeDisp('qaTimeDisp','qaTime','','시간 선택');
   document.getElementById('qaPlace').value    = '';
-  document.getElementById('qaHelper').value   = '';
+  qaResetGeo();
+  _pkSetTimeDisp('qaReqStartDisp','qaReqStart','','시작');
+  _pkSetTimeDisp('qaReqEndDisp','qaReqEnd','','종료(선택)');
   document.getElementById('qaMemo').value     = '';
   document.getElementById('qaChungyakCompany').value = '';
   document.getElementById('qaChungyakAmount').value  = '';
@@ -3894,8 +4099,10 @@ function saveQuickAdd() {
   if(!_quickAddDate) return;
 
   var status    = document.getElementById('qaStatusComplete').dataset.sel ? '완료' : '진행중';
-  var helperOn  = document.getElementById('qaHelperArea').style.display  !== 'none';
-  var supportOn = document.getElementById('qaSupportArea').style.display !== 'none';
+  var supportVal = _qaSupport;
+  var reqStart = supportVal ? document.getElementById('qaReqStart').value : '';
+  var reqEnd   = supportVal ? document.getElementById('qaReqEnd').value : '';
+  if(supportVal && !reqStart){ showToast('⚠️ 지원요청 시작시간을 선택해 주세요'); return; }
 
   // 관리자 FP 선택
   var isAdmin = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장');
@@ -3911,27 +4118,45 @@ function saveQuickAdd() {
   var db = {};
   try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
   var id = 'act_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
-  db[id] = {
-    id: id, fpId: fpId, fpName: fpName, branch: fpBranch,
-    date: _quickAddDate,
-    time:  document.getElementById('qaTime').value,
-    place: document.getElementById('qaPlace').value.trim(),
-    customerName: customer,
-    type:    document.getElementById('qaType').value,
-    status:  status,
-    helper:  helperOn  ? document.getElementById('qaHelper').value.trim()  : '',
-    support: supportOn ? document.getElementById('qaSupport').value         : '',
-    nextDate:'', nextTime:'', nextPlace:'',
-    note: document.getElementById('qaMemo').value.trim(),
-    chungyakCompany: (document.getElementById('qaType').value==='청약'||document.getElementById('qaType').value==='PT') ? document.getElementById('qaChungyakCompany').value.trim() : '',
-    chungyakAmount:  (document.getElementById('qaType').value==='청약'||document.getElementById('qaType').value==='PT') ? document.getElementById('qaChungyakAmount').value.trim()  : '',
-    parentId:'',
-    createdAt: new Date().toISOString()
-  };
-  localStorage.setItem('unispace_activities', JSON.stringify(db));
-  closeQuickAdd();
-  renderWeekActTable();
-  showToast('✅ '+fpName+' - '+customer+' 활동이 등록되었습니다');
+  var placeStr = document.getElementById('qaPlace').value.trim();
+  var aType = document.getElementById('qaType').value;
+  var preLat = document.getElementById('qaLat').value, preLng = document.getElementById('qaLng').value;
+
+  function persistQa(latVal, lngVal){
+    db[id] = {
+      id: id, fpId: fpId, fpName: fpName, branch: fpBranch,
+      date: _quickAddDate,
+      time:  document.getElementById('qaTime').value,
+      place: placeStr,
+      placeAddr: placeStr,
+      lat: latVal || '',
+      lng: lngVal || '',
+      customerName: customer,
+      type:    aType,
+      status:  status,
+      helper:  '',
+      support: supportVal,
+      supportReqTime: reqStart,
+      supportReqEndTime: reqEnd,
+      nextDate:'', nextTime:'', nextPlace:'',
+      note: document.getElementById('qaMemo').value.trim(),
+      chungyakCompany: (aType==='청약'||aType==='PT') ? document.getElementById('qaChungyakCompany').value.trim() : '',
+      chungyakAmount:  (aType==='청약'||aType==='PT') ? document.getElementById('qaChungyakAmount').value.trim()  : '',
+      parentId:'',
+      createdAt: new Date().toISOString()
+    };
+    localStorage.setItem('unispace_activities', JSON.stringify(db));
+    closeQuickAdd();
+    renderWeekActTable();
+    if(placeStr && !(latVal && lngVal)) showToast('✅ 등록 완료 (주소 좌표 변환 실패 — 동선 미표기)');
+    else showToast('✅ '+fpName+' - '+customer+' 활동이 등록되었습니다');
+  }
+
+  if(preLat && preLng){ persistQa(preLat, preLng); return; }
+  if(!placeStr){ persistQa('', ''); return; }
+  var st=document.getElementById('qaGeoStatus');
+  if(st){ st.textContent='좌표 변환 중...'; st.style.color='var(--text2)'; }
+  qaGeocode(placeStr, function(la, ln){ persistQa(la, ln); });
 }
 
 function onWeekCellClick(e, dateStr, fpId) {
@@ -4164,7 +4389,8 @@ function doCheckin() { doSmartCheckin(); }
       </div>
       <div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:3px">시간</div>
-        <input type="time" id="editActTime" style="width:100%;padding:6px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--text);font-size:12px">
+        <div class="pk-trigger" id="editActTimeTrig"><span id="editActTimeDisp" class="pk-ph">시간 선택</span><span class="pk-ico">🕐</span></div>
+        <input type="hidden" id="editActTime">
       </div>
     </div>
     <div style="margin-bottom:8px">
@@ -4188,18 +4414,18 @@ function doCheckin() { doSmartCheckin(); }
     <div style="margin-bottom:8px">
       <div style="font-size:10px;color:var(--text3);margin-bottom:5px">지원 구분</div>
       <div style="display:flex;gap:5px;margin-bottom:6px">
-        <button type="button" id="pTabNone"    onclick="setPSupportTab('none',this)"    style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">없음</button>
+        <button type="button" id="pTabSupport" onclick="setPSupportTab('support',this)" style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">🎯 지점장</button>
         <button type="button" id="pTabHelper"  onclick="setPSupportTab('helper',this)"  style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">👤 헬퍼</button>
-        <button type="button" id="pTabSupport" onclick="setPSupportTab('support',this)" style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">🤝 지원</button>
+        <button type="button" id="pTabNone"    onclick="setPSupportTab('none',this)"    style="flex:1;padding:5px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif">없음</button>
       </div>
-      <div id="pHelperArea"  style="display:none">
-        <input type="text" id="editActHelper" placeholder="헬퍼 이름" style="width:100%;padding:6px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--text);font-size:12px">
-      </div>
-      <div id="pSupportArea" style="display:none">
-        <select id="editActSupport" style="width:100%;padding:6px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--text);font-size:12px">
-          <option value="지점장">지점장</option>
-          <option value="매니저">매니저</option>
-        </select>
+      <div id="pReqArea" style="display:none">
+        <div style="font-size:9px;color:var(--text3);font-weight:700;margin-bottom:4px">지원요청시간 (시작 필수 · 종료 선택)</div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <div class="pk-trigger" id="editReqStartTrig" style="flex:1"><span id="editReqStartDisp" class="pk-ph">시작</span><span class="pk-ico">🕐</span></div>
+          <span style="color:var(--text3);font-weight:700">~</span>
+          <div class="pk-trigger" id="editReqEndTrig" style="flex:1"><span id="editReqEndDisp" class="pk-ph">종료(선택)</span><span class="pk-ico">🕐</span></div>
+        </div>
+        <input type="hidden" id="editReqStart"><input type="hidden" id="editReqEnd">
       </div>
     </div>
     <div style="margin-bottom:8px">
@@ -4222,6 +4448,29 @@ function doCheckin() { doSmartCheckin(); }
     <div style="display:flex;gap:6px">
       <button type="button" onclick="switchActView()" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--bdr);background:var(--sur);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer">취소</button>
       <button type="button" onclick="saveActEdit()" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#080E1C;font-size:12px;font-weight:700;cursor:pointer">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 커스텀 시간 피커 (휠) -->
+<div class="pk-overlay" id="pkTimeOverlay">
+  <div class="pk-sheet">
+    <div class="pk-title" id="pkTimeTitle">시간 선택</div>
+    <div class="pk-wheels">
+      <div style="flex:1">
+        <div class="pk-wheel-label">시</div>
+        <div class="pk-wheel" id="pkWheelH"></div>
+      </div>
+      <div class="pk-colon" style="padding-top:18px">:</div>
+      <div style="flex:1">
+        <div class="pk-wheel-label">분</div>
+        <div class="pk-wheel" id="pkWheelM"></div>
+      </div>
+    </div>
+    <div class="pk-btns">
+      <button type="button" class="pk-btn pk-cancel" id="pkTimeClear" style="flex:0 0 auto;padding-left:14px;padding-right:14px">지우기</button>
+      <button type="button" class="pk-btn pk-cancel" id="pkTimeCancel">취소</button>
+      <button type="button" class="pk-btn pk-ok" id="pkTimeOk">확인</button>
     </div>
   </div>
 </div>
