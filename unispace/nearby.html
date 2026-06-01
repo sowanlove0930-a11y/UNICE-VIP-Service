@@ -554,6 +554,7 @@ var isCustomerMode = false;
 var currentTab = 'nearby'; // 'nearby' | 'ds' | 'today'
 var routeMode = 'view'; // 'view'(조회) | 'add'(담기) — 동선 짜기/조회 공통
 function isRouteTab(){ return currentTab == 'ds' || currentTab == 'today'; }
+function canAddToRoute(){ return isRouteTab() && routeMode == 'add'; }
 var dsQueue = []; // 동선관리 큐: [{ name, lat, lng, id, address }, ...]
 var dsPolylines = []; // 동선 연결선
 var dsBadges = []; // 동선 구간 번호 배지
@@ -1777,14 +1778,8 @@ window.addEventListener('DOMContentLoaded', function() {
   if(btnPinBase) btnPinBase.addEventListener('click', function(){
     if(!kakaoMap){ alert('먼저 지도를 불러주세요.'); return; }
 
-    // 동선 조회 탭: 기준잡기/임의좌표 비활성 (읽기 전용 동선 보기)
-    if(currentTab == 'today') {
-      showRouteToast('동선 조회 탭에서는 위치 추가 기능을 쓸 수 없습니다.\n동선관리 탭에서 이용하세요.');
-      return;
-    }
-
-    // 동선관리 탭: 지도 클릭 → 임의좌표를 큐에 추가
-    if(currentTab == 'ds') {
+    // 동선관리·동선조회 탭: 임의좌표 모드 (조회=주변검색, 담기=지점추가)
+    if(isRouteTab()) {
       var isActive = this.className.indexOf('active') !== -1;
       var banner = document.getElementById('mapSelectBanner');
       var icon   = document.getElementById('mapSelectIcon');
@@ -1798,7 +1793,7 @@ window.addEventListener('DOMContentLoaded', function() {
         this.className = 'pinbase-btn active';
         if(banner) banner.style.display = '';
         if(icon)   icon.textContent = '📌';
-        if(text)   text.textContent = '지도를 클릭해 동선에 위치를 추가하세요';
+        if(text)   text.textContent = (routeMode=='add') ? '지도를 클릭해 동선에 위치를 추가하세요' : '지도를 클릭해 그 주변 고객을 검색하세요';
         kakaoMap.setCursor('crosshair');
         window._dsPinMode = true;
       }
@@ -2033,15 +2028,27 @@ function loadKakaoScript(key) {
               var r = result[0];
               a = r.road_address ? r.road_address.address_name : r.address.address_name;
             }
-            var obj = { id:'DS_PIN_' + Date.now(), name:a, lat:String(latlng.getLat()), lng:String(latlng.getLng()), address:a };
-            dsQueue.push(obj);
-            syncDsQueueToRoute();
-            drawDsPolylines();
-            if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
-            applyNearbyMarkerOpacity();
-            injectDsRoleLabels();
-            updateDsMarkerLabels();
-            renderDsEditList();
+            if(routeMode == 'add') {
+              // 담기 모드: 동선에 임의 지점 추가
+              var obj = { id:'DS_PIN_' + Date.now(), name:a, lat:String(latlng.getLat()), lng:String(latlng.getLng()), address:a };
+              dsQueue.push(obj);
+              syncDsQueueToRoute();
+              drawDsPolylines();
+              if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+              applyNearbyMarkerOpacity();
+              injectDsRoleLabels();
+              updateDsMarkerLabels();
+              renderDsEditList();
+              if(currentTab == 'today') renderTodayListFromQueue();
+            } else {
+              // 조회 모드: 그 지점 주변 고객 검색
+              centerLat = latlng.getLat(); centerLng = latlng.getLng();
+              var mlabelEl = document.querySelector('.mlabel');
+              if(mlabelEl) mlabelEl.textContent = '📌 기준 위치';
+              var tn = document.getElementById('targetName'); if(tn) tn.textContent = a;
+              var ta = document.getElementById('targetAddr'); if(ta) ta.textContent = '';
+              drawNearby(centerLat, centerLng);
+            }
           });
           window._dsPinMode = false;
           var btn2 = document.getElementById('btnPinBase');
@@ -2186,7 +2193,7 @@ function searchAddr() {
 
   list.style.display = '';
   var srlHint = document.getElementById('srlHint');
-  if(srlHint) srlHint.textContent = currentTab == 'ds' ? '[+ 추가] 클릭해 동선에 추가' : '클릭하면 기준 위치로 설정됩니다';
+  if(srlHint) srlHint.textContent = canAddToRoute() ? '[+ 추가] 클릭해 동선에 추가' : '클릭하면 기준 위치로 설정됩니다';
   items.innerHTML = '<div class="srl-loading"><div style="width:12px;height:12px;border-radius:50%;border:2px solid #60A5FA;border-top-color:transparent;animation:srl-spin .7s linear infinite;flex-shrink:0;"></div>검색 중...</div>';
   title.textContent = '"' + addr + '" 검색 중...';
 
@@ -2264,9 +2271,9 @@ function showSearchResultsCombined(customerMatches, placeResults, keyword) {
         + '<div style="font-size:10px;color:#8B98B8;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (c.address||'주소 미등록') + '</div>'
         + '</div>'
         + (dist ? '<div style="font-size:10px;color:#60A5FA;flex-shrink:0;margin-right:4px;">' + dist + '</div>' : '')
-        + (currentTab == 'ds' ? '<div class="srl-add-btn" style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(232,201,122,.15);color:#E8C97A;border:1px solid rgba(232,201,122,.3);white-space:nowrap;flex-shrink:0;cursor:pointer;">+ 추가</div>' : '');
+        + (canAddToRoute() ? '<div class="srl-add-btn" style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(232,201,122,.15);color:#E8C97A;border:1px solid rgba(232,201,122,.3);white-space:nowrap;flex-shrink:0;cursor:pointer;">+ 추가</div>' : '');
       item.addEventListener('click', function() {
-        if(currentTab == 'ds') {
+        if(canAddToRoute()) {
           addToDsQueue(c);
           document.getElementById('searchResultList').style.display = 'none';
           document.getElementById('addrInput').value = '';
@@ -2363,14 +2370,14 @@ function showSearchResults(results, keyword, containerEl) {
     item.innerHTML = '<div class="srl-item-top">'
       +'<span class="srl-item-name">'+p.place_name+'</span>'
       +(distStr ? '<span class="srl-item-dist">'+distStr+'</span>' : '')
-      +(currentTab == 'ds' ? '<span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(232,201,122,.15);color:#E8C97A;border:1px solid rgba(232,201,122,.3);margin-left:4px;cursor:pointer;">+ 추가</span>' : '')
+      +(canAddToRoute() ? '<span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(232,201,122,.15);color:#E8C97A;border:1px solid rgba(232,201,122,.3);margin-left:4px;cursor:pointer;">+ 추가</span>' : '')
       +'</div>'
       +'<div class="srl-item-addr">'+(p.road_address_name || p.address_name || '')+'</div>'
       +(p.category_name ? '<div class="srl-item-cat">'+p.category_name.split(' > ').pop()+(p.phone?' · '+p.phone:'')+'</div>' : '');
 
     (function(place){
       item.addEventListener('click', function(){
-        if(currentTab == 'ds') {
+        if(canAddToRoute()) {
           var obj = { id:'DS_PIN_' + Date.now(), name: place.place_name, lat: String(place.y), lng: String(place.x), address: place.road_address_name || place.address_name || place.place_name };
           dsQueue.push(obj);
           syncDsQueueToRoute();
@@ -2547,15 +2554,16 @@ function refreshNearbyOnly(lat, lng) {
       +'</svg>';
     var markerImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(svgContent), new kakao.maps.Size(28,36));
     var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
-    var inQueueNow = currentTab == 'ds' && dsQueue.findIndex(function(q){
+    var inQueueNow = isRouteTab() && dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
-    marker.setOpacity(inQueueNow ? 1.0 : (currentTab == 'ds' ? 0.6 : 1.0));
+    var dimNow = isRouteTab() && dsQueue.length > 0;
+    marker.setOpacity(inQueueNow ? 1.0 : (dimNow ? 0.6 : 1.0));
     nearbyMarkers.push({ marker:marker, labelEl:null, pos:pos, color:color });
 
     var evInfo = getUpcomingEvents(c);
-    var queueIdx2 = currentTab == 'ds' ? dsQueue.findIndex(function(q){
+    var queueIdx2 = isRouteTab() ? dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) : -1;
@@ -2611,7 +2619,7 @@ function refreshNearbyOnly(lat, lng) {
     var el = document.getElementById('citem_'+idx);
     if(el){ el.style.cursor='pointer'; (function(i){ el.addEventListener('click', function(){ selectCustomer(i); }); })(idx); }
   });
-  if(currentTab == 'ds') applyNearbyMarkerOpacity();
+  if(isRouteTab()) applyNearbyMarkerOpacity();
 }
 
 // ── 주변 고객 표시 ───────────────────────────────────
@@ -2869,7 +2877,7 @@ function drawNearby(lat, lng) {
 
     // 이름 오버레이 (클릭 가능 - 큰 클릭 영역)
     var evInfo = getUpcomingEvents(c);
-    var queueIdxDn = currentTab == 'ds' ? dsQueue.findIndex(function(q){
+    var queueIdxDn = isRouteTab() ? dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) : -1;
