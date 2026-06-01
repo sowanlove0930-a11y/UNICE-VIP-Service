@@ -1312,10 +1312,27 @@ window.addEventListener('DOMContentLoaded', function() {
       centerLng = parseFloat(target.lng);
     }
     sessionStorage.removeItem('nearbyTarget');
-    // 탭 자동 전환 (대시보드에서 오늘의 동선으로 진입 시)
     if(target.tab) {
       setTimeout(function(){ switchTab(target.tab); }, 300);
     }
+  }
+
+  // sessionStorage에서 동선 정보 (대시보드 동선 버튼)
+  var routeData = null;
+  try { routeData = JSON.parse(sessionStorage.getItem('nearbyRoute') || 'null'); } catch(e){}
+  if(routeData && routeData.stops && routeData.stops.length > 0) {
+    sessionStorage.removeItem('nearbyRoute');
+    // dsQueue에 stops 채우기
+    dsQueue = routeData.stops.map(function(s){
+      return { id: s.id || ('ROUTE_'+Math.random().toString(36).slice(2)), name: s.name, lat: String(s.lat), lng: String(s.lng), address: s.address || '' };
+    });
+    // 첫 stop 기준으로 지도 중심
+    centerLat = parseFloat(routeData.stops[0].lat);
+    centerLng = parseFloat(routeData.stops[0].lng);
+    var hsub = document.getElementById('headerSub');
+    if(hsub) hsub.textContent = (routeData.fpName || '') + ' ' + (routeData.date || '') + ' 동선';
+    // 동선관리 탭으로 진입 (지도 로드 후)
+    window._pendingRouteLoad = true;
   }
 
   // 기준 고객 카드 클릭 → 지도 해당 위치로 이동
@@ -1764,7 +1781,31 @@ function loadKakaoScript(key) {
           })(curMode, latlng);
       });
       var addr = document.getElementById('addrInput').value.trim();
-      if(addr) searchAddr();
+      if(window._pendingRouteLoad && dsQueue.length > 0) {
+        window._pendingRouteLoad = false;
+        // 지도 중심을 첫 stop으로
+        if(centerLat && centerLng) kakaoMap.setCenter(new kakao.maps.LatLng(centerLat, centerLng));
+        // 동선관리 탭으로 진입
+        switchTab('ds');
+        // 동선 핀/선 그리기
+        setTimeout(function(){
+          syncDsQueueToRoute();
+          drawDsPolylines();
+          injectDsRoleLabels();
+          updateDsMarkerLabels();
+          renderDsEditList();
+          // 전체 동선이 보이도록 범위 조정
+          if(dsQueue.length > 0 && kakaoMap) {
+            var bounds = new kakao.maps.LatLngBounds();
+            dsQueue.forEach(function(q){
+              if(q.lat && q.lng) bounds.extend(new kakao.maps.LatLng(parseFloat(q.lat), parseFloat(q.lng)));
+            });
+            kakaoMap.setBounds(bounds);
+          }
+        }, 400);
+      } else if(addr) {
+        searchAddr();
+      }
     });
   };
   s.onerror = function() {
