@@ -1241,7 +1241,16 @@ function injectDsRoleLabels() {
       var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name, draggable: true });
       dsRoleMarkers.push(pinMarker);
       // 클릭 제거
-      (function(qIdx){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(currentTab=='ds'){ dsQueue.splice(qIdx,1); syncDsQueueToRoute(); if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng); injectDsRoleLabels(); updateDsMarkerLabels(); drawDsPolylines(); renderDsEditList(); } }); })(i);
+      (function(pinItem){ kakao.maps.event.addListener(pinMarker, 'click', function(){
+        if(!canAddToRoute()) return;
+        var ri = dsQueue.findIndex(function(q){ return q.id == pinItem.id; });
+        if(ri === -1) return;
+        dsQueue.splice(ri,1);
+        syncDsQueueToRoute();
+        if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng);
+        injectDsRoleLabels(); updateDsMarkerLabels(); drawDsPolylines(); renderDsEditList();
+        if(currentTab == 'today') renderTodayListFromQueue();
+      }); })(item);
       // 라벨 — 주소 표시 (앞 시/구 제거하고 도로명만)
       var addrText = item.address || item.name;
       var shortAddr = addrText.length > 14 ? addrText.replace(/^[^\s]+\s[^\s]+\s/, '') : addrText;
