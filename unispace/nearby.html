@@ -780,23 +780,70 @@ function applyTodayToRoute(acts) {
   try { customers = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e){}
   panelFrom = null; panelTo = null; panelVia = [];
   clearAllRoutePins();
-  acts.forEach(function(a, i) {
-    var c = customers.filter(function(cu){ return cu.name == a.customerName; })[0];
-    var obj = { name: a.customerName, lat: c ? (c.lat||'') : '', lng: c ? (c.lng||'') : '', address: c ? (c.address||a.place||'') : (a.place||'') };
-    if(i == 0) panelFrom = obj;
-    else if(i == acts.length - 1) panelTo = obj;
-    else panelVia.push(obj);
-    if(c && c.lat && c.lng) {
-      var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
-      var type = i == 0 ? 'from' : (i == acts.length - 1 ? 'to' : 'via_' + (i-1));
-      var label = String(i+1) + ' ' + a.customerName;
+  clearDsPolylines();
+  var geocoder = new kakao.maps.services.Geocoder();
+  var resolved = [];
+  var pending = acts.length;
+
+  function finalize() {
+    // 좌표 확보된 순서대로 핀/선 생성
+    resolved.sort(function(a,b){ return a.idx - b.idx; });
+    panelFrom = null; panelTo = null; panelVia = [];
+    clearAllRoutePins();
+    clearDsPolylines();
+    var pts = [];
+    resolved.forEach(function(r, i) {
+      var obj = { name: r.name, lat: String(r.lat), lng: String(r.lng), address: r.address };
+      if(i == 0) panelFrom = obj;
+      else if(i == resolved.length - 1 && resolved.length > 1) panelTo = obj;
+      else panelVia.push(obj);
+      var pos = new kakao.maps.LatLng(r.lat, r.lng);
+      var type = i == 0 ? 'from' : (i == resolved.length - 1 && resolved.length > 1 ? 'to' : 'via_' + (panelVia.length - 1));
+      var label = String(i+1) + ' ' + r.name;
       setRoutePin(type, pos, label);
-      updateRoutePinAddr(type, pos, obj.address || obj.name);
+      updateRoutePinAddr(type, pos, r.address || r.name);
+      pts.push(pos);
+    });
+    renderRoutePanel();
+    var ob = document.getElementById('routeOpenBtn');
+    if(ob && (panelFrom || panelTo)) ob.className = 'route-open-btn has-route';
+    // 연결선
+    if(pts.length > 1 && kakaoMap) {
+      for(var ti = 0; ti < pts.length - 1; ti++) {
+        var tbg = new kakao.maps.Polyline({ path:[pts[ti],pts[ti+1]], strokeWeight:9, strokeColor:'#FFFFFF', strokeOpacity:0.6, strokeStyle:'solid' });
+        tbg.setMap(kakaoMap); dsPolylines.push(tbg);
+        var tfg = new kakao.maps.Polyline({ path:[pts[ti],pts[ti+1]], strokeWeight:5, strokeColor:'#E8C97A', strokeOpacity:0.95, strokeStyle:'solid' });
+        tfg.setMap(kakaoMap); dsPolylines.push(tfg);
+      }
+      // 지도 범위 맞추기
+      var bounds = new kakao.maps.LatLngBounds();
+      pts.forEach(function(p){ bounds.extend(p); });
+      kakaoMap.setBounds(bounds);
+    } else if(pts.length == 1 && kakaoMap) {
+      kakaoMap.setCenter(pts[0]);
+    }
+  }
+
+  acts.forEach(function(a, idx) {
+    var c = customers.filter(function(cu){ return cu.name == a.customerName; })[0];
+    var addr = c ? (c.address || a.place || '') : (a.place || '');
+    if(c && c.lat && c.lng) {
+      resolved.push({ idx: idx, name: a.customerName, lat: parseFloat(c.lat), lng: parseFloat(c.lng), address: addr });
+      pending--;
+      if(pending == 0) finalize();
+    } else if(addr) {
+      geocoder.addressSearch(addr, function(result, status) {
+        if(status === kakao.maps.services.Status.OK && result.length > 0) {
+          resolved.push({ idx: idx, name: a.customerName, lat: parseFloat(result[0].y), lng: parseFloat(result[0].x), address: addr });
+        }
+        pending--;
+        if(pending == 0) finalize();
+      });
+    } else {
+      pending--;
+      if(pending == 0) finalize();
     }
   });
-  renderRoutePanel();
-  var ob = document.getElementById('routeOpenBtn');
-  if(ob && (panelFrom || panelTo)) ob.className = 'route-open-btn has-route';
 }
 
 function flashHighlightInList(customer) {
@@ -1265,6 +1312,10 @@ window.addEventListener('DOMContentLoaded', function() {
       centerLng = parseFloat(target.lng);
     }
     sessionStorage.removeItem('nearbyTarget');
+    // 탭 자동 전환 (대시보드에서 오늘의 동선으로 진입 시)
+    if(target.tab) {
+      setTimeout(function(){ switchTab(target.tab); }, 300);
+    }
   }
 
   // 기준 고객 카드 클릭 → 지도 해당 위치로 이동
