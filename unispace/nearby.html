@@ -563,6 +563,12 @@ function switchTab(tab) {
   if(dsPreview) dsPreview.style.display = 'none';
   if(todayCard) todayCard.style.display = tab == 'today' ? '' : 'none';
   if(tab == 'today') {
+    // 동선조회 진입: 주변고객/기준핀/임의좌표 모드 정리 (route만 표시)
+    window._dsPinMode = false; pinBaseMode = false;
+    var bpb = document.getElementById('btnPinBase'); if(bpb) bpb.className = 'pinbase-btn';
+    var msb = document.getElementById('mapSelectBanner'); if(msb) msb.style.display = 'none';
+    if(kakaoMap) kakaoMap.setCursor('');
+    clearNearbyMarkersAll();
     if(window._activeRoute) populateRouteFpSelect(window._activeRoute.fpId);
     else populateRouteFpSelect('');
     var dInp = document.getElementById('routeDateInput');
@@ -1672,6 +1678,12 @@ window.addEventListener('DOMContentLoaded', function() {
   if(btnPinBase) btnPinBase.addEventListener('click', function(){
     if(!kakaoMap){ alert('먼저 지도를 불러주세요.'); return; }
 
+    // 동선 조회 탭: 기준잡기/임의좌표 비활성 (읽기 전용 동선 보기)
+    if(currentTab == 'today') {
+      showRouteToast('동선 조회 탭에서는 위치 추가 기능을 쓸 수 없습니다.\n동선관리 탭에서 이용하세요.');
+      return;
+    }
+
     // 동선관리 탭: 지도 클릭 → 임의좌표를 큐에 추가
     if(currentTab == 'ds') {
       var isActive = this.className.indexOf('active') !== -1;
@@ -2302,6 +2314,23 @@ function getTodayMeeting(customerName) {
     return a.date == today && a.customerName == customerName && (!fpId || a.fpId == fpId);
   }).sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); })[0];
   return match || null;
+}
+
+function clearNearbyMarkersAll(){
+  if(window._nearbyMarkers){
+    window._nearbyMarkers.forEach(function(nm){
+      if(nm.marker) nm.marker.setMap(null);
+      if(nm.overlay) nm.overlay.setMap(null);
+    });
+    window._nearbyMarkers = [];
+  }
+  if(typeof circles !== 'undefined' && circles){
+    circles.forEach(function(c){ c.setMap(null); });
+    circles = [];
+  }
+  if(pinBaseMarker){ pinBaseMarker.setMap(null); pinBaseMarker = null; }
+  if(typeof centerMarkerGlobal !== 'undefined' && centerMarkerGlobal){ centerMarkerGlobal.setMap(null); centerMarkerGlobal = null; }
+  if(typeof centerOverlay !== 'undefined' && centerOverlay){ centerOverlay.setMap(null); centerOverlay = null; }
 }
 
 function refreshNearbyOnly(lat, lng) {
