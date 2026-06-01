@@ -1185,7 +1185,7 @@ function updateDsMarkerLabels() {
     var oldBadge = nm.labelEl.querySelector('.ds-role-badge-inline');
     if(oldBadge) oldBadge.parentNode.removeChild(oldBadge);
     // opacity only on name label / marker
-    var dimOff = (currentTab == 'ds' || currentTab == 'today') && dsQueue.length > 0;
+    var dimOff = canAddToRoute() && dsQueue.length > 0;
     nm.labelEl.style.opacity = inQueue ? '1' : (dimOff ? '0.6' : '1');
     if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : (dimOff ? 0.6 : 1.0));
     // queued customer: insert role badge as first child (above name)
@@ -1318,16 +1318,34 @@ function injectDsRoleLabels() {
         cLblOv._dsRoleKind = 'pin';
         cLblOv.setMap(kakaoMap);
         dsRoleOverlays.push(cLblOv);
-        (function(itm){
-          function showInfo(){
+        (function(itm, qIndex){
+          function handleClick(){
+            if(canAddToRoute()){
+              // 담기 모드: 클릭하면 동선에서 해제
+              var ri = dsQueue.findIndex(function(q){
+                if(itm.id && q.id) return q.id == itm.id;
+                return q.name == itm.name && String(q.lat).slice(0,7) == String(itm.lat).slice(0,7);
+              });
+              if(ri !== -1){
+                dsQueue.splice(ri,1);
+                syncDsQueueToRoute();
+                injectDsRoleLabels();
+                updateDsMarkerLabels();
+                drawDsPolylines();
+                renderDsEditList();
+                if(currentTab == 'today') renderTodayListFromQueue();
+              }
+              return;
+            }
+            // 조회 모드: 고객 정보 표시
             var full = null;
             if(window.allCustomers){ for(var z=0;z<allCustomers.length;z++){ if(allCustomers[z] && (allCustomers[z].id==itm.id || allCustomers[z].name==itm.name)){ full=allCustomers[z]; break; } } }
             if(full && typeof showPopup === 'function') showPopup(full, 0);
             else showRouteToast(itm.name + (itm.address?('\n📍 '+itm.address):''));
           }
-          kakao.maps.event.addListener(cMarker, 'click', showInfo);
-          cLblEl.addEventListener('click', showInfo);
-        })(item);
+          kakao.maps.event.addListener(cMarker, 'click', handleClick);
+          cLblEl.addEventListener('click', handleClick);
+        })(item, i);
       }
     }
   });
@@ -1789,6 +1807,7 @@ window.addEventListener('DOMContentLoaded', function() {
         if(banner) banner.style.display = 'none';
         kakaoMap.setCursor('');
         window._dsPinMode = false;
+        clearNearbyMarkersAll();
       } else {
         this.className = 'pinbase-btn active';
         if(banner) banner.style.display = '';
@@ -2558,7 +2577,7 @@ function refreshNearbyOnly(lat, lng) {
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
-    var dimNow = isRouteTab() && dsQueue.length > 0;
+    var dimNow = canAddToRoute() && dsQueue.length > 0;
     marker.setOpacity(inQueueNow ? 1.0 : (dimNow ? 0.6 : 1.0));
     nearbyMarkers.push({ marker:marker, labelEl:null, pos:pos, color:color });
 
@@ -2581,7 +2600,7 @@ function refreshNearbyOnly(lat, lng) {
       nameBox.appendChild(dotWrap);
     }
     labelEl.appendChild(nameBox);
-    if(queueIdx2 === -1 && (currentTab == 'ds' || currentTab == 'today') && dsQueue.length > 0) {
+    if(queueIdx2 === -1 && canAddToRoute() && dsQueue.length > 0) {
       labelEl.style.opacity = '0.6';
     }
     (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if((currentTab=='ds'||currentTab=='today') && routeMode=='add'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
@@ -2912,7 +2931,7 @@ function drawNearby(lat, lng) {
       nameBoxDn.appendChild(dotWrap);
     }
     labelEl.appendChild(nameBoxDn);
-    if(queueIdxDn === -1 && (currentTab == 'ds' || currentTab == 'today') && dsQueue.length > 0) labelEl.style.opacity = '0.6';
+    if(queueIdxDn === -1 && canAddToRoute() && dsQueue.length > 0) labelEl.style.opacity = '0.6';
     (function(customer, distance){
       function fire(e){
         if(e){ e.preventDefault(); e.stopPropagation(); }
@@ -3236,10 +3255,10 @@ function showPopup(c, dist) {
     };
   }
 
-  // 동선 담기/빼기 버튼 (동선관리·동선조회 탭에서만)
+  // 동선 담기/빼기 버튼 (담기 모드에서만)
   var brt = document.getElementById('btnPopupRoute');
   if(brt){
-    if(currentTab=='ds' || currentTab=='today'){
+    if(canAddToRoute()){
       brt.style.display = '';
       var inQ = dsQueue.findIndex(function(q){
         if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
