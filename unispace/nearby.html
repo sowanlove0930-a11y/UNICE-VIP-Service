@@ -562,6 +562,7 @@ var dsBadges = []; // 동선 구간 번호 배지
 var dsRoleOverlays = []; // 동선 역할 라벨 오버레이 (출발/경유/도착)
 var dsRoleMarkers = []; // 동선 임의좌표/내위치 마커
 var _arbPinMarker = null; // 조회 모드 임의좌표 핀 (1개만 유지)
+var _removedRoutePins = []; // 동선에서 뺀 고객의 일반 핀 (동선 진입 시 복원용)
 
 function setRouteMode(mode){
   routeMode = (mode === 'add') ? 'add' : 'view';
@@ -833,6 +834,7 @@ function clearRouteLayer(){
   _routePolylines.forEach(function(p){ p.setMap(null); });
   _routePolylines = [];
   if(typeof clearRouteDimMarkers === 'function') clearRouteDimMarkers();
+  if(typeof _clearRemovedRoutePins === 'function') _clearRemovedRoutePins();
 }
 
 function makeRouteStopMarker(num, color){
@@ -1239,14 +1241,70 @@ function removeFromDsQueue(matchObj) {
     return q.name == matchObj.name && String(q.lat).slice(0,7) == String(matchObj.lat).slice(0,7);
   });
   if(ri === -1) return false;
+  var removed = dsQueue[ri];
   dsQueue.splice(ri, 1);
   if(centerLat && centerLng && window._nearbyList) refreshNearbyOnly(centerLat, centerLng);
   rerenderDsQueue();
+  // 빠진 고객이 주변 마커로 표시되지 않는 경우(동선 진입 등) 일반 핀+이름을 직접 남김
+  if(removed && removed.lat && removed.lng){
+    var isArb = removed.id && String(removed.id).indexOf('DS_PIN_') === 0;
+    var hasNm = false;
+    if(window._nearbyList){
+      for(var k=0;k<window._nearbyList.length;k++){
+        var nc = window._nearbyList[k] && window._nearbyList[k].c;
+        if(!nc) continue;
+        if((nc.id && removed.id && nc.id==removed.id) || (nc.name==removed.name && String(nc.lat).slice(0,7)==String(removed.lat).slice(0,7))){ hasNm = true; break; }
+      }
+    }
+    // 임의좌표(DS_PIN_)는 일반 핀으로 남기지 않음. 그 외 고객이 주변 마커에 없으면 일반 핀 생성
+    if(!isArb && !hasNm){
+      _drawRemovedRoutePin(removed);
+    }
+  }
   return true;
 }
 
+// 동선에서 뺀 고객을 일반 핀+이름으로 표시 (동선 진입 시 복원)
+function _drawRemovedRoutePin(cust){
+  if(!kakaoMap || !cust || !cust.lat || !cust.lng) return;
+  var pos = new kakao.maps.LatLng(parseFloat(cust.lat), parseFloat(cust.lng));
+  var full = null;
+  if(window.allCustomers){ for(var z=0;z<allCustomers.length;z++){ if(allCustomers[z] && (allCustomers[z].id==cust.id || allCustomers[z].name==cust.name)){ full=allCustomers[z]; break; } } }
+  var color = (full && full.customerType==='계약')?'#10B981':(full && full.customerType==='관리')?'#8B5CF6':'#F59E0B';
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="' + color + '"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/></svg>';
+  var img = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg))), new kakao.maps.Size(28,36));
+  var mk = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: img, title: cust.name, zIndex: 4 });
+  var lblEl = document.createElement('div');
+  lblEl.style.cssText = 'background:rgba(13,22,40,.9);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.45);';
+  lblEl.textContent = cust.name;
+  var ov = new kakao.maps.CustomOverlay({ position: pos, content: lblEl, yAnchor: 2.4, zIndex: 4, clickable: true });
+  ov.setMap(kakaoMap);
+  (function(c2){ function fire(){ if(canAddToRoute()){ addToDsQueue(c2); } else if(full){ showPopup(full, 0); } else { showRouteToast(c2.name + (c2.address?('\n📍 '+c2.address):'')); } }
+    lblEl.addEventListener('click', fire);
+    kakao.maps.event.addListener(mk, 'click', fire); })(cust);
+  _removedRoutePins.push({ marker: mk, overlay: ov, key: cust.name + '|' + String(cust.lat).slice(0,7) });
+}
+
+function _clearRemovedRoutePins(){
+  if(!_removedRoutePins) return;
+  _removedRoutePins.forEach(function(p){ if(p.marker) p.marker.setMap(null); if(p.overlay) p.overlay.setMap(null); });
+  _removedRoutePins = [];
+}
+
+
 function addToDsQueue(customer) {
   if(!customer || !customer.lat || !customer.lng) return;
+  // 동선에서 빠져 일반 핀으로 남아있던 같은 고객이 있으면 그 핀 제거 (중복 방지)
+  if(_removedRoutePins && _removedRoutePins.length){
+    var ckey = customer.name + '|' + String(customer.lat).slice(0,7);
+    for(var rp = _removedRoutePins.length - 1; rp >= 0; rp--){
+      if(_removedRoutePins[rp].key === ckey){
+        if(_removedRoutePins[rp].marker) _removedRoutePins[rp].marker.setMap(null);
+        if(_removedRoutePins[rp].overlay) _removedRoutePins[rp].overlay.setMap(null);
+        _removedRoutePins.splice(rp, 1);
+      }
+    }
+  }
   var idx = dsQueue.findIndex(function(q){
     if(customer.id && q.id) return q.id == customer.id;
     return q.name == customer.name && String(q.lat).slice(0,7) == String(customer.lat).slice(0,7);
