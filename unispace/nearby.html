@@ -826,6 +826,7 @@ function clearRouteLayer(){
   _routeMarkers = [];
   _routePolylines.forEach(function(p){ p.setMap(null); });
   _routePolylines = [];
+  if(typeof clearRouteDimMarkers === 'function') clearRouteDimMarkers();
 }
 
 function makeRouteStopMarker(num, color){
@@ -947,6 +948,54 @@ function renderRouteFromData(route){
     path.forEach(function(p){ bounds.extend(p); });
     kakaoMap.setBounds(bounds);
   }
+
+  // 2단계: 동선 주변 반경 고객도 함께 표시(흐리게) — 동선 핀은 선명 유지
+  if(stops.length && stops[0].lat && stops[0].lng){
+    centerLat = parseFloat(stops[0].lat);
+    centerLng = parseFloat(stops[0].lng);
+    drawRouteNearbyDimmed(centerLat, centerLng);
+  }
+}
+
+// 동선조회: 동선 정류장 외 반경 고객을 흐리게 표시
+function drawRouteNearbyDimmed(lat, lng){
+  if(!kakaoMap) return;
+  var rKm = (typeof radiusKm === 'number' && radiusKm) ? radiusKm : 5;
+  var allCustomers = [];
+  try { allCustomers = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e){}
+  if(!Array.isArray(allCustomers)) allCustomers = [];
+  // 동선에 포함된 고객(이름+좌표) 집합
+  var inRoute = {};
+  dsQueue.forEach(function(q){ inRoute[q.name + '|' + String(q.lat).slice(0,7)] = true; });
+  if(!window._routeDimMarkers) window._routeDimMarkers = [];
+  window._routeDimMarkers.forEach(function(m){ if(m.marker) m.marker.setMap(null); if(m.overlay) m.overlay.setMap(null); });
+  window._routeDimMarkers = [];
+  allCustomers.forEach(function(c){
+    if(!c.lat || !c.lng) return;
+    var dist = getDistKm(lat, lng, parseFloat(c.lat), parseFloat(c.lng));
+    if(dist > rKm) return;
+    if(inRoute[c.name + '|' + String(c.lat).slice(0,7)]) return; // 동선 포함 고객 제외
+    var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
+    var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="31" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="' + color + '"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/></svg>';
+    var img = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg))), new kakao.maps.Size(24,31));
+    var mk = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: img, title: c.name, zIndex: 2 });
+    mk.setOpacity(0.45);
+    var lblEl = document.createElement('div');
+    lblEl.style.cssText = 'background:rgba(8,14,28,.55);border:1px solid rgba(201,168,76,.15);border-radius:6px;padding:2px 7px;font-size:9px;font-weight:600;color:rgba(240,244,255,.6);white-space:nowrap;cursor:pointer;';
+    lblEl.textContent = c.name;
+    var ov = new kakao.maps.CustomOverlay({ position: pos, content: lblEl, yAnchor: 2.4, zIndex: 2, clickable: true });
+    ov.setMap(kakaoMap);
+    (function(cust){ lblEl.addEventListener('click', function(){ if(canAddToRoute()){ addToDsQueue(cust); } else { showPopup(cust, getDistKm(lat,lng,parseFloat(cust.lat),parseFloat(cust.lng))); } });
+      kakao.maps.event.addListener(mk, 'click', function(){ if(canAddToRoute()){ addToDsQueue(cust); } else { showPopup(cust, getDistKm(lat,lng,parseFloat(cust.lat),parseFloat(cust.lng))); } }); })(c);
+    window._routeDimMarkers.push({ marker: mk, overlay: ov });
+  });
+}
+
+function clearRouteDimMarkers(){
+  if(!window._routeDimMarkers) return;
+  window._routeDimMarkers.forEach(function(m){ if(m.marker) m.marker.setMap(null); if(m.overlay) m.overlay.setMap(null); });
+  window._routeDimMarkers = [];
 }
 
 function showRouteStopInfo(stop){
@@ -1373,7 +1422,9 @@ function injectDsRoleLabels() {
         cLblEl.appendChild(cBadge);
         // 기준 고객은 파란 기준핀에 이미 이름이 표시되므로 역할핀에는 이름 라벨 생략(중복 방지)
         if(!isBaseQ) cLblEl.appendChild(cNameDiv);
-        var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: 2.6, zIndex: 7 });
+        // 기준 고객이면 배지를 파란 주소 라벨 바로 위에 오도록 yAnchor 상향
+        var roleYAnchor = isBaseQ ? 5.4 : 2.6;
+        var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: roleYAnchor, zIndex: 8 });
         cLblOv._dsRoleKind = 'pin';
         cLblOv.setMap(kakaoMap);
         dsRoleOverlays.push(cLblOv);
@@ -2520,6 +2571,7 @@ function clearNearbyMarkersAll(){
   if(pinBaseMarker){ pinBaseMarker.setMap(null); pinBaseMarker = null; }
   if(typeof centerMarkerGlobal !== 'undefined' && centerMarkerGlobal){ centerMarkerGlobal.setMap(null); centerMarkerGlobal = null; }
   if(typeof centerOverlay !== 'undefined' && centerOverlay){ centerOverlay.setMap(null); centerOverlay = null; }
+  if(typeof clearRouteDimMarkers === 'function') clearRouteDimMarkers();
 }
 
 function refreshNearbyOnly(lat, lng) {
