@@ -2660,6 +2660,26 @@ function refreshNearbyOnly(lat, lng) {
   window._nearbyList = nearby;
   window._nearbyMarkers = nearbyMarkers;
 
+  // 기준 고객 마커 숨김 (기준 파란 핀과 이름 중복 방지) — drawNearby와 동일 처리
+  if(window._baseCustomerId || isCustomerMode) {
+    nearby.forEach(function(item, idx) {
+      var sameId = window._baseCustomerId && item.c.id === window._baseCustomerId;
+      var sameSpot = false;
+      if(item.c.lat && item.c.lng){
+        var dB = getDistKm(lat, lng, parseFloat(item.c.lat), parseFloat(item.c.lng));
+        if(dB < 0.03) sameSpot = true;
+      }
+      if(sameId || sameSpot) {
+        var nm = nearbyMarkers[idx];
+        if(nm) {
+          if(nm.marker) nm.marker.setMap(null);
+          if(nm.overlay) nm.overlay.setMap(null);
+          if(nm.labelEl) nm.labelEl.style.display = 'none';
+        }
+      }
+    });
+  }
+
   nearby.forEach(function(item, idx){
     var el = document.getElementById('citem_'+idx);
     if(el){ el.style.cursor='pointer'; (function(i){ el.addEventListener('click', function(){ selectCustomer(i); }); })(idx); }
