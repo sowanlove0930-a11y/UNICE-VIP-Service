@@ -1217,6 +1217,17 @@ function updateDsMarkerLabels() {
   window._nearbyMarkers.forEach(function(nm, i) {
     var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
     if(!c || !nm.labelEl) return;
+    // 기준 고객(파란 기준핀으로 대체 표시)은 큐에 담겨도 일반 마커를 다시 켜지 않음
+    var isBaseC = (window._baseCustomerId && c.id === window._baseCustomerId);
+    if(!isBaseC && isCustomerMode && c.lat && c.lng && centerLat && centerLng){
+      if(getDistKm(centerLat, centerLng, parseFloat(c.lat), parseFloat(c.lng)) < 0.03) isBaseC = true;
+    }
+    if(isBaseC){
+      if(nm.marker) nm.marker.setMap(null);
+      if(nm.overlay) nm.overlay.setMap(null);
+      if(nm.labelEl) nm.labelEl.style.display = 'none';
+      return;
+    }
     var queueIdx = dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
