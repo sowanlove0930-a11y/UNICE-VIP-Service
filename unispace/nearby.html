@@ -1346,8 +1346,8 @@ function injectDsRoleLabels() {
       var pinImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(pinSvg))), new kakao.maps.Size(28, 36));
       var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name, draggable: true });
       dsRoleMarkers.push(pinMarker);
-      // 동선 핀 클릭: 제거하지 않음 (순서 변경은 좌측 패널에서). 정보 토스트만 표시
-      (function(itm){ kakao.maps.event.addListener(pinMarker, 'click', function(){ showRouteToast(itm.name + (itm.address?('\n📍 '+itm.address):'')); }); })(item);
+      // 동선 핀 클릭: 담기 모드면 동선에서 제거. 조회 모드면 정보 표시
+      (function(itm){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(canAddToRoute()){ removeFromDsQueue(itm); } else { showRouteToast(itm.name + (itm.address?('\n📍 '+itm.address):'')); } }); })(item);
       // 라벨 — 주소 표시 (앞 시/구 제거하고 도로명만)
       var addrText = item.address || item.name;
       var shortAddr = addrText.length > 14 ? addrText.replace(/^[^\s]+\s[^\s]+\s/, '') : addrText;
@@ -1436,7 +1436,12 @@ function injectDsRoleLabels() {
         dsRoleOverlays.push(cLblOv);
         (function(itm, qIndex){
           function handleClick(){
-            // 동선 핀 클릭: 제거하지 않음 (순서 변경은 좌측 패널에서). 고객 정보만 표시
+            if(canAddToRoute()){
+              // 담기 모드: 동선에서만 제거 (일반 고객 핀은 주변 마커로 남음)
+              removeFromDsQueue(itm);
+              return;
+            }
+            // 조회 모드: 고객 정보 표시
             var full = null;
             if(window.allCustomers){ for(var z=0;z<allCustomers.length;z++){ if(allCustomers[z] && (allCustomers[z].id==itm.id || allCustomers[z].name==itm.name)){ full=allCustomers[z]; break; } } }
             if(full && typeof showPopup === 'function') showPopup(full, 0);
@@ -1912,8 +1917,19 @@ window.addEventListener('DOMContentLoaded', function() {
         if(banner) banner.style.display = 'none';
         kakaoMap.setCursor('');
         window._dsPinMode = false;
-        // 임의좌표 핀이 찍혀 있으면 그 핀만 제거. 없으면 모드만 해제(지도 유지)
+        // 조회 모드 임의좌표 핀 제거
         if(_arbPinMarker){ _arbPinMarker.setMap(null); _arbPinMarker = null; }
+        // 담기 모드: 마지막으로 추가한 임의좌표(DS_PIN_)를 동선에서 제거
+        if(routeMode == 'add' && dsQueue.length > 0){
+          for(var di = dsQueue.length - 1; di >= 0; di--){
+            if(dsQueue[di].id && String(dsQueue[di].id).indexOf('DS_PIN_') === 0){
+              dsQueue.splice(di, 1);
+              if(centerLat && centerLng && window._nearbyList) refreshNearbyOnly(centerLat, centerLng);
+              if(typeof rerenderDsQueue === 'function') rerenderDsQueue();
+              break;
+            }
+          }
+        }
       } else {
         this.className = 'pinbase-btn active';
         if(banner) banner.style.display = '';
