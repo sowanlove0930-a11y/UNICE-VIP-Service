@@ -2717,7 +2717,7 @@ function drawNearby(lat, lng) {
     map: kakaoMap,
     image: centerImg,
     title: '기준 위치',
-    draggable: true
+    draggable: !isCustomerMode
   });
 
   // 오버레이 — 주소 한 줄 + 클릭 가능
@@ -2813,6 +2813,18 @@ function drawNearby(lat, lng) {
 
   // 파란 핀 마커 클릭 이벤트 (draggable이라 click이 발화 안 될 수 있음 → 오버레이로도 처리)
   function onCenterPinClick() {
+    // 담기 모드 + 기준 고객 진입: 기준 핀 클릭 시 그 고객을 동선에 추가(출발지 등)
+    if(canAddToRoute()) {
+      if(isCustomerMode && window._baseCustomerId) {
+        var bcA = allCustomers.filter(function(a){ return a.id == window._baseCustomerId; })[0];
+        if(bcA && bcA.lat && bcA.lng) { addToDsQueue(bcA); return; }
+      }
+      // 임의좌표/위치 모드: 현재 기준 좌표를 동선에 추가
+      var nm2 = document.getElementById('targetName').textContent || '기준위치';
+      var ad2 = document.getElementById('targetAddr').textContent || '';
+      addToDsQueue({ id: 'DS_PIN_' + Date.now(), name: nm2, lat: String(centerLat), lng: String(centerLng), address: ad2 });
+      return;
+    }
     var name = document.getElementById('targetName').textContent || '기준위치';
     var addr = document.getElementById('targetAddr').textContent || '';
     var card = document.getElementById('selectedCustomerCard');
