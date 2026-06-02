@@ -1564,9 +1564,15 @@ function clearAllRoutePins() {
 
 function applyNearbyMarkerOpacity() {
   if(!window._nearbyMarkers || !window._nearbyList) return;
+  var dimMode = (routeMode == 'add');
   window._nearbyMarkers.forEach(function(nm, i) {
     var c = window._nearbyList[i] ? window._nearbyList[i].c : null;
     if(!c) return;
+    if(!dimMode){
+      if(nm.marker) nm.marker.setOpacity(1.0);
+      if(nm.labelEl) nm.labelEl.style.opacity = '1';
+      return;
+    }
     var inQueue = dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
@@ -2188,11 +2194,12 @@ function loadKakaoScript(key) {
             });
           })(curMode, latlng);
       });
+      var hasPending = !!(window._pendingRoute && window._pendingRoute.stops && window._pendingRoute.stops.length);
       var addr = document.getElementById('addrInput').value.trim();
-      if(addr) searchAddr();
+      if(addr && !hasPending) searchAddr();
 
       // index 주간현황에서 전달된 하루 동선 자동 표시
-      if(window._pendingRoute && window._pendingRoute.stops && window._pendingRoute.stops.length){
+      if(hasPending){
         window._activeRoute = window._pendingRoute;
         switchTab('today');
       }
