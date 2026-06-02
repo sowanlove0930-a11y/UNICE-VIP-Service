@@ -2168,7 +2168,8 @@ function loadKakaoScript(key) {
               if(_arbPinMarker){ _arbPinMarker.setMap(null); _arbPinMarker = null; }
               var arbSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="#3B82F6"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.95"/></svg>';
               var arbImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(arbSvg), new kakao.maps.Size(28,36), { offset:new kakao.maps.Point(14,36) });
-              _arbPinMarker = new kakao.maps.Marker({ position:latlng, map:kakaoMap, image:arbImg, zIndex:9, title:a });
+              _arbPinMarker = new kakao.maps.Marker({ position:latlng, map:kakaoMap, image:arbImg, zIndex:9, title:a, draggable:true });
+              _bindArbPinDrag(_arbPinMarker, arbImg);
             }
           });
           window._dsPinMode = false;
@@ -4090,6 +4091,30 @@ function goDetail() {
 }
 
 // ── 마커 클리어 ──────────────────────────────────────
+function _bindArbPinDrag(mk, arbImg) {
+  if(!mk) return;
+  kakao.maps.event.addListener(mk, 'dragend', function(){
+    var np = mk.getPosition();
+    centerLat = np.getLat(); centerLng = np.getLng();
+    isCustomerMode = false; window._baseCustomerId = '';
+    var gc2 = new kakao.maps.services.Geocoder();
+    gc2.coord2Address(np.getLng(), np.getLat(), function(res2, st2){
+      var a2 = np.getLat().toFixed(4) + ',' + np.getLng().toFixed(4);
+      if(st2 === kakao.maps.services.Status.OK && res2.length > 0){
+        var rr = res2[0];
+        a2 = rr.road_address ? rr.road_address.address_name : rr.address.address_name;
+      }
+      var tn2 = document.getElementById('targetName'); if(tn2) tn2.textContent = a2;
+      var ml2 = document.querySelector('.mlabel'); if(ml2) ml2.textContent = '📌 기준 위치';
+      drawNearby(centerLat, centerLng);
+      // drawNearby가 clearMarkers로 핀을 지우므로 재생성
+      if(_arbPinMarker){ _arbPinMarker.setMap(null); }
+      _arbPinMarker = new kakao.maps.Marker({ position:np, map:kakaoMap, image:arbImg, zIndex:9, title:a2, draggable:true });
+      _bindArbPinDrag(_arbPinMarker, arbImg);
+    });
+  });
+}
+
 function clearMarkers() {
   markers.forEach(function(m){ m.setMap(null); });
   circles.forEach(function(c){ c.setMap(null); });
