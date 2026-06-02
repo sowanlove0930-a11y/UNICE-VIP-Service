@@ -561,6 +561,7 @@ var dsPolylines = []; // 동선 연결선
 var dsBadges = []; // 동선 구간 번호 배지
 var dsRoleOverlays = []; // 동선 역할 라벨 오버레이 (출발/경유/도착)
 var dsRoleMarkers = []; // 동선 임의좌표/내위치 마커
+var _arbPinMarker = null; // 조회 모드 임의좌표 핀 (1개만 유지)
 
 function setRouteMode(mode){
   routeMode = (mode === 'add') ? 'add' : 'view';
@@ -603,6 +604,7 @@ function switchTab(tab) {
   if(tab == 'today') {
     // 동선조회 진입: 주변고객/기준핀/임의좌표 모드 정리 (route만 표시)
     window._dsPinMode = false; pinBaseMode = false;
+    if(_arbPinMarker){ _arbPinMarker.setMap(null); _arbPinMarker = null; }
     var bpb = document.getElementById('btnPinBase'); if(bpb) bpb.className = 'pinbase-btn';
     var msb = document.getElementById('mapSelectBanner'); if(msb) msb.style.display = 'none';
     if(kakaoMap) kakaoMap.setCursor('');
@@ -1910,7 +1912,8 @@ window.addEventListener('DOMContentLoaded', function() {
         if(banner) banner.style.display = 'none';
         kakaoMap.setCursor('');
         window._dsPinMode = false;
-        clearNearbyMarkersAll();
+        // 임의좌표 핀이 찍혀 있으면 그 핀만 제거. 없으면 모드만 해제(지도 유지)
+        if(_arbPinMarker){ _arbPinMarker.setMap(null); _arbPinMarker = null; }
       } else {
         this.className = 'pinbase-btn active';
         if(banner) banner.style.display = '';
@@ -2153,20 +2156,32 @@ function loadKakaoScript(key) {
               renderDsEditList();
               if(currentTab == 'today') renderTodayListFromQueue();
             } else {
-              // 조회 모드: 그 지점 주변 고객 검색
+              // 조회 모드: 그 지점이 새 기준 + 주변 고객 검색 + 임의좌표 핀 표시
               centerLat = latlng.getLat(); centerLng = latlng.getLng();
               var mlabelEl = document.querySelector('.mlabel');
               if(mlabelEl) mlabelEl.textContent = '📌 기준 위치';
               var tn = document.getElementById('targetName'); if(tn) tn.textContent = a;
               var ta = document.getElementById('targetAddr'); if(ta) ta.textContent = '';
+              isCustomerMode = false; window._baseCustomerId = '';
               drawNearby(centerLat, centerLng);
+              // 임의좌표 핀: drawNearby(=clearMarkers) 이후에 그려야 지워지지 않음. 1개만 유지
+              if(_arbPinMarker){ _arbPinMarker.setMap(null); _arbPinMarker = null; }
+              var arbSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="#3B82F6"/><circle cx="14" cy="14" r="6" fill="white" opacity="0.95"/></svg>';
+              var arbImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(arbSvg), new kakao.maps.Size(28,36), { offset:new kakao.maps.Point(14,36) });
+              _arbPinMarker = new kakao.maps.Marker({ position:latlng, map:kakaoMap, image:arbImg, zIndex:9, title:a });
             }
           });
           window._dsPinMode = false;
           var btn2 = document.getElementById('btnPinBase');
-          if(btn2) btn2.className = 'pinbase-btn';
           var banner2 = document.getElementById('mapSelectBanner');
-          if(banner2) banner2.style.display = 'none';
+          if(routeMode != 'add') {
+            // 조회 모드: 임의좌표 핀이 찍혔으므로 버튼 active 유지 (재클릭 시 핀 제거)
+            if(btn2) btn2.className = 'pinbase-btn active';
+            if(banner2) banner2.style.display = 'none';
+          } else {
+            if(btn2) btn2.className = 'pinbase-btn';
+            if(banner2) banner2.style.display = 'none';
+          }
           kakaoMap.setCursor('');
           return;
         }
