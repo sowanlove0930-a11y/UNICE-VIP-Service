@@ -583,6 +583,10 @@ function setRouteMode(mode){
 }
 
 function switchTab(tab) {
+  // 동선조회로 불러온 동선(_activeRoute)이 살아있으면, 고객지도(ds) 탭 복귀 시 조회 상태로 유지
+  if(tab == 'ds' && window._activeRoute && window._activeRoute.stops && window._activeRoute.stops.length){
+    tab = 'today';
+  }
   currentTab = tab;
   // 모드 토글 바: 동선관리·동선조회에서만 표시, 탭 전환 시 조회 모드로 초기화
   var rmb = document.getElementById('routeModeBar');
@@ -1340,8 +1344,8 @@ function injectDsRoleLabels() {
       var pinImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(pinSvg))), new kakao.maps.Size(28, 36));
       var pinMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: pinImg, title: item.name, draggable: true });
       dsRoleMarkers.push(pinMarker);
-      // 클릭 제거 (동선관리/동선조회 공통, 담기 모드일 때만)
-      (function(itm){ kakao.maps.event.addListener(pinMarker, 'click', function(){ if(canAddToRoute()){ removeFromDsQueue(itm); } }); })(item);
+      // 동선 핀 클릭: 제거하지 않음 (순서 변경은 좌측 패널에서). 정보 토스트만 표시
+      (function(itm){ kakao.maps.event.addListener(pinMarker, 'click', function(){ showRouteToast(itm.name + (itm.address?('\n📍 '+itm.address):'')); }); })(item);
       // 라벨 — 주소 표시 (앞 시/구 제거하고 도로명만)
       var addrText = item.address || item.name;
       var shortAddr = addrText.length > 14 ? addrText.replace(/^[^\s]+\s[^\s]+\s/, '') : addrText;
@@ -1430,12 +1434,7 @@ function injectDsRoleLabels() {
         dsRoleOverlays.push(cLblOv);
         (function(itm, qIndex){
           function handleClick(){
-            if(canAddToRoute()){
-              // 담기 모드: 클릭하면 동선에서 해제
-              removeFromDsQueue(itm);
-              return;
-            }
-            // 조회 모드: 고객 정보 표시
+            // 동선 핀 클릭: 제거하지 않음 (순서 변경은 좌측 패널에서). 고객 정보만 표시
             var full = null;
             if(window.allCustomers){ for(var z=0;z<allCustomers.length;z++){ if(allCustomers[z] && (allCustomers[z].id==itm.id || allCustomers[z].name==itm.name)){ full=allCustomers[z]; break; } } }
             if(full && typeof showPopup === 'function') showPopup(full, 0);
@@ -1697,19 +1696,19 @@ function drawDsPolylines() {
     // 흰 테두리 선 (배경)
     var bgLine = new kakao.maps.Polyline({
       path: [p1, p2],
-      strokeWeight: 9,
+      strokeWeight: 10,
       strokeColor: '#FFFFFF',
-      strokeOpacity: 0.6,
+      strokeOpacity: 0.85,
       strokeStyle: 'solid'
     });
     bgLine.setMap(kakaoMap);
     dsPolylines.push(bgLine);
-    // 골드 실선 (전경)
+    // 빨간 실선 (전경) — 흐린 반경 핀들 사이에서도 잘 보이도록 강조
     var fgLine = new kakao.maps.Polyline({
       path: [p1, p2],
       strokeWeight: 5,
-      strokeColor: '#E8C97A',
-      strokeOpacity: 0.95,
+      strokeColor: '#EF2B2B',
+      strokeOpacity: 1.0,
       strokeStyle: 'solid'
     });
     fgLine.setMap(kakaoMap);
@@ -1720,7 +1719,7 @@ function drawDsPolylines() {
       var midLng = (lng1 + lng2) / 2;
       var midPos = new kakao.maps.LatLng(midLat, midLng);
       var badgeEl = document.createElement('div');
-      badgeEl.style.cssText = 'width:21px;height:21px;border-radius:50%;background:#080E1C;border:1.5px solid rgba(201,168,76,.85);text-align:center;line-height:18px;font-size:11px;font-weight:800;color:#E8C97A;font-family:\'Noto Sans KR\',Arial,sans-serif;pointer-events:none;box-shadow:0 2px 7px rgba(0,0,0,.5);';
+      badgeEl.style.cssText = 'width:21px;height:21px;border-radius:50%;background:#080E1C;border:1.5px solid rgba(239,43,43,.9);text-align:center;line-height:18px;font-size:11px;font-weight:800;color:#FF6B6B;font-family:\'Noto Sans KR\',Arial,sans-serif;pointer-events:none;box-shadow:0 2px 7px rgba(0,0,0,.5);';
       badgeEl.textContent = String(segIdx + 1);
       var badge = new kakao.maps.CustomOverlay({
         position: midPos,
