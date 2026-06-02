@@ -609,7 +609,7 @@ function switchTab(tab) {
     var bpb = document.getElementById('btnPinBase'); if(bpb) bpb.className = 'pinbase-btn';
     var msb = document.getElementById('mapSelectBanner'); if(msb) msb.style.display = 'none';
     if(kakaoMap) kakaoMap.setCursor('');
-    clearNearbyMarkersAll();
+    clearRouteLayer();
     if(window._activeRoute) populateRouteFpSelect(window._activeRoute.fpId);
     else populateRouteFpSelect('');
     var dInp = document.getElementById('routeDateInput');
@@ -618,6 +618,8 @@ function switchTab(tab) {
     clearRouteLayer();
   }
   if(tab == 'ds') {
+    // 동선관리(편집) 진입: 동선 원본 백업 정리 (초기화가 빈 상태로 동작하도록)
+    window._originalRoute = null;
     // 동선조회에서 적재된 동선(_activeRoute 기반)은 동선관리 탭에 가져오지 않음
     if(window._activeRoute) {
       dsQueue = [];
@@ -654,8 +656,8 @@ function switchTab(tab) {
   }
   var clistEl = document.getElementById('clist');
   var rcntEl = document.getElementById('resultCount');
-  if(clistEl) clistEl.style.display = tab == 'today' ? 'none' : '';
-  if(rcntEl) rcntEl.style.display = tab == 'today' ? 'none' : '';
+  if(clistEl) clistEl.style.display = '';
+  if(rcntEl) rcntEl.style.display = '';
   if(tab != 'today' && window._nearbyList && centerLat && centerLng) {
     refreshNearbyOnly(centerLat, centerLng);
     if(tab == 'ds') { injectDsRoleLabels(); updateDsMarkerLabels(); }
@@ -897,6 +899,8 @@ function renderRouteFromData(route){
   var inner = document.getElementById('todayInner');
   if(!inner || !route || !route.stops) return;
   window._activeRoute = route;
+  // 최초 불러온 동선 원본 백업 (초기화 시 복원용) — 깊은 복사
+  try { window._originalRoute = JSON.parse(JSON.stringify(route)); } catch(e){ window._originalRoute = null; }
   var stops = route.stops;
   var header = '📅 ' + (route.fpName||'') + ' ' + (route.date||'') + ' 동선 (' + stops.length + '곳)';
   var html = '<div class="today-hd">' + header + '</div>';
@@ -957,11 +961,25 @@ function renderRouteFromData(route){
     kakaoMap.setBounds(bounds);
   }
 
-  // 2단계: 동선 주변 반경 고객도 함께 표시(흐리게) — 동선 핀은 선명 유지
-  if(stops.length && stops[0].lat && stops[0].lng){
-    centerLat = parseFloat(stops[0].lat);
-    centerLng = parseFloat(stops[0].lng);
-    drawRouteNearbyDimmed(centerLat, centerLng);
+  // 동선 전체 범위의 중심을 기준으로 주변 고객을 개별 진입과 동일하게(선명) 표시
+  if(stops.length){
+    var sumLat = 0, sumLng = 0, cnt = 0;
+    stops.forEach(function(s){ if(s.lat && s.lng){ sumLat += parseFloat(s.lat); sumLng += parseFloat(s.lng); cnt++; } });
+    if(cnt > 0){
+      centerLat = sumLat / cnt;
+      centerLng = sumLng / cnt;
+      // 동선 진입: 기준 고객 없음 (파란 기준핀 미표시)
+      isCustomerMode = false;
+      window._baseCustomerId = '';
+      window._routeEntryNoBase = true;
+      drawNearby(centerLat, centerLng);
+      window._routeEntryNoBase = false;
+      // drawNearby가 clearMarkers로 동선 레이어를 지우므로 동선(번호핀+이음선) 다시 그림
+      syncDsQueueToRoute();
+      injectDsRoleLabels();
+      updateDsMarkerLabels();
+      drawDsPolylines();
+    }
   }
 }
 
@@ -1207,12 +1225,27 @@ function flashHighlightInList(customer) {
 
 // 동선 큐 전체 초기화 (담기/조회 공통)
 function resetDsQueue() {
+  // 동선 진입(원본 동선 있음): 초기화 시 최초 불러온 동선으로 복원
+  if(window._originalRoute && window._originalRoute.stops && window._originalRoute.stops.length){
+    var orig = null;
+    try { orig = JSON.parse(JSON.stringify(window._originalRoute)); } catch(e){ orig = window._originalRoute; }
+    dsQueue = [];
+    clearAllRoutePins();
+    clearDsPolylines();
+    clearDsRoleLayer();
+    clearInlineRoleBadges();
+    if(typeof _clearRemovedRoutePins === 'function') _clearRemovedRoutePins();
+    setRouteMode('view');
+    renderRouteFromData(orig);
+    return;
+  }
   dsQueue = [];
   window._activeRoute = null;
   clearAllRoutePins();
   clearDsPolylines();
   clearDsRoleLayer();
   clearInlineRoleBadges();
+  if(typeof _clearRemovedRoutePins === 'function') _clearRemovedRoutePins();
   restoreNearbyMarkerOpacity();
   panelFrom = null; panelTo = null; panelVia = [];
   renderRoutePanel();
@@ -1420,7 +1453,7 @@ function injectDsRoleLabels() {
       pinNameDiv.textContent = shortAddr;
       pinLblEl.appendChild(pinBadge);
       pinLblEl.appendChild(pinNameDiv);
-      var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 2.7, zIndex: 7 });
+      var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 1.55, zIndex: 7 });
       pinLblOv._dsRoleKind = 'pin';
       pinLblOv.setMap(kakaoMap);
       dsRoleOverlays.push(pinLblOv);
@@ -1489,7 +1522,7 @@ function injectDsRoleLabels() {
         // 기준 고객은 파란 기준핀에 이미 이름이 표시되므로 역할핀에는 이름 라벨 생략(중복 방지)
         if(!isBaseQ) cLblEl.appendChild(cNameDiv);
         // 기준 고객이면 배지를 파란 주소 라벨 바로 위에 오도록 yAnchor 상향
-        var roleYAnchor = isBaseQ ? 5.4 : 2.7;
+        var roleYAnchor = isBaseQ ? 5.4 : 1.55;
         var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: roleYAnchor, zIndex: 8 });
         cLblOv._dsRoleKind = 'pin';
         cLblOv.setMap(kakaoMap);
@@ -2890,6 +2923,10 @@ function drawNearby(lat, lng) {
   // 기존 기준 핀 제거
   if(centerMarkerGlobal) { centerMarkerGlobal.setMap(null); centerMarkerGlobal = null; }
 
+  // 동선 진입(기준 고객 없음): 파란 기준핀 미표시
+  if(window._routeEntryNoBase) {
+    centerMarkerGlobal = null;
+  } else {
   centerMarkerGlobal = new kakao.maps.Marker({
     position: centerPos,
     map: kakaoMap,
@@ -2897,6 +2934,7 @@ function drawNearby(lat, lng) {
     title: '기준 위치',
     draggable: !isCustomerMode
   });
+  }
 
   // 오버레이 — 주소 한 줄 + 클릭 가능
   function makeCenterLabel(addrText) {
@@ -2943,6 +2981,7 @@ function drawNearby(lat, lng) {
       }
     });
   }
+  if(!window._routeEntryNoBase) {
   centerOverlay = new kakao.maps.CustomOverlay({
     position: centerPos,
     content: makeCenterLabelFull(),
@@ -3041,6 +3080,7 @@ function drawNearby(lat, lng) {
   // 마커 클릭 + 오버레이 클릭 둘 다 연결
   kakao.maps.event.addListener(centerMarkerGlobal, 'click', onCenterPinClick);
   window._onCenterPinClick = onCenterPinClick;
+  } // end if(!_routeEntryNoBase)
 
   // 반경 원
   var circle = new kakao.maps.Circle({
