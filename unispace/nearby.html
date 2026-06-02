@@ -332,6 +332,12 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <button type="button" class="ptab" id="tabToday">📅 동선 조회</button>
     </div>
 
+    <!-- 조회/담기 모드 토글 (동선관리·동선조회 공통) -->
+    <div id="routeModeBar" style="display:none;gap:6px;padding:8px 14px 4px">
+      <button type="button" id="modeViewBtn" style="flex:1;padding:7px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:2px solid #60A5FA;background:rgba(59,130,246,.16);color:#93C5FD">👁 조회</button>
+      <button type="button" id="modeAddBtn" style="flex:1;padding:7px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2)">➕ 담기</button>
+    </div>
+
     <!-- 동선관리: 순서편집은 지도 위 팝업으로 표시 -->
 
     <!-- 동선 조회: 카드 -->
@@ -503,6 +509,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         <a class="contact-btn btn-call" id="btnCall" href="#">📞 전화걸기</a>
         <a class="contact-btn btn-kakao" id="btnKakao" href="#">💬 카카오톡</a>
       </div>
+      <button type="button" class="set-base-btn" id="btnPopupRoute" style="display:none;background:rgba(232,201,122,.12);border:1px solid rgba(232,201,122,.4);color:#E8C97A">➕ 동선에 담기</button>
       <button type="button" class="set-base-btn" id="btnSetBase">🎯 이 고객을 기준으로 설정</button>
       <button type="button" class="detail-btn" id="btnDetail">고객 상세 보기 →</button>
       </div>
@@ -545,14 +552,41 @@ var pinBaseMarker = null;
 var myLat = null, myLng = null;
 var isCustomerMode = false;
 var currentTab = 'nearby'; // 'nearby' | 'ds' | 'today'
+var routeMode = 'view'; // 'view'(조회) | 'add'(담기) — 동선 짜기/조회 공통
+function isRouteTab(){ return currentTab == 'ds' || currentTab == 'today'; }
+function canAddToRoute(){ return isRouteTab() && routeMode == 'add'; }
 var dsQueue = []; // 동선관리 큐: [{ name, lat, lng, id, address }, ...]
 var dsPolylines = []; // 동선 연결선
 var dsBadges = []; // 동선 구간 번호 배지
 var dsRoleOverlays = []; // 동선 역할 라벨 오버레이 (출발/경유/도착)
 var dsRoleMarkers = []; // 동선 임의좌표/내위치 마커
 
+function setRouteMode(mode){
+  routeMode = (mode === 'add') ? 'add' : 'view';
+  var vb = document.getElementById('modeViewBtn');
+  var ab = document.getElementById('modeAddBtn');
+  if(vb && ab){
+    if(routeMode === 'add'){
+      ab.style.border='2px solid #E8C97A'; ab.style.background='rgba(232,201,122,.18)'; ab.style.color='#E8C97A';
+      vb.style.border='1px solid var(--bdr2)'; vb.style.background='var(--sur)'; vb.style.color='var(--text2)';
+    } else {
+      vb.style.border='2px solid #60A5FA'; vb.style.background='rgba(59,130,246,.16)'; vb.style.color='#93C5FD';
+      ab.style.border='1px solid var(--bdr2)'; ab.style.background='var(--sur)'; ab.style.color='var(--text2)';
+    }
+  }
+  if(kakaoMap) kakaoMap.setCursor('');
+  // 모드 변경 시 마커 투명도 즉시 반영
+  if((currentTab=='ds'||currentTab=='today') && window._nearbyList && centerLat && centerLng){
+    if(typeof applyNearbyMarkerOpacity === 'function') applyNearbyMarkerOpacity();
+  }
+}
+
 function switchTab(tab) {
   currentTab = tab;
+  // 모드 토글 바: 동선관리·동선조회에서만 표시, 탭 전환 시 조회 모드로 초기화
+  var rmb = document.getElementById('routeModeBar');
+  if(rmb) rmb.style.display = (tab == 'ds' || tab == 'today') ? 'flex' : 'none';
+  setRouteMode('view');
   var tabs = { nearby: 'tabNearby', ds: 'tabDs', today: 'tabToday' };
   Object.keys(tabs).forEach(function(k) {
     var el = document.getElementById(tabs[k]);
@@ -573,11 +607,6 @@ function switchTab(tab) {
     else populateRouteFpSelect('');
     var dInp = document.getElementById('routeDateInput');
     if(dInp && !dInp.value) dInp.value = (window._activeRoute && window._activeRoute.date) ? window._activeRoute.date : new Date().toISOString().slice(0,10);
-    if(window._activeRoute && window._activeRoute.stops && window._activeRoute.stops.length) {
-      renderRouteFromData(window._activeRoute);
-    } else {
-      renderTodayCard();
-    }
   } else {
     clearRouteLayer();
   }
@@ -615,6 +644,14 @@ function switchTab(tab) {
   if(tab != 'today' && window._nearbyList && centerLat && centerLng) {
     refreshNearbyOnly(centerLat, centerLng);
     if(tab == 'ds') { injectDsRoleLabels(); updateDsMarkerLabels(); }
+  }
+  // 동선조회 렌더링은 ds/else 정리 이후에 실행 (정리에 지워지지 않도록)
+  if(tab == 'today') {
+    if(window._activeRoute && window._activeRoute.stops && window._activeRoute.stops.length) {
+      renderRouteFromData(window._activeRoute);
+    } else {
+      renderTodayCard();
+    }
   }
 }
 
@@ -809,6 +846,36 @@ function makeRouteStopOverlay(pos, roleText, name, roleColor){
   return new kakao.maps.CustomOverlay({ position:pos, content:wrap, yAnchor:3.0, zIndex:6, clickable:true });
 }
 
+function renderTodayListFromQueue(){
+  var inner = document.getElementById('todayInner');
+  if(!inner) return;
+  var fpName = (window._activeRoute && window._activeRoute.fpName) || '';
+  var dateStr = (window._activeRoute && window._activeRoute.date) || '';
+  var header = '📅 ' + fpName + ' ' + dateStr + ' 동선 (' + dsQueue.length + '곳)';
+  var html = '<div class="today-hd">' + header + '</div>';
+  if(!dsQueue.length){
+    html += '<div class="today-empty">동선이 비어있습니다 · 담기 모드로 추가하세요</div>';
+    inner.innerHTML = html;
+    return;
+  }
+  dsQueue.forEach(function(q, i){
+    var seqCls = i == 0 ? 'ds-seq ds-s0' : (i == dsQueue.length - 1 ? 'ds-seq ds-s2' : 'ds-seq ds-s1');
+    html += '<div class="today-row" style="cursor:pointer" data-qlat="' + q.lat + '" data-qlng="' + q.lng + '">'
+      + '<span class="today-time">' + (i+1) + '</span>'
+      + '<span class="today-name">' + q.name + '</span>'
+      + '<span class="today-place">' + (q.address || '') + '</span>'
+      + '<div class="' + seqCls + '">' + (i+1) + '</div>'
+      + '</div>';
+  });
+  inner.innerHTML = html;
+  inner.querySelectorAll('.today-row').forEach(function(rowEl){
+    rowEl.addEventListener('click', function(){
+      var la = rowEl.getAttribute('data-qlat'), ln = rowEl.getAttribute('data-qlng');
+      if(la && ln && kakaoMap) kakaoMap.setCenter(new kakao.maps.LatLng(parseFloat(la), parseFloat(ln)));
+    });
+  });
+}
+
 function renderRouteFromData(route){
   var inner = document.getElementById('todayInner');
   if(!inner || !route || !route.stops) return;
@@ -840,30 +907,21 @@ function renderRouteFromData(route){
   if(route.skipped) html += '<div style="font-size:10px;color:var(--text3);padding:6px 0 0">※ 좌표 없는 활동 ' + route.skipped + '건은 지도에서 제외됨</div>';
   inner.innerHTML = html;
 
+  // 동선을 dsQueue로 적재 → 동선관리와 동일한 렌더링 시스템 사용 (담기/이음선/투명도 통일)
   clearRouteLayer();
   if(!kakaoMap) return;
-  var path = [];
-  stops.forEach(function(s, i) {
+  dsQueue = [];
+  stops.forEach(function(s){
     if(!s.lat || !s.lng) return;
-    var pos = new kakao.maps.LatLng(parseFloat(s.lat), parseFloat(s.lng));
-    path.push(pos);
-    var isFrom = (i == 0), isTo = (i == stops.length - 1);
-    var roleText = isFrom ? '출발' : (isTo ? '도착' : '경유' + i);
-    var color = isFrom ? '#3B82F6' : (isTo ? '#EF4444' : '#A78BFA');
-    var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:makeRouteStopMarker(String(i+1), color), title:s.name, zIndex:5 });
-    var overlay = makeRouteStopOverlay(pos, roleText, s.name, color);
-    overlay.setMap(kakaoMap);
-    (function(stop){
-      kakao.maps.event.addListener(marker, 'click', function(){ showRouteStopInfo(stop); });
-      overlay.getContent().addEventListener('click', function(){ showRouteStopInfo(stop); });
-    })(s);
-    _routeMarkers.push({ marker:marker, overlay:overlay });
+    dsQueue.push({ id: s.id || ('RT_'+s.name+'_'+s.lat), name: s.name, lat: String(s.lat), lng: String(s.lng), address: s.address || s.name });
   });
-  if(path.length > 1){
-    var poly = new kakao.maps.Polyline({ path:path, strokeWeight:4, strokeColor:'#E8C97A', strokeOpacity:0.85, strokeStyle:'solid' });
-    poly.setMap(kakaoMap);
-    _routePolylines.push(poly);
-  }
+  syncDsQueueToRoute();
+  injectDsRoleLabels();
+  updateDsMarkerLabels();
+  drawDsPolylines();
+  // 리스트 행 클릭 → 해당 위치로 이동
+  var path = [];
+  stops.forEach(function(s){ if(s.lat && s.lng) path.push(new kakao.maps.LatLng(parseFloat(s.lat), parseFloat(s.lng))); });
   inner.querySelectorAll('.route-row').forEach(function(rowEl){
     rowEl.addEventListener('click', function(){
       var ri = parseInt(rowEl.getAttribute('data-ri'));
@@ -1096,6 +1154,7 @@ function addToDsQueue(customer) {
     updateDsMarkerLabels();
     drawDsPolylines();
     renderDsEditList();
+    if(currentTab == 'today') renderTodayListFromQueue();
     return;
   }
   dsQueue.push({ id: customer.id, name: customer.name, lat: customer.lat, lng: customer.lng, address: customer.address || '' });
@@ -1105,6 +1164,7 @@ function addToDsQueue(customer) {
   updateDsMarkerLabels();
   drawDsPolylines();
   renderDsEditList();
+  if(currentTab == 'today') renderTodayListFromQueue();
   setTimeout(function(){ flashHighlightInList(customer); }, 100);
 }
 
@@ -1125,8 +1185,9 @@ function updateDsMarkerLabels() {
     var oldBadge = nm.labelEl.querySelector('.ds-role-badge-inline');
     if(oldBadge) oldBadge.parentNode.removeChild(oldBadge);
     // opacity only on name label / marker
-    nm.labelEl.style.opacity = inQueue ? '1' : (currentTab == 'ds' ? '0.6' : '1');
-    if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : (currentTab == 'ds' ? 0.6 : 1.0));
+    var dimOff = canAddToRoute() && dsQueue.length > 0;
+    nm.labelEl.style.opacity = inQueue ? '1' : (dimOff ? '0.6' : '1');
+    if(nm.marker) nm.marker.setOpacity(inQueue ? 1.0 : (dimOff ? 0.6 : 1.0));
     // queued customer: insert role badge as first child (above name)
     if(inQueue) {
       var roleText = queueIdx == 0 ? '출발' : (queueIdx == dsQueue.length-1 && dsQueue.length > 1 ? '도착' : '경유' + queueIdx);
@@ -1151,7 +1212,7 @@ function syncDsQueueToRoute() {
     else panelVia.push(obj);
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
     var type = i == 0 ? 'from' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? 'to' : 'via_' + (panelVia.length - 1));
-    if(currentTab != 'ds') {
+    if(!isRouteTab()) {
       var label = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + (panelVia.length));
       setRoutePin(type, pos, label);
       updateRoutePinAddr(type, pos, item.address || item.name);
@@ -1167,7 +1228,7 @@ function attachRoutePinDsClick2(pos, queueIdx) {}
 
 function injectDsRoleLabels() {
   clearDsRoleLayer();
-  if(!kakaoMap || currentTab != 'ds') return;
+  if(!kakaoMap || !isRouteTab()) return;
   dsQueue.forEach(function(item, i) {
     var pos = new kakao.maps.LatLng(parseFloat(item.lat), parseFloat(item.lng));
     var roleText = i == 0 ? '출발' : (i == dsQueue.length - 1 && dsQueue.length > 1 ? '도착' : '경유' + i);
@@ -1228,7 +1289,64 @@ function injectDsRoleLabels() {
         });
       }); })(i, pinNameDiv, pinLblOv);
     } else {
-      // 일반 고객: updateDsMarkerLabels에서 처리
+      // 일반 고객: 주변 마커가 이미 있으면 updateDsMarkerLabels가 배지 부착.
+      // 주변 마커가 없으면(동선조회 등) 여기서 직접 핀+라벨 생성.
+      var hasNearbyMarker = false;
+      if(window._nearbyList){
+        for(var k=0;k<window._nearbyList.length;k++){
+          var nc = window._nearbyList[k] && window._nearbyList[k].c;
+          if(!nc) continue;
+          if((nc.id && item.id && nc.id==item.id) || (nc.name==item.name && String(nc.lat).slice(0,7)==String(item.lat).slice(0,7))){ hasNearbyMarker = true; break; }
+        }
+      }
+      if(!hasNearbyMarker){
+        var cSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40"><path d="M15 0C7 0 0.5 6.5 0.5 14.5C0.5 25 15 40 15 40S29.5 25 29.5 14.5C29.5 6.5 23 0 15 0z" fill="' + roleColor + '" stroke="#fff" stroke-width="1.5"/><circle cx="15" cy="14.5" r="9" fill="#fff"/><text x="15" y="14.5" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-size="12" font-weight="800" fill="' + roleColor + '">' + (i+1) + '</text></svg>';
+        var cImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(cSvg))), new kakao.maps.Size(30,40), { offset: new kakao.maps.Point(15,40) });
+        var cMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: cImg, title: item.name, zIndex: 6 });
+        dsRoleMarkers.push(cMarker);
+        var cLblEl = document.createElement('div');
+        cLblEl.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:pointer;';
+        var cBadge = document.createElement('div');
+        cBadge.style.cssText = 'background:' + roleColor + ';color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:5px;margin-bottom:3px;letter-spacing:.03em;box-shadow:0 2px 6px rgba(0,0,0,.4);';
+        cBadge.textContent = roleText;
+        var cNameDiv = document.createElement('div');
+        cNameDiv.style.cssText = 'background:rgba(8,14,28,.92);border:1px solid rgba(201,168,76,.28);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 3px 10px rgba(0,0,0,.45);';
+        cNameDiv.textContent = item.name;
+        cLblEl.appendChild(cBadge);
+        cLblEl.appendChild(cNameDiv);
+        var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: 2.6, zIndex: 7 });
+        cLblOv._dsRoleKind = 'pin';
+        cLblOv.setMap(kakaoMap);
+        dsRoleOverlays.push(cLblOv);
+        (function(itm, qIndex){
+          function handleClick(){
+            if(canAddToRoute()){
+              // 담기 모드: 클릭하면 동선에서 해제
+              var ri = dsQueue.findIndex(function(q){
+                if(itm.id && q.id) return q.id == itm.id;
+                return q.name == itm.name && String(q.lat).slice(0,7) == String(itm.lat).slice(0,7);
+              });
+              if(ri !== -1){
+                dsQueue.splice(ri,1);
+                syncDsQueueToRoute();
+                injectDsRoleLabels();
+                updateDsMarkerLabels();
+                drawDsPolylines();
+                renderDsEditList();
+                if(currentTab == 'today') renderTodayListFromQueue();
+              }
+              return;
+            }
+            // 조회 모드: 고객 정보 표시
+            var full = null;
+            if(window.allCustomers){ for(var z=0;z<allCustomers.length;z++){ if(allCustomers[z] && (allCustomers[z].id==itm.id || allCustomers[z].name==itm.name)){ full=allCustomers[z]; break; } } }
+            if(full && typeof showPopup === 'function') showPopup(full, 0);
+            else showRouteToast(itm.name + (itm.address?('\n📍 '+itm.address):''));
+          }
+          kakao.maps.event.addListener(cMarker, 'click', handleClick);
+          cLblEl.addEventListener('click', handleClick);
+        })(item, i);
+      }
     }
   });
 }
@@ -1678,14 +1796,8 @@ window.addEventListener('DOMContentLoaded', function() {
   if(btnPinBase) btnPinBase.addEventListener('click', function(){
     if(!kakaoMap){ alert('먼저 지도를 불러주세요.'); return; }
 
-    // 동선 조회 탭: 기준잡기/임의좌표 비활성 (읽기 전용 동선 보기)
-    if(currentTab == 'today') {
-      showRouteToast('동선 조회 탭에서는 위치 추가 기능을 쓸 수 없습니다.\n동선관리 탭에서 이용하세요.');
-      return;
-    }
-
-    // 동선관리 탭: 지도 클릭 → 임의좌표를 큐에 추가
-    if(currentTab == 'ds') {
+    // 동선관리·동선조회 탭: 임의좌표 모드 (조회=주변검색, 담기=지점추가)
+    if(isRouteTab()) {
       var isActive = this.className.indexOf('active') !== -1;
       var banner = document.getElementById('mapSelectBanner');
       var icon   = document.getElementById('mapSelectIcon');
@@ -1695,11 +1807,12 @@ window.addEventListener('DOMContentLoaded', function() {
         if(banner) banner.style.display = 'none';
         kakaoMap.setCursor('');
         window._dsPinMode = false;
+        clearNearbyMarkersAll();
       } else {
         this.className = 'pinbase-btn active';
         if(banner) banner.style.display = '';
         if(icon)   icon.textContent = '📌';
-        if(text)   text.textContent = '지도를 클릭해 동선에 위치를 추가하세요';
+        if(text)   text.textContent = (routeMode=='add') ? '지도를 클릭해 동선에 위치를 추가하세요' : '지도를 클릭해 그 주변 고객을 검색하세요';
         kakaoMap.setCursor('crosshair');
         window._dsPinMode = true;
       }
@@ -1790,6 +1903,24 @@ window.addEventListener('DOMContentLoaded', function() {
 
   var btnSetBase = document.getElementById('btnSetBase');
   if(btnSetBase) btnSetBase.addEventListener('click', setAsBase);
+  var btnPopupRoute = document.getElementById('btnPopupRoute');
+  if(btnPopupRoute) btnPopupRoute.addEventListener('click', function(){
+    var c = selectedPanelCustomer;
+    if(!c) return;
+    var qi = dsQueue.findIndex(function(q){
+      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
+      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+    });
+    if(qi !== -1){
+      dsQueue.splice(qi,1);
+      syncDsQueueToRoute();
+      if(centerLat&&centerLng) refreshNearbyOnly(centerLat,centerLng);
+      injectDsRoleLabels(); updateDsMarkerLabels(); drawDsPolylines(); renderDsEditList();
+    } else {
+      addToDsQueue(c);
+    }
+    closePopup();
+  });
 
   // 길찾기 팝업 열기/닫기
   var routeOpenBtn = document.getElementById('routeOpenBtn');
@@ -1867,6 +1998,8 @@ function loadKakaoScript(key) {
       if(tabNearby) tabNearby.addEventListener('click', function(){ switchTab('nearby'); });
       if(tabDs) tabDs.addEventListener('click', function(){ switchTab('ds'); });
       if(tabToday) tabToday.addEventListener('click', function(){ switchTab('today'); });
+      var mvb=document.getElementById('modeViewBtn'); if(mvb) mvb.addEventListener('click', function(){ setRouteMode('view'); });
+      var mab=document.getElementById('modeAddBtn'); if(mab) mab.addEventListener('click', function(){ setRouteMode('add'); });
       var rlb=document.getElementById('routeLoadBtn'); if(rlb) rlb.addEventListener('click', function(){ window._activeRoute=null; loadRouteFromSelectors(); });
       var rfs=document.getElementById('routeFpSelect'); if(rfs) rfs.addEventListener('change', function(){ window._activeRoute=null; loadRouteFromSelectors(); });
       var rdi=document.getElementById('routeDateInput'); if(rdi) rdi.addEventListener('change', function(){ window._activeRoute=null; loadRouteFromSelectors(); });
@@ -1914,15 +2047,27 @@ function loadKakaoScript(key) {
               var r = result[0];
               a = r.road_address ? r.road_address.address_name : r.address.address_name;
             }
-            var obj = { id:'DS_PIN_' + Date.now(), name:a, lat:String(latlng.getLat()), lng:String(latlng.getLng()), address:a };
-            dsQueue.push(obj);
-            syncDsQueueToRoute();
-            drawDsPolylines();
-            if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
-            applyNearbyMarkerOpacity();
-            injectDsRoleLabels();
-            updateDsMarkerLabels();
-            renderDsEditList();
+            if(routeMode == 'add') {
+              // 담기 모드: 동선에 임의 지점 추가
+              var obj = { id:'DS_PIN_' + Date.now(), name:a, lat:String(latlng.getLat()), lng:String(latlng.getLng()), address:a };
+              dsQueue.push(obj);
+              syncDsQueueToRoute();
+              drawDsPolylines();
+              if(centerLat && centerLng) refreshNearbyOnly(centerLat, centerLng);
+              applyNearbyMarkerOpacity();
+              injectDsRoleLabels();
+              updateDsMarkerLabels();
+              renderDsEditList();
+              if(currentTab == 'today') renderTodayListFromQueue();
+            } else {
+              // 조회 모드: 그 지점 주변 고객 검색
+              centerLat = latlng.getLat(); centerLng = latlng.getLng();
+              var mlabelEl = document.querySelector('.mlabel');
+              if(mlabelEl) mlabelEl.textContent = '📌 기준 위치';
+              var tn = document.getElementById('targetName'); if(tn) tn.textContent = a;
+              var ta = document.getElementById('targetAddr'); if(ta) ta.textContent = '';
+              drawNearby(centerLat, centerLng);
+            }
           });
           window._dsPinMode = false;
           var btn2 = document.getElementById('btnPinBase');
@@ -2067,7 +2212,7 @@ function searchAddr() {
 
   list.style.display = '';
   var srlHint = document.getElementById('srlHint');
-  if(srlHint) srlHint.textContent = currentTab == 'ds' ? '[+ 추가] 클릭해 동선에 추가' : '클릭하면 기준 위치로 설정됩니다';
+  if(srlHint) srlHint.textContent = canAddToRoute() ? '[+ 추가] 클릭해 동선에 추가' : '클릭하면 기준 위치로 설정됩니다';
   items.innerHTML = '<div class="srl-loading"><div style="width:12px;height:12px;border-radius:50%;border:2px solid #60A5FA;border-top-color:transparent;animation:srl-spin .7s linear infinite;flex-shrink:0;"></div>검색 중...</div>';
   title.textContent = '"' + addr + '" 검색 중...';
 
@@ -2145,9 +2290,9 @@ function showSearchResultsCombined(customerMatches, placeResults, keyword) {
         + '<div style="font-size:10px;color:#8B98B8;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (c.address||'주소 미등록') + '</div>'
         + '</div>'
         + (dist ? '<div style="font-size:10px;color:#60A5FA;flex-shrink:0;margin-right:4px;">' + dist + '</div>' : '')
-        + (currentTab == 'ds' ? '<div class="srl-add-btn" style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(232,201,122,.15);color:#E8C97A;border:1px solid rgba(232,201,122,.3);white-space:nowrap;flex-shrink:0;cursor:pointer;">+ 추가</div>' : '');
+        + (canAddToRoute() ? '<div class="srl-add-btn" style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(232,201,122,.15);color:#E8C97A;border:1px solid rgba(232,201,122,.3);white-space:nowrap;flex-shrink:0;cursor:pointer;">+ 추가</div>' : '');
       item.addEventListener('click', function() {
-        if(currentTab == 'ds') {
+        if(canAddToRoute()) {
           addToDsQueue(c);
           document.getElementById('searchResultList').style.display = 'none';
           document.getElementById('addrInput').value = '';
@@ -2244,14 +2389,14 @@ function showSearchResults(results, keyword, containerEl) {
     item.innerHTML = '<div class="srl-item-top">'
       +'<span class="srl-item-name">'+p.place_name+'</span>'
       +(distStr ? '<span class="srl-item-dist">'+distStr+'</span>' : '')
-      +(currentTab == 'ds' ? '<span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(232,201,122,.15);color:#E8C97A;border:1px solid rgba(232,201,122,.3);margin-left:4px;cursor:pointer;">+ 추가</span>' : '')
+      +(canAddToRoute() ? '<span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(232,201,122,.15);color:#E8C97A;border:1px solid rgba(232,201,122,.3);margin-left:4px;cursor:pointer;">+ 추가</span>' : '')
       +'</div>'
       +'<div class="srl-item-addr">'+(p.road_address_name || p.address_name || '')+'</div>'
       +(p.category_name ? '<div class="srl-item-cat">'+p.category_name.split(' > ').pop()+(p.phone?' · '+p.phone:'')+'</div>' : '');
 
     (function(place){
       item.addEventListener('click', function(){
-        if(currentTab == 'ds') {
+        if(canAddToRoute()) {
           var obj = { id:'DS_PIN_' + Date.now(), name: place.place_name, lat: String(place.y), lng: String(place.x), address: place.road_address_name || place.address_name || place.place_name };
           dsQueue.push(obj);
           syncDsQueueToRoute();
@@ -2428,15 +2573,16 @@ function refreshNearbyOnly(lat, lng) {
       +'</svg>';
     var markerImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(svgContent), new kakao.maps.Size(28,36));
     var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
-    var inQueueNow = currentTab == 'ds' && dsQueue.findIndex(function(q){
+    var inQueueNow = isRouteTab() && dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) !== -1;
-    marker.setOpacity(inQueueNow ? 1.0 : (currentTab == 'ds' ? 0.6 : 1.0));
+    var dimNow = canAddToRoute() && dsQueue.length > 0;
+    marker.setOpacity(inQueueNow ? 1.0 : (dimNow ? 0.6 : 1.0));
     nearbyMarkers.push({ marker:marker, labelEl:null, pos:pos, color:color });
 
     var evInfo = getUpcomingEvents(c);
-    var queueIdx2 = currentTab == 'ds' ? dsQueue.findIndex(function(q){
+    var queueIdx2 = isRouteTab() ? dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) : -1;
@@ -2454,15 +2600,15 @@ function refreshNearbyOnly(lat, lng) {
       nameBox.appendChild(dotWrap);
     }
     labelEl.appendChild(nameBox);
-    if(queueIdx2 === -1 && currentTab == 'ds') {
+    if(queueIdx2 === -1 && canAddToRoute() && dsQueue.length > 0) {
       labelEl.style.opacity = '0.6';
     }
-    (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
+    (function(customer, distance){ function fire(e){ if(e){e.preventDefault();e.stopPropagation();} if((currentTab=='ds'||currentTab=='today') && routeMode=='add'){ addToDsQueue(customer); return; } showPopup(customer, distance); } labelEl.addEventListener('click', fire); labelEl.addEventListener('touchstart', fire); })(c, dist);
     var nameOverlay = new kakao.maps.CustomOverlay({ position:pos, content:labelEl, yAnchor:3.2, clickable:true, zIndex:1 });
     nameOverlay.setMap(kakaoMap);
     nearbyMarkers[nearbyMarkers.length-1].labelEl = labelEl;
     nearbyMarkers[nearbyMarkers.length-1].overlay = nameOverlay;
-    (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ if(currentTab=='ds'){ addToDsQueue(customer); return; } showPopup(customer, distance); }); })(c, dist, marker);
+    (function(customer, distance, markerEl){ kakao.maps.event.addListener(markerEl, 'click', function(){ if((currentTab=='ds'||currentTab=='today') && routeMode=='add'){ addToDsQueue(customer); return; } showPopup(customer, distance); }); })(c, dist, marker);
   });
 
 
@@ -2492,7 +2638,7 @@ function refreshNearbyOnly(lat, lng) {
     var el = document.getElementById('citem_'+idx);
     if(el){ el.style.cursor='pointer'; (function(i){ el.addEventListener('click', function(){ selectCustomer(i); }); })(idx); }
   });
-  if(currentTab == 'ds') applyNearbyMarkerOpacity();
+  if(isRouteTab()) applyNearbyMarkerOpacity();
 }
 
 // ── 주변 고객 표시 ───────────────────────────────────
@@ -2750,7 +2896,7 @@ function drawNearby(lat, lng) {
 
     // 이름 오버레이 (클릭 가능 - 큰 클릭 영역)
     var evInfo = getUpcomingEvents(c);
-    var queueIdxDn = currentTab == 'ds' ? dsQueue.findIndex(function(q){
+    var queueIdxDn = isRouteTab() ? dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
     }) : -1;
@@ -2785,11 +2931,11 @@ function drawNearby(lat, lng) {
       nameBoxDn.appendChild(dotWrap);
     }
     labelEl.appendChild(nameBoxDn);
-    if(queueIdxDn === -1 && currentTab == 'ds') labelEl.style.opacity = '0.6';
+    if(queueIdxDn === -1 && canAddToRoute() && dsQueue.length > 0) labelEl.style.opacity = '0.6';
     (function(customer, distance){
       function fire(e){
         if(e){ e.preventDefault(); e.stopPropagation(); }
-        if(currentTab == 'ds') {
+        if((currentTab == 'ds' || currentTab == 'today') && routeMode == 'add') {
           addToDsQueue(customer);
           return;
         }
@@ -2811,7 +2957,7 @@ function drawNearby(lat, lng) {
 
     (function(customer, distance, markerEl){
       kakao.maps.event.addListener(markerEl, 'click', function() {
-        if(currentTab == 'ds') {
+        if((currentTab == 'ds' || currentTab == 'today') && routeMode == 'add') {
           addToDsQueue(customer);
           return;
         }
@@ -3107,6 +3253,22 @@ function showPopup(c, dist) {
       } else { alert('카카오톡 공유는 카카오 SDK 연동 후 사용 가능합니다.'); }
       return false;
     };
+  }
+
+  // 동선 담기/빼기 버튼 (담기 모드에서만)
+  var brt = document.getElementById('btnPopupRoute');
+  if(brt){
+    if(canAddToRoute()){
+      brt.style.display = '';
+      var inQ = dsQueue.findIndex(function(q){
+        if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
+        return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+      }) !== -1;
+      if(inQ){ brt.textContent='✓ 동선에서 빼기'; brt.style.color='#FCA5A5'; brt.style.borderColor='rgba(239,68,68,.4)'; brt.style.background='rgba(239,68,68,.1)'; }
+      else { brt.textContent='➕ 동선에 담기'; brt.style.color='#E8C97A'; brt.style.borderColor='rgba(232,201,122,.4)'; brt.style.background='rgba(232,201,122,.12)'; }
+    } else {
+      brt.style.display = 'none';
+    }
   }
 
   // 팝업 위치
