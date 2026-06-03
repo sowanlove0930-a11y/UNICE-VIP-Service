@@ -934,7 +934,7 @@ function renderRouteFromData(route){
   dsQueue = [];
   stops.forEach(function(s){
     if(!s.lat || !s.lng) return;
-    dsQueue.push({ id: s.id || ('RT_'+s.name+'_'+s.lat), name: s.name, lat: String(s.lat), lng: String(s.lng), address: s.address || s.name });
+    dsQueue.push({ id: s.id || ('RT_'+s.name+'_'+s.lat), custId: s.custId || '', name: s.name, lat: String(s.lat), lng: String(s.lng), address: s.address || s.name });
   });
   syncDsQueueToRoute();
   injectDsRoleLabels();
@@ -1062,9 +1062,10 @@ function buildRouteFromActivities(fpId, dateStr){
   acts.forEach(function(a){
     if(a.fpName) fpName=a.fpName;
     var la=a.lat, ln=a.lng, addr=a.place||a.placeAddr||'';
-    if(!la || !ln){ var c=findCust(a.customerName); if(c && c.lat && c.lng){ la=c.lat; ln=c.lng; if(!addr) addr=c.address||''; } }
+    var matchedCust = findCust(a.customerName);
+    if(!la || !ln){ var c=matchedCust; if(c && c.lat && c.lng){ la=c.lat; ln=c.lng; if(!addr) addr=c.address||''; } }
     if(!la || !ln){ skipped++; return; }
-    stops.push({ id:a.id, name:a.customerName, address:addr, lat:String(la), lng:String(ln),
+    stops.push({ id:a.id, custId:(matchedCust && matchedCust.id) || '', name:a.customerName, address:addr, lat:String(la), lng:String(ln),
       time:a.time||'', type:a.type||'', status:a.status||'', support:a.support||'',
       supportReqTime:a.supportReqTime||'', supportReqEndTime:a.supportReqEndTime||'' });
   });
@@ -1514,14 +1515,15 @@ function injectDsRoleLabels() {
         var cImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(cSvg))), new kakao.maps.Size(30,40), { offset: new kakao.maps.Point(15,40) });
         var cMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: cImg, title: item.name, zIndex: 6 });
         dsRoleMarkers.push(cMarker);
-        // 같은 고객의 주변 마커가 있으면 즉시 숨김 (번호 핀과 중복 방지)
+        // 같은 고객(custId 일치)의 주변 마커를 즉시 숨김 (번호 핀과 중복 방지)
         if(window._nearbyMarkers && window._nearbyList){
+          var itemCustId = item.custId || ((item.id && String(item.id).indexOf('RT_') !== 0) ? item.id : '');
           for(var hm=0; hm<window._nearbyMarkers.length; hm++){
             var hc = window._nearbyList[hm] && window._nearbyList[hm].c;
             if(!hc) continue;
-            var sameName = hc.name == item.name;
-            var sameSpot = hc.lat && hc.lng && item.lat && item.lng && getDistKm(parseFloat(hc.lat), parseFloat(hc.lng), parseFloat(item.lat), parseFloat(item.lng)) < 0.03;
-            if(sameName && sameSpot){
+            var matchById = itemCustId && hc.id && hc.id == itemCustId;
+            var matchByNameSpot = (hc.name == item.name) && hc.lat && hc.lng && item.lat && item.lng && getDistKm(parseFloat(hc.lat), parseFloat(hc.lng), parseFloat(item.lat), parseFloat(item.lng)) < 0.03;
+            if(matchById || matchByNameSpot){
               var hnm = window._nearbyMarkers[hm];
               if(hnm.marker) hnm.marker.setMap(null);
               if(hnm.overlay) hnm.overlay.setMap(null);
