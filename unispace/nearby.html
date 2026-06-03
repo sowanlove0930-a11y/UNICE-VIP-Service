@@ -334,10 +334,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <button type="button" class="ptab" id="tabToday" style="display:none">📅 동선 조회</button>
     </div>
 
-    <!-- 모드 토글: 주변고객(조회) / 동선짜기(담기) / 초기화 -->
+    <!-- 모드 토글: 주변고객(조회) / 동선관리(담기) / 초기화 -->
     <div id="routeModeBar" style="display:flex;gap:6px;padding:8px 14px 4px">
-      <button type="button" id="modeViewBtn" style="flex:1;padding:7px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:2px solid #60A5FA;background:rgba(59,130,246,.16);color:#93C5FD">📍 주변고객</button>
-      <button type="button" id="modeAddBtn" style="flex:1;padding:7px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2)">🗺 동선짜기</button>
+      <button type="button" id="modeViewBtn" style="flex:1;padding:7px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:2px solid #60A5FA;background:rgba(59,130,246,.16);color:#93C5FD">🔍 주변고객</button>
+      <button type="button" id="modeAddBtn" style="flex:1;padding:7px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2)">🧭 동선관리</button>
       <button type="button" id="routeResetBtn" style="padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#FCA5A5;white-space:nowrap">🗑 초기화</button>
     </div>
 
@@ -2231,8 +2231,17 @@ function loadKakaoScript(key) {
       if(tabNearby) tabNearby.addEventListener('click', function(){ switchTab('nearby'); });
       if(tabRoute) tabRoute.addEventListener('click', function(){ switchTab('ds'); });
       if(tabToday) tabToday.addEventListener('click', function(){ switchTab('today'); });
-      var mvb=document.getElementById('modeViewBtn'); if(mvb) mvb.addEventListener('click', function(){ setRouteMode('view'); });
-      var mab=document.getElementById('modeAddBtn'); if(mab) mab.addEventListener('click', function(){ if(_arbPinMarker){ _arbPinMarker.setMap(null); _arbPinMarker = null; } setRouteMode('add'); });
+      var mvb=document.getElementById('modeViewBtn'); if(mvb) mvb.addEventListener('click', function(){
+        // 주변고객(조회) 모드: 동선 편집 상태(ds)였으면 일반 주변보기(nearby)로 복귀
+        if(currentTab == 'ds'){ switchTab('nearby'); }
+        setRouteMode('view');
+      });
+      var mab=document.getElementById('modeAddBtn'); if(mab) mab.addEventListener('click', function(){
+        if(_arbPinMarker){ _arbPinMarker.setMap(null); _arbPinMarker = null; }
+        // 동선관리(담기) 모드: 개별/검색 진입(nearby)이면 편집 상태(ds)로 전환해 팝업·담기 활성화. 동선 진입(today)은 유지
+        if(currentTab == 'nearby'){ switchTab('ds'); }
+        setRouteMode('add');
+      });
       var rrb=document.getElementById('routeResetBtn'); if(rrb) rrb.addEventListener('click', function(){ resetDsQueue(); });
       var rlb=document.getElementById('routeLoadBtn'); if(rlb) rlb.addEventListener('click', function(){ window._activeRoute=null; loadRouteFromSelectors(); });
       var rfs=document.getElementById('routeFpSelect'); if(rfs) rfs.addEventListener('change', function(){ window._activeRoute=null; loadRouteFromSelectors(); });
