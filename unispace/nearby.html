@@ -981,7 +981,6 @@ function renderRouteFromData(route){
 
 // 동선조회: 동선 정류장 외 반경 고객을 흐리게 표시
 function drawRouteNearbyDimmed(lat, lng){
-  console.log('[TRACE] drawRouteNearbyDimmed 실행', lat, lng);
   if(!kakaoMap) return;
   var rKm = (typeof radiusKm === 'number' && radiusKm) ? radiusKm : 5;
   var allCustomers = [];
@@ -1373,13 +1372,10 @@ function updateDsMarkerLabels() {
       return;
     }
     var queueIdx = dsQueue.findIndex(function(q){
+      if(q.id && (String(q.id).startsWith('MY_LOC_') || String(q.id).startsWith('DS_PIN_'))) return false;
       if(c.id && q.custId && q.custId == c.id) return true;
-      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_') && !q.id.startsWith('RT_')) return q.id == c.id;
-      if(q.name == c.name){
-        if(String(q.lat).slice(0,7) == String(c.lat).slice(0,7)) return true;
-        if(q.lat && q.lng && c.lat && c.lng && getDistKm(parseFloat(q.lat), parseFloat(q.lng), parseFloat(c.lat), parseFloat(c.lng)) < 0.03) return true;
-      }
-      return false;
+      if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_') && !q.id.startsWith('RT_') && !q.id.startsWith('act_')) return q.id == c.id;
+      return q.name == c.name;
     });
     var inQueue = queueIdx !== -1;
     // remove any existing role badge child first
@@ -2739,7 +2735,6 @@ function clearNearbyMarkersAll(){
 }
 
 function refreshNearbyOnly(lat, lng) {
-  console.log('[TRACE] refreshNearbyOnly 실행 dsQueue=', dsQueue.map(function(q){return q.name+'/custId='+(q.custId||'')+'/id='+q.id;}).join(' | '));
   // 고객 마커만 제거 (index 1 이후: 0은 기준마커)
   // 실제론 markers[0]이 기준 마커 — nearbyMarkers만 지우기
   if(window._nearbyMarkers) {
@@ -2829,13 +2824,10 @@ function refreshNearbyOnly(lat, lng) {
     var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
     // 동선 큐에 포함된 고객은 번호 핀으로 표시 → 주변 마커 생성 안 함(중복 방지)
     var inRouteQ = dsQueue.findIndex(function(q){
+      if(q.id && (String(q.id).startsWith('MY_LOC_') || String(q.id).startsWith('DS_PIN_'))) return false;
       if(c.id && q.custId && q.custId == c.id) return true;
-      if(c.id && q.id && !String(q.id).startsWith('MY_LOC_') && !String(q.id).startsWith('DS_PIN_') && !String(q.id).startsWith('RT_')) return q.id == c.id;
-      if(q.name == c.name){
-        if(String(q.lat).slice(0,7) == String(c.lat).slice(0,7)) return true;
-        if(q.lat && q.lng && c.lat && c.lng && getDistKm(parseFloat(q.lat), parseFloat(q.lng), parseFloat(c.lat), parseFloat(c.lng)) < 0.03) return true;
-      }
-      return false;
+      if(c.id && q.id && !String(q.id).startsWith('MY_LOC_') && !String(q.id).startsWith('DS_PIN_') && !String(q.id).startsWith('RT_') && !String(q.id).startsWith('act_')) return q.id == c.id;
+      return q.name == c.name;
     }) !== -1;
     if(inRouteQ){
       nearbyMarkers.push({ marker:null, labelEl:null, pos:pos, color:null });
@@ -2934,7 +2926,6 @@ function refreshNearbyOnly(lat, lng) {
 
 // ── 주변 고객 표시 ───────────────────────────────────
 function drawNearby(lat, lng) {
-  console.log('[TRACE] drawNearby 실행 dsQueue=', dsQueue.map(function(q){return q.name+'/custId='+(q.custId||'')+'/id='+q.id;}).join(' | '), 'nearbyList=', (window._nearbyList||[]).map(function(n){return (n.c&&n.c.name)+':'+(n.c&&n.c.id);}).join(' | '));
   clearMarkers();
   kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
 
@@ -3198,15 +3189,11 @@ function drawNearby(lat, lng) {
     var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
     // 동선 큐에 포함된 고객은 번호 핀(injectDsRoleLabels)으로 표시 → 주변 마커는 생성하지 않음(중복 방지)
     var inRouteQueue = dsQueue.findIndex(function(q){
+      if(q.id && (String(q.id).startsWith('MY_LOC_') || String(q.id).startsWith('DS_PIN_'))) return false;
       if(c.id && q.custId && q.custId == c.id) return true;
-      if(c.id && q.id && !String(q.id).startsWith('MY_LOC_') && !String(q.id).startsWith('DS_PIN_') && !String(q.id).startsWith('RT_')) return q.id == c.id;
-      if(q.name == c.name){
-        if(String(q.lat).slice(0,7) == String(c.lat).slice(0,7)) return true;
-        if(q.lat && q.lng && c.lat && c.lng && getDistKm(parseFloat(q.lat), parseFloat(q.lng), parseFloat(c.lat), parseFloat(c.lng)) < 0.03) return true;
-      }
-      return false;
+      if(c.id && q.id && !String(q.id).startsWith('MY_LOC_') && !String(q.id).startsWith('DS_PIN_') && !String(q.id).startsWith('RT_') && !String(q.id).startsWith('act_')) return q.id == c.id;
+      return q.name == c.name;
     }) !== -1;
-    console.log('[TRACE] drawNearby 고객', c.name, 'id=', c.id, 'inRouteQueue=', inRouteQueue);
     if(inRouteQueue){
       nearbyMarkers.push({ marker:null, labelEl:null, pos:pos, color:null });
       return;
