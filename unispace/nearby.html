@@ -507,6 +507,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       <div class="section-label">📋 계약 요약</div>
       <div id="popupContracts" class="popup-contracts"></div>
       <div class="divider"></div>
+      <div class="section-label">🕘 상담 이력</div>
+      <div id="popupHistory" class="popup-contracts"></div>
+      <div class="divider"></div>
       <div class="section-label">📲 연락하기</div>
       <div class="contact-btns">
         <a class="contact-btn btn-call" id="btnCall" href="#">📞 전화걸기</a>
@@ -1537,11 +1540,8 @@ function injectDsRoleLabels() {
         cNameDiv.style.cssText = 'background:rgba(8,14,28,.92);border:1px solid rgba(201,168,76,.28);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:#F0F4FF;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 3px 10px rgba(0,0,0,.45);';
         cNameDiv.textContent = item.name;
         cLblEl.appendChild(cBadge);
-        // 기준 고객은 파란 기준핀에 이미 이름이 표시되므로 역할핀에는 이름 라벨 생략(중복 방지)
-        if(!isBaseQ) cLblEl.appendChild(cNameDiv);
-        // 기준 고객이면 배지를 파란 주소 라벨 바로 위에 오도록 yAnchor 상향
-        var roleYAnchor = isBaseQ ? 5.4 : 1.9;
-        var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: roleYAnchor, zIndex: 8 });
+        cLblEl.appendChild(cNameDiv);
+        var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: 1.9, zIndex: 8 });
         cLblOv._dsRoleKind = 'pin';
         cLblOv.setMap(kakaoMap);
         dsRoleOverlays.push(cLblOv);
@@ -2728,13 +2728,25 @@ function buildMeetingEventHtml(c) {
   var meetings = getAllMeetings(c.name);
   if(meetings.length){
     var todayStr = new Date().toISOString().slice(0,10);
-    var parts = meetings.slice(0,4).map(function(m){
-      var isToday = m.date == todayStr;
-      var dlabel = isToday ? '오늘' : (m.date ? m.date.slice(5).replace('-','/') : '');
-      var clr = isToday ? '#E8C97A' : '#8B98B8';
-      return '<span style="font-size:9px;color:' + clr + ';font-weight:600;">📅 ' + dlabel + (m.time?(' '+m.time):'') + '</span>';
+    var upcoming = [];
+    var pastCount = 0;
+    meetings.forEach(function(m){
+      if(m.date >= todayStr) upcoming.push(m);
+      else pastCount++;
     });
-    html += '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 8px;padding-left:1px">' + parts.join('') + '</div>';
+    var segs = [];
+    if(upcoming.length){
+      var nx = upcoming[0];
+      var isToday = nx.date == todayStr;
+      var dlabel = isToday ? '오늘' : nx.date.slice(5).replace('-','/');
+      segs.push('<span style="font-size:9px;color:#E8C97A;font-weight:700;">📅 예정 ' + dlabel + (nx.time?(' '+nx.time):'') + (upcoming.length>1?(' 외 '+(upcoming.length-1)+'건'):'') + '</span>');
+    }
+    if(pastCount){
+      segs.push('<span style="font-size:9px;color:#8B98B8;font-weight:600;">🕘 지난 상담이력 ' + pastCount + '회</span>');
+    }
+    if(segs.length){
+      html += '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 8px;padding-left:1px">' + segs.join('') + '</div>';
+    }
   }
   var ev = getUpcomingEvents(c);
   if(ev.events && ev.events.length){
@@ -3603,6 +3615,26 @@ function showPopup(c, dist) {
     } else {
       evSection.style.display = 'none';
       evCards.innerHTML = '';
+    }
+  }
+
+  // 상담 이력 렌더링 (전체 미팅, 최신순)
+  var phEl = document.getElementById('popupHistory');
+  if(phEl) {
+    var hist = getAllMeetings(c.name).slice().reverse();
+    if(hist.length > 0) {
+      var hHtml = '';
+      hist.forEach(function(m){
+        var dstr = m.date ? m.date.replace(/-/g,'.') : '';
+        var line2 = (m.type||'') + (m.status?(' · '+m.status):'') + (m.place?(' · '+m.place):'');
+        hHtml += '<div class="pc-item">'
+          +'<div class="pc-company">' + dstr + (m.time?(' '+m.time):'') + '</div>'
+          + (line2.trim() ? '<div class="pc-detail">' + line2 + '</div>' : '')
+          +'</div>';
+      });
+      phEl.innerHTML = hHtml;
+    } else {
+      phEl.innerHTML = '<div class="pc-empty">상담 이력 없음</div>';
     }
   }
 
