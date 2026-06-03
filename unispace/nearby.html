@@ -959,13 +959,13 @@ function renderRouteFromData(route){
     kakaoMap.setBounds(bounds);
   }
 
-  // 동선 전체 범위의 중심을 기준으로 주변 고객을 개별 진입과 동일하게(선명) 표시
+  // 동선 첫 출발지를 기준으로 주변 고객을 개별 진입과 동일하게(선명) 표시
   if(stops.length){
-    var sumLat = 0, sumLng = 0, cnt = 0;
-    stops.forEach(function(s){ if(s.lat && s.lng){ sumLat += parseFloat(s.lat); sumLng += parseFloat(s.lng); cnt++; } });
-    if(cnt > 0){
-      centerLat = sumLat / cnt;
-      centerLng = sumLng / cnt;
+    var firstStop = null;
+    for(var fs=0; fs<stops.length; fs++){ if(stops[fs].lat && stops[fs].lng){ firstStop = stops[fs]; break; } }
+    if(firstStop){
+      centerLat = parseFloat(firstStop.lat);
+      centerLng = parseFloat(firstStop.lng);
       // 동선 진입: 기준 고객 없음 (파란 기준핀 미표시)
       isCustomerMode = false;
       window._baseCustomerId = '';
@@ -2722,6 +2722,34 @@ function showSearchResults(results, keyword, containerEl) {
 })();
 
 // ── 고객 마커+반경만 재계산 (기준 핀 유지) ──────────────
+// 리스트 항목용: 미팅 일정 + 임박 이벤트(D-3) 텍스트 HTML 생성
+function buildMeetingEventHtml(c) {
+  var html = '';
+  var meetings = getAllMeetings(c.name);
+  if(meetings.length){
+    var todayStr = new Date().toISOString().slice(0,10);
+    var parts = meetings.slice(0,4).map(function(m){
+      var isToday = m.date == todayStr;
+      var dlabel = isToday ? '오늘' : (m.date ? m.date.slice(5).replace('-','/') : '');
+      var clr = isToday ? '#E8C97A' : '#8B98B8';
+      return '<span style="font-size:9px;color:' + clr + ';font-weight:600;">📅 ' + dlabel + (m.time?(' '+m.time):'') + '</span>';
+    });
+    html += '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 8px;padding-left:1px">' + parts.join('') + '</div>';
+  }
+  var ev = getUpcomingEvents(c);
+  if(ev.events && ev.events.length){
+    var evParts = ev.events.slice(0,3).map(function(e){
+      if(e.type === 'custom'){
+        return '<span style="font-size:9px;color:#C4B5FD;font-weight:600;">📌 ' + e.name + '</span>';
+      }
+      var dd = e.dday === 0 ? 'D-DAY' : ('D-' + e.dday);
+      return '<span style="font-size:9px;color:#E8C97A;font-weight:700;">🎉 ' + e.name + ' ' + dd + '</span>';
+    });
+    html += '<div style="margin-top:2px;display:flex;flex-wrap:wrap;gap:4px 8px;padding-left:1px">' + evParts.join('') + '</div>';
+  }
+  return html;
+}
+
 function getTodayMeeting(customerName) {
   var acts = {};
   try { acts = JSON.parse(localStorage.getItem('unispace_activities') || '{}'); } catch(e){}
@@ -2731,6 +2759,19 @@ function getTodayMeeting(customerName) {
     return a.date == today && a.customerName == customerName && (!fpId || a.fpId == fpId);
   }).sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); })[0];
   return match || null;
+}
+
+// 고객의 모든 미팅 일정 (과거 포함, 날짜순)
+function getAllMeetings(customerName) {
+  var acts = {};
+  try { acts = JSON.parse(localStorage.getItem('unispace_activities') || '{}'); } catch(e){}
+  var fpId = window._myFpId || '';
+  return Object.values(acts).filter(function(a) {
+    return a.customerName == customerName && (!fpId || a.fpId == fpId) && a.date;
+  }).sort(function(a,b){
+    var dc = (a.date||'').localeCompare(b.date||'');
+    return dc !== 0 ? dc : (a.time||'').localeCompare(b.time||'');
+  });
 }
 
 function clearNearbyMarkersAll(){
@@ -2834,7 +2875,7 @@ function refreshNearbyOnly(lat, lng) {
       seqHtml2 = '<div class="ds-seq ds-sm">+</div>';
     }
     var mtg = getTodayMeeting(c.name);
-    var mtgHtml = mtg ? '<div style="margin-top:3px;display:flex;align-items:center;gap:5px;padding-left:1px"><span style="font-size:10px;color:#E8C97A;font-weight:700;">📅 오늘 ' + (mtg.time||'') + '</span>' + (mtg.place ? '<span style="font-size:9px;color:#8B98B8;">' + mtg.place + '</span>' : '') + '</div>' : '';
+    var mtgHtml = buildMeetingEventHtml(c);
     var borderStyle = mtg ? 'border-left:3px solid rgba(232,201,122,.6);padding-left:9px;' : '';
     listHtml += '<div class="ci" id="citem_'+idx+'" style="display:flex;align-items:center;' + borderStyle + '"><div style="flex:1;min-width:0;"><div class="ctop"><span class="cn">'+c.name+evDots+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div>' + mtgHtml + '</div>'+seqHtml2+'</div>';
 
@@ -3197,7 +3238,7 @@ function drawNearby(lat, lng) {
       seqHtml = '<div class="ds-seq ds-sm">+</div>';
     }
     var mtg2 = getTodayMeeting(c.name);
-    var mtgHtml2 = mtg2 ? '<div style="margin-top:3px;display:flex;align-items:center;gap:5px;padding-left:1px"><span style="font-size:10px;color:#E8C97A;font-weight:700;">📅 오늘 ' + (mtg2.time||'') + '</span>' + (mtg2.place ? '<span style="font-size:9px;color:#8B98B8;">' + mtg2.place + '</span>' : '') + '</div>' : '';
+    var mtgHtml2 = buildMeetingEventHtml(c);
     var borderStyle2 = mtg2 ? 'border-left:3px solid rgba(232,201,122,.6);padding-left:9px;' : '';
     listHtml += '<div class="ci" id="citem_'+idx+'" style="display:flex;align-items:center;' + borderStyle2 + '">'
       +'<div style="flex:1;min-width:0;">'
