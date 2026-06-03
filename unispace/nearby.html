@@ -1273,9 +1273,7 @@ function removeFromDsQueue(matchObj) {
   if(ri === -1) return false;
   var removed = dsQueue[ri];
   dsQueue.splice(ri, 1);
-  console.log('[DBG remove]', removed.name, 'dsQueue남음=', dsQueue.map(function(q){return q.name;}).join(','), 'nearbyMarkers=', (window._nearbyMarkers||[]).length, 'centerLat=', centerLat);
   if(centerLat && centerLng && window._nearbyList) refreshNearbyOnly(centerLat, centerLng);
-  console.log('[DBG remove2] after refresh nearbyMarkers=', (window._nearbyMarkers||[]).length, 'visible=', (window._nearbyMarkers||[]).filter(function(m){return m.marker;}).length);
   rerenderDsQueue();
   // 빠진 고객이 주변 마커로 표시되지 않는 경우(동선 진입 등) 일반 핀+이름을 직접 남김
   if(removed && removed.lat && removed.lng){
@@ -1454,7 +1452,7 @@ function injectDsRoleLabels() {
       pinNameDiv.textContent = shortAddr;
       pinLblEl.appendChild(pinBadge);
       pinLblEl.appendChild(pinNameDiv);
-      var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 1.55, zIndex: 7 });
+      var pinLblOv = new kakao.maps.CustomOverlay({ position: pos, content: pinLblEl, yAnchor: 3.0, zIndex: 7 });
       pinLblOv._dsRoleKind = 'pin';
       pinLblOv.setMap(kakaoMap);
       dsRoleOverlays.push(pinLblOv);
@@ -1539,7 +1537,7 @@ function injectDsRoleLabels() {
         // 기준 고객은 파란 기준핀에 이미 이름이 표시되므로 역할핀에는 이름 라벨 생략(중복 방지)
         if(!isBaseQ) cLblEl.appendChild(cNameDiv);
         // 기준 고객이면 배지를 파란 주소 라벨 바로 위에 오도록 yAnchor 상향
-        var roleYAnchor = isBaseQ ? 5.4 : 1.55;
+        var roleYAnchor = isBaseQ ? 5.4 : 3.0;
         var cLblOv = new kakao.maps.CustomOverlay({ position: pos, content: cLblEl, yAnchor: roleYAnchor, zIndex: 8 });
         cLblOv._dsRoleKind = 'pin';
         cLblOv.setMap(kakaoMap);
@@ -2836,6 +2834,12 @@ function refreshNearbyOnly(lat, lng) {
       return;
     }
     var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
+    var svgContent = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
+      +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="'+color+'"/>'
+      +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>'
+      +'</svg>';
+    var markerImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(svgContent), new kakao.maps.Size(28,36));
+    var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
     var inQueueNow = isRouteTab() && dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
