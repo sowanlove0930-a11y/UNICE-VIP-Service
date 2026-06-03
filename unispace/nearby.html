@@ -1514,6 +1514,21 @@ function injectDsRoleLabels() {
         var cImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(cSvg))), new kakao.maps.Size(30,40), { offset: new kakao.maps.Point(15,40) });
         var cMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap, image: cImg, title: item.name, zIndex: 6 });
         dsRoleMarkers.push(cMarker);
+        // 같은 고객의 주변 마커가 있으면 즉시 숨김 (번호 핀과 중복 방지)
+        if(window._nearbyMarkers && window._nearbyList){
+          for(var hm=0; hm<window._nearbyMarkers.length; hm++){
+            var hc = window._nearbyList[hm] && window._nearbyList[hm].c;
+            if(!hc) continue;
+            var sameName = hc.name == item.name;
+            var sameSpot = hc.lat && hc.lng && item.lat && item.lng && getDistKm(parseFloat(hc.lat), parseFloat(hc.lng), parseFloat(item.lat), parseFloat(item.lng)) < 0.03;
+            if(sameName && sameSpot){
+              var hnm = window._nearbyMarkers[hm];
+              if(hnm.marker) hnm.marker.setMap(null);
+              if(hnm.overlay) hnm.overlay.setMap(null);
+              if(hnm.labelEl) hnm.labelEl.style.display = 'none';
+            }
+          }
+        }
         var cLblEl = document.createElement('div');
         cLblEl.style.cssText = 'display:inline-flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:pointer;';
         var cBadge = document.createElement('div');
