@@ -975,9 +975,11 @@ function renderRouteFromData(route){
       drawNearby(centerLat, centerLng);
       window._routeEntryNoBase = false;
       // drawNearby가 clearMarkers로 동선 레이어를 지우므로 동선(번호핀+이음선) 다시 그림
+      window._dbgPin = true;
       syncDsQueueToRoute();
       injectDsRoleLabels();
       updateDsMarkerLabels();
+      window._dbgPin = false;
       drawDsPolylines();
     }
   }
@@ -1376,6 +1378,7 @@ function updateDsMarkerLabels() {
       return;
     }
     var queueIdx = dsQueue.findIndex(function(q){
+      if(c.id && q.custId && q.custId == c.id) return true;
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_') && !q.id.startsWith('RT_')) return q.id == c.id;
       if(q.name == c.name){
         if(String(q.lat).slice(0,7) == String(c.lat).slice(0,7)) return true;
@@ -1518,6 +1521,7 @@ function injectDsRoleLabels() {
         // 같은 고객(custId 일치)의 주변 마커를 즉시 숨김 (번호 핀과 중복 방지)
         if(window._nearbyMarkers && window._nearbyList){
           var itemCustId = item.custId || ((item.id && String(item.id).indexOf('RT_') !== 0) ? item.id : '');
+          if(window._dbgPin){ console.log('[DBG pin]', item.name, 'custId=', item.custId, 'itemId=', item.id, 'resolved=', itemCustId, 'nearbyIds=', window._nearbyList.map(function(n){return (n.c&&n.c.name)+':'+(n.c&&n.c.id);}).join(' | ')); }
           for(var hm=0; hm<window._nearbyMarkers.length; hm++){
             var hc = window._nearbyList[hm] && window._nearbyList[hm].c;
             if(!hc) continue;
