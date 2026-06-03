@@ -2825,13 +2825,21 @@ function refreshNearbyOnly(lat, lng) {
     listHtml += '<div class="ci" id="citem_'+idx+'" style="display:flex;align-items:center;' + borderStyle + '"><div style="flex:1;min-width:0;"><div class="ctop"><span class="cn">'+c.name+evDots+'</span><span class="cd">'+distStr+'</span></div><div class="ci2">'+(c.address||'주소 미등록')+'<span class="ctag '+tagClass+'">'+tagText+'</span></div>' + mtgHtml + '</div>'+seqHtml2+'</div>';
 
     var pos = new kakao.maps.LatLng(parseFloat(c.lat), parseFloat(c.lng));
+    // 동선 큐에 포함된 고객은 번호 핀으로 표시 → 주변 마커 생성 안 함(중복 방지)
+    var inRouteQ = dsQueue.findIndex(function(q){
+      if(c.id && q.custId && q.custId == c.id) return true;
+      if(c.id && q.id && !String(q.id).startsWith('MY_LOC_') && !String(q.id).startsWith('DS_PIN_') && !String(q.id).startsWith('RT_')) return q.id == c.id;
+      if(q.name == c.name){
+        if(String(q.lat).slice(0,7) == String(c.lat).slice(0,7)) return true;
+        if(q.lat && q.lng && c.lat && c.lng && getDistKm(parseFloat(q.lat), parseFloat(q.lng), parseFloat(c.lat), parseFloat(c.lng)) < 0.03) return true;
+      }
+      return false;
+    }) !== -1;
+    if(inRouteQ){
+      nearbyMarkers.push({ marker:null, labelEl:null, pos:pos, color:null });
+      return;
+    }
     var color = c.customerType==='계약'?'#10B981':c.customerType==='관리'?'#8B5CF6':'#F59E0B';
-    var svgContent = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">'
-      +'<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="'+color+'"/>'
-      +'<circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>'
-      +'</svg>';
-    var markerImg = new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(svgContent), new kakao.maps.Size(28,36));
-    var marker = new kakao.maps.Marker({ position:pos, map:kakaoMap, image:markerImg, title:c.name });
     var inQueueNow = isRouteTab() && dsQueue.findIndex(function(q){
       if(c.id && q.id && !q.id.startsWith('MY_LOC_') && !q.id.startsWith('DS_PIN_')) return q.id == c.id;
       return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
