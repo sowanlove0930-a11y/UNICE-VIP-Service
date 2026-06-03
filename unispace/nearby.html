@@ -928,7 +928,7 @@ function renderRouteFromData(route){
   if(route.skipped) html += '<div style="font-size:10px;color:var(--text3);padding:6px 0 0">※ 좌표 없는 활동 ' + route.skipped + '건은 지도에서 제외됨</div>';
   inner.innerHTML = html;
 
-  // 동선을 dsQueue로 적재 → 동선관리와 동일한 렌더링 시스템 사용 (담기/이음선/투명도 통일)
+  // 동선을 dsQueue로 적재 (실제 핀/이음선은 drawNearby 이후에 그림 — 주변 마커와 중복 방지)
   clearRouteLayer();
   if(!kakaoMap) return;
   dsQueue = [];
@@ -936,10 +936,6 @@ function renderRouteFromData(route){
     if(!s.lat || !s.lng) return;
     dsQueue.push({ id: s.id || ('RT_'+s.name+'_'+s.lat), custId: s.custId || '', name: s.name, lat: String(s.lat), lng: String(s.lng), address: s.address || s.name });
   });
-  syncDsQueueToRoute();
-  injectDsRoleLabels();
-  updateDsMarkerLabels();
-  drawDsPolylines();
   // 리스트 행 클릭 → 해당 위치로 이동
   var path = [];
   stops.forEach(function(s){ if(s.lat && s.lng) path.push(new kakao.maps.LatLng(parseFloat(s.lat), parseFloat(s.lng))); });
@@ -975,11 +971,9 @@ function renderRouteFromData(route){
       drawNearby(centerLat, centerLng);
       window._routeEntryNoBase = false;
       // drawNearby가 clearMarkers로 동선 레이어를 지우므로 동선(번호핀+이음선) 다시 그림
-      window._dbgPin = true;
       syncDsQueueToRoute();
       injectDsRoleLabels();
       updateDsMarkerLabels();
-      window._dbgPin = false;
       drawDsPolylines();
     }
   }
@@ -1521,7 +1515,6 @@ function injectDsRoleLabels() {
         // 같은 고객(custId 일치)의 주변 마커를 즉시 숨김 (번호 핀과 중복 방지)
         if(window._nearbyMarkers && window._nearbyList){
           var itemCustId = item.custId || ((item.id && String(item.id).indexOf('RT_') !== 0) ? item.id : '');
-          if(window._dbgPin){ console.log('[DBG pin]', item.name, 'custId=', item.custId, 'itemId=', item.id, 'resolved=', itemCustId, 'nearbyIds=', window._nearbyList.map(function(n){return (n.c&&n.c.name)+':'+(n.c&&n.c.id);}).join(' | ')); }
           for(var hm=0; hm<window._nearbyMarkers.length; hm++){
             var hc = window._nearbyList[hm] && window._nearbyList[hm].c;
             if(!hc) continue;
