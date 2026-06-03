@@ -344,12 +344,27 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <!-- 동선관리: 순서편집은 지도 위 팝업으로 표시 -->
 
     <!-- 동선 조회: 날짜·FP 검색 (항상 표시) -->
-    <div id="routeSearchBar" style="margin:8px 14px 2px">
+    <div id="routeSearchBar" style="margin:8px 14px 2px;position:relative">
       <div style="font-size:10px;font-weight:700;color:#E8C97A;margin-bottom:5px;">📅 FP 동선 조회</div>
       <div style="display:flex;gap:6px;align-items:center">
-        <input type="date" id="routeDateInput" style="flex:1;padding:7px 10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#F0F4FF;font-size:12px;font-family:'Noto Sans KR',sans-serif">
+        <input type="hidden" id="routeDateInput">
+        <button type="button" id="dateTriggerBtn" style="flex:1;padding:7px 10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#F0F4FF;font-size:12px;font-weight:600;font-family:'Noto Sans KR',sans-serif;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📅 날짜 선택</button>
         <select id="routeFpSelect" style="flex:1;padding:7px 10px;background:#16213A;border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#F0F4FF;font-size:12px;font-weight:600;font-family:'Noto Sans KR',sans-serif;cursor:pointer"></select>
         <button type="button" id="routeLoadBtn" style="padding:7px 12px;border:none;border-radius:8px;background:linear-gradient(135deg,#E8C97A,#C9A84C);color:#080E1C;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif">조회</button>
+      </div>
+      <!-- 커스텀 달력 팝업 -->
+      <div id="calPopup" style="display:none;position:absolute;top:62px;left:0;z-index:9500;width:262px;background:#0F1A30;border:1px solid rgba(232,201,122,.3);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.6);padding:12px;font-family:'Noto Sans KR',sans-serif;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <button type="button" id="calPrev" style="width:28px;height:28px;border:none;border-radius:7px;background:rgba(255,255,255,.06);color:#F0F4FF;font-size:14px;cursor:pointer">‹</button>
+          <div id="calTitle" style="font-size:13px;font-weight:700;color:#F0F4FF;"></div>
+          <button type="button" id="calNext" style="width:28px;height:28px;border:none;border-radius:7px;background:rgba(255,255,255,.06);color:#F0F4FF;font-size:14px;cursor:pointer">›</button>
+        </div>
+        <div id="calDow" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;"></div>
+        <div id="calGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:10px;border-top:1px solid rgba(255,255,255,.08);padding-top:8px;">
+          <button type="button" id="calClear" style="border:none;background:none;color:#8B98B8;font-size:11px;font-weight:600;cursor:pointer">삭제</button>
+          <button type="button" id="calToday" style="border:none;background:none;color:#E8C97A;font-size:11px;font-weight:700;cursor:pointer">오늘</button>
+        </div>
       </div>
     </div>
 
@@ -1098,6 +1113,111 @@ function populateRouteFpSelect(selectedFpId){
     sel.appendChild(opt);
   });
   if(!ids.length){ var opt=document.createElement('option'); opt.value=''; opt.textContent='활동 FP 없음'; opt.style.background='#16213A'; opt.style.color='#F0F4FF'; sel.appendChild(opt); }
+}
+
+// ── 커스텀 달력 ───────────────────────────────────────
+var _calView = new Date();
+function initCustomCalendar(){
+  var trigger = document.getElementById('dateTriggerBtn');
+  var popup = document.getElementById('calPopup');
+  if(!trigger || !popup) return;
+  var hidden = document.getElementById('routeDateInput');
+  if(hidden && hidden.value){
+    var pv = hidden.value.split('-');
+    _calView = new Date(parseInt(pv[0],10), parseInt(pv[1],10)-1, 1);
+    updateDateTriggerLabel();
+  }
+  // 요일 헤더
+  var dowEl = document.getElementById('calDow');
+  if(dowEl && !dowEl.dataset.done){
+    var dows = ['일','월','화','수','목','금','토'];
+    dowEl.innerHTML = dows.map(function(d,idx){
+      var clr = idx===0 ? '#FF8A8A' : (idx===6 ? '#8AB4FF' : '#8B98B8');
+      return '<div style="text-align:center;font-size:10px;font-weight:700;color:'+clr+';padding:2px 0;">'+d+'</div>';
+    }).join('');
+    dowEl.dataset.done = '1';
+  }
+  trigger.addEventListener('click', function(e){
+    e.stopPropagation();
+    popup.style.display = popup.style.display === 'none' ? 'block' : 'none';
+    if(popup.style.display === 'block') renderCalGrid();
+  });
+  document.getElementById('calPrev').addEventListener('click', function(e){ e.stopPropagation(); _calView.setMonth(_calView.getMonth()-1); renderCalGrid(); });
+  document.getElementById('calNext').addEventListener('click', function(e){ e.stopPropagation(); _calView.setMonth(_calView.getMonth()+1); renderCalGrid(); });
+  document.getElementById('calToday').addEventListener('click', function(e){
+    e.stopPropagation();
+    var t = new Date();
+    setCalDate(t.getFullYear(), t.getMonth(), t.getDate());
+  });
+  document.getElementById('calClear').addEventListener('click', function(e){
+    e.stopPropagation();
+    if(hidden) hidden.value = '';
+    updateDateTriggerLabel();
+    popup.style.display = 'none';
+  });
+  // 팝업 바깥 클릭 시 닫기
+  document.addEventListener('click', function(ev){
+    if(popup.style.display !== 'none' && !popup.contains(ev.target) && ev.target !== trigger){
+      popup.style.display = 'none';
+    }
+  });
+  popup.addEventListener('click', function(ev){ ev.stopPropagation(); });
+}
+
+function renderCalGrid(){
+  var grid = document.getElementById('calGrid');
+  var title = document.getElementById('calTitle');
+  if(!grid || !title) return;
+  var y = _calView.getFullYear(), m = _calView.getMonth();
+  title.textContent = y + '년 ' + (m+1) + '월';
+  var first = new Date(y, m, 1);
+  var startDow = first.getDay();
+  var daysInMonth = new Date(y, m+1, 0).getDate();
+  var hidden = document.getElementById('routeDateInput');
+  var sel = hidden && hidden.value ? hidden.value : '';
+  var todayStr = new Date().toISOString().slice(0,10);
+  var cells = '';
+  for(var b=0; b<startDow; b++){ cells += '<div></div>'; }
+  for(var d=1; d<=daysInMonth; d++){
+    var dateStr = y + '-' + ('0'+(m+1)).slice(-2) + '-' + ('0'+d).slice(-2);
+    var dow = new Date(y, m, d).getDay();
+    var isSel = dateStr === sel;
+    var isToday = dateStr === todayStr;
+    var clr = dow===0 ? '#FF8A8A' : (dow===6 ? '#8AB4FF' : '#F0F4FF');
+    var bg = isSel ? 'background:#3B82F6;color:#fff;' : (isToday ? 'background:rgba(232,201,122,.18);' : '');
+    var bd = isToday && !isSel ? 'border:1px solid rgba(232,201,122,.5);' : 'border:1px solid transparent;';
+    cells += '<div class="cal-day" data-date="'+dateStr+'" style="text-align:center;font-size:12px;font-weight:600;padding:6px 0;border-radius:7px;cursor:pointer;color:'+clr+';'+bg+bd+'">'+d+'</div>';
+  }
+  grid.innerHTML = cells;
+  grid.querySelectorAll('.cal-day').forEach(function(cell){
+    cell.addEventListener('click', function(e){
+      e.stopPropagation();
+      var ds = cell.getAttribute('data-date').split('-');
+      setCalDate(parseInt(ds[0],10), parseInt(ds[1],10)-1, parseInt(ds[2],10));
+    });
+  });
+}
+
+function setCalDate(y, m, d){
+  var dateStr = y + '-' + ('0'+(m+1)).slice(-2) + '-' + ('0'+d).slice(-2);
+  var hidden = document.getElementById('routeDateInput');
+  if(hidden){ hidden.value = dateStr; hidden.dispatchEvent(new Event('change')); }
+  _calView = new Date(y, m, 1);
+  updateDateTriggerLabel();
+  var popup = document.getElementById('calPopup');
+  if(popup) popup.style.display = 'none';
+}
+
+function updateDateTriggerLabel(){
+  var trigger = document.getElementById('dateTriggerBtn');
+  var hidden = document.getElementById('routeDateInput');
+  if(!trigger) return;
+  if(hidden && hidden.value){
+    var p = hidden.value.split('-');
+    trigger.textContent = '📅 ' + p[0] + '.' + p[1] + '.' + p[2];
+  } else {
+    trigger.textContent = '📅 날짜 선택';
+  }
 }
 
 function loadRouteFromSelectors(){
@@ -2261,6 +2381,7 @@ function loadKakaoScript(key) {
       var rlb=document.getElementById('routeLoadBtn'); if(rlb) rlb.addEventListener('click', function(){ window._activeRoute=null; loadRouteFromSelectors(); });
       var rfs=document.getElementById('routeFpSelect'); if(rfs) rfs.addEventListener('change', function(){ window._activeRoute=null; loadRouteFromSelectors(); });
       var rdi=document.getElementById('routeDateInput'); if(rdi) rdi.addEventListener('change', function(){ window._activeRoute=null; loadRouteFromSelectors(); });
+      if(typeof initCustomCalendar === 'function') initCustomCalendar();
 
       // 동선 팝업 드래그 + 초기화 버튼
       (function(){
@@ -2449,6 +2570,7 @@ function loadKakaoScript(key) {
       // 동선 조회 검색 UI 초기화 (FP 목록 + 오늘 날짜 기본값)
       var _rdi = document.getElementById('routeDateInput');
       if(_rdi && !_rdi.value) _rdi.value = (window._activeRoute && window._activeRoute.date) ? window._activeRoute.date : new Date().toISOString().slice(0,10);
+      if(typeof updateDateTriggerLabel === 'function') updateDateTriggerLabel();
       populateRouteFpSelect(window._activeRoute ? window._activeRoute.fpId : '');
     });
   };
