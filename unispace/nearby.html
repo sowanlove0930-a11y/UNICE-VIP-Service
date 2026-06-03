@@ -343,13 +343,18 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
     <!-- 동선관리: 순서편집은 지도 위 팝업으로 표시 -->
 
-    <!-- 동선 조회: 카드 -->
-    <div id="todayCard" style="display:none">
-      <div style="display:flex;gap:6px;align-items:center;margin:8px 14px 4px">
+    <!-- 동선 조회: 날짜·FP 검색 (항상 표시) -->
+    <div id="routeSearchBar" style="margin:8px 14px 2px">
+      <div style="font-size:10px;font-weight:700;color:#E8C97A;margin-bottom:5px;">📅 FP 동선 조회</div>
+      <div style="display:flex;gap:6px;align-items:center">
         <input type="date" id="routeDateInput" style="flex:1;padding:7px 10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#F0F4FF;font-size:12px;font-family:'Noto Sans KR',sans-serif">
         <select id="routeFpSelect" style="flex:1;padding:7px 10px;background:#16213A;border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#F0F4FF;font-size:12px;font-weight:600;font-family:'Noto Sans KR',sans-serif;cursor:pointer"></select>
         <button type="button" id="routeLoadBtn" style="padding:7px 12px;border:none;border-radius:8px;background:linear-gradient(135deg,#E8C97A,#C9A84C);color:#080E1C;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif">조회</button>
       </div>
+    </div>
+
+    <!-- 동선 조회: 카드 -->
+    <div id="todayCard" style="display:none">
       <div class="today-card" id="todayInner"></div>
       <div class="today-route-bar" id="todayRouteBar" style="display:none">
         <div class="ds-preview" style="padding:0"></div>
@@ -1103,6 +1108,9 @@ function loadRouteFromSelectors(){
   var fpId=fpSel.value;
   if(!dateStr || !fpId){ showRouteToast('날짜와 FP를 선택하세요'); return; }
   var route=buildRouteFromActivities(fpId, dateStr);
+  window._activeRoute = route;
+  currentTab = 'today';
+  setRouteMode('view');
   renderRouteFromData(route);
 }
 
@@ -2432,6 +2440,10 @@ function loadKakaoScript(key) {
         if(centerLat && centerLng && !window._nearbyList){ drawNearby(centerLat, centerLng); }
         switchTab('nearby');
       }
+      // 동선 조회 검색 UI 초기화 (FP 목록 + 오늘 날짜 기본값)
+      var _rdi = document.getElementById('routeDateInput');
+      if(_rdi && !_rdi.value) _rdi.value = (window._activeRoute && window._activeRoute.date) ? window._activeRoute.date : new Date().toISOString().slice(0,10);
+      populateRouteFpSelect(window._activeRoute ? window._activeRoute.fpId : '');
     });
   };
   s.onerror = function() {
