@@ -601,7 +601,7 @@ function switchTab(tab) {
   var dsPreview = document.getElementById('dsPreview');
   var todayCard = document.getElementById('todayCard');
   if(dsPreview) dsPreview.style.display = 'none';
-  if(todayCard) todayCard.style.display = tab == 'today' ? '' : 'none';
+  if(todayCard) todayCard.style.display = 'none';
   if(tab == 'today') {
     // 동선조회 진입: 주변고객/기준핀/임의좌표 모드 정리 (route만 표시)
     window._dsPinMode = false; pinBaseMode = false;
@@ -2238,8 +2238,9 @@ function loadKakaoScript(key) {
       });
       var mab=document.getElementById('modeAddBtn'); if(mab) mab.addEventListener('click', function(){
         if(_arbPinMarker){ _arbPinMarker.setMap(null); _arbPinMarker = null; }
-        // 동선관리(담기) 모드: 개별/검색 진입(nearby)이면 편집 상태(ds)로 전환해 팝업·담기 활성화. 동선 진입(today)은 유지
+        // 동선관리(담기) 모드: 개별/검색 진입(nearby)이면 편집 상태(ds)로 전환. 동선 진입(today)은 유지하되 편집 팝업 표시
         if(currentTab == 'nearby'){ switchTab('ds'); }
+        else if(currentTab == 'today'){ if(typeof openDsEditSheet === 'function') openDsEditSheet(); }
         setRouteMode('add');
       });
       var rrb=document.getElementById('routeResetBtn'); if(rrb) rrb.addEventListener('click', function(){ resetDsQueue(); });
@@ -2820,17 +2821,17 @@ function refreshNearbyOnly(lat, lng) {
     if(evInfo.hasEvent) evDots += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E8C97A;margin-left:3px;vertical-align:middle;"></span>';
     if(evInfo.hasCustom) evDots += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-left:2px;vertical-align:middle;"></span>';
     var dsIdx2 = dsQueue.findIndex(function(q){
-      if(c.id && q.id) return q.id == c.id;
-      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+      if(q.id && (String(q.id).startsWith('MY_LOC_') || String(q.id).startsWith('DS_PIN_'))) return false;
+      if(c.id && q.custId && q.custId == c.id) return true;
+      if(c.id && q.id && !String(q.id).startsWith('RT_') && !String(q.id).startsWith('act_')) return q.id == c.id;
+      return q.name == c.name;
     });
     var seqHtml2 = '';
-    if(currentTab == 'ds') {
-      if(dsIdx2 === -1) {
-        seqHtml2 = '<div class="ds-seq ds-sm">+</div>';
-      } else {
-        var seqCls2 = dsIdx2 == 0 ? 'ds-s0' : (dsIdx2 == dsQueue.length-1 && dsQueue.length > 1 ? 'ds-s2' : 'ds-s1');
-        seqHtml2 = '<div class="ds-seq ' + seqCls2 + '">' + (dsIdx2+1) + '</div>';
-      }
+    if(dsIdx2 !== -1) {
+      var seqCls2 = dsIdx2 == 0 ? 'ds-s0' : (dsIdx2 == dsQueue.length-1 && dsQueue.length > 1 ? 'ds-s2' : 'ds-s1');
+      seqHtml2 = '<div class="ds-seq ' + seqCls2 + '">' + (dsIdx2+1) + '</div>';
+    } else if(canAddToRoute()) {
+      seqHtml2 = '<div class="ds-seq ds-sm">+</div>';
     }
     var mtg = getTodayMeeting(c.name);
     var mtgHtml = mtg ? '<div style="margin-top:3px;display:flex;align-items:center;gap:5px;padding-left:1px"><span style="font-size:10px;color:#E8C97A;font-weight:700;">📅 오늘 ' + (mtg.time||'') + '</span>' + (mtg.place ? '<span style="font-size:9px;color:#8B98B8;">' + mtg.place + '</span>' : '') + '</div>' : '';
@@ -3183,17 +3184,17 @@ function drawNearby(lat, lng) {
     if(evInfo2.hasEvent) evDots2 += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E8C97A;margin-left:3px;vertical-align:middle;"></span>';
     if(evInfo2.hasCustom) evDots2 += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-left:2px;vertical-align:middle;"></span>';
     var dsIdx = dsQueue.findIndex(function(q){
-      if(c.id && q.id) return q.id == c.id;
-      return q.name == c.name && String(q.lat).slice(0,7) == String(c.lat).slice(0,7);
+      if(q.id && (String(q.id).startsWith('MY_LOC_') || String(q.id).startsWith('DS_PIN_'))) return false;
+      if(c.id && q.custId && q.custId == c.id) return true;
+      if(c.id && q.id && !String(q.id).startsWith('RT_') && !String(q.id).startsWith('act_')) return q.id == c.id;
+      return q.name == c.name;
     });
     var seqHtml = '';
-    if(currentTab == 'ds') {
-      if(dsIdx === -1) {
-        seqHtml = '<div class="ds-seq ds-sm">+</div>';
-      } else {
-        var seqCls = dsIdx == 0 ? 'ds-s0' : (dsIdx == dsQueue.length-1 && dsQueue.length > 1 ? 'ds-s2' : 'ds-s1');
-        seqHtml = '<div class="ds-seq ' + seqCls + '">' + (dsIdx+1) + '</div>';
-      }
+    if(dsIdx !== -1) {
+      var seqCls = dsIdx == 0 ? 'ds-s0' : (dsIdx == dsQueue.length-1 && dsQueue.length > 1 ? 'ds-s2' : 'ds-s1');
+      seqHtml = '<div class="ds-seq ' + seqCls + '">' + (dsIdx+1) + '</div>';
+    } else if(canAddToRoute()) {
+      seqHtml = '<div class="ds-seq ds-sm">+</div>';
     }
     var mtg2 = getTodayMeeting(c.name);
     var mtgHtml2 = mtg2 ? '<div style="margin-top:3px;display:flex;align-items:center;gap:5px;padding-left:1px"><span style="font-size:10px;color:#E8C97A;font-weight:700;">📅 오늘 ' + (mtg2.time||'') + '</span>' + (mtg2.place ? '<span style="font-size:9px;color:#8B98B8;">' + mtg2.place + '</span>' : '') + '</div>' : '';
