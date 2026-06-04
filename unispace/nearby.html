@@ -1565,21 +1565,34 @@ function setRoutePointToQueue(mode, obj){
     else panelVia.push(obj);
   }
   var qItem = { id: 'DS_PIN_' + Date.now() + '_' + Math.floor(Math.random()*1000), name: obj.name, lat: obj.lat, lng: obj.lng, address: obj.address || obj.name };
+  // 슬롯에 있던 기존 항목이 실제 고객(임의좌표 아님)이면, 동선에서 빼고 원래 위치에 일반 핀으로 복원
+  function _displaceReal(prev){
+    if(!prev) return;
+    var isArbPrev = prev.id && (String(prev.id).indexOf('DS_PIN_') === 0 || String(prev.id).indexOf('MY_LOC_') === 0);
+    if(isArbPrev) return;
+    // 기준 고객이면 파란 기준핀으로 복원, 아니면 일반 핀
+    var isBasePrev = window._baseCustomerId && ((prev.id && prev.id == window._baseCustomerId) || (prev.custId && prev.custId == window._baseCustomerId));
+    if(isBasePrev && centerLat && centerLng){
+      isCustomerMode = true;
+      window._restoreBaseAfter = true;
+    } else if(prev.lat && prev.lng){
+      _drawRemovedRoutePin(prev);
+    }
+  }
   if(mode === 'from'){
     if(dsQueue.length === 0) dsQueue.push(qItem);
-    else dsQueue[0] = qItem;
+    else { _displaceReal(dsQueue[0]); dsQueue[0] = qItem; }
   } else if(mode === 'to'){
     if(dsQueue.length <= 1) dsQueue.push(qItem);
-    else dsQueue[dsQueue.length - 1] = qItem;
+    else { _displaceReal(dsQueue[dsQueue.length - 1]); dsQueue[dsQueue.length - 1] = qItem; }
   } else if(mode && mode.indexOf('via_') === 0){
     var vi = parseInt(mode.split('_')[1], 10);
     var targetIdx = vi + 1; // 0=from 다음이 첫 경유
     if(targetIdx >= dsQueue.length){
-      // 도착 앞에 삽입
       var insertAt = dsQueue.length > 1 ? dsQueue.length - 1 : dsQueue.length;
       dsQueue.splice(insertAt, 0, qItem);
     } else {
-      dsQueue[targetIdx] = qItem;
+      _displaceReal(dsQueue[targetIdx]); dsQueue[targetIdx] = qItem;
     }
   }
   // 번호핀 + 이음선 통일 렌더
@@ -1589,6 +1602,7 @@ function setRoutePointToQueue(mode, obj){
   drawDsPolylines();
   renderDsEditList();
   renderRoutePanel();
+  if(window._restoreBaseAfter){ window._restoreBaseAfter = false; if(centerLat && centerLng) drawNearby(centerLat, centerLng); injectDsRoleLabels(); updateDsMarkerLabels(); drawDsPolylines(); }
   if(currentTab == 'today') renderTodayListFromQueue();
   var ob = document.getElementById('routeOpenBtn');
   if(ob) ob.className = 'route-open-btn' + (dsQueue.length > 1 ? ' has-route' : '');
