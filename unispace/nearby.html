@@ -1614,6 +1614,45 @@ function setRoutePointToQueue(mode, obj){
   if(ob) ob.className = 'route-open-btn' + (dsQueue.length > 1 ? ' has-route' : '');
 }
 
+// 길찾기 팝업 X 삭제: dsQueue의 해당 지점 제거 → 번호핀/이음선 갱신
+function removeRoutePointFromQueue(mode){
+  var rmIdx = -1;
+  if(mode === 'from') rmIdx = 0;
+  else if(mode === 'to') rmIdx = dsQueue.length - 1;
+  else if(mode && mode.indexOf('via_') === 0){
+    var vi = parseInt(mode.split('_')[1], 10);
+    rmIdx = vi + 1;
+  }
+  if(rmIdx < 0 || rmIdx >= dsQueue.length) return;
+  var removed = dsQueue[rmIdx];
+  dsQueue.splice(rmIdx, 1);
+  // 실제 고객이면 원래 위치에 복원 (기준 고객은 파란핀)
+  var isArb = removed.id && (String(removed.id).indexOf('DS_PIN_') === 0 || String(removed.id).indexOf('MY_LOC_') === 0);
+  var restoredBase = false;
+  if(!isArb && removed.lat && removed.lng){
+    var isBase = window._baseCustomerId && ((removed.id && removed.id == window._baseCustomerId) || (removed.custId && removed.custId == window._baseCustomerId));
+    if(isBase && centerLat && centerLng){ isCustomerMode = true; drawNearby(centerLat, centerLng); restoredBase = true; }
+    else _drawRemovedRoutePin(removed);
+  }
+  clearAllRoutePins();
+  injectDsRoleLabels();
+  updateDsMarkerLabels();
+  drawDsPolylines();
+  // panel 배열을 dsQueue 기준으로 재구성 (팝업 입력칸 동기화)
+  panelFrom = null; panelTo = null; panelVia = [];
+  dsQueue.forEach(function(it, ix){
+    var o = { name: it.name, lat: it.lat, lng: it.lng, address: it.address };
+    if(ix === 0) panelFrom = o;
+    else if(ix === dsQueue.length - 1 && dsQueue.length > 1) panelTo = o;
+    else panelVia.push(o);
+  });
+  renderDsEditList();
+  renderRoutePanel();
+  if(currentTab == 'today') renderTodayListFromQueue();
+  var ob2 = document.getElementById('routeOpenBtn');
+  if(ob2) ob2.className = 'route-open-btn' + (dsQueue.length > 1 ? ' has-route' : '');
+}
+
 function syncDsQueueToRoute() {
   panelFrom = null; panelTo = null; panelVia = [];
   clearAllRoutePins();
@@ -2316,10 +2355,10 @@ window.addEventListener('DOMContentLoaded', function() {
   if(rpToMyLoc) rpToMyLoc.addEventListener('click', function(){ getMyLocForPanel('to', rpToMyLoc); });
 
   var rpFromClear = document.getElementById('rpFromClear');
-  if(rpFromClear) rpFromClear.addEventListener('click', function(){ panelFrom=null; clearRoutePin('from'); renderRoutePanel(); });
+  if(rpFromClear) rpFromClear.addEventListener('click', function(){ panelFrom=null; clearRoutePin('from'); removeRoutePointFromQueue('from'); });
 
   var rpToClear = document.getElementById('rpToClear');
-  if(rpToClear) rpToClear.addEventListener('click', function(){ panelTo=null; clearRoutePin('to'); renderRoutePanel(); });
+  if(rpToClear) rpToClear.addEventListener('click', function(){ panelTo=null; clearRoutePin('to'); removeRoutePointFromQueue('to'); });
 
   // + 경유지 추가 버튼
   var rpAddVia = document.getElementById('rpAddVia');
@@ -4181,7 +4220,7 @@ function renderRoutePanel() {
       del.type = 'button';
       del.className = 'rp-via-del';
       del.textContent = '✕';
-      (function(idx){ del.addEventListener('click', function(){ clearRoutePin('via_'+idx); panelVia.splice(idx,1); routeViaMarkers.splice(idx,1); renderRoutePanel(); }); })(i);
+      (function(idx){ del.addEventListener('click', function(){ clearRoutePin('via_'+idx); routeViaMarkers.splice(idx,1); removeRoutePointFromQueue('via_'+idx); }); })(i);
 
       slot.appendChild(label);
       slot.appendChild(name);
