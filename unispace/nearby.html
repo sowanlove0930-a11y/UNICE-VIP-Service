@@ -1564,7 +1564,8 @@ function setRoutePointToQueue(mode, obj){
     if(vi0 >= 0 && vi0 < panelVia.length) panelVia[vi0] = obj;
     else panelVia.push(obj);
   }
-  var qItem = { id: 'DS_PIN_' + Date.now() + '_' + Math.floor(Math.random()*1000), name: obj.name, lat: obj.lat, lng: obj.lng, address: obj.address || obj.name };
+  var keepId = (obj.id && String(obj.id).indexOf('DS_PIN_') !== 0 && String(obj.id).indexOf('MY_LOC_') !== 0) ? obj.id : ('DS_PIN_' + Date.now() + '_' + Math.floor(Math.random()*1000));
+  var qItem = { id: keepId, custId: obj.custId || (obj.id && String(obj.id).indexOf('DS_PIN_') !== 0 ? obj.id : ''), name: obj.name, lat: obj.lat, lng: obj.lng, address: obj.address || obj.name };
   // 슬롯에 있던 기존 항목이 실제 고객(임의좌표 아님)이면, 동선에서 빼고 원래 위치에 일반 핀으로 복원
   function _displaceReal(prev){
     if(!prev) return;
@@ -2212,8 +2213,7 @@ window.addEventListener('DOMContentLoaded', function() {
   if(sccFrom) sccFrom.addEventListener('click', function(){
     if(!selectedPanelCustomer || !selectedPanelCustomer.lat) return;
     var c = selectedPanelCustomer;
-    panelFrom = { name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' };
-    renderRoutePanel();
+    setRoutePointToQueue('from', { id:c.id||'', name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' });
     var card = document.getElementById('selectedCustomerCard');
     if(card) card.style.display = 'none';
     selectedPanelCustomer = null;
@@ -2223,8 +2223,7 @@ window.addEventListener('DOMContentLoaded', function() {
   if(sccTo) sccTo.addEventListener('click', function(){
     if(!selectedPanelCustomer || !selectedPanelCustomer.lat) return;
     var c = selectedPanelCustomer;
-    panelTo = { name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' };
-    renderRoutePanel();
+    setRoutePointToQueue('to', { id:c.id||'', name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' });
     var card = document.getElementById('selectedCustomerCard');
     if(card) card.style.display = 'none';
     selectedPanelCustomer = null;
@@ -2344,8 +2343,7 @@ window.addEventListener('DOMContentLoaded', function() {
   if(sccVia) sccVia.addEventListener('click', function(){
     if(!selectedPanelCustomer || !selectedPanelCustomer.lat) return;
     var c = selectedPanelCustomer;
-    panelVia.push({ name:c.name, lat:c.lat, lng:c.lng });
-    renderRoutePanel();
+    setRoutePointToQueue('via_' + panelVia.length, { id:c.id||'', name:c.name, lat:c.lat, lng:c.lng, address:c.address||'' });
     var card = document.getElementById('selectedCustomerCard');
     if(card) card.style.display = 'none';
     selectedPanelCustomer = null;
@@ -3953,15 +3951,9 @@ function getMyLocForPanel(type, btn) {
   if(btn) btn.textContent = '⏳';
 
   function applyLoc(lat, lng) {
-    var obj = { name:'내 현재 위치', lat:String(lat), lng:String(lng) };
-    if(type === 'from') panelFrom = obj;
-    else if(type === 'to') panelTo = obj;
-    else if(type.indexOf('via_') === 0) {
-      var idx = parseInt(type.split('_')[1], 10);
-      if(idx >= 0 && idx < panelVia.length) panelVia[idx] = obj;
-    }
+    var obj = { name:'내 현재 위치', lat:String(lat), lng:String(lng), address:'내 현재 위치' };
+    setRoutePointToQueue(type, obj);
     if(btn) btn.textContent = origText;
-    renderRoutePanel();
 
     // 지도 이동 + 내 위치 마커 표시
     if(kakaoMap) {
@@ -4332,12 +4324,7 @@ function searchRouteAddr(type, addr) {
   var viaIdx = isVia ? parseInt(type.split('_')[1], 10) : -1;
 
   function applyObj(obj) {
-    if(type === 'from') panelFrom = obj;
-    else if(type === 'to') panelTo = obj;
-    else if(isVia && viaIdx >= 0 && viaIdx < panelVia.length) {
-      panelVia[viaIdx] = obj;
-    }
-    renderRoutePanel();
+    setRoutePointToQueue(type, obj);
   }
 
   places.keywordSearch(addr, function(result, status) {
