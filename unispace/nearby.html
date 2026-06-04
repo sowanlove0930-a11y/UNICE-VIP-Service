@@ -1554,6 +1554,46 @@ function updateDsMarkerLabels() {
   });
 }
 
+// 길찾기 팝업에서 선택한 좌표(from/to/via_N)를 dsQueue에 반영 → 번호핀+이음선 통일
+function setRoutePointToQueue(mode, obj){
+  // panel 변수도 함께 유지(카카오 내비 호출용)
+  if(mode === 'from') panelFrom = obj;
+  else if(mode === 'to') panelTo = obj;
+  else if(mode && mode.indexOf('via_') === 0){
+    var vi0 = parseInt(mode.split('_')[1], 10);
+    if(vi0 >= 0 && vi0 < panelVia.length) panelVia[vi0] = obj;
+    else panelVia.push(obj);
+  }
+  var qItem = { id: 'DS_PIN_' + Date.now() + '_' + Math.floor(Math.random()*1000), name: obj.name, lat: obj.lat, lng: obj.lng, address: obj.address || obj.name };
+  if(mode === 'from'){
+    if(dsQueue.length === 0) dsQueue.push(qItem);
+    else dsQueue[0] = qItem;
+  } else if(mode === 'to'){
+    if(dsQueue.length <= 1) dsQueue.push(qItem);
+    else dsQueue[dsQueue.length - 1] = qItem;
+  } else if(mode && mode.indexOf('via_') === 0){
+    var vi = parseInt(mode.split('_')[1], 10);
+    var targetIdx = vi + 1; // 0=from 다음이 첫 경유
+    if(targetIdx >= dsQueue.length){
+      // 도착 앞에 삽입
+      var insertAt = dsQueue.length > 1 ? dsQueue.length - 1 : dsQueue.length;
+      dsQueue.splice(insertAt, 0, qItem);
+    } else {
+      dsQueue[targetIdx] = qItem;
+    }
+  }
+  // 번호핀 + 이음선 통일 렌더
+  clearAllRoutePins();
+  injectDsRoleLabels();
+  updateDsMarkerLabels();
+  drawDsPolylines();
+  renderDsEditList();
+  renderRoutePanel();
+  if(currentTab == 'today') renderTodayListFromQueue();
+  var ob = document.getElementById('routeOpenBtn');
+  if(ob) ob.className = 'route-open-btn' + (dsQueue.length > 1 ? ' has-route' : '');
+}
+
 function syncDsQueueToRoute() {
   panelFrom = null; panelTo = null; panelVia = [];
   clearAllRoutePins();
@@ -2561,16 +2601,7 @@ function loadKakaoScript(key) {
                 a = r.road_address ? r.road_address.address_name : r.address.address_name;
               }
               var obj = { name:a, lat:String(pos.getLat()), lng:String(pos.getLng()), address:a };
-              if(mode === 'from') panelFrom = obj;
-              else if(mode === 'to') panelTo = obj;
-              else if(mode && mode.indexOf('via_') === 0) {
-                var vi = parseInt(mode.split('_')[1], 10);
-                if(vi >= 0 && vi < panelVia.length) panelVia[vi] = obj;
-              }
-              var pinLabel = getRoutePinLabel(mode);
-              setRoutePin(mode, pos, pinLabel);
-              updateRoutePinAddr(mode, pos, a);
-              renderRoutePanel();
+              setRoutePointToQueue(mode, obj);
             });
           })(curMode, latlng);
       });
