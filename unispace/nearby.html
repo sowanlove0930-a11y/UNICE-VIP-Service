@@ -1475,7 +1475,16 @@ function addToDsQueue(customer) {
   });
   if(idx !== -1) {
     // 이미 큐에 있으면 제거 (토글)
+    var removedC = dsQueue[idx];
     dsQueue.splice(idx, 1);
+    // 빠진 고객이 기준 고객이면 파란 기준핀 복원 (drawNearby 재호출)
+    var isBaseRemoved = window._baseCustomerId && ((removedC.id && removedC.id == window._baseCustomerId) || (removedC.custId && removedC.custId == window._baseCustomerId));
+    if(isBaseRemoved && centerLat && centerLng){
+      isCustomerMode = true;
+      drawNearby(centerLat, centerLng);
+      rerenderDsQueue();
+      return;
+    }
     if(centerLat && centerLng && window._nearbyList) refreshNearbyOnly(centerLat, centerLng);
     rerenderDsQueue();
     return;
@@ -3288,6 +3297,11 @@ function drawNearby(lat, lng) {
       var ad2 = document.getElementById('targetAddr').textContent || '';
       addToDsQueue({ id: 'DS_PIN_' + Date.now(), name: nm2, lat: String(centerLat), lng: String(centerLng), address: ad2 });
       return;
+    }
+    // 조회 모드: 기준 고객이면 고객 정보 팝업 표시
+    if(isCustomerMode && window._baseCustomerId) {
+      var bcInfo = allCustomers.filter(function(a){ return a.id == window._baseCustomerId; })[0];
+      if(bcInfo && typeof showPopup === 'function') { showPopup(bcInfo, 0); return; }
     }
     var name = document.getElementById('targetName').textContent || '기준위치';
     var addr = document.getElementById('targetAddr').textContent || '';
