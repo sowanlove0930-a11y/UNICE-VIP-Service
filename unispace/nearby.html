@@ -697,8 +697,12 @@ function switchTab(tab) {
 }
 
 function openDsEditSheet() {
+  // 동선순서 팝업 대신 길찾기 팝업으로 통합 (순서 조정 포함)
   var popup = document.getElementById('dsOrderPopup');
-  if(popup) { popup.style.display = 'flex'; }
+  if(popup) popup.style.display = 'none';
+  var rp = document.getElementById('routePopup');
+  if(rp) rp.style.display = '';
+  renderRoutePanel();
   renderDsEditList();
 }
 
@@ -1652,6 +1656,32 @@ function removeRoutePointFromQueue(mode){
   if(currentTab == 'today') renderTodayListFromQueue();
   var ob2 = document.getElementById('routeOpenBtn');
   if(ob2) ob2.className = 'route-open-btn' + (dsQueue.length > 1 ? ' has-route' : '');
+}
+
+// 경유지 순서 이동: dsQueue 내 위치 교환 (panelVia idx 기준, dsQueue는 idx+1)
+function moveViaInQueue(viaIdx, dir){
+  var qIdx = viaIdx + 1; // 0=from
+  var targetQIdx = qIdx + dir;
+  // from(0)·to(마지막)와는 교환하지 않음 — 경유끼리만
+  var lastIdx = dsQueue.length - 1;
+  if(targetQIdx <= 0 || targetQIdx >= lastIdx) return;
+  if(qIdx <= 0 || qIdx >= lastIdx) return;
+  var tmp = dsQueue[targetQIdx]; dsQueue[targetQIdx] = dsQueue[qIdx]; dsQueue[qIdx] = tmp;
+  clearAllRoutePins();
+  injectDsRoleLabels();
+  updateDsMarkerLabels();
+  drawDsPolylines();
+  // panel 재구성
+  panelFrom = null; panelTo = null; panelVia = [];
+  dsQueue.forEach(function(it, ix){
+    var o = { name: it.name, lat: it.lat, lng: it.lng, address: it.address };
+    if(ix === 0) panelFrom = o;
+    else if(ix === dsQueue.length - 1 && dsQueue.length > 1) panelTo = o;
+    else panelVia.push(o);
+  });
+  renderDsEditList();
+  renderRoutePanel();
+  if(currentTab == 'today') renderTodayListFromQueue();
 }
 
 function syncDsQueueToRoute() {
@@ -4274,17 +4304,13 @@ function renderRoutePanel() {
       var upBtn = document.createElement('button');
       upBtn.type = 'button'; upBtn.className = 'rp-via-btn'; upBtn.textContent = '▲';
       (function(idx){ upBtn.addEventListener('click', function(){
-        if(idx===0) return;
-        var tmp=panelVia[idx-1]; panelVia[idx-1]=panelVia[idx]; panelVia[idx]=tmp;
-        renderRoutePanel();
+        moveViaInQueue(idx, -1);
       }); })(i);
 
       var downBtn = document.createElement('button');
       downBtn.type = 'button'; downBtn.className = 'rp-via-btn'; downBtn.textContent = '▼';
       (function(idx){ downBtn.addEventListener('click', function(){
-        if(idx>=panelVia.length-1) return;
-        var tmp=panelVia[idx+1]; panelVia[idx+1]=panelVia[idx]; panelVia[idx]=tmp;
-        renderRoutePanel();
+        moveViaInQueue(idx, 1);
       }); })(i);
 
       orderCol.appendChild(upBtn);
