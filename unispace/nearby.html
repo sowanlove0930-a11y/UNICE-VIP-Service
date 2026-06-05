@@ -423,6 +423,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
             <button type="button" class="rp-reset-btn" id="rpResetBtn" style="white-space:nowrap;">초기화</button>
+            <button type="button" class="rp-popup-close" id="rpMinBtn" title="최소화" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:0;line-height:1;">─</button>
             <button type="button" class="rp-popup-close" id="routePopupClose">✕</button>
           </div>
         </div>
@@ -443,6 +444,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
               </div>
               <button type="button" class="rp-myloc" id="rpMyLoc" title="내 현재 위치">📍</button>
               <button type="button" class="rp-mapsel" id="rpFromMapSel" title="지도에서 선택">📌</button>
+              <button type="button" class="rp-via-btn" id="rpFromDown" title="아래로" style="font-size:9px;">▼</button>
             </div>
             <input type="text" class="rp-input" id="rpFromInput" placeholder="주소 직접 입력">
           </div>
@@ -471,6 +473,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
               </div>
               <button type="button" class="rp-myloc" id="rpToMyLoc" title="내 현재 위치">📍</button>
               <button type="button" class="rp-mapsel" id="rpToMapSel" title="지도에서 선택">📌</button>
+              <button type="button" class="rp-via-btn" id="rpToUp" title="위로" style="font-size:9px;">▲</button>
             </div>
             <input type="text" class="rp-input" id="rpToInput" placeholder="주소 직접 입력">
           </div>
@@ -1658,20 +1661,16 @@ function removeRoutePointFromQueue(mode){
   if(ob2) ob2.className = 'route-open-btn' + (dsQueue.length > 1 ? ' has-route' : '');
 }
 
-// 경유지 순서 이동: dsQueue 내 위치 교환 (panelVia idx 기준, dsQueue는 idx+1)
-function moveViaInQueue(viaIdx, dir){
-  var qIdx = viaIdx + 1; // 0=from
-  var targetQIdx = qIdx + dir;
-  // from(0)·to(마지막)와는 교환하지 않음 — 경유끼리만
-  var lastIdx = dsQueue.length - 1;
-  if(targetQIdx <= 0 || targetQIdx >= lastIdx) return;
-  if(qIdx <= 0 || qIdx >= lastIdx) return;
-  var tmp = dsQueue[targetQIdx]; dsQueue[targetQIdx] = dsQueue[qIdx]; dsQueue[qIdx] = tmp;
+// dsQueue 내 두 인접 항목 교환 (출발/경유/도착 자유 이동). qIdx와 qIdx+dir을 swap
+function swapInQueue(qIdx, dir){
+  var t = qIdx + dir;
+  if(qIdx < 0 || qIdx >= dsQueue.length) return;
+  if(t < 0 || t >= dsQueue.length) return;
+  var tmp = dsQueue[t]; dsQueue[t] = dsQueue[qIdx]; dsQueue[qIdx] = tmp;
   clearAllRoutePins();
   injectDsRoleLabels();
   updateDsMarkerLabels();
   drawDsPolylines();
-  // panel 재구성
   panelFrom = null; panelTo = null; panelVia = [];
   dsQueue.forEach(function(it, ix){
     var o = { name: it.name, lat: it.lat, lng: it.lng, address: it.address };
@@ -1682,6 +1681,11 @@ function moveViaInQueue(viaIdx, dir){
   renderDsEditList();
   renderRoutePanel();
   if(currentTab == 'today') renderTodayListFromQueue();
+}
+
+// 경유지 순서 이동 (panelVia idx 기준, dsQueue는 idx+1) — swapInQueue로 위임
+function moveViaInQueue(viaIdx, dir){
+  swapInQueue(viaIdx + 1, dir);
 }
 
 function syncDsQueueToRoute() {
@@ -2388,6 +2392,12 @@ window.addEventListener('DOMContentLoaded', function() {
   var rpFromClear = document.getElementById('rpFromClear');
   if(rpFromClear) rpFromClear.addEventListener('click', function(){ panelFrom=null; clearRoutePin('from'); removeRoutePointFromQueue('from'); });
 
+  var rpFromDown = document.getElementById('rpFromDown');
+  if(rpFromDown) rpFromDown.addEventListener('click', function(){ swapInQueue(0, 1); });
+
+  var rpToUp = document.getElementById('rpToUp');
+  if(rpToUp) rpToUp.addEventListener('click', function(){ swapInQueue(dsQueue.length - 1, -1); });
+
   var rpToClear = document.getElementById('rpToClear');
   if(rpToClear) rpToClear.addEventListener('click', function(){ panelTo=null; clearRoutePin('to'); removeRoutePointFromQueue('to'); });
 
@@ -2456,6 +2466,15 @@ window.addEventListener('DOMContentLoaded', function() {
   if(routePopupClose) routePopupClose.addEventListener('click', function(){
     var popup = document.getElementById('routePopup');
     if(popup) popup.style.display = 'none';
+  });
+
+  var rpMinBtn = document.getElementById('rpMinBtn');
+  if(rpMinBtn) rpMinBtn.addEventListener('click', function(){
+    var body = document.querySelector('#routePopup .route-popup-body');
+    if(!body) return;
+    var collapsed = body.style.display === 'none';
+    if(collapsed){ body.style.display = ''; rpMinBtn.textContent = '─'; }
+    else { body.style.display = 'none'; rpMinBtn.textContent = '▢'; }
   });
 
   // 초기화
