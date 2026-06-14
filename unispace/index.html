@@ -2897,24 +2897,45 @@ function showDashboard() {
       renderAdminAttStat();
 
     } else {
-      // 2번 (FP): 내 고객수
+      // 2번 (FP): 내 고객수 (사번 기준, GAS 캐시)
       var DB2 = [];
       try { DB2 = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e) {}
-      var myCnt = DB2.filter(function(c){ return c.fp === currentUser.name; }).length;
+      var myCnt = DB2.filter(function(c){
+        return c.fpCode === currentUser.id || c.fp === currentUser.name;
+      }).length;
       var st2 = document.getElementById('st2');
-      if(st2) st2.textContent = myCnt || '42';
+      if(st2) st2.textContent = myCnt;
 
-      // 3번 (FP): 내 출결
+      // 3번 (FP): 내 출결 (실데이터, 아직 없으면 0)
       var ok = document.getElementById('att-ok-val');
       var ng = document.getElementById('att-ng-val');
-      if(ok) ok.textContent = '2';
-      if(ng) ng.textContent = '1';
+      var _myAtt = _calcMyAtt(currentUser.id);
+      if(ok) ok.textContent = _myAtt.ok;
+      if(ng) ng.textContent = _myAtt.ng;
     }
 
     // 4번: 오늘 챙길 고객 — localStorage 실계산
     var st4el = document.getElementById('st4');
     if(st4el) st4el.textContent = calcTodayCount();
   }, 300);
+}
+
+// FP 본인 이번 달 출석 증빙/미증빙 일수 (실데이터, 없으면 0)
+function _calcMyAtt(fpId) {
+  var res = { ok: 0, ng: 0 };
+  if (!fpId) return res;
+  var attDb = {};
+  try { attDb = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) { return res; }
+  var now = new Date();
+  var ym = now.getFullYear() + '-' + (now.getMonth()+1 < 10 ? '0' : '') + (now.getMonth()+1);
+  Object.keys(attDb).forEach(function(date){
+    if (date.indexOf(ym) !== 0) return;
+    var rec = attDb[date][fpId];
+    if (!rec) return;
+    if (rec.status === '미출결' || rec.status === '결근') res.ng++;
+    else res.ok++;
+  });
+  return res;
 }
 
 // 고객의 담당 FP 지점 반환

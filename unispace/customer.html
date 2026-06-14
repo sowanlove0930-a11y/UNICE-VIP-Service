@@ -1735,48 +1735,7 @@ window.addEventListener('DOMContentLoaded', function() {
   var fp = JSON.parse(localStorage.getItem('unispace_user') || '{}');
   if (fp.name) document.getElementById('headerFp').textContent = fp.name + ' ' + (fp.role || 'FP');
 
-  // 테스트 데이터 - customerType 없으면 재초기화
-  var needReset = DB.length === 0 || DB.some(function(c){ return !c.customerType; });
-  if (needReset) {
-    DB = [
-      {
-        id:'TEST001', name:'홍길동', phone:'010-1234-5678',
-        birth:'1985-03-15', gender:'남', grade:'VIP', channel:'소개', referrer:'이수아',
-        memo:"종신보험 추가 니즈 있음. 자녀 2명.",
-        fp: fp.name||'테스트', branch: fp.branch||'알파지점',
-        contracts:[
-          { insurer:'한화생명', product:'하나로H종신보험', date:'2024-06-01', premium:'150000', payday:'15일', paymethod:'자동이체' },
-          { insurer:'삼성화재', product:'운전자보험', date:'2023-03-10', premium:'35000', payday:'10일', paymethod:'카드' }
-        ],
-        family:[{ id:'TEST002', name:'김영희', rel:'배우자' }],
-        events:[{ name:'암진단일', date:'2020-03-10', trigger:'5년후' }],
-        lastContact:'2026-05-20', registered:'2024-06-01', customerType:'계약', contractDate:'2024-06-01', etcNote:''
-      },
-      {
-        id:'TEST002', name:'김영희', phone:'010-9876-5432',
-        birth:'1988-11-22', gender:'여', grade:'우량', channel:'지인',
-        memo:"실손 갱신 시점 체크 필요. 남편 홍길동 고객 소개로 연결.",
-        fp: fp.name||'테스트', branch: fp.branch||'알파지점',
-        contracts:[
-          { insurer:'현대해상', product:'실손의료비보험', date:'2022-08-15', premium:'42000', payday:'25일', paymethod:'자동이체' }
-        ],
-        family:[{ id:'TEST001', name:'홍길동', rel:'배우자' }],
-        events:[],
-        lastContact:'2026-05-15', registered:'2022-08-15', customerType:'계약', contractDate:'2022-08-15', etcNote:''
-      },
-      {
-        id:'TEST003', name:'박지훈', phone:'010-5555-7777',
-        birth:'1975-07-04', gender:'남', grade:'일반', channel:'히든',
-        memo:"종신보험 관심 있음. 다음 달 재상담 예정.",
-        fp: fp.name||'테스트', branch: fp.branch||'알파지점',
-        contracts:[], family:[], events:[
-          { name:'자녀대학입학', date:'2027-03-01', trigger:'매년' }
-        ],
-        lastContact:'2026-05-01', registered:'2026-04-10', customerType:'관리', contractDate:'', etcNote:''
-      }
-    ];
-    localStorage.setItem('unispace_customers', JSON.stringify(DB));
-  }
+  // 고객 데이터는 GAS에서 로드 (아래 loadCustomersFromGas)
 
   updateHeaderCount();
   addContract(); // 계약 1개 기본 추가
@@ -2282,7 +2241,7 @@ function openDetail(id) {
   body += '<div class="detail-section">';
   body += '<div class="detail-section-title">기본 정보</div>';
   body += '<div class="detail-grid">';
-  var basics = [['연락처',c.phone],['생년월일',c.birth||'—'],['성별',c.gender||'—'],['등급',c.grade||'—'],['고객속성',c.channel+(c.referrer?' ('+c.referrer+')':(c.etcNote?' ('+c.etcNote+')':''))],['담당FP',c.fp||'—'],['등록일',c.registered]];
+  var basics = [['연락처',c.phone],['생년월일',c.birth||'—'],['성별',c.gender||'—'],['등급',c.grade||'—'],['고객속성',c.channel+(c.referrer?' ('+c.referrer+')':(c.etcNote?' ('+c.etcNote+')':''))],['담당FP',c.fpName||c.fp||'—'],['등록일',c.registered]];
   if(c.address) basics.splice(1,0,['주소', c.address + (c.lat&&c.lng ? ' <span style="font-size:10px;color:#1F9268;font-weight:700">📍 좌표등록</span>' : ' <span style="font-size:10px;color:var(--text3)">좌표미등록</span>')]);
   basics.forEach(function(r){ body += '<div class="detail-row"><div class="detail-row-label">'+r[0]+'</div><div class="detail-row-value">'+(r[1]||'—')+'</div></div>'; });
   body += '</div>';
@@ -2777,7 +2736,10 @@ function geocodeMissingCustomers(onDone) {
     }
     var c = targets[idx];
     geocodeAddressOnce(c.address, kakaoKey).then(function(coord){
-      if (coord) { c.lat = coord.lat; c.lng = coord.lng; ok++; }
+      if (coord) {
+        c.lat = coord.lat; c.lng = coord.lng; ok++;
+        gasSaveCustomer(c); // GAS 시트에도 좌표 반영
+      }
       idx++;
       setTimeout(step, 250);
     });
