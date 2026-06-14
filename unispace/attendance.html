@@ -474,7 +474,16 @@ function attGasGet(params){
   var qs = Object.keys(params).map(function(k){
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
   }).join('&');
-  return fetch(ATT_GAS_URL + '?' + qs).then(function(r){ return r.json(); });
+  var fullUrl = ATT_GAS_URL + '?' + qs;
+  console.log('[attGasGet] 요청:', fullUrl);
+  return fetch(fullUrl).then(function(r){
+    console.log('[attGasGet] 응답 status:', r.status, 'ok:', r.ok, 'type:', r.type);
+    return r.text();
+  }).then(function(txt){
+    console.log('[attGasGet] 응답 본문:', txt.slice(0, 200));
+    try { return JSON.parse(txt); }
+    catch(e){ console.log('[attGasGet] JSON 파싱 실패:', e); return { ok:false, msg:'파싱실패' }; }
+  });
 }
 // 이번 달 출결+사전보고 GAS에서 로드 -> 로컬 캐시
 function loadAttFromGas(){
@@ -484,7 +493,18 @@ function loadAttFromGas(){
   var url = ATT_GAS_URL + '?action=getAttendance&fp=' + encodeURIComponent(fp) + '&ym=' + encodeURIComponent(ym);
   return fetch(url).then(function(r){ return r.json(); }).then(function(res){
     if(res && res.ok){
-      if(res.attendance) saveAttDB(res.attendance);
+      // GAS 데이터로 갱신하되, 로컬에 있는 오늘 내 체크인은 보존 (덮어쓰기 방지)
+      var today = getTodayStr();
+      var localDb = getAttDB();
+      var myLocalToday = localDb[today] && localDb[today][fp];
+      var newAtt = res.attendance || {};
+      if(myLocalToday){
+        if(!newAtt[today] || !newAtt[today][fp]){
+          if(!newAtt[today]) newAtt[today] = {};
+          newAtt[today][fp] = myLocalToday;
+        }
+      }
+      saveAttDB(newAtt);
       if(res.prereport)  savePrDB(res.prereport);
       return true;
     }
