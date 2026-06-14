@@ -463,6 +463,37 @@ function saveAttDB(db){ localStorage.setItem(ATT_KEY,JSON.stringify(db)); }
 function getPrDB()  { try{return JSON.parse(localStorage.getItem(PR_KEY)||'{}');}catch(e){return{};} }
 function savePrDB(db){ localStorage.setItem(PR_KEY,JSON.stringify(db)); }
 
+// ── UNISPACE GAS 연동 ──────────────────────────────
+var ATT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
+function _myFpCode(){ return (currentUser && currentUser.id) || ''; }
+function attGasPost(payload){
+  return fetch(ATT_GAS_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); });
+}
+// 이번 달 출결+사전보고 GAS에서 로드 -> 로컬 캐시
+function loadAttFromGas(){
+  var fp = _myFpCode();
+  if(!fp) return Promise.resolve(false);
+  var ym = getYMStr(new Date());
+  var url = ATT_GAS_URL + '?action=getAttendance&fp=' + encodeURIComponent(fp) + '&ym=' + encodeURIComponent(ym);
+  return fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ok){
+      if(res.attendance) saveAttDB(res.attendance);
+      if(res.prereport)  savePrDB(res.prereport);
+      return true;
+    }
+    return false;
+  }).catch(function(){ return false; });
+}
+function gasCheckin(rec){ attGasPost({ action:'checkin', data:rec }).catch(function(){}); }
+function gasSavePrereport(rec){ attGasPost({ action:'savePrereport', data:rec }).catch(function(){}); }
+function gasSetProof(date, fpCode, proof){ attGasPost({ action:'setPrereportProof', data:{ date:date, fpCode:fpCode, proof:proof } }).catch(function(){}); }
+// ───────────────────────────────────────────────────
+
+
 function showToast(msg){
   var t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
@@ -510,6 +541,14 @@ window.addEventListener('DOMContentLoaded',function(){
   startLiveClock();
   renderCheckinTab();
   renderPrereportTab();
+
+  // GAS에서 이번 달 출결/사전보고 로드 후 재렌더 (캐시 갱신)
+  loadAttFromGas().then(function(ok){
+    if(ok){
+      renderCheckinTab();
+      renderPrereportTab();
+    }
+  });
 
   // 진입 모드 판별: report = 근태보고, 그 외 = 출결관리
   var urlTab='';
@@ -646,7 +685,7 @@ function doCheckin(){
   if(!db[today]) db[today]={};
   db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
   saveAttDB(db);
-  // TODO_GAS_1: GAS POST 체크인
+  gasCheckin({ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch, time:timeStr, status:isLate?'지각':'정상' });
   renderCheckinTab();
   showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
 }
@@ -1002,9 +1041,9 @@ function savePrereport(){
     };
     if(activities) rec.activities=activities;
     db[date][currentUser.id]=rec;
+    gasSavePrereport({ date:date, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch, type:type, note:note, proof:false, reportedAt:rec.reportedAt });
   }
   savePrDB(db);
-  // TODO_GAS_3: GAS POST 사전보고
 
   var cnt=_prSelDates.length;
   document.getElementById('prNote').value='';
@@ -1065,8 +1104,8 @@ function confirmProof(){
     db[date][currentUser.id].proof   = true;
     db[date][currentUser.id].proofAt = new Date().toISOString();
     db[date][currentUser.id].hasPhoto = !!_selectedPhotoBase64;
-    // TODO_GAS_4: GAS POST { fpId, date, proof:true, photoBase64: _selectedPhotoBase64 }
-    // GAS 연동 후 Google Drive 저장 → Sheets에 링크 기록
+    gasSetProof(date, currentUser.id, true);
+    // (사진 base64 Drive 저장은 추후 연동)
     savePrDB(db);
 
     var msg = _selectedPhotoBase64
