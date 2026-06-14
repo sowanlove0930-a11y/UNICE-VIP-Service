@@ -425,7 +425,7 @@ body.theme-light .pr-actno{color:#854F0B;}
       </div>
 
       <div class="gas-photo-notice">
-        ⚡ 인증샷은 현재 미리보기만 지원 · GAS 연동 후 Google Drive 자동 저장 예정
+        ☁️ 인증샷은 Google Drive에 안전하게 저장됩니다
       </div>
       <div style="font-size:11px;color:var(--text3);margin-top:6px">증빙 완료 시 해당 날짜 출결이 ✅ 출결인정으로 변경됩니다</div>
     </div>
@@ -1161,24 +1161,46 @@ function confirmProof(){
   var date=document.getElementById('proofTargetDate').value;
   if(!date){showToast('증빙 처리할 날짜를 선택해 주세요');return;}
 
-  var db=getPrDB();
-  if(db[date]&&db[date][currentUser.id]){
-    db[date][currentUser.id].proof   = true;
-    db[date][currentUser.id].proofAt = new Date().toISOString();
-    db[date][currentUser.id].hasPhoto = !!_selectedPhotoBase64;
-    gasSetProof(date, currentUser.id, true);
-    // (사진 base64 Drive 저장은 추후 연동)
-    savePrDB(db);
-
-    var msg = _selectedPhotoBase64
-      ? '✅ ' + date + ' 인증샷 포함 출결 인정 처리되었습니다'
-      : '✅ ' + date + ' 출결 인정 처리되었습니다';
-    showToast(msg);
-
-    removePhoto(); // 사진 초기화
-    renderPrereportTab();
-    renderCheckinTab();
+  // 사진 필수
+  if(!_selectedPhotoBase64){
+    showToast('⚠️ 증빙 사진을 먼저 업로드해 주세요');
+    return;
   }
+
+  var db=getPrDB();
+  if(!(db[date]&&db[date][currentUser.id])){
+    showToast('해당 날짜의 사전보고를 찾을 수 없습니다');
+    return;
+  }
+
+  var btn=document.getElementById('proofConfirmBtn');
+  if(btn){ btn.disabled=true; btn.textContent='업로드 중...'; }
+
+  // 사진을 GAS로 POST -> Drive 저장
+  var mime = 'image/jpeg';
+  if(_selectedPhotoBase64.indexOf('image/png')>=0) mime='image/png';
+  attGasPost({ action:'uploadProof', data:{
+    date:date, fpCode:currentUser.id, name:currentUser.name,
+    photoBase64:_selectedPhotoBase64, mimeType:mime
+  }}).then(function(res){
+    if(btn){ btn.disabled=false; btn.textContent='✅ 증빙 완료 처리'; }
+    if(res && res.ok){
+      db[date][currentUser.id].proof   = true;
+      db[date][currentUser.id].proofAt = new Date().toISOString();
+      db[date][currentUser.id].hasPhoto = true;
+      db[date][currentUser.id].proofUrl = res.url || '';
+      savePrDB(db);
+      showToast('✅ ' + date + ' 인증샷 포함 출결 인정 처리되었습니다');
+      removePhoto();
+      renderPrereportTab();
+      renderCheckinTab();
+    } else {
+      showToast('⚠️ ' + ((res && res.msg) || '증빙 저장에 실패했습니다'));
+    }
+  }).catch(function(){
+    if(btn){ btn.disabled=false; btn.textContent='✅ 증빙 완료 처리'; }
+    showToast('⚠️ 네트워크 오류로 증빙이 저장되지 않았습니다');
+  });
 }
 
 // ── 사전보고 삭제 ─────────────────────────────────────
