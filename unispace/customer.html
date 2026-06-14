@@ -2692,29 +2692,17 @@ function clearGeocode() {
 var KAKAO_REST_KEY = '281bb27cc451ac8e5f6bf303af9fec09';
 
 function geocodeAddressOnce(addr, kakaoKey) {
-  function _kw() {
-    return fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(addr), {
-      headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
-    }).then(function(r){ return r.json(); });
+  var variants = _addrVariants(addr);
+  var i = 0;
+  function tryNext(){
+    if(i >= variants.length) return Promise.resolve(null);
+    var cand = variants[i++];
+    return _kakaoGeocodeTry(cand, kakaoKey).then(function(res){
+      if(res) return { lat:res.lat, lng:res.lng };
+      return tryNext();
+    }).catch(function(){ return tryNext(); });
   }
-  function _addr() {
-    return fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr), {
-      headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
-    }).then(function(r){ return r.json(); });
-  }
-  return _kw().then(function(d){
-    if (d.documents && d.documents.length) {
-      var p = d.documents[0];
-      return { lat: p.y, lng: p.x };
-    }
-    return _addr().then(function(d2){
-      if (d2.documents && d2.documents.length) {
-        var p2 = d2.documents[0];
-        return { lat: p2.y, lng: p2.x };
-      }
-      return null;
-    });
-  }).catch(function(){ return null; });
+  return tryNext();
 }
 
 function geocodeMissingCustomers(onDone) {
@@ -2747,53 +2735,85 @@ function geocodeMissingCustomers(onDone) {
   step();
 }
 
+// 주소 변형 후보 생성 (동/호수 등 방해요소 제거, 점진적 단순화)
+function _addrVariants(addr) {
+  var list = [];
+  function push(s){ s=(s||'').trim().replace(/\s+/g,' '); if(s && list.indexOf(s)<0) list.push(s); }
+  push(addr);
+  // "103동 1704호", "103-1704", "1704호" 등 동/호수 제거
+  var noUnit = addr
+    .replace(/\d+\s*동\s*\d+\s*호/g,' ')
+    .replace(/\d+\s*동/g,' ')
+    .replace(/\d+\s*호/g,' ')
+    .replace(/\d+\s*층/g,' ')
+    .replace(/[A-Za-z]?\d+\s*-\s*\d+\s*$/,' ');
+  push(noUnit);
+  // 괄호 안 내용 제거
+  push(noUnit.replace(/\([^)]*\)/g,' '));
+  // 끝의 숫자 토막 제거 (지번 아닌 동호수 잔여)
+  push(noUnit.replace(/\s+\d+\s*$/,' '));
+  // 단어 단위로 뒤에서부터 하나씩 떼면서 시도 (마지막 토큰 제거)
+  var toks = noUnit.split(' ').filter(Boolean);
+  for(var n=toks.length; n>=2; n--){
+    push(toks.slice(0,n).join(' '));
+  }
+  return list;
+}
+
+function _kakaoGeocodeTry(addr, kakaoKey) {
+  // 키워드 검색 -> 실패 시 주소 검색
+  return fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(addr), {
+    headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(data.documents && data.documents.length>0){
+      var p=data.documents[0];
+      return { lat:p.y, lng:p.x, label:p.place_name||p.address_name||addr, matched:addr };
+    }
+    return fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr), {
+      headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
+    }).then(function(r){ return r.json(); }).then(function(d2){
+      if(d2.documents && d2.documents.length>0){
+        var p2=d2.documents[0];
+        return { lat:p2.y, lng:p2.x, label:p2.address_name||addr, matched:addr };
+      }
+      return null;
+    });
+  });
+}
+
 function geocodeAddress() {
   var addr = document.getElementById('r_address').value.trim();
   if(!addr) { showToast('⚠️ 주소를 먼저 입력해주세요'); return; }
-
   var kakaoKey = KAKAO_REST_KEY;
-
   var statusEl = document.getElementById('geocodeStatus');
   statusEl.textContent = '🔄 변환 중...';
   statusEl.style.color = 'var(--text2)';
 
-  // 카카오 로컬 API - 장소명 검색
-  fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(addr), {
-    headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
-  }).then(function(r){ return r.json(); })
-  .then(function(data) {
-    if(data.documents && data.documents.length > 0) {
-      var p = data.documents[0];
-      document.getElementById('r_lat').value = p.y;
-      document.getElementById('r_lng').value = p.x;
-      statusEl.textContent = '✅ 좌표 저장됨';
-      statusEl.style.color = '#1F9268';
-      showToast('📍 좌표 저장 완료: '+p.place_name);
+  var variants = _addrVariants(addr);
+  var i = 0;
+  function tryNext() {
+    if(i >= variants.length){
+      statusEl.textContent = '❌ 주소를 찾을 수 없음';
+      statusEl.style.color = '#DC2626';
+      showToast('⚠️ 시/구/동까지 포함해 입력해 주세요 (예: 부산 해운대구 우동 힐스테이트위브)');
       return;
     }
-    // 주소 검색 fallback
-    return fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr), {
-      headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
-    }).then(function(r){ return r.json(); })
-    .then(function(data2) {
-      if(data2.documents && data2.documents.length > 0) {
-        var p2 = data2.documents[0];
-        document.getElementById('r_lat').value = p2.y;
-        document.getElementById('r_lng').value = p2.x;
+    var cand = variants[i++];
+    _kakaoGeocodeTry(cand, kakaoKey).then(function(res){
+      if(res){
+        document.getElementById('r_lat').value = res.lat;
+        document.getElementById('r_lng').value = res.lng;
         statusEl.textContent = '✅ 좌표 저장됨';
         statusEl.style.color = '#1F9268';
-        showToast('📍 좌표 저장 완료');
+        showToast('📍 좌표 저장 완료: '+res.label);
       } else {
-        statusEl.textContent = '❌ 주소를 찾을 수 없음';
-        statusEl.style.color = '#DC2626';
-        showToast('⚠️ 주소를 더 구체적으로 입력해주세요');
+        tryNext();
       }
+    }).catch(function(){
+      tryNext();
     });
-  }).catch(function() {
-    statusEl.textContent = '❌ 오류 발생';
-    statusEl.style.color = '#DC2626';
-    showToast('⚠️ API 키를 확인해주세요');
-  });
+  }
+  tryNext();
 }
 
 // ── 계피 구분 ─────────────────────────────────────────
