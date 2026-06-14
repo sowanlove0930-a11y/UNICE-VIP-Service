@@ -469,6 +469,13 @@ function attGasPost(payload){
     body: JSON.stringify(payload)
   }).then(function(r){ return r.json(); });
 }
+// GET 방식 호출 (POST 리다이렉트 이슈 회피 — 체크인/사전보고/증빙)
+function attGasGet(params){
+  var qs = Object.keys(params).map(function(k){
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
+  }).join('&');
+  return fetch(ATT_GAS_URL + '?' + qs).then(function(r){ return r.json(); });
+}
 // 이번 달 출결+사전보고 GAS에서 로드 -> 로컬 캐시
 function loadAttFromGas(){
   var fp = _myFpCode();
@@ -484,9 +491,9 @@ function loadAttFromGas(){
     return false;
   }).catch(function(){ return false; });
 }
-function gasCheckin(rec){ attGasPost({ action:'checkin', data:rec }).catch(function(){}); }
-function gasSavePrereport(rec){ attGasPost({ action:'savePrereport', data:rec }).catch(function(){}); }
-function gasSetProof(date, fpCode, proof){ attGasPost({ action:'setPrereportProof', data:{ date:date, fpCode:fpCode, proof:proof } }).catch(function(){}); }
+function gasCheckin(rec){ attGasGet({ action:'checkin', date:rec.date, fp:rec.fpCode, name:rec.name, branch:rec.branch, time:rec.time, status:rec.status }).catch(function(){}); }
+function gasSavePrereport(rec){ attGasGet({ action:'savePrereport', date:rec.date, fp:rec.fpCode, name:rec.name, branch:rec.branch, type:rec.type, note:rec.note, proof:rec.proof?'Y':'N', reportedAt:rec.reportedAt }).catch(function(){}); }
+function gasSetProof(date, fpCode, proof){ attGasGet({ action:'setPrereportProof', date:date, fp:fpCode, proof:proof?'Y':'N' }).catch(function(){}); }
 // ───────────────────────────────────────────────────
 
 
@@ -700,7 +707,7 @@ function doCheckin(){
   var rec={ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch, time:timeStr, status:isLate?'지각':'정상' };
 
   // GAS에 먼저 저장 시도 -> 이미 체크인됐으면 서버가 막음
-  attGasPost({ action:'checkin', data:rec }).then(function(res){
+  attGasGet({ action:'checkin', date:today, fp:currentUser.id, name:currentUser.name, branch:currentUser.branch, time:timeStr, status:isLate?'지각':'정상' }).then(function(res){
     if(res && res.ok===false && res.msg && res.msg.indexOf('이미')>=0){
       // 서버에 이미 있음 -> 로컬도 동기화하고 차단
       if(!db[today]) db[today]={};
