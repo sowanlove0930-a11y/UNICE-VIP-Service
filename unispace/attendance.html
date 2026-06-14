@@ -689,15 +689,41 @@ function renderCheckinTab(){
 function doCheckin(){
   var today=getTodayStr(),db=getAttDB();
   if(db[today]&&db[today][currentUser.id]){showToast('오늘 이미 체크인하셨습니다');return;}
+
+  var btn=document.getElementById('checkinBtn');
+  if(btn){ btn.disabled=true; btn.textContent='확인 중...'; }
+
   var now=new Date(),h=now.getHours(),m=now.getMinutes(),s=now.getSeconds();
-  var timeStr=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  function _p2(n){ return (n<10?'0':'')+n; }
+  var timeStr=_p2(h)+':'+_p2(m)+':'+_p2(s);
   var isLate=(h>LATE_HOUR)||(h===LATE_HOUR&&m>=LATE_MIN);
-  if(!db[today]) db[today]={};
-  db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
-  saveAttDB(db);
-  gasCheckin({ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch, time:timeStr, status:isLate?'지각':'정상' });
-  renderCheckinTab();
-  showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
+  var rec={ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch, time:timeStr, status:isLate?'지각':'정상' };
+
+  // GAS에 먼저 저장 시도 -> 이미 체크인됐으면 서버가 막음
+  attGasPost({ action:'checkin', data:rec }).then(function(res){
+    if(res && res.ok===false && res.msg && res.msg.indexOf('이미')>=0){
+      // 서버에 이미 있음 -> 로컬도 동기화하고 차단
+      if(!db[today]) db[today]={};
+      db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
+      saveAttDB(db);
+      renderCheckinTab();
+      showToast('오늘 이미 체크인하셨습니다');
+      return;
+    }
+    // 정상 체크인
+    if(!db[today]) db[today]={};
+    db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
+    saveAttDB(db);
+    renderCheckinTab();
+    showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
+  }).catch(function(){
+    // 네트워크 실패 시: 로컬만 저장 (오프라인 대비), 다음 로드 때 동기화
+    if(!db[today]) db[today]={};
+    db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
+    saveAttDB(db);
+    renderCheckinTab();
+    showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
+  });
 }
 
 // ── 사전근태보고 날짜 제한 ───────────────────────────
