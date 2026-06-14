@@ -2189,9 +2189,9 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
 
     <!-- 2번: 신규 계약고객 (대표/지점장) / 내 고객 수 (FP) -->
     <div class="stat s-blue" id="stat2-admin" style="display:none">
-      <div class="stat-lbl">이번달 신규 계약고객</div>
+      <div class="stat-lbl">유니스 계약고객</div>
       <div class="stat-val" id="st2-admin">—</div>
-      <div class="stat-unit" id="st2-admin-sub">알파 0 · 브라보 0</div>
+      <div class="stat-unit" id="st2-admin-sub">이번달 신규 · 알파 0 · 브라보 0</div>
     </div>
     <div class="stat s-blue" id="stat2-fp" style="display:none">
       <div class="stat-lbl">내 고객 수</div>
@@ -2866,8 +2866,8 @@ function showDashboard() {
     renderSmartCheckinBtn();
   }, 30000);
 
-  // 권한별 stat 2, 3번 표시 전환
-  var isAdmin = (currentUser.role === '대표' || currentUser.role === '지점장');
+  // 권한별 stat 2, 3번 표시 전환 (관리자 4명: 대표+지점장들+교육지점장)
+  var isAdmin = _isManagerUser(currentUser);
 
   // 2번
   var s2a = document.getElementById('stat2-admin');
@@ -2886,25 +2886,30 @@ function showDashboard() {
     renderBojangCard();
 
     if(isAdmin) {
-      // 2번 (대표/지점장): 신규 계약고객 — localStorage 실계산
-      var DB = [];
-      try { DB = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e) {}
-      var now = new Date();
-      var ym  = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-      var alphaNew = 0, bravoNew = 0;
-      DB.forEach(function(c) {
-        if(c.customerType !== '계약') return;
-        var reg = c.registered || '';
-        if(!reg.startsWith(ym)) return;
-        var fp = getFpBranch(c.fp);
-        if(fp === '알파지점') alphaNew++;
-        else if(fp === '브라보지점') bravoNew++;
-      });
-      var totalNew = alphaNew + bravoNew;
-      var el2 = document.getElementById('st2-admin');
-      if(el2) el2.textContent = totalNew + '명';
-      var sub2 = document.getElementById('st2-admin-sub');
-      if(sub2) sub2.textContent = '알파 '+alphaNew+'명 · 브라보 '+bravoNew+'명';
+      // 2번 (관리자 4명): 전체 계약고객 + 이번달 신규 — 대시보드 전용 전체 조회
+      var now0 = new Date();
+      var ym0 = now0.getFullYear() + '-' + (now0.getMonth()+1<10?'0':'') + (now0.getMonth()+1);
+      var st2Url = UNISPACE_GAS_URL + '?action=getDashboardStats&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym0);
+      fetch(st2Url).then(function(r){return r.json();}).then(function(res){
+        var list = (res && res.ok && res.customers) ? res.customers : [];
+        var now2 = new Date();
+        var ym2 = now2.getFullYear() + '-' + (now2.getMonth()+1<10?'0':'') + (now2.getMonth()+1);
+        var totalContract = 0, alphaNew = 0, bravoNew = 0;
+        list.forEach(function(c){
+          if((c.customerType||'계약') !== '계약') return;
+          totalContract++;
+          var reg = c.registered || '';
+          if(reg.indexOf(ym2) === 0){
+            var br = (c.branch||'');
+            if(br.indexOf('알파')>=0) alphaNew++;
+            else if(br.indexOf('브라보')>=0) bravoNew++;
+          }
+        });
+        var el2 = document.getElementById('st2-admin');
+        if(el2) el2.textContent = totalContract + '명';
+        var sub2 = document.getElementById('st2-admin-sub');
+        if(sub2) sub2.textContent = '이번달 신규 · 알파 '+alphaNew+' · 브라보 '+bravoNew;
+      }).catch(function(){});
 
       // 3번 (대표/지점장): 출결현황 — localStorage 실계산
       renderAdminAttStat();
@@ -4763,27 +4768,19 @@ function renderAttToday() {
   document.getElementById('attTodayDate').textContent =
     (n.getMonth()+1) + '월 ' + n.getDate() + '일 (' + days[n.getDay()] + ')';
 
-  // GAS에서 오늘 출결 + 전체 명단 로드 후 집계
+  // GAS에서 오늘 출결 + 전체 명단 로드 후 집계 (대시보드 전용)
   var ym = today.slice(0,7);
-  var attUrl = UNISPACE_GAS_URL + '?action=getAttendance&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym);
-  var rosterUrl = UNISPACE_GAS_URL + '?action=getRoster&fp=' + encodeURIComponent(currentUser.id);
-  Promise.all([
-    fetch(attUrl).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch(rosterUrl).then(function(r){return r.json();}).catch(function(){return null;})
-  ]).then(function(results){
-    var attRes = results[0], rosRes = results[1];
+  var dashUrl = UNISPACE_GAS_URL + '?action=getDashboardStats&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym);
+  fetch(dashUrl).then(function(r){return r.json();}).then(function(attRes){
     var todayDb = (attRes && attRes.ok && attRes.attendance && attRes.attendance[today]) || {};
     var todayPr = (attRes && attRes.ok && attRes.prereport && attRes.prereport[today]) || {};
-    // 로컬 캐시에도 반영
     if(attRes && attRes.ok){
       try {
-        var adb = JSON.parse(localStorage.getItem('unispace_attendance')||'{}');
         if(attRes.attendance) localStorage.setItem('unispace_attendance', JSON.stringify(attRes.attendance));
         if(attRes.prereport) localStorage.setItem('unispace_prereport', JSON.stringify(attRes.prereport));
       } catch(e) {}
     }
-    // 명단: 체크인 대상 FP만 (대표/지점장/교육 제외)
-    var roster = (rosRes && rosRes.ok && rosRes.list) ? rosRes.list : [];
+    var roster = (attRes && attRes.ok && attRes.roster) ? attRes.roster : [];
     var FPS = [];
     roster.forEach(function(f){
       if(f.level==='admin'||f.level==='manager') return;
@@ -4792,7 +4789,7 @@ function renderAttToday() {
       FPS.push({ id:f.id, name:f.name, branch:(f.branch||'').replace('지점','') });
     });
     _renderAttTodayCards(FPS, todayDb, todayPr);
-  });
+  }).catch(function(){});
 }
 
 function _renderAttTodayCards(FPS, todayDb, todayPr) {
@@ -6971,6 +6968,15 @@ document.addEventListener('click',function(e){
 var LATE_HOUR = 10, LATE_MIN = 11; // 10:11:00 이후 지각
 
 // 출근 체크인 제외 대상: 대표, 지점장, 교육지점장
+// 관리자 4명 판정 (대표 + 알파/브라보 지점장 + 교육지점장)
+function _isManagerUser(u) {
+  if (!u) return false;
+  if (u.role === '대표' || u.role === '지점장') return true;
+  if (u.id === 'H2503162') return true; // 교육지점장 최성경
+  if (u.branch && u.branch.indexOf('교육') >= 0) return true;
+  return false;
+}
+
 function _isCheckinExempt(u) {
   if (!u) return false;
   if (u.level === 'admin' || u.level === 'manager') return true;
