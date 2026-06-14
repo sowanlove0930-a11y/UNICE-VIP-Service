@@ -1368,6 +1368,12 @@ body.theme-light .login-box,
 body.theme-light .mgmt-box,
 body.theme-light .confirm-box,
 body.theme-light .act-popup { box-shadow: 0 20px 48px rgba(60,50,20,.18); }
+body.theme-light .login-box .login-subtitle { color: #EDEFF4; }
+body.theme-light .login-box .login-subtitle span { color: #9AA3B2; }
+body.theme-light .login-box .login-footer { color: #8A93A3; }
+body.theme-light .login-box .login-footer b { color: #C9CFD9; }
+body.theme-light .login-box .login-input { color: #EDEFF4; }
+body.theme-light #cpwHint { color: #9AA3B2 !important; }
 body.theme-light .quick-input,
 body.theme-light .quick-select {
   background: #FFFFFF; border: 1px solid var(--bdr2); color: var(--text);
@@ -2451,6 +2457,26 @@ function showToast(msg) {
 }
 
 // ── FP 목록 (54명 전원, 초기비번 unice2026) ──────────
+// 30분(밀리초) 미활동 시 자동 로그아웃
+var IDLE_LIMIT_MS = 30 * 60 * 1000;
+var _idleTimer = null;
+function _autoLogout() {
+  try { localStorage.removeItem('unispace_user'); } catch(e) {}
+  alert('30분간 활동이 없어 자동 로그아웃되었습니다. 다시 로그인해 주세요.');
+  location.reload();
+}
+function resetIdleTimer() {
+  if (_idleTimer) clearTimeout(_idleTimer);
+  if (!currentUser) return;
+  _idleTimer = setTimeout(_autoLogout, IDLE_LIMIT_MS);
+}
+function startIdleWatch() {
+  ['mousedown','keydown','touchstart','scroll','click'].forEach(function(ev){
+    document.addEventListener(ev, resetIdleTimer, { passive: true });
+  });
+  resetIdleTimer();
+}
+
 var currentUser = null;
 
 // UNISPACE GAS endpoint (auth / roster / password)
@@ -2653,11 +2679,11 @@ function openGasPw(isFirst) {
   var cur  = document.getElementById('cpwCur');
   if (isFirst) {
     if (hint) hint.innerHTML = '처음 로그인하셨네요!<br>안전을 위해 비밀번호를 변경해 주세요';
-    if (skip) skip.style.display = '';
+    if (skip) { skip.style.display = ''; skip.textContent = '나중에 변경 (그냥 시작)'; }
     if (cur && _pwReturnPw) cur.value = _pwReturnPw;
   } else {
     if (hint) hint.innerHTML = '새 비밀번호로 변경합니다';
-    if (skip) skip.style.display = 'none';
+    if (skip) { skip.style.display = ''; skip.textContent = '취소'; }
     if (cur) cur.value = '';
   }
   document.getElementById('cpwNew').value = '';
@@ -2751,6 +2777,7 @@ const SUBMENUS = {
 // ── 초기화 ──────────────────────────────────────────
 function showDashboard() {
   document.getElementById('loginOverlay').classList.add('hidden');
+  startIdleWatch();
   document.getElementById('userAv').textContent   = currentUser.name[0];
   document.getElementById('userName').textContent = currentUser.name;
   document.getElementById('userRole').textContent = currentUser.role + ' · ' + currentUser.branch;
@@ -4706,7 +4733,7 @@ function renderAttToday() {
     {id:'H2502985',name:'박혜윤',branch:'브라보'},
   ];
 
-  if (currentUser) {
+  if (currentUser && !_isCheckinExempt(currentUser)) {
     var already = DUMMY_FPS.some(function(f){ return f.id === currentUser.id; });
     if (!already) {
       var br = currentUser.branch.replace('지점','');
@@ -6888,6 +6915,15 @@ document.addEventListener('click',function(e){
 
 var LATE_HOUR = 10, LATE_MIN = 11; // 10:11:00 이후 지각
 
+// 출근 체크인 제외 대상: 대표, 지점장, 교육지점장
+function _isCheckinExempt(u) {
+  if (!u) return false;
+  if (u.level === 'admin' || u.level === 'manager') return true;
+  if (u.branch && u.branch.indexOf('교육') === 0) return true;
+  if (u.id === 'H2503162') return true;
+  return false;
+}
+
 function getTodayStr() {
   var n = new Date();
   return n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0') + '-' + String(n.getDate()).padStart(2,'0');
@@ -6896,6 +6932,11 @@ function getTodayStr() {
 function renderSmartCheckinBtn() {
   var btn    = document.getElementById('checkinSmartBtn');
   if (!btn || !currentUser) return;
+
+  // 대표/지점장/교육지점장은 출근 체크인 대상 아님
+  if (_isCheckinExempt(currentUser)) { btn.style.display = 'none'; return; }
+  btn.style.display = '';
+
   var today  = getTodayStr();
   var db     = {};
   try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
@@ -6917,6 +6958,10 @@ function renderSmartCheckinBtn() {
 }
 
 function doSmartCheckin() {
+  if (_isCheckinExempt(currentUser)) {
+    showToast('출근 체크인 대상이 아닙니다');
+    return;
+  }
   var today = getTodayStr();
   var db    = {};
   try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
