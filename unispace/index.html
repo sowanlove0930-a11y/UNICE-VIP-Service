@@ -2589,9 +2589,25 @@ var FP_LIST = [
 
 // localStorage에 저장된 개별 비번/활성화 상태 병합
 function getMergedFpList() {
+  // GAS에서 받아온 전체 명단이 있으면 그것을 단일 기준으로 사용
+  var gasList = null;
+  try { gasList = JSON.parse(localStorage.getItem('unispace_fp_roster_full') || 'null'); } catch(e) {}
+  var baseList;
+  if (gasList && gasList.length) {
+    baseList = gasList.map(function(f){
+      var roleMap = { admin:'대표', manager:'지점장', fp:'FP' };
+      var role = roleMap[f.level] || 'FP';
+      var br = f.branch;
+      if (br === '알파') br = '알파지점';
+      else if (br === '브라보') br = '브라보지점';
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false };
+    });
+  } else {
+    baseList = FP_LIST;
+  }
   var overrides = {};
   try { overrides = JSON.parse(localStorage.getItem('unispace_fp_overrides') || '{}'); } catch(e) {}
-  var list = FP_LIST.map(function(fp) {
+  var list = baseList.map(function(fp) {
     var ov = overrides[fp.id] || {};
     return Object.assign({}, fp, {
       pw:     ov.pw     !== undefined ? ov.pw     : fp.pw,
@@ -2604,6 +2620,17 @@ function getMergedFpList() {
     localStorage.setItem('unispace_fp_roster', JSON.stringify(roster));
   } catch(e) {}
   return list;
+}
+
+// GAS에서 전체 명단 로드 -> localStorage 저장 (명단 단일 기준)
+function loadAllFpsFromGas(cb){
+  var url = UNISPACE_GAS_URL + '?action=getAllFps';
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.list){
+      try { localStorage.setItem('unispace_fp_roster_full', JSON.stringify(res.list)); } catch(e) {}
+    }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
 }
 function saveFpOverride(id, key, val) {
   var overrides = {};
@@ -2920,6 +2947,11 @@ function showDashboard() {
   // 더미 스탯
   setTimeout(function() {
     renderBojangCard();
+
+    // GAS에서 전체 명단 로드 (명단 단일 기준) - 받으면 명단 의존 카드 갱신
+    loadAllFpsFromGas(function(){
+      if(typeof renderTop10==='function') renderTop10();
+    });
 
     // 업적을 GAS에서 로드 후 카드 갱신
     loadPerfFromGas(function(){
