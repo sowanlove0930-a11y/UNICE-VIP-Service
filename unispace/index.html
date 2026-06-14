@@ -2381,7 +2381,6 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <button type="button" onclick="event.stopPropagation();renderAttToday()" style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer">🔄 새로고침</button>
-          <div class="att-today-gas-badge">⚡ GAS 연동 후 실데이터 연결 예정</div>
           <span class="accordion-chevron" id="chev3">▼</span>
         </div>
       </div>
@@ -4764,35 +4763,41 @@ function renderAttToday() {
   document.getElementById('attTodayDate').textContent =
     (n.getMonth()+1) + '월 ' + n.getDate() + '일 (' + days[n.getDay()] + ')';
 
-  var db={}, prDb={};
-  try { db   = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
-  try { prDb = JSON.parse(localStorage.getItem('unispace_prereport')  || '{}'); } catch(e) {}
-  var todayDb = db[today] || {};
-  var todayPr = prDb[today] || {};
-
-  var DUMMY_FPS = [
-    {id:'H2502969',name:'전소영',branch:'알파'},
-    {id:'H2502965',name:'이수아',branch:'브라보'},
-    {id:'H2502956',name:'강민경',branch:'알파'},
-    {id:'H2503600',name:'강아름',branch:'브라보'},
-    {id:'H2502976',name:'강현주',branch:'알파'},
-    {id:'H2502980',name:'김려원',branch:'알파'},
-    {id:'H2502982',name:'김진영',branch:'브라보'},
-    {id:'H2502984',name:'문희영',branch:'알파'},
-    {id:'H2502959',name:'박경화',branch:'알파'},
-    {id:'H2502985',name:'박혜윤',branch:'브라보'},
-  ];
-
-  if (currentUser && !_isCheckinExempt(currentUser)) {
-    var already = DUMMY_FPS.some(function(f){ return f.id === currentUser.id; });
-    if (!already) {
-      var br = currentUser.branch.replace('지점','');
-      DUMMY_FPS.unshift({id:currentUser.id, name:currentUser.name, branch:br});
+  // GAS에서 오늘 출결 + 전체 명단 로드 후 집계
+  var ym = today.slice(0,7);
+  var attUrl = UNISPACE_GAS_URL + '?action=getAttendance&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym);
+  var rosterUrl = UNISPACE_GAS_URL + '?action=getRoster&fp=' + encodeURIComponent(currentUser.id);
+  Promise.all([
+    fetch(attUrl).then(function(r){return r.json();}).catch(function(){return null;}),
+    fetch(rosterUrl).then(function(r){return r.json();}).catch(function(){return null;})
+  ]).then(function(results){
+    var attRes = results[0], rosRes = results[1];
+    var todayDb = (attRes && attRes.ok && attRes.attendance && attRes.attendance[today]) || {};
+    var todayPr = (attRes && attRes.ok && attRes.prereport && attRes.prereport[today]) || {};
+    // 로컬 캐시에도 반영
+    if(attRes && attRes.ok){
+      try {
+        var adb = JSON.parse(localStorage.getItem('unispace_attendance')||'{}');
+        if(attRes.attendance) localStorage.setItem('unispace_attendance', JSON.stringify(attRes.attendance));
+        if(attRes.prereport) localStorage.setItem('unispace_prereport', JSON.stringify(attRes.prereport));
+      } catch(e) {}
     }
-  }
+    // 명단: 체크인 대상 FP만 (대표/지점장/교육 제외)
+    var roster = (rosRes && rosRes.ok && rosRes.list) ? rosRes.list : [];
+    var FPS = [];
+    roster.forEach(function(f){
+      if(f.level==='admin'||f.level==='manager') return;
+      if((f.branch||'').indexOf('교육')>=0) return;
+      if(!f.active) return;
+      FPS.push({ id:f.id, name:f.name, branch:(f.branch||'').replace('지점','') });
+    });
+    _renderAttTodayCards(FPS, todayDb, todayPr);
+  });
+}
 
+function _renderAttTodayCards(FPS, todayDb, todayPr) {
   var lateArr=[], absentArr=[], normalArr=[], prereportArr=[], approvedArr=[];
-  DUMMY_FPS.forEach(function(fp) {
+  FPS.forEach(function(fp) {
     var attRec = todayDb[fp.id];
     var prRec  = todayPr[fp.id];
     var proofDone = prRec && prRec.proof;
