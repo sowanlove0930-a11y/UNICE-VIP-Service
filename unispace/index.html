@@ -2206,11 +2206,9 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
       <div class="stat-unit" id="st3-sub">알파 — · 브라보 —</div>
     </div>
     <div class="stat s-green" id="stat3-fp" style="display:none">
-      <div class="stat-lbl">이번 달 미출석</div>
-      <div class="stat-val-sm" id="st3-fp">
-        <span class="att-ok">증빙 <strong id="att-ok-val">0</strong>일</span>
-        <span class="att-ng">미증빙 <strong id="att-ng-val">0</strong>일</span>
-      </div>
+      <div class="stat-lbl">이번달 출결현황</div>
+      <div class="stat-val" id="st3-fp-total">—</div>
+      <div class="stat-unit" id="st3-fp-sub">지각 0 · 미출석 0</div>
     </div>
 
     <!-- 4번: 리크루팅 (대표/지점장) / 오늘 챙길 고객 (FP) -->
@@ -2922,6 +2920,19 @@ function showDashboard() {
       renderAdminAttStat();
 
     } else {
+      // 1번 (FP): 본인 보장월초/건수 + 속한 지점 합계
+      var myPerfUrl = UNISPACE_GAS_URL + '?action=getMyPerfSummary&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(getCurrentYM());
+      fetch(myPerfUrl).then(function(r){return r.json();}).then(function(res){
+        if(res && res.ok){
+          var e1 = document.getElementById('st1');
+          if(e1) e1.textContent = (res.myAmt||0).toLocaleString() + '만 / ' + (res.myCnt||0) + '건';
+          var er = document.getElementById('st1-rate');
+          if(er) er.textContent = '';
+          var eu = document.getElementById('st1-unit');
+          if(eu) eu.innerHTML = '<span style="color:var(--gold2);font-weight:700">' + (res.branch||'우리지점') + '</span> 보장월초 ' + (res.branchAmt||0).toLocaleString() + '만 (' + (res.branchCnt||0) + '건)';
+        }
+      }).catch(function(){});
+
       // 2번 (FP): 내 고객수 (사번 기준, GAS 캐시)
       var DB2 = [];
       try { DB2 = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e) {}
@@ -2931,12 +2942,27 @@ function showDashboard() {
       var st2 = document.getElementById('st2');
       if(st2) st2.textContent = myCnt;
 
-      // 3번 (FP): 내 출결 (실데이터, 아직 없으면 0)
-      var ok = document.getElementById('att-ok-val');
-      var ng = document.getElementById('att-ng-val');
-      var _myAtt = _calcMyAtt(currentUser.id);
-      if(ok) ok.textContent = _myAtt.ok;
-      if(ng) ng.textContent = _myAtt.ng;
+      // 3번 (FP): 이번달 출결현황 (정상출근 일수 + 지각/미출석)
+      var fpAttUrl = UNISPACE_GAS_URL + '?action=getAttendance&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(getCurrentYM());
+      fetch(fpAttUrl).then(function(r){return r.json();}).then(function(res){
+        if(res && res.ok){
+          try {
+            if(res.attendance) localStorage.setItem('unispace_attendance', JSON.stringify(res.attendance));
+            if(res.prereport) localStorage.setItem('unispace_prereport', JSON.stringify(res.prereport));
+          } catch(e) {}
+        }
+        var _myAtt = _calcMyAtt(currentUser.id);
+        var t3 = document.getElementById('st3-fp-total');
+        var s3 = document.getElementById('st3-fp-sub');
+        if(t3) t3.textContent = _myAtt.normal + '일';
+        if(s3) s3.textContent = '지각 ' + _myAtt.late + ' · 미출석 ' + _myAtt.absent;
+      }).catch(function(){
+        var _myAtt = _calcMyAtt(currentUser.id);
+        var t3 = document.getElementById('st3-fp-total');
+        var s3 = document.getElementById('st3-fp-sub');
+        if(t3) t3.textContent = _myAtt.normal + '일';
+        if(s3) s3.textContent = '지각 ' + _myAtt.late + ' · 미출석 ' + _myAtt.absent;
+      });
     }
 
     // 4번: 오늘 챙길 고객 — localStorage 실계산
@@ -2945,20 +2971,28 @@ function showDashboard() {
   }, 300);
 }
 
-// FP 본인 이번 달 출석 증빙/미증빙 일수 (실데이터, 없으면 0)
+// FP 본인 이번 달 출결 집계 (정상출근/지각/미출석)
 function _calcMyAtt(fpId) {
-  var res = { ok: 0, ng: 0 };
+  var res = { normal: 0, late: 0, absent: 0 };
   if (!fpId) return res;
-  var attDb = {};
-  try { attDb = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) { return res; }
+  var attDb = {}, prDb = {};
+  try { attDb = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
+  try { prDb  = JSON.parse(localStorage.getItem('unispace_prereport')  || '{}'); } catch(e) {}
   var now = new Date();
   var ym = now.getFullYear() + '-' + (now.getMonth()+1 < 10 ? '0' : '') + (now.getMonth()+1);
   Object.keys(attDb).forEach(function(date){
     if (date.indexOf(ym) !== 0) return;
     var rec = attDb[date][fpId];
     if (!rec) return;
-    if (rec.status === '미출결' || rec.status === '결근') res.ng++;
-    else res.ok++;
+    if (rec.status === '지각') res.late++;
+    else res.normal++;
+  });
+  // 미출석: 사전보고에 미출석예정으로 보고했거나, 출결 없이 미출결 처리된 날
+  Object.keys(prDb).forEach(function(date){
+    if (date.indexOf(ym) !== 0) return;
+    var pr = prDb[date] && prDb[date][fpId];
+    if (!pr) return;
+    if ((pr.type||'').indexOf('미출') >= 0) res.absent++;
   });
   return res;
 }
