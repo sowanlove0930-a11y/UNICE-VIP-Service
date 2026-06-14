@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>불러오기 시연 - 활동현황 미팅 심기</title>
+<style>
+  body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#FBF9F4;color:#1A2744;max-width:560px;margin:0 auto;padding:24px}
+  h2{font-size:18px;margin:0 0 6px}
+  p{font-size:13px;color:#5b6472;line-height:1.6}
+  .card{background:#fff;border:1px solid #ece6da;border-radius:12px;padding:16px;margin:14px 0}
+  .btn{display:block;width:100%;font-size:14px;font-weight:700;padding:13px;border-radius:11px;border:none;cursor:pointer;font-family:inherit;margin-top:8px}
+  .b-navy{background:#1A2744;color:#fff}
+  .b-gold{background:#B8860B;color:#fff}
+  .b-ghost{background:#fff;border:1px solid #d8d2c4;color:#5b6472}
+  .row{font-size:13px;padding:8px 0;border-bottom:1px solid #f0ece2}
+  .row:last-child{border-bottom:none}
+  .tag{font-size:11px;color:#B8860B;font-weight:700}
+  code{background:#f3efe6;padding:1px 5px;border-radius:4px;font-size:12px}
+  .ok{color:#1F9268;font-weight:700}
+</style>
+</head>
+<body>
+<h2>📥 불러오기 시연 도구</h2>
+<p>활동계획수립의 "이번 주 예정 미팅 불러오기"를 테스트하기 위한 도구입니다.
+아래 버튼을 누르면 <b>이번 주(월~일)</b> 날짜로 활동현황(<code>unispace_activities</code>)에 미팅 몇 건을 심습니다.
+그 후 활동계획수립을 열면 불러오기 버튼이 나타납니다.</p>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:700;margin-bottom:4px">현재 로그인 FP</div>
+  <div id="who" style="font-size:13px;color:#5b6472">확인중...</div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">심을 미팅 (이번 주)</div>
+  <div id="preview"></div>
+</div>
+
+<button class="btn b-navy" id="seedBtn">✅ 활동현황에 미팅 3건 심기</button>
+<button class="btn b-ghost" id="goBtn">활동계획수립 열기 →</button>
+<button class="btn b-ghost" id="clearBtn" style="margin-top:14px">🗑 이번 주 심은 미팅 지우기</button>
+
+<div id="result" style="font-size:13px;margin-top:14px"></div>
+
+<script>
+function pad2(n){ return ('0'+n).slice(-2); }
+function ymd(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function getUser(){
+  var u={ id:'ktk01', name:'김태규', role:'대표', branch:'유니스지사' };
+  try{ var s=localStorage.getItem('unispace_user'); if(s) u=JSON.parse(s); }catch(e){}
+  return u;
+}
+function weekMon(){
+  var now=new Date(); now.setHours(0,0,0,0);
+  var dow=now.getDay();
+  var mon=new Date(now); mon.setDate(now.getDate()-(dow===0?6:dow-1));
+  return mon;
+}
+var user=getUser();
+document.getElementById('who').innerHTML='<b>'+user.name+'</b> ('+user.role+' · '+user.branch+') · id: <code>'+user.id+'</code>';
+
+var mon=weekMon();
+function dplus(n){ var d=new Date(mon); d.setDate(mon.getDate()+n); return d; }
+// 이번 주 화/수/목에 미팅
+var seeds=[
+  { off:1, time:'14:00', customerName:'시연고객A', type:'2차 상담', place:'스타벅스 강남점', planTags:['PT'], planProducts:[{company:'한화생명',amount:'120000'}], note:'PT 진행 예정' },
+  { off:2, time:'10:30', customerName:'시연고객B', type:'1차 상담', place:'고객 자택', planTags:['친숙','케어핏'], planProducts:[], note:'첫 미팅' },
+  { off:3, time:'16:00', customerName:'시연고객C', type:'3차 상담', place:'카페', planTags:['청약'], planProducts:[{company:'메리츠',amount:'180000'}], note:'청약 예정' }
+];
+var pv='';
+seeds.forEach(function(s){ var d=dplus(s.off); pv+='<div class="row">'+ymd(d)+' '+s.time+' · <b>'+s.customerName+'</b> · '+s.type+' <span class="tag">'+s.planTags.join('/')+'</span></div>'; });
+document.getElementById('preview').innerHTML=pv;
+
+document.getElementById('seedBtn').addEventListener('click', function(){
+  var db={}; try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  var n=0;
+  seeds.forEach(function(s){
+    var d=dplus(s.off);
+    var id='demo_'+user.id+'_'+ymd(d)+'_'+s.customerName;
+    db[id]={
+      id:id, fpId:user.id, fpName:user.name, branch:user.branch,
+      date:ymd(d), time:s.time, place:s.place, placeAddr:s.place,
+      customerName:s.customerName, type:s.type, status:'예정',
+      planTags:s.planTags, planProducts:s.planProducts, note:s.note,
+      createdAt:new Date().toISOString()
+      // planKey 없음 = 활동현황에서 직접 잡은 미팅으로 인식됨
+    };
+    n++;
+  });
+  localStorage.setItem('unispace_activities', JSON.stringify(db));
+  document.getElementById('result').innerHTML='<span class="ok">✅ '+n+'건 심었습니다. 이제 활동계획수립을 열어 "이번 주 예정 미팅 불러오기"를 확인하세요.</span>';
+});
+
+document.getElementById('clearBtn').addEventListener('click', function(){
+  var db={}; try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  var removed=0;
+  Object.keys(db).forEach(function(k){ if(k.indexOf('demo_')===0){ delete db[k]; removed++; } });
+  localStorage.setItem('unispace_activities', JSON.stringify(db));
+  document.getElementById('result').innerHTML='🗑 시연용 미팅 '+removed+'건 삭제했습니다.';
+});
+
+document.getElementById('goBtn').addEventListener('click', function(){ location.href='activity-plan.html'; });
+</script>
+</body>
+</html>
