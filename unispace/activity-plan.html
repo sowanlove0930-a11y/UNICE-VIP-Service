@@ -374,6 +374,21 @@ input:focus,select,textarea:focus{border-color:var(--gold)}
 var PLAN_KEY='unispace_plan';
 var PERF_LOG_KEY='unispace_perf_log';
 var CUST_KEY='unispace_customers';
+
+// GAS 연동
+var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
+function planGasGet(params){
+  var qs=[];
+  for(var k in params){ if(params.hasOwnProperty(k)) qs.push(k+'='+encodeURIComponent(params[k])); }
+  return fetch(UNISPACE_GAS_URL+'?'+qs.join('&')).then(function(r){ return r.json(); });
+}
+function planGasPost(body){
+  return fetch(UNISPACE_GAS_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  }).then(function(r){ return r.json(); });
+}
 var ATTR_OPTS=['히든','DB','지인','소개'];
 var CHASU_OPTS=['1차','2차','3차','N차'];
 var TAG_OPTS=['PT','청약','친숙','소개','관리','리쿨','패널','케어핏','노파클','U고비'];
@@ -1014,13 +1029,32 @@ function collect(){
 
 function loadExisting(){
   var wi=getWeekInfo();
+  // GAS에서 이번 주 본인 계획 먼저 로드 -> localStorage 반영 후 화면 채움
+  planGasGet({ action:'getPlans', fp:currentUser.id, weekKey:wi.key }).then(function(res){
+    if(res && res.ok && res.plans){
+      var db=getPlanDB();
+      if(!db[wi.key]) db[wi.key]={};
+      res.plans.forEach(function(pl){
+        db[wi.key][pl.fpId]={
+          fpId:pl.fpId, name:pl.name, branch:pl.branch,
+          monthGoal:pl.monthGoal, weekGoal:pl.weekGoal, request:pl.request,
+          customers:pl.customers, updatedAt:pl.updatedAt, submittedAt:pl.submittedAt||null
+        };
+      });
+      savePlanDB(db);
+    }
+    _fillExistingFromDb();
+  }).catch(function(){ _fillExistingFromDb(); });
+}
+function _fillExistingFromDb(){
+  var wi=getWeekInfo();
   var db=getPlanDB();
   var rec = db[wi.key] && db[wi.key][currentUser.id];
   if(rec){
     if(rec.monthGoal){ document.getElementById('mGoalLife').value=fmtComma(rec.monthGoal.life); document.getElementById('mGoalNon').value=fmtComma(rec.monthGoal.non); }
     if(rec.weekGoal){ document.getElementById('wGoalLife').value=fmtComma(rec.weekGoal.life); document.getElementById('wGoalNon').value=fmtComma(rec.weekGoal.non); }
     if(rec.request){ var wr=document.getElementById('weekRequest'); if(wr) wr.value=rec.request; }
-    if(rec.customers && rec.customers.length) custs=rec.customers.slice();
+    if(rec.customers && rec.customers.length){ custs=rec.customers.slice(); if(typeof renderCusts==='function') renderCusts(); }
     if(rec.submittedAt){
       document.getElementById('submittedBadge').innerHTML='<span class="submitted-badge">✓ 제출완료</span>';
     }
@@ -1033,13 +1067,20 @@ function saveDraft(submitted){
   if(!db[wi.key]) db[wi.key]={};
   var data=collect();
   var prev=db[wi.key][currentUser.id]||{};
+  var submittedAt = submitted ? new Date().toISOString() : (prev.submittedAt||null);
   db[wi.key][currentUser.id]={
     fpId:currentUser.id, name:currentUser.name, branch:currentUser.branch,
     monthGoal:data.monthGoal, weekGoal:data.weekGoal, request:data.request, customers:data.customers,
     updatedAt:new Date().toISOString(),
-    submittedAt: submitted ? new Date().toISOString() : (prev.submittedAt||null)
+    submittedAt: submittedAt
   };
   savePlanDB(db);
+  // GAS에 저장 (POST)
+  planGasPost({ action:'savePlan', data:{
+    weekKey:wi.key, fpCode:currentUser.id, fpName:currentUser.name, branch:currentUser.branch,
+    monthGoal:data.monthGoal, weekGoal:data.weekGoal, request:data.request,
+    customers:data.customers, submittedAt:submittedAt||''
+  }}).catch(function(){});
 }
 
 function _buildActFromCust(c, idx, planKey){
@@ -1466,6 +1507,22 @@ function showStatusView(){
   var dl=wi.deadline;
   document.getElementById('stWarn').textContent='제출마감 '+_pad2(dl.getMonth()+1)+'/'+_pad2(dl.getDate())+'(월) 12:00';
   renderStatus();
+  // GAS에서 이번 주 전체 계획 로드 후 다시 렌더 (관리자 권한대로)
+  planGasGet({ action:'getPlans', fp:currentUser.id, weekKey:wi.key }).then(function(res){
+    if(res && res.ok && res.plans){
+      var db=getPlanDB();
+      if(!db[wi.key]) db[wi.key]={};
+      res.plans.forEach(function(pl){
+        db[wi.key][pl.fpId]={
+          fpId:pl.fpId, name:pl.name, branch:pl.branch,
+          monthGoal:pl.monthGoal, weekGoal:pl.weekGoal, request:pl.request,
+          customers:pl.customers, updatedAt:pl.updatedAt, submittedAt:pl.submittedAt||null
+        };
+      });
+      savePlanDB(db);
+      renderStatus();
+    }
+  }).catch(function(){});
 }
 function _weekKeyLabel(key){
   var m=key.match(/^(\d{4})-(\d{2})-W(\d+)$/);
