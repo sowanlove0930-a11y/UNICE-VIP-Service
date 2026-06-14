@@ -561,9 +561,12 @@ window.addEventListener('DOMContentLoaded',function(){
 
   // GAS에서 이번 달 출결/사전보고 로드 후 재렌더 (캐시 갱신)
   loadAttFromGas().then(function(ok){
-    if(ok){
-      renderCheckinTab();
-      renderPrereportTab();
+    // 데이터 도착 후 화면 무조건 갱신 (체크인 상태 반영)
+    renderCheckinTab();
+    renderPrereportTab();
+    if(typeof renderStatus==='function'){
+      var sp=document.getElementById('pageStatus');
+      if(sp && sp.classList.contains('active')) renderStatus();
     }
   });
 
@@ -717,19 +720,22 @@ function doCheckin(){
       showToast('오늘 이미 체크인하셨습니다');
       return;
     }
-    // 정상 체크인
-    if(!db[today]) db[today]={};
-    db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
-    saveAttDB(db);
-    renderCheckinTab();
-    showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
+    if(res && res.ok===true){
+      // 서버 저장 성공 -> 로컬 동기화 + 완료
+      if(!db[today]) db[today]={};
+      db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
+      saveAttDB(db);
+      renderCheckinTab();
+      showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
+      return;
+    }
+    // 그 외 응답 -> 실패로 간주
+    if(btn){ btn.disabled=false; btn.textContent='📍 출근 체크인'; btn.className='checkin-btn'; }
+    showToast('⚠️ 저장에 실패했습니다. 잠시 후 다시 시도해 주세요');
   }).catch(function(){
-    // 네트워크 실패 시: 로컬만 저장 (오프라인 대비), 다음 로드 때 동기화
-    if(!db[today]) db[today]={};
-    db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
-    saveAttDB(db);
-    renderCheckinTab();
-    showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
+    // 네트워크/요청 실패 -> 로컬 저장 안 함, 실패 안내 (시트와 불일치 방지)
+    if(btn){ btn.disabled=false; btn.textContent='📍 출근 체크인'; btn.className='checkin-btn'; }
+    showToast('⚠️ 네트워크 오류로 체크인이 저장되지 않았습니다. 다시 시도해 주세요');
   });
 }
 
