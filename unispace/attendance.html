@@ -474,15 +474,9 @@ function attGasGet(params){
   var qs = Object.keys(params).map(function(k){
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
   }).join('&');
-  var fullUrl = ATT_GAS_URL + '?' + qs;
-  console.log('[attGasGet] 요청:', fullUrl);
-  return fetch(fullUrl).then(function(r){
-    console.log('[attGasGet] 응답 status:', r.status, 'ok:', r.ok, 'type:', r.type);
-    return r.text();
-  }).then(function(txt){
-    console.log('[attGasGet] 응답 본문:', txt.slice(0, 200));
+  return fetch(ATT_GAS_URL + '?' + qs).then(function(r){ return r.text(); }).then(function(txt){
     try { return JSON.parse(txt); }
-    catch(e){ console.log('[attGasGet] JSON 파싱 실패:', e); return { ok:false, msg:'파싱실패' }; }
+    catch(e){ return { ok:false, msg:'파싱실패' }; }
   });
 }
 // 이번 달 출결+사전보고 GAS에서 로드 -> 로컬 캐시
@@ -1193,6 +1187,7 @@ function deletePrereport(date){
   if(db[date]&&db[date][currentUser.id]){
     delete db[date][currentUser.id];
     savePrDB(db);
+    attGasGet({ action:'deletePrereport', date:date, fp:currentUser.id }).catch(function(){});
     showToast('삭제되었습니다');
     renderPrereportTab();
   }
