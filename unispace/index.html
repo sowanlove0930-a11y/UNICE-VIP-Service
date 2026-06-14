@@ -603,21 +603,23 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 .perf-modal-overlay {
   position: fixed; inset: 0; z-index: 400;
   background: rgba(8,14,28,0.8); backdrop-filter: blur(8px);
-  display: flex; align-items: flex-end; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   opacity: 0; pointer-events: none;
   transition: opacity 0.3s ease;
+  padding: 20px; box-sizing: border-box; overflow-y: auto;
 }
 .perf-modal-overlay.open { opacity: 1; pointer-events: all; }
 
 .perf-modal {
   width: 100%; max-width: 480px;
   background: var(--bg2); border: 1px solid var(--border2);
-  border-radius: 24px 24px 0 0;
-  padding: 8px 24px 40px;
-  transform: translateY(100%);
-  transition: transform 0.35s cubic-bezier(0.34,1.2,0.64,1);
+  border-radius: 24px;
+  padding: 8px 24px 32px;
+  max-height: 90vh; overflow-y: auto;
+  transform: scale(0.94); opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.34,1.2,0.64,1), opacity 0.25s ease;
 }
-.perf-modal-overlay.open .perf-modal { transform: translateY(0); }
+.perf-modal-overlay.open .perf-modal { transform: scale(1); opacity: 1; }
 
 .perf-modal-handle {
   width: 40px; height: 4px; background: var(--border2);
@@ -642,6 +644,42 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 .perf-input::placeholder { color: var(--text3); }
 
 .perf-modal-actions { display: flex; gap: 10px; }
+
+.perf-date-wrap { position: relative; }
+.perf-date-display { width: 100%; box-sizing: border-box; padding-right: 40px; }
+.perf-date-ico { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 15px; }
+.perf-cal {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  width: 280px; background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 14px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+.perf-cal.open { display: block; }
+.perf-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.perf-cal-title { font-size: 14px; font-weight: 800; color: var(--text); }
+.perf-cal-nav {
+  width: 28px; height: 28px; border: 1px solid var(--border2); border-radius: 8px;
+  background: var(--surface); color: var(--text); cursor: pointer; font-size: 15px; line-height: 1;
+}
+.perf-cal-nav:hover { background: var(--gold); color: #fff; }
+.perf-cal-dow { display: grid; grid-template-columns: repeat(7,1fr); margin-bottom: 6px; }
+.perf-cal-dow span { text-align: center; font-size: 11px; font-weight: 700; color: var(--text3); padding: 4px 0; }
+.perf-cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+.perf-cal-cell {
+  text-align: center; padding: 7px 0; font-size: 13px; color: var(--text);
+  border-radius: 8px; cursor: pointer; transition: background 0.15s;
+}
+.perf-cal-cell:hover { background: var(--surface); }
+.perf-cal-cell.other { color: var(--text3); opacity: 0.5; }
+.perf-cal-cell.sun { color: #F87171; }
+.perf-cal-cell.sat { color: #60A5FA; }
+.perf-cal-cell.selected { background: var(--gold); color: #fff; font-weight: 800; }
+.perf-cal-cell.today { border: 1px solid var(--gold); }
+.perf-cal-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+.perf-cal-today {
+  font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 8px;
+  background: rgba(201,168,76,.14); color: var(--gold2); border: 1px solid rgba(201,168,76,.3); cursor: pointer;
+}
+
 .perf-cancel {
   flex: 1; padding: 14px; border: 1px solid var(--border2);
   border-radius: var(--r-md); background: var(--surface);
@@ -3092,6 +3130,10 @@ document.addEventListener('click', function(e) {
   var chip = document.getElementById('userChip');
   var menu = document.getElementById('userMenu');
   if (chip && menu && !chip.contains(e.target)) menu.style.display = 'none';
+  // 계약일 커스텀 달력 외부 클릭 닫기
+  var pcal = document.getElementById('perfCal');
+  var pwrap = e.target.closest ? e.target.closest('.perf-date-wrap') : null;
+  if (pcal && pcal.classList.contains('open') && !pwrap) pcal.classList.remove('open');
 });
 
 // ── 공용 Confirm 모달 ───────────────────────────────
@@ -3555,10 +3597,98 @@ function openPerfModal() {
   // FP 본인이면 자동 선택
   if(!isAdmin && list.length===1){ _perfPickFp(list[0].id, list[0].name, list[0].branch); }
 
-  document.getElementById('perfDate').value = getTodayStr();
+  _perfSetDate(getTodayStr());
+  var pc=document.getElementById('perfCal'); if(pc) pc.classList.remove('open');
   _perfProducts = [{co:'', cat:'', amount:''}];
   renderPerfProds();
   document.getElementById('perfModalOverlay').classList.add('open');
+}
+
+// ── 커스텀 계약일 달력 ─────────────────────────────
+var _perfCalRef = null; // 표시 중인 달 (1일 기준)
+function _perfSetDate(ymd){
+  var hid=document.getElementById('perfDate');
+  var disp=document.getElementById('perfDateDisplay');
+  if(hid) hid.value=ymd||'';
+  if(disp){
+    if(ymd){
+      var p=ymd.split('-');
+      var dObj=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+      var days=['일','월','화','수','목','금','토'];
+      disp.value = p[0]+'년 '+parseInt(p[1])+'월 '+parseInt(p[2])+'일 ('+days[dObj.getDay()]+')';
+    } else { disp.value=''; }
+  }
+}
+function openPerfCal(){
+  var cal=document.getElementById('perfCal');
+  if(!cal) return;
+  if(cal.classList.contains('open')){ cal.classList.remove('open'); return; }
+  var cur=document.getElementById('perfDate').value || getTodayStr();
+  var p=cur.split('-');
+  _perfCalRef=new Date(parseInt(p[0]),parseInt(p[1])-1,1);
+  _renderPerfCal();
+  cal.classList.add('open');
+}
+function perfCalMove(delta){
+  if(!_perfCalRef) _perfCalRef=new Date();
+  _perfCalRef.setMonth(_perfCalRef.getMonth()+delta);
+  _renderPerfCal();
+}
+function perfCalToday(){
+  var t=new Date();
+  _perfSetDate(getTodayStr());
+  _perfCalRef=new Date(t.getFullYear(),t.getMonth(),1);
+  _renderPerfCal();
+  document.getElementById('perfCal').classList.remove('open');
+}
+function _renderPerfCal(){
+  if(!_perfCalRef) _perfCalRef=new Date();
+  var y=_perfCalRef.getFullYear(), m=_perfCalRef.getMonth();
+  var title=document.getElementById('perfCalTitle');
+  if(title) title.textContent=y+'년 '+(m+1)+'월';
+  var grid=document.getElementById('perfCalGrid');
+  if(!grid) return;
+  var first=new Date(y,m,1);
+  var startDow=first.getDay();
+  var daysInMonth=new Date(y,m+1,0).getDate();
+  var prevDays=new Date(y,m,0).getDate();
+  var selected=document.getElementById('perfDate').value;
+  var todayStr=getTodayStr();
+  var html='';
+  function cell(dnum, ymd, cls){
+    return '<div class="perf-cal-cell '+cls+'" onclick="_perfPickDate(\''+ymd+'\')">'+dnum+'</div>';
+  }
+  // 이전 달
+  for(var i=startDow-1;i>=0;i--){
+    var dn=prevDays-i;
+    var pm=m===0?12:m, py=m===0?y-1:y;
+    var ymd=py+'-'+('0'+pm).slice(-2)+'-'+('0'+dn).slice(-2);
+    html+=cell(dn, ymd, 'other');
+  }
+  // 이번 달
+  for(var d=1;d<=daysInMonth;d++){
+    var ymd2=y+'-'+('0'+(m+1)).slice(-2)+'-'+('0'+d).slice(-2);
+    var dow=new Date(y,m,d).getDay();
+    var cls='';
+    if(dow===0) cls+=' sun'; else if(dow===6) cls+=' sat';
+    if(ymd2===selected) cls+=' selected';
+    if(ymd2===todayStr) cls+=' today';
+    html+=cell(d, ymd2, cls);
+  }
+  // 다음 달 채우기
+  var total=startDow+daysInMonth;
+  var rest=(7-(total%7))%7;
+  for(var n=1;n<=rest;n++){
+    var nm=m===11?1:m+2, ny=m===11?y+1:y;
+    var ymd3=ny+'-'+('0'+nm).slice(-2)+'-'+('0'+n).slice(-2);
+    html+=cell(n, ymd3, 'other');
+  }
+  grid.innerHTML=html;
+}
+function _perfPickDate(ymd){
+  _perfSetDate(ymd);
+  _renderPerfCal();
+  document.getElementById('perfCal').classList.remove('open');
 }
 function onPerfFpSearch(){
   var q=(document.getElementById('perfFpSearch').value||'').trim();
@@ -3732,11 +3862,23 @@ function confirmPerfInput() {
 // ── 업적 조회 ───────────────────────────────────────
 var _pvRange = 'today';
 var _pvDay = null; // Date (오늘 모드에서 날짜 이동)
+var _pvMonth = null; // Date (이번 달 모드에서 월 이동, 1일 기준)
+var _pvRangeStart = ''; // 기간 지정 시작
+var _pvRangeEnd = '';   // 기간 지정 종료
 var _pvBranch = 'all'; // all | al | br
 function openPerfView(){
   _pvRange = 'today';
   _pvBranch = 'all';
   _pvDay = new Date(); _pvDay.setHours(0,0,0,0);
+  // FP(비관리자)면 본인 업적만, 목표/카톡공유/지점필터 숨김
+  var isAdminPv = _isManagerUser(currentUser);
+  var gBtn=document.getElementById('pvGoalBtn');
+  var sBtn=document.getElementById('pvShareBtn');
+  var bfWrap=document.getElementById('pvBranchFilterWrap');
+  if(gBtn) gBtn.style.display = isAdminPv ? '' : 'none';
+  if(sBtn) sBtn.style.display = isAdminPv ? '' : 'none';
+  if(bfWrap) bfWrap.style.display = isAdminPv ? 'flex' : 'none';
+  if(!isAdminPv) _pvBranch = 'all'; // FP는 본인 것만 (renderPerfView에서 필터)
   ['pvSegToday','pvSegWeek','pvSegMonth'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.classList.toggle('on', id==='pvSegToday');
   });
@@ -3755,6 +3897,15 @@ function setPerfRange(r, el){
   document.querySelectorAll('.pv-seg').forEach(function(b){ b.classList.remove('on'); });
   if(el) el.classList.add('on');
   if(r==='today' && !_pvDay){ _pvDay=new Date(); _pvDay.setHours(0,0,0,0); }
+  if(r==='month' && !_pvMonth){ _pvMonth=new Date(); _pvMonth.setDate(1); _pvMonth.setHours(0,0,0,0); }
+  if(r==='range'){
+    var s=document.getElementById('pvRangeStart'), e=document.getElementById('pvRangeEnd');
+    var todayStr=_pvYmd(new Date());
+    if(s && !s.value) s.value=_pvRangeStart||todayStr;
+    if(e && !e.value) e.value=_pvRangeEnd||todayStr;
+    _pvRangeStart = s ? s.value : todayStr;
+    _pvRangeEnd = e ? e.value : todayStr;
+  }
   renderPerfView();
 }
 function setPerfBranch(b, el){
@@ -3768,10 +3919,36 @@ function movePerfDay(delta){
   _pvDay.setDate(_pvDay.getDate()+delta);
   renderPerfView();
 }
+function movePerfMonth(delta){
+  if(!_pvMonth){ _pvMonth=new Date(); _pvMonth.setDate(1); _pvMonth.setHours(0,0,0,0); }
+  _pvMonth.setMonth(_pvMonth.getMonth()+delta);
+  renderPerfView();
+}
+function onPvRangeChange(){
+  var s=document.getElementById('pvRangeStart'), e=document.getElementById('pvRangeEnd');
+  _pvRangeStart = s ? s.value : '';
+  _pvRangeEnd = e ? e.value : '';
+  if(_pvRangeStart && _pvRangeEnd && _pvRangeStart > _pvRangeEnd){
+    var tmp=_pvRangeStart; _pvRangeStart=_pvRangeEnd; _pvRangeEnd=tmp;
+    if(s) s.value=_pvRangeStart; if(e) e.value=_pvRangeEnd;
+  }
+  renderPerfView();
+}
 function _pvYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _pvSelYm(){
+  var now=new Date();
+  if(_pvRange==='month' && _pvMonth) return _pvMonth.getFullYear()+'-'+('0'+(_pvMonth.getMonth()+1)).slice(-2);
+  if(_pvRange==='range' && _pvRangeStart) return _pvRangeStart.slice(0,7);
+  if(_pvRange==='today' && _pvDay) return _pvDay.getFullYear()+'-'+('0'+(_pvDay.getMonth()+1)).slice(-2);
+  return now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
+}
 function _pvBranchKey(b){ if((b||'').indexOf('알파')>=0) return 'al'; if((b||'').indexOf('브라보')>=0) return 'br'; return 'etc'; }
 function renderPerfView(){
   var log = getPerfLog();
+  // FP(비관리자)는 본인 업적만
+  if(!_isManagerUser(currentUser)){
+    log = log.filter(function(r){ return r.fpId === currentUser.id; });
+  }
   var now = new Date(); now.setHours(0,0,0,0);
 
   // 기간 필터 범위
@@ -3785,8 +3962,13 @@ function renderPerfView(){
     var sun = new Date(mon); sun.setDate(mon.getDate()+6);
     var ms=_pvYmd(mon), ss=_pvYmd(sun);
     rangeRecs = log.filter(function(r){ return r.date>=ms && r.date<=ss; });
+  } else if(_pvRange==='range'){
+    if(_pvRangeStart && _pvRangeEnd){
+      rangeRecs = log.filter(function(r){ return (r.date||'')>=_pvRangeStart && (r.date||'')<=_pvRangeEnd; });
+    }
   } else {
-    var mp = now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
+    var mref = _pvMonth || now;
+    var mp = mref.getFullYear()+'-'+('0'+(mref.getMonth()+1)).slice(-2);
     rangeRecs = log.filter(function(r){ return (r.date||'').indexOf(mp)===0; });
   }
 
@@ -3799,30 +3981,66 @@ function renderPerfView(){
     if(bk==='al'){ al.amt+=t; al.cnt++; }
     else if(bk==='br'){ br.amt+=t; br.cnt++; }
   });
-  document.getElementById('pvTotAmt').textContent = Math.round(tot.amt/10000).toLocaleString()+'만';
-  document.getElementById('pvTotCnt').textContent = tot.cnt+'건';
-  document.getElementById('pvAlAmt').textContent = Math.round(al.amt/10000).toLocaleString()+'만';
-  document.getElementById('pvAlCnt').textContent = al.cnt+'건';
-  document.getElementById('pvBrAmt').textContent = Math.round(br.amt/10000).toLocaleString()+'만';
-  document.getElementById('pvBrCnt').textContent = br.cnt+'건';
 
-  // KPI 강조 (필터에 따라)
-  var kTot=document.getElementById('pvKpiTot'), kAl=document.getElementById('pvKpiAl'), kBr=document.getElementById('pvKpiBr');
-  [kTot,kAl,kBr].forEach(function(el){ if(el){ el.classList.remove('dim'); el.classList.remove('hi'); } });
-  if(_pvBranch==='al'){ if(kTot) kTot.classList.add('dim'); if(kBr) kBr.classList.add('dim'); if(kAl) kAl.classList.add('hi'); }
-  else if(_pvBranch==='br'){ if(kTot) kTot.classList.add('dim'); if(kAl) kAl.classList.add('dim'); if(kBr) kBr.classList.add('hi'); }
+  var _pvIsAdmin = _isManagerUser(currentUser);
+  if(!_pvIsAdmin){
+    // FP: 내 목표 / 보장월초 / 건수
+    var goalDB2 = getFpGoalDB()[_pvSelYm()] || {};
+    var myGoal = parseInt((goalDB2[currentUser.id]||{}).goal) || 0;
+    var lblT=document.getElementById('pvTotLbl'); if(lblT) lblT.textContent='내 목표';
+    var lblA=document.getElementById('pvAlLbl'); if(lblA) lblA.textContent='내 보장월초';
+    var lblB=document.getElementById('pvBrLbl'); if(lblB) lblB.textContent='내 건수';
+    document.getElementById('pvTotAmt').textContent = myGoal.toLocaleString()+'만';
+    document.getElementById('pvTotCnt').textContent = '목표';
+    document.getElementById('pvAlAmt').textContent = Math.round(tot.amt/10000).toLocaleString()+'만';
+    var rate = myGoal ? Math.round(tot.amt/10000/myGoal*100) : 0;
+    document.getElementById('pvAlCnt').textContent = '달성 '+rate+'%';
+    document.getElementById('pvBrAmt').textContent = tot.cnt+'건';
+    document.getElementById('pvBrCnt').textContent = '계약';
+    var kTot0=document.getElementById('pvKpiTot'), kAl0=document.getElementById('pvKpiAl'), kBr0=document.getElementById('pvKpiBr');
+    [kTot0,kAl0,kBr0].forEach(function(el){ if(el){ el.classList.remove('dim'); el.classList.remove('hi'); } });
+  } else {
+    var lblT2=document.getElementById('pvTotLbl'); if(lblT2) lblT2.textContent='합계';
+    var lblA2=document.getElementById('pvAlLbl'); if(lblA2) lblA2.textContent='알파지점';
+    var lblB2=document.getElementById('pvBrLbl'); if(lblB2) lblB2.textContent='브라보지점';
+    document.getElementById('pvTotAmt').textContent = Math.round(tot.amt/10000).toLocaleString()+'만';
+    document.getElementById('pvTotCnt').textContent = tot.cnt+'건';
+    document.getElementById('pvAlAmt').textContent = Math.round(al.amt/10000).toLocaleString()+'만';
+    document.getElementById('pvAlCnt').textContent = al.cnt+'건';
+    document.getElementById('pvBrAmt').textContent = Math.round(br.amt/10000).toLocaleString()+'만';
+    document.getElementById('pvBrCnt').textContent = br.cnt+'건';
 
-  // 날짜 이동 + 건별 리스트 (오늘 모드만 날짜 네비 표시)
+    // KPI 강조 (필터에 따라)
+    var kTot=document.getElementById('pvKpiTot'), kAl=document.getElementById('pvKpiAl'), kBr=document.getElementById('pvKpiBr');
+    [kTot,kAl,kBr].forEach(function(el){ if(el){ el.classList.remove('dim'); el.classList.remove('hi'); } });
+    if(_pvBranch==='al'){ if(kTot) kTot.classList.add('dim'); if(kBr) kBr.classList.add('dim'); if(kAl) kAl.classList.add('hi'); }
+    else if(_pvBranch==='br'){ if(kTot) kTot.classList.add('dim'); if(kAl) kAl.classList.add('dim'); if(kBr) kBr.classList.add('hi'); }
+  }
+
+  // 날짜/월/기간 네비 + 건별 리스트
   var dayNav = document.getElementById('pvDayNav');
+  var monthNav = document.getElementById('pvMonthNav');
+  var rangeNav = document.getElementById('pvRangeNav');
+  if(dayNav) dayNav.style.display='none';
+  if(monthNav) monthNav.style.display='none';
+  if(rangeNav) rangeNav.style.display='none';
   var listRecs;
   if(_pvRange==='today'){
-    if(dayNav) dayNav.style.display='';
+    if(dayNav) dayNav.style.display='flex';
     var d=_pvDay||now;
     var days=['일','월','화','수','목','금','토'];
     document.getElementById('pvDayLabel').textContent = d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 ('+days[d.getDay()]+')';
     listRecs = rangeRecs;
+  } else if(_pvRange==='month'){
+    if(monthNav) monthNav.style.display='flex';
+    var md=_pvMonth||now;
+    var ml=document.getElementById('pvMonthLabel');
+    if(ml) ml.textContent = md.getFullYear()+'년 '+(md.getMonth()+1)+'월';
+    listRecs = rangeRecs.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  } else if(_pvRange==='range'){
+    if(rangeNav) rangeNav.style.display='flex';
+    listRecs = rangeRecs.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   } else {
-    if(dayNav) dayNav.style.display='none';
     listRecs = rangeRecs.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   }
   // 지점 필터 적용
@@ -3851,7 +4069,7 @@ function renderPerfView(){
     var dateHead = (_pvRange!=='today') ? '<th>날짜</th>' : '';
     var delHead = canDel ? '<th></th>' : '';
     listEl.innerHTML = '<table class="pv-tbl"><thead><tr>'+dateHead+'<th>FP</th><th>상품</th><th style="text-align:right">금액</th>'+delHead+'</tr></thead><tbody>'+rows+'</tbody></table>'+
-      '<div class="pv-daysum"><span>'+(_pvRange==='today'?'이 날':_pvRange==='week'?'이번 주':'이번 달')+' 합계'+brLabel+'</span><span><b>'+fSum.toLocaleString()+'원</b> · '+fCnt+'건</span></div>';
+      '<div class="pv-daysum"><span>'+(_pvRange==='today'?'이 날':_pvRange==='week'?'이번 주':_pvRange==='range'?'기간':'이번 달')+' 합계'+brLabel+'</span><span><b>'+fSum.toLocaleString()+'원</b> · '+fCnt+'건</span></div>';
   }
 
   // 일자별 추이 (지점 필터 반영)
@@ -3896,7 +4114,10 @@ function deletePerfRec(id){
   });
 }
 function renderPerfTrend(log, now){
-  var y=now.getFullYear(), m=now.getMonth();
+  var refDate = now;
+  if(_pvRange==='month' && _pvMonth) refDate = _pvMonth;
+  else if(_pvRange==='range' && _pvRangeStart){ var rp=_pvRangeStart.split('-'); refDate=new Date(parseInt(rp[0]),parseInt(rp[1])-1,1); }
+  var y=refDate.getFullYear(), m=refDate.getMonth();
   var trendEl=document.getElementById('pvTrend');
   var rangeEl=document.getElementById('pvTrendRange');
   var titleEl=null; // 제목은 고정, 라벨만 변경
@@ -4004,6 +4225,8 @@ function _fpYm(){ var n=new Date(); return n.getFullYear()+'-'+('0'+(n.getMonth(
 
 var _fpRange='month';
 var _fpMonth=null; // Date (선택한 달, 1일 기준). null이면 이번 달
+var _fpRangeStart=''; // 기간 지정 시작일 (YYYY-MM-DD)
+var _fpRangeEnd='';   // 기간 지정 종료일
 var _fpSort='total'; // total | goal | rate | remain | life | non | cnt
 var _fpTab='all'; // all | al | br | mgr
 function setFpSort(key){
@@ -4027,12 +4250,36 @@ function closeFpPerf(){ document.getElementById('fpPerfOverlay').classList.remov
 function setFpRange(r, el){ _fpRange=r; document.querySelectorAll('#fpPerfOverlay .pv-seg').forEach(function(b){ b.classList.remove('on'); }); if(el) el.classList.add('on'); _updateFpMonthNav(); renderFpPerf(); }
 function setFpTab(t, el){ _fpTab=t; ['fpTabAll','fpTabAlpha','fpTabBravo','fpTabMgr'].forEach(function(id){ var e=document.getElementById(id); if(e) e.classList.remove('on'); }); if(el) el.classList.add('on'); renderFpPerf(); }
 function _fpMonthRef(){ var d=_fpMonth?new Date(_fpMonth):new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }
-function _fpSelYm(){ var d=_fpMonthRef(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); }
+function _fpSelYm(){
+  if(_fpRange==='range' && _fpRangeStart){ return _fpRangeStart.slice(0,7); }
+  var d=_fpMonthRef(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
+}
 function _updateFpMonthNav(){
   var nav=document.getElementById('fpMonthNav');
   if(nav) nav.style.display = (_fpRange==='month') ? 'flex' : 'none';
+  var rnav=document.getElementById('fpRangeNav');
+  if(rnav) rnav.style.display = (_fpRange==='range') ? 'flex' : 'none';
   var lbl=document.getElementById('fpMonthLabel');
   if(lbl){ var d=_fpMonthRef(); lbl.textContent = d.getFullYear()+'년 '+(d.getMonth()+1)+'월'; }
+  // range 모드 첫 진입 시 기본값(오늘~오늘)
+  if(_fpRange==='range'){
+    var s=document.getElementById('fpRangeStart'), e=document.getElementById('fpRangeEnd');
+    var todayStr = _pvYmd(new Date());
+    if(s && !s.value){ s.value = _fpRangeStart || todayStr; }
+    if(e && !e.value){ e.value = _fpRangeEnd || todayStr; }
+    _fpRangeStart = s ? s.value : todayStr;
+    _fpRangeEnd = e ? e.value : todayStr;
+  }
+}
+function onFpRangeChange(){
+  var s=document.getElementById('fpRangeStart'), e=document.getElementById('fpRangeEnd');
+  _fpRangeStart = s ? s.value : '';
+  _fpRangeEnd = e ? e.value : '';
+  if(_fpRangeStart && _fpRangeEnd && _fpRangeStart > _fpRangeEnd){
+    var tmp=_fpRangeStart; _fpRangeStart=_fpRangeEnd; _fpRangeEnd=tmp;
+    if(s) s.value=_fpRangeStart; if(e) e.value=_fpRangeEnd;
+  }
+  renderFpPerf();
 }
 function moveFpMonth(delta){
   var d=_fpMonthRef(); d.setMonth(d.getMonth()+delta); _fpMonth=d;
@@ -4052,6 +4299,9 @@ function _fpRangeRecs(){
     var sun=new Date(mon); sun.setDate(mon.getDate()+6);
     var ms=_pvYmd(mon), ss=_pvYmd(sun);
     return log.filter(function(r){ return r.date>=ms && r.date<=ss; });
+  } else if(_fpRange==='range'){
+    if(!_fpRangeStart || !_fpRangeEnd) return [];
+    return log.filter(function(r){ return (r.date||'')>=_fpRangeStart && (r.date||'')<=_fpRangeEnd; });
   }
   var d=_fpMonthRef();
   var mp=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
@@ -4336,6 +4586,7 @@ function _buildFpExcel(){
   var rangeLabel;
   if(_fpRange==='today') rangeLabel='오늘';
   else if(_fpRange==='week') rangeLabel='이번 주';
+  else if(_fpRange==='range') rangeLabel=(_fpRangeStart||'')+' ~ '+(_fpRangeEnd||'');
   else { var md=_fpMonthRef(); rangeLabel=md.getFullYear()+'년 '+(md.getMonth()+1)+'월'; }
   var baseStr=now.getFullYear()+'\ub144 '+(now.getMonth()+1)+'\uc6d4 '+now.getDate()+'\uc77c '+hh+'\uc2dc'+mm+'\ubd84 \uae30\uc900 \u00b7 '+rangeLabel;
 
@@ -7149,7 +7400,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="perf-form-group">
         <label class="perf-label">FP 선택 <span style="color:var(--red);font-size:11px">*</span></label>
         <div style="position:relative">
-          <input type="text" class="perf-input" id="perfFpSearch" placeholder="🔍 이름 검색 (예: 김려원)" autocomplete="off" oninput="onPerfFpSearch()" onfocus="onPerfFpSearch()" onblur="setTimeout(function(){var r=document.getElementById('perfFpResults');if(r)r.style.display='none';},180)">
+          <input type="text" class="perf-input" id="perfFpSearch" placeholder="🔍 이름 검색" autocomplete="off" oninput="onPerfFpSearch()" onfocus="onPerfFpSearch()" onblur="setTimeout(function(){var r=document.getElementById('perfFpResults');if(r)r.style.display='none';},180)">
           <div id="perfFpResults" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;max-height:220px;overflow-y:auto;background:var(--bg2);border:1px solid var(--bdr2);border-radius:11px;box-shadow:0 8px 24px rgba(0,0,0,.25)"></div>
         </div>
         <div id="perfFpChosen" style="display:none;margin-top:7px;font-size:12px;font-weight:700;color:var(--gold2);background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);border-radius:9px;padding:7px 11px"></div>
@@ -7157,7 +7408,23 @@ function doCheckin() { doSmartCheckin(); }
       </div>
       <div class="perf-form-group">
         <label class="perf-label">계약일 <span style="color:var(--red);font-size:11px">*</span></label>
-        <input class="perf-input" id="perfDate" type="date">
+        <div class="perf-date-wrap">
+          <input class="perf-input perf-date-display" id="perfDateDisplay" type="text" readonly placeholder="날짜를 선택하세요" onclick="openPerfCal()" style="cursor:pointer">
+          <input type="hidden" id="perfDate">
+          <span class="perf-date-ico" onclick="openPerfCal()">📅</span>
+          <div class="perf-cal" id="perfCal">
+            <div class="perf-cal-head">
+              <button type="button" class="perf-cal-nav" onclick="perfCalMove(-1)">‹</button>
+              <span class="perf-cal-title" id="perfCalTitle"></span>
+              <button type="button" class="perf-cal-nav" onclick="perfCalMove(1)">›</button>
+            </div>
+            <div class="perf-cal-dow"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+            <div class="perf-cal-grid" id="perfCalGrid"></div>
+            <div class="perf-cal-foot">
+              <button type="button" class="perf-cal-today" onclick="perfCalToday()">오늘</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="perf-form-group">
         <label class="perf-label">상품 내역 <span style="color:var(--red);font-size:11px">*</span></label>
@@ -7194,10 +7461,11 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="pv-seg on" id="pvSegToday" onclick="setPerfRange('today',this)">오늘</button>
       <button type="button" class="pv-seg" id="pvSegWeek" onclick="setPerfRange('week',this)">이번 주</button>
       <button type="button" class="pv-seg" id="pvSegMonth" onclick="setPerfRange('month',this)">이번 달</button>
+      <button type="button" class="pv-seg" id="pvSegRange" onclick="setPerfRange('range',this)">📅 기간</button>
     </div>
 
     <!-- 지점 필터 (작게) -->
-    <div style="display:flex;gap:5px;margin-bottom:14px">
+    <div id="pvBranchFilterWrap" style="display:flex;gap:5px;margin-bottom:14px">
       <button type="button" class="pv-bf on" id="pvBfAll" onclick="setPerfBranch('all',this)">전체</button>
       <button type="button" class="pv-bf" id="pvBfAlpha" onclick="setPerfBranch('al',this)">알파</button>
       <button type="button" class="pv-bf" id="pvBfBravo" onclick="setPerfBranch('br',this)">브라보</button>
@@ -7205,9 +7473,9 @@ function doCheckin() { doSmartCheckin(); }
 
     <!-- KPI -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-      <div class="pv-kpi pv-tot" id="pvKpiTot"><div class="pv-kpi-lbl">합계</div><div class="pv-kpi-val" id="pvTotAmt">0만</div><div class="pv-kpi-sub" id="pvTotCnt">0건</div></div>
-      <div class="pv-kpi pv-al" id="pvKpiAl"><div class="pv-kpi-lbl">알파지점</div><div class="pv-kpi-val" id="pvAlAmt">0만</div><div class="pv-kpi-sub" id="pvAlCnt">0건</div></div>
-      <div class="pv-kpi pv-br" id="pvKpiBr"><div class="pv-kpi-lbl">브라보지점</div><div class="pv-kpi-val" id="pvBrAmt">0만</div><div class="pv-kpi-sub" id="pvBrCnt">0건</div></div>
+      <div class="pv-kpi pv-tot" id="pvKpiTot"><div class="pv-kpi-lbl" id="pvTotLbl">합계</div><div class="pv-kpi-val" id="pvTotAmt">0만</div><div class="pv-kpi-sub" id="pvTotCnt">0건</div></div>
+      <div class="pv-kpi pv-al" id="pvKpiAl"><div class="pv-kpi-lbl" id="pvAlLbl">알파지점</div><div class="pv-kpi-val" id="pvAlAmt">0만</div><div class="pv-kpi-sub" id="pvAlCnt">0건</div></div>
+      <div class="pv-kpi pv-br" id="pvKpiBr"><div class="pv-kpi-lbl" id="pvBrLbl">브라보지점</div><div class="pv-kpi-val" id="pvBrAmt">0만</div><div class="pv-kpi-sub" id="pvBrCnt">0건</div></div>
     </div>
 
     <!-- 날짜 이동 + 건별 리스트 -->
@@ -7215,6 +7483,16 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="pv-dnav" onclick="movePerfDay(-1)">‹</button>
       <span class="pv-dlabel" id="pvDayLabel"></span>
       <button type="button" class="pv-dnav" onclick="movePerfDay(1)">›</button>
+    </div>
+    <div id="pvMonthNav" style="display:none;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <button type="button" class="pv-dnav" onclick="movePerfMonth(-1)">‹</button>
+      <span class="pv-dlabel" id="pvMonthLabel"></span>
+      <button type="button" class="pv-dnav" onclick="movePerfMonth(1)">›</button>
+    </div>
+    <div id="pvRangeNav" style="display:none;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="date" id="pvRangeStart" onchange="onPvRangeChange()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif">
+      <span style="color:var(--text2);font-size:13px">~</span>
+      <input type="date" id="pvRangeEnd" onchange="onPvRangeChange()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif">
     </div>
     <div id="pvList"></div>
 
@@ -7276,16 +7554,23 @@ function doCheckin() { doSmartCheckin(); }
     </div>
 
     <!-- 기간 토글 -->
-    <div style="display:flex;gap:6px;margin-bottom:8px">
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
       <button type="button" class="pv-seg" id="fpSegToday" onclick="setFpRange('today',this)">오늘</button>
       <button type="button" class="pv-seg" id="fpSegWeek" onclick="setFpRange('week',this)">이번 주</button>
       <button type="button" class="pv-seg on" id="fpSegMonth" onclick="setFpRange('month',this)">이번 달</button>
+      <button type="button" class="pv-seg" id="fpSegRange" onclick="setFpRange('range',this)">📅 기간 지정</button>
     </div>
     <!-- 월 선택 네비 (이번 달 모드에서만) -->
     <div id="fpMonthNav" style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px">
       <button type="button" class="pv-dnav" onclick="moveFpMonth(-1)">‹</button>
       <span id="fpMonthLabel" style="font-size:13px;font-weight:700;color:var(--text);min-width:96px;text-align:center"></span>
       <button type="button" class="pv-dnav" onclick="moveFpMonth(1)">›</button>
+    </div>
+    <!-- 기간 지정 (range 모드에서만) -->
+    <div id="fpRangeNav" style="display:none;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="date" id="fpRangeStart" onchange="onFpRangeChange()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif">
+      <span style="color:var(--text2);font-size:13px">~</span>
+      <input type="date" id="fpRangeEnd" onchange="onFpRangeChange()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif">
     </div>
     <!-- 보기 탭: 전체 / 알파지점 / 브라보지점 / 매니저 -->
     <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
