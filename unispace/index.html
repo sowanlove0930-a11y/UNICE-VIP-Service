@@ -2650,7 +2650,21 @@ function doLogin() {
       document.getElementById('loginPw').value = '';
       return;
     }
-    currentUser = _adaptGasUser(res);
+    var _newUser = _adaptGasUser(res);
+    // 이전 로그인 사용자와 다르면 데이터 캐시 초기화 (FP 전환 시 데이터 섞임 방지)
+    try {
+      var _prev = JSON.parse(localStorage.getItem('unispace_user') || 'null');
+      if (!_prev || _prev.id !== _newUser.id) {
+        localStorage.removeItem('unispace_customers');
+        localStorage.removeItem('unispace_attendance');
+        localStorage.removeItem('unispace_prereport');
+      }
+    } catch(e) {
+      localStorage.removeItem('unispace_customers');
+      localStorage.removeItem('unispace_attendance');
+      localStorage.removeItem('unispace_prereport');
+    }
+    currentUser = _newUser;
     localStorage.setItem('unispace_user', JSON.stringify(currentUser));
     // 초기 비번(unice2026) 사용 중이고 대표가 아니면 비번 변경 유도
     if (res.mustChangePw && currentUser.id !== 'ktk01') {
@@ -3102,6 +3116,9 @@ function logout() {
   }).then(function(ok) {
     if (!ok) return;
     localStorage.removeItem('unispace_user');
+    localStorage.removeItem('unispace_customers');
+    localStorage.removeItem('unispace_attendance');
+    localStorage.removeItem('unispace_prereport');
     location.reload();
   });
 }
