@@ -259,10 +259,6 @@ body.theme-light .pr-actno{color:#854F0B;}
     <div class="header-fp" id="headerFp">—</div>
   </div>
 
-  <div class="gas-todo-banner">
-    ⚡ <b style="margin-right:4px">GAS 연동 예정</b> 현재 데이터는 이 기기 localStorage에만 저장됩니다. GAS 연동 후 전체 FP 데이터 통합 예정.
-  </div>
-
   <div class="tab-nav">
     <button type="button" class="tab-btn active" id="checkinTabBtn" onclick="switchTab('checkin',this)">📍 출근 체크인</button>
     <button type="button" class="tab-btn" onclick="switchTab('status',this)" id="statusTabBtn">📊 출석 현황</button>
@@ -499,6 +495,20 @@ function showToast(msg){
   t.textContent=msg; t.classList.add('show');
   clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove('show');},2800);
 }
+// 시각 표시 보정: "1899-12-30T08:34:26.000Z" 같은 깨진 값 -> "HH:MM:SS"
+function _fmtTime(t){
+  if(!t) return '';
+  t = String(t);
+  if(t.indexOf('T') > 0){
+    var d = new Date(t);
+    if(!isNaN(d.getTime())){
+      var h=d.getHours(), mi=d.getMinutes(), s=d.getSeconds();
+      return (h<10?'0':'')+h+':'+(mi<10?'0':'')+mi+':'+(s<10?'0':'')+s;
+    }
+  }
+  return t;
+}
+
 function getTodayStr(){
   var n=new Date();
   return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
@@ -609,7 +619,7 @@ function renderCheckinTab(){
 
   if(rec){
     var isLate=rec.status==='지각';
-    btn.textContent=(isLate?'⚠️ 지각 체크인 완료 · ':'✅ 출근 완료 · ')+rec.time;
+    btn.textContent=(isLate?'⚠️ 지각 체크인 완료 · ':'✅ 출근 완료 · ')+_fmtTime(rec.time);
     btn.disabled=true;
     btn.className='checkin-btn '+(isLate?'done-late':'done-normal');
   }else{
