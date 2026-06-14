@@ -989,6 +989,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       </div>
       <button class="excel-dedup-btn" onclick="dedupCustomers()">🧹 중복 고객 정리 (같은 연락처 1명만 남기기)</button>
       <button class="excel-dedup-btn" onclick="geocodeMissingCustomers()" style="margin-top:8px">📍 주소 → 좌표 일괄 변환 (지도 표시용)</button>
+      <button class="excel-dedup-btn" onclick="migrateLocalToGas()" style="margin-top:8px">☁️ 현재 고객 전체를 서버(GAS)에 올리기</button>
     </div>
   </div>
 
@@ -1327,6 +1328,7 @@ function doExcelImport() {
 
 function _doImportWork() {
   var totalAdded = 0;
+  var _importedForGas = [];
 
   pendingFiles.forEach(function(pf) {
     if (!pf._newRows || !pf._newRows.length) return;
@@ -1380,11 +1382,18 @@ function _doImportWork() {
 
     Object.values(customerMap).forEach(function(c) {
       DB.push(c);
+      _importedForGas.push(c);
       totalAdded++;
     });
   });
 
   localStorage.setItem('unispace_customers', JSON.stringify(DB));
+  if (_importedForGas.length) {
+    gasBulkAdd(_importedForGas.slice(), function(res){
+      if (res && res.ok) showToast('☁️ GAS 동기화 완료 (' + res.added + '명)');
+    });
+    _importedForGas = [];
+  }
   updateCustomerStats();
   if (typeof updateHeaderCount === 'function') updateHeaderCount();
   renderCustomerList();
@@ -1609,6 +1618,69 @@ if (_raw) {
   } catch(e) { localStorage.removeItem('unispace_customers'); _raw = null; }
 }
 var DB = JSON.parse(_raw || '[]');
+
+// ── UNISPACE GAS 연동 ──────────────────────────────
+var CUST_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
+function _myFpCode() {
+  try { var u = JSON.parse(localStorage.getItem('unispace_user') || '{}'); return u.id || ''; }
+  catch(e) { return ''; }
+}
+// GAS POST (text/plain 으로 보내 CORS preflight 회피)
+function gasPost(payload) {
+  return fetch(CUST_GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); });
+}
+// 페이지 진입 시 GAS에서 내 권한 고객 받아와 로컬 캐시 채움
+function loadCustomersFromGas() {
+  var fp = _myFpCode();
+  if (!fp) return Promise.resolve(false);
+  var url = CUST_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(fp);
+  return fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok && res.customers) {
+      DB = res.customers;
+      localStorage.setItem('unispace_customers', JSON.stringify(DB));
+      return true;
+    }
+    return false;
+  }).catch(function(){ return false; });
+}
+// 단건 저장 (백그라운드)
+function gasSaveCustomer(c) {
+  if (!c) return;
+  if (!c.fpCode) c.fpCode = _myFpCode();
+  gasPost({ action:'saveCustomer', customer:c }).catch(function(){});
+}
+function gasDeleteCustomer(id) {
+  if (!id) return;
+  gasPost({ action:'deleteCustomer', id:id }).catch(function(){});
+}
+function gasBulkAdd(arr, onDone) {
+  if (!arr || !arr.length) { if(onDone) onDone(null); return; }
+  gasPost({ action:'bulkAddCustomers', customers:arr })
+    .then(function(res){ if(onDone) onDone(res); })
+    .catch(function(){ if(onDone) onDone(null); });
+}
+// 로컬 51명을 GAS로 한 번에 올리기 (마이그레이션)
+function migrateLocalToGas() {
+  if (!DB.length) { showToast('올릴 고객이 없습니다'); return; }
+  var fp = _myFpCode();
+  var payload = DB.map(function(c){
+    var cc = {};
+    for (var k in c) cc[k] = c[k];
+    if (!cc.fpCode) cc.fpCode = cc.fp ? '' : fp; // 이름 기반은 GAS에서 변환
+    return cc;
+  });
+  showToast('☁️ GAS로 ' + payload.length + '명 업로드 중...');
+  gasBulkAdd(payload, function(res){
+    if (res && res.ok) showToast('☁️ 업로드 완료 (추가 ' + res.added + ' / 중복 ' + res.skipped + ')');
+    else showToast('⚠️ 업로드 실패 - 네트워크를 확인해 주세요');
+  });
+}
+// ───────────────────────────────────────────────────
+
 var currentFilter = 'all';
 var currentView = 'list';
 var searchMode = 'contractor';
@@ -1709,6 +1781,15 @@ window.addEventListener('DOMContentLoaded', function() {
   updateHeaderCount();
   addContract(); // 계약 1개 기본 추가
   renderCustomerList();
+
+  // GAS에서 내 권한 고객 로드 후 다시 렌더 (캐시 갱신)
+  loadCustomersFromGas().then(function(ok){
+    if (ok) {
+      updateCustomerStats();
+      updateHeaderCount();
+      renderCustomerList();
+    }
+  });
 
   var params = new URLSearchParams(window.location.search);
   if (params.get('tab') == 'list') {
@@ -2010,6 +2091,7 @@ function saveCustomer() {
   }
 
   localStorage.setItem('unispace_customers', JSON.stringify(DB));
+  gasSaveCustomer(customer);
   showToast('✅ ' + name + ' 고객님 등록 완료!');
   updateCustomerStats();
   resetForm();
@@ -2606,6 +2688,7 @@ function deleteCustomer() {
     if (!ok) return;
     DB = DB.filter(function(c){ return c.id !== target.id; });
     localStorage.setItem('unispace_customers', JSON.stringify(DB));
+    gasDeleteCustomer(target.id);
     closeDetail();
     renderCustomerList();
     updateHeaderCount();
