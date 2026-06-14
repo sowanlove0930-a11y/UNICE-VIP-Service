@@ -2775,6 +2775,27 @@ const SUBMENUS = {
 };
 
 // ── 초기화 ──────────────────────────────────────────
+function renderBojangCard() {
+  // 보장월초 카드: 목표는 저장값, 실적/건수는 0 (GAS 연동 후 실데이터)
+  var _g = {};
+  try { _g = JSON.parse(localStorage.getItem('unispace_perf_goal') || '{}'); } catch(e) {}
+  var GOAL_ALPHA = parseInt(_g.alpha) || 0;
+  var GOAL_BRAVO = parseInt(_g.bravo) || 0;
+  var GOAL_TOTAL = GOAL_ALPHA + GOAL_BRAVO;
+  var AMT_ALPHA  = 0, AMT_BRAVO  = 0;
+  var AMT_TOTAL  = AMT_ALPHA + AMT_BRAVO;
+  var CNT_TOTAL  = 0;
+  var RATE_TOTAL = GOAL_TOTAL ? Math.round(AMT_TOTAL / GOAL_TOTAL * 100) : 0;
+  var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / GOAL_ALPHA * 100) : 0;
+  var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / GOAL_BRAVO * 100) : 0;
+  var e1 = document.getElementById('st1');      if(e1) e1.textContent = AMT_TOTAL+'만 / '+CNT_TOTAL+'건';
+  var er = document.getElementById('st1-rate'); if(er) er.textContent = RATE_TOTAL+'%';
+  var eu = document.getElementById('st1-unit');
+  if(eu) eu.innerHTML =
+    '<span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA+'만 '+RATE_ALPHA+'%&nbsp;&nbsp;'+
+    '<span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO+'만 '+RATE_BRAVO+'%';
+}
+
 function showDashboard() {
   document.getElementById('loginOverlay').classList.add('hidden');
   startIdleWatch();
@@ -2845,21 +2866,7 @@ function showDashboard() {
 
   // 더미 스탯
   setTimeout(function() {
-    // 1번: 보장월초 (더미 — GAS 연동 후 실데이터)
-    var GOAL_TOTAL = 2500, GOAL_ALPHA = 1500, GOAL_BRAVO = 1000;
-    var AMT_ALPHA  = 1300, AMT_BRAVO  = 800;
-    var AMT_TOTAL  = AMT_ALPHA + AMT_BRAVO;
-    var CNT_ALPHA  = 9,    CNT_BRAVO  = 5;
-    var CNT_TOTAL  = CNT_ALPHA + CNT_BRAVO;
-    var RATE_TOTAL = Math.round(AMT_TOTAL / GOAL_TOTAL * 100);
-    var RATE_ALPHA = Math.round(AMT_ALPHA / GOAL_ALPHA * 100);
-    var RATE_BRAVO = Math.round(AMT_BRAVO / GOAL_BRAVO * 100);
-
-    document.getElementById('st1').textContent = AMT_TOTAL+'만 / '+CNT_TOTAL+'건';
-    document.getElementById('st1-rate').textContent = RATE_TOTAL+'%';
-    document.getElementById('st1-unit').innerHTML =
-      '<span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA+'만 '+RATE_ALPHA+'%&nbsp;&nbsp;'+
-      '<span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO+'만 '+RATE_BRAVO+'%';
+    renderBojangCard();
 
     if(isAdmin) {
       // 2번 (대표/지점장): 신규 계약고객 — localStorage 실계산
@@ -4441,6 +4448,7 @@ function savePerfGoal(){
   var a=parseInt(document.getElementById('perfGoalAlpha').value)||0;
   var b=parseInt(document.getElementById('perfGoalBravo').value)||0;
   localStorage.setItem('unispace_perf_goal', JSON.stringify({alpha:a, bravo:b}));
+  if (typeof renderBojangCard === 'function') renderBojangCard();
   closePerfGoal();
   showToast('🎯 이번 달 목표가 저장되었습니다');
 }
