@@ -2636,6 +2636,85 @@ function loadAllFpsFromGas(cb){
     if(cb) cb();
   }).catch(function(){ if(cb) cb(); });
 }
+
+// ── activity plan GAS sync (reflect into dashboard activity table) ──
+function _padTwo(n){ return (n<10?'0':'')+n; }
+// weekKey for given offset (same rule as activity-plan.html getWeekInfo)
+function weekKeyForOffset(off){
+  var now=new Date(); now.setHours(0,0,0,0);
+  var dow=now.getDay();
+  var mon=new Date(now); mon.setDate(now.getDate()-(dow===0?6:dow-1)+(off||0)*7);
+  var m=mon.getMonth();
+  var weekNo=Math.ceil(mon.getDate()/7);
+  return mon.getFullYear()+'-'+_padTwo(m+1)+'-W'+weekNo;
+}
+// plan customer -> activity object (ported from activity-plan _buildActFromCust)
+function _planCustToAct(c, idx, planKey, plan){
+  var chasuN = c.chasu==='1차'?'1':c.chasu==='2차'?'2':c.chasu==='3차'?'3':c.chasu==='N차'?'N':'';
+  var tags=(c.tags||[]).slice();
+  var type;
+  if(chasuN) type = chasuN+'차 상담';
+  else if(tags.length) type = tags[0];
+  else type='상담';
+  var prods=(c.products||[]).filter(function(p){ return (p.company||'').trim()||(''+(p.amount||'')).replace(/[^0-9]/g,''); })
+    .map(function(p){ return {company:(p.company||'').trim(), amount:(''+(p.amount||'')).replace(/[^0-9]/g,'')}; });
+  var id='act_plan_'+planKey+'_'+plan.fpId+'_'+idx;
+  return {
+    id:id, fpId:plan.fpId, fpName:plan.name, branch:plan.branch,
+    date:c.date, time:c.time||'', place:c.place||'', placeAddr:c.place||'', lat:'', lng:'',
+    customerName:c.name,
+    type:type, status:'진행중', helper:'',
+    support:(c.support||''), supportReqTime:(c.supportStart||''), supportReqEndTime:(c.supportEnd||''),
+    nextDate:'', nextTime:'', nextPlace:'',
+    note:c.note||'',
+    planTags:tags, planProducts:prods,
+    planCompany:prods.length?prods[0].company:'', planAmount:prods.length?prods[0].amount:'',
+    chungyakCompany:'', chungyakAmount:'', parentId:'',
+    planKey:planKey, planCustIdx:idx,
+    createdAt:(plan.updatedAt||new Date().toISOString())
+  };
+}
+// merge plans array into unispace_activities (replace only this planKey portion)
+function _mergePlansToActivities(plans, planKeyFilter){
+  var db={};
+  try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  var prevCreated={};
+  Object.keys(db).forEach(function(k){
+    var a=db[k];
+    if(!a || !a.planKey) return;
+    if(planKeyFilter && a.planKey!==planKeyFilter) return;
+    prevCreated[k]=a.createdAt;
+    delete db[k];
+  });
+  (plans||[]).forEach(function(pl){
+    if(!pl || !pl.fpId) return;
+    var pk=pl.weekKey;
+    if(planKeyFilter && pk!==planKeyFilter) return;
+    (pl.customers||[]).forEach(function(c, idx){
+      if(!c || !c.date || !(c.name||'').trim()) return;
+      var act=_planCustToAct(c, idx, pk, pl);
+      if(prevCreated[act.id]) act.createdAt=prevCreated[act.id];
+      db[act.id]=act;
+    });
+  });
+  localStorage.setItem('unispace_activities', JSON.stringify(db));
+}
+// load plans from GAS -> merge to activities -> callback. null weekKey = all
+var _loadedPlanKeys = {};
+function loadPlansFromGas(weekKey, cb){
+  if(!currentUser || !currentUser.id){ if(cb) cb(); return; }
+  var cacheKey = weekKey || '__ALL__';
+  var url = UNISPACE_GAS_URL + '?action=getPlans&fp=' + encodeURIComponent(currentUser.id);
+  if(weekKey) url += '&weekKey=' + encodeURIComponent(weekKey);
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.plans){
+      _mergePlansToActivities(res.plans, weekKey || null);
+      _loadedPlanKeys[cacheKey] = true;
+    }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
+
 function saveFpOverride(id, key, val) {
   var overrides = {};
   try { overrides = JSON.parse(localStorage.getItem('unispace_fp_overrides') || '{}'); } catch(e) {}
@@ -5417,13 +5496,22 @@ function setActViewMode(mode) {
 }
 
 function moveActPeriod(dir) {
-  if (actViewMode == 'month') { monthOffset += dir; renderMonthCal(); }
-  else { weekOffset += dir; renderWeekActTable(); }
+  if (actViewMode == 'month') { monthOffset += dir; renderActView(); }
+  else { weekOffset += dir; renderActView(); }
 }
 
-function renderActView() {
+function _doRenderActView() {
   if (actViewMode == 'month') renderMonthCal();
   else renderWeekActTable();
+}
+
+// ensure GAS plans loaded before draw (cached key draws immediately)
+function renderActView() {
+  var key = (actViewMode == 'month') ? '__ALL__' : weekKeyForOffset(weekOffset);
+  if (_loadedPlanKeys[key]) { _doRenderActView(); return; }
+  _doRenderActView(); // show local data first to avoid blank
+  var wk = (actViewMode == 'month') ? null : weekKeyForOffset(weekOffset);
+  loadPlansFromGas(wk, function(){ _doRenderActView(); });
 }
 
 function actFilterMatch(a) {
@@ -5731,7 +5819,7 @@ function renderWeekActTable() {
   try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
 
   var datestrs = dates.map(function(d){
-    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    return d.getFullYear()+'-'+_padTwo(d.getMonth()+1)+'-'+_padTwo(d.getDate());
   });
 
   // DB에 있는 FP 수집 (FP목록 무관)
