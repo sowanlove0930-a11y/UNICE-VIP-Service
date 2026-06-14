@@ -7025,29 +7025,46 @@ function doSmartCheckin() {
 
   var now     = new Date();
   var h       = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
-  var timeStr = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  function _p2(n){ return (n<10?'0':'')+n; }
+  var timeStr = _p2(h) + ':' + _p2(m) + ':' + _p2(s);
   var isLate  = (h > LATE_HOUR) || (h === LATE_HOUR && m >= LATE_MIN);
   var status  = isLate ? '지각' : '정상';
 
-  if (!db[today]) db[today] = {};
-  db[today][currentUser.id] = {
-    name:   currentUser.name,
-    branch: currentUser.branch,
-    role:   currentUser.role,
-    time:   timeStr,
-    status: status
-  };
-  localStorage.setItem('unispace_attendance', JSON.stringify(db));
+  var btn = document.getElementById('checkinSmartBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '확인 중...'; }
 
-  // TODO_GAS_ATT_1: GAS POST 체크인 데이터 전송
-
-  renderSmartCheckinBtn();
-  renderAttToday();
-
-  // A안: 토스트만
-  showToast(isLate
-    ? '⚠️ ' + timeStr.slice(0,5) + ' 지각 처리되었습니다'
-    : '✅ ' + timeStr.slice(0,5) + ' 정상 출근 완료!');
+  // GAS에 먼저 저장 (GET 방식) -> 성공 확인 후에만 완료 처리
+  var qs = 'action=checkin&date=' + encodeURIComponent(today)
+         + '&fp=' + encodeURIComponent(currentUser.id)
+         + '&name=' + encodeURIComponent(currentUser.name)
+         + '&branch=' + encodeURIComponent(currentUser.branch || '')
+         + '&time=' + encodeURIComponent(timeStr)
+         + '&status=' + encodeURIComponent(status);
+  fetch(UNISPACE_GAS_URL + '?' + qs).then(function(r){ return r.text(); }).then(function(txt){
+    var res = null;
+    try { res = JSON.parse(txt); } catch(e) {}
+    if (res && res.ok === false && res.msg && res.msg.indexOf('이미') >= 0) {
+      if (!db[today]) db[today] = {};
+      db[today][currentUser.id] = { name:currentUser.name, branch:currentUser.branch, role:currentUser.role, time:timeStr, status:status };
+      localStorage.setItem('unispace_attendance', JSON.stringify(db));
+      renderSmartCheckinBtn(); renderAttToday();
+      showToast('⏰ 오늘 이미 체크인했습니다');
+      return;
+    }
+    if (res && res.ok === true) {
+      if (!db[today]) db[today] = {};
+      db[today][currentUser.id] = { name:currentUser.name, branch:currentUser.branch, role:currentUser.role, time:timeStr, status:status };
+      localStorage.setItem('unispace_attendance', JSON.stringify(db));
+      renderSmartCheckinBtn(); renderAttToday();
+      showToast(isLate ? '⚠️ ' + timeStr.slice(0,5) + ' 지각 처리되었습니다' : '✅ ' + timeStr.slice(0,5) + ' 정상 출근 완료!');
+      return;
+    }
+    if (btn) { btn.disabled = false; renderSmartCheckinBtn(); }
+    showToast('⚠️ 저장에 실패했습니다. 잠시 후 다시 시도해 주세요');
+  }).catch(function(){
+    if (btn) { btn.disabled = false; renderSmartCheckinBtn(); }
+    showToast('⚠️ 네트워크 오류로 체크인이 저장되지 않았습니다');
+  });
 }
 
 function doCheckin() { doSmartCheckin(); }
