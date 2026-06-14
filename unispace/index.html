@@ -2885,6 +2885,13 @@ function showDashboard() {
   setTimeout(function() {
     renderBojangCard();
 
+    // 업적을 GAS에서 로드 후 카드 갱신
+    loadPerfFromGas(function(){
+      renderBojangCard();
+      if(typeof renderGoals==='function') renderGoals();
+      if(typeof renderTop10==='function') renderTop10();
+    });
+
     if(isAdmin) {
       // 2번 (관리자 4명): 전체 계약고객 + 이번달 신규 — 대시보드 전용 전체 조회
       var now0 = new Date();
@@ -3459,6 +3466,23 @@ var PERF_LOG_KEY = 'unispace_perf_log';
 var PERF_CATS = ['건강상해','종신','저축','기타'];
 var PERF_COMPANIES = ['한화생명','라이나','미래에셋','신한라이프','흥국생명','한화손보','현대해상','DB손보','KB손보','메리츠'];
 function getPerfLog(){ try{ return JSON.parse(localStorage.getItem(PERF_LOG_KEY)||'[]'); }catch(e){ return []; } }
+
+// GAS에서 업적 로드 -> localStorage 반영 -> 집계 갱신
+function loadPerfFromGas(cb){
+  if(!currentUser || !currentUser.id){ if(cb) cb(); return; }
+  var url = UNISPACE_GAS_URL + '?action=getPerf&fp=' + encodeURIComponent(currentUser.id);
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.perf){
+      var arr = res.perf.map(function(p){
+        return { id:p.id, date:p.date, fpId:p.fpCode, fpName:p.fpName, branch:p.branch,
+                 products:p.products, total:p.total, note:p.note||'', createdAt:p.createdAt||'' };
+      });
+      savePerfLog(arr);
+      rebuildPerfData();
+    }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
 function savePerfLog(arr){ localStorage.setItem(PERF_LOG_KEY, JSON.stringify(arr)); }
 // 로그에서 FP별 누계 재계산 → 기존 perfData 형식으로 동기화 (TOP10 등 호환)
 function rebuildPerfData(){
@@ -3643,16 +3667,27 @@ function confirmPerfInput() {
   var total=products.reduce(function(s,x){ return s+x.amount; },0);
 
   var log=getPerfLog();
-  log.push({
-    id:'perf_'+Date.now()+'_'+Math.random().toString(36).substr(2,4),
+  var perfId='perf_'+Date.now()+'_'+Math.random().toString(36).substr(2,4);
+  var newPerf={
+    id:perfId,
     date:date, fpId:fpId, fpName:fpName, branch:branch,
     products:products, total:total,
     note:'',
     createdAt:new Date().toISOString()
-  });
+  };
+  log.push(newPerf);
   savePerfLog(log);
   rebuildPerfData();
-  // TODO_GAS_PERF: GAS POST 업적 기록
+
+  // GAS에 저장 (POST)
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'savePerf', data:{
+      id:perfId, date:date, fpCode:fpId, fpName:fpName, branch:branch,
+      products:products, total:total, note:''
+    }})
+  }).catch(function(){});
 
   document.getElementById('perfModalOverlay').classList.remove('open');
   showToast('✅ '+fpName+' '+total.toLocaleString()+'원 ('+products.length+'건) 업적 입력 완료');
@@ -3812,7 +3847,11 @@ function deletePerfRec(id){
     var arr=getPerfLog().filter(function(r){ return r.id!==id; });
     savePerfLog(arr);
     rebuildPerfData();
-    // TODO_GAS_PERF: GAS DELETE 동기화
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'deletePerf', data:{ id:id } })
+    }).catch(function(){});
     renderPerfView();
     renderGoals();
     renderTop10();
