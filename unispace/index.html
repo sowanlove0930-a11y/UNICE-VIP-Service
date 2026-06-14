@@ -2203,7 +2203,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="stat s-green" id="stat3-admin" style="display:none">
       <div class="stat-lbl">오늘 출결 현황</div>
       <div class="stat-val" id="st3-total">—</div>
-      <div class="stat-unit" id="st3-sub">알파 이슈 — · 브라보 이슈 —</div>
+      <div class="stat-unit" id="st3-sub">알파 — · 브라보 —</div>
     </div>
     <div class="stat s-green" id="stat3-fp" style="display:none">
       <div class="stat-lbl">이번 달 미출석</div>
@@ -2966,43 +2966,8 @@ function getFpBranch(fpName) {
 
 // 대표/지점장용 3번 stat: 알파/브라보 출결현황
 function renderAdminAttStat() {
-  var today  = getTodayStr();
-  var attDb  = {};
-  var prDb   = {};
-  try { attDb = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
-  try { prDb  = JSON.parse(localStorage.getItem('unispace_prereport')  || '{}'); } catch(e) {}
-  var todayAtt = attDb[today] || {};
-  var todayPr  = prDb[today]  || {};
-
-  var DUMMY = [
-    {id:'H2502969',branch:'알파지점'},{id:'H2502956',branch:'알파지점'},
-    {id:'H2502976',branch:'알파지점'},{id:'H2502980',branch:'알파지점'},
-    {id:'H2502984',branch:'알파지점'},{id:'H2502959',branch:'알파지점'},
-    {id:'H2502965',branch:'브라보지점'},{id:'H2503600',branch:'브라보지점'},
-    {id:'H2502982',branch:'브라보지점'},{id:'H2502985',branch:'브라보지점'},
-  ];
-  if(currentUser) {
-    var exists = DUMMY.some(function(f){ return f.id === currentUser.id; });
-    if(!exists) DUMMY.unshift({id:currentUser.id, branch:currentUser.branch});
-  }
-
-  var alphaOk=0, alphaNg=0, bravoOk=0, bravoNg=0;
-  DUMMY.forEach(function(fp) {
-    var rec = todayAtt[fp.id];
-    var pr  = todayPr[fp.id];
-    var proofDone = pr && pr.proof;
-    var isAlpha = fp.branch === '알파지점';
-    var ok = rec && (rec.status === '정상' || proofDone);
-    var ng = (!rec && !proofDone && !pr) || (rec && rec.status === '지각' && !proofDone);
-    if(isAlpha){ if(ok) alphaOk++; if(ng) alphaNg++; }
-    else       { if(ok) bravoOk++; if(ng) bravoNg++; }
-  });
-
-  var totalOk = alphaOk + bravoOk;
-  var st3t = document.getElementById('st3-total');
-  var st3s = document.getElementById('st3-sub');
-  if(st3t) st3t.textContent = totalOk + '명';
-  if(st3s) st3s.textContent = '알파 이슈 '+alphaNg+'명 · 브라보 이슈 '+bravoNg+'명';
+  // 출결 카드(st3)는 renderAttToday가 GAS 실데이터로 채움
+  renderAttToday();
 }
 
 // ── (구 showDashboard 닫힘 — 위에서 통합됨) ──
@@ -4829,6 +4794,18 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
   _setBr('normalBr', fullNormalArr);
   _setBr('lateBr', lateArr);
   _setBr('absentBr', absentArr.concat(prereportArr));
+
+  // 상단 출결 카드(st3): 정상출근 수 + 알파/브라보
+  var na=0, nb=0;
+  fullNormalArr.forEach(function(fp){
+    var br=(fp.branch||'');
+    if(br.indexOf('알파')>=0||br==='알') na++;
+    else if(br.indexOf('브라보')>=0||br==='브') nb++;
+  });
+  var st3t = document.getElementById('st3-total');
+  var st3s = document.getElementById('st3-sub');
+  if(st3t) st3t.textContent = fullNormalArr.length + '명';
+  if(st3s) st3s.textContent = '알파 ' + na + '명 · 브라보 ' + nb + '명';
 
   // 사전보고 칸: 오늘 사전보고한 사람 전원 (증빙 상태 포함)
   var preList = [];
