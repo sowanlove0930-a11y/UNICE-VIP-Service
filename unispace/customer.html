@@ -623,6 +623,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 }
 
 /* ── 엑셀 일괄 업로드 ── */
+.excel-open-btn{font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;background:rgba(239,159,39,.12);border:1px solid rgba(239,159,39,.4);color:var(--gold-d);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;}
+.insured-copy-btn{font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.3);color:var(--blue);cursor:pointer;font-family:inherit;transition:all .15s;}
+.insured-copy-btn:hover{background:rgba(37,99,235,.18);}
+.insured-copy-btn:active{transform:scale(.95);}
+.excel-open-btn:hover{background:rgba(239,159,39,.2);}
+.excel-modal-overlay{position:fixed;inset:0;z-index:400;background:rgba(20,15,5,.5);display:none;align-items:center;justify-content:center;padding:20px;}
+.excel-modal-overlay.open{display:flex;}
+.excel-modal{width:100%;max-width:480px;max-height:88vh;overflow-y:auto;background:var(--bg2);border-radius:18px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.25);}
+.excel-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.excel-modal-title{font-size:16px;font-weight:800;color:var(--text);}
+.excel-modal-x{font-size:20px;color:var(--text3);cursor:pointer;background:none;border:none;line-height:1;}
+.excel-modal-sub{font-size:12px;color:var(--text2);margin-bottom:16px;}
 .excel-upload-wrap {
   margin-bottom: 20px;
   border: 1.5px dashed rgba(201,168,76,.3);
@@ -752,8 +764,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
     <!-- 기본 정보 -->
     <div class="card card-gold">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <div class="sec-label" style="margin-bottom:0">기본 정보</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="sec-label" style="margin-bottom:0">기본 정보</div>
+          <button type="button" class="excel-open-btn" onclick="openExcelModal()">📊 엑셀로 일괄 등록</button>
+        </div>
         <div class="customer-type-toggle">
           <button class="type-toggle-btn active-contract" id="typeContract" onclick="setCustomerType('계약')">
             ✅ 계약 고객
@@ -882,6 +897,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
                 </select>
               </div>
             </div>
+            <div class="form-grid" style="gap:12px;margin-top:12px">
+              <div class="form-group full">
+                <div class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+                  <span>연락처</span>
+                  <button type="button" class="insured-copy-btn" onclick="copyInsuredFromContractor('phone')">📋 계약자와 동일</button>
+                </div>
+                <input class="form-input" id="r_insured_phone" placeholder="010-0000-0000" type="tel">
+              </div>
+              <div class="form-group full">
+                <div class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+                  <span>주소</span>
+                  <button type="button" class="insured-copy-btn" onclick="copyInsuredFromContractor('address')">📋 계약자와 동일</button>
+                </div>
+                <input class="form-input" id="r_insured_address" placeholder="예) 부산 해운대구 좌동 1400">
+              </div>
+            </div>
             <div style="font-size:11px;color:var(--text3);margin-top:10px">
               💡 계약자(보험료 납부자)는 현재 등록 중인 고객입니다. 추후 가족 연결 기능으로 연계 예정.
             </div>
@@ -930,39 +961,39 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     </div>
   </div>
 
+  <!-- 📊 엑셀 일괄 등록 모달 -->
+  <div class="excel-modal-overlay" id="excelModalOverlay" onclick="if(event.target===this)closeExcelModal()">
+    <div class="excel-modal">
+      <div class="excel-modal-head">
+        <div class="excel-modal-title">📊 엑셀 일괄 등록</div>
+        <button class="excel-modal-x" onclick="closeExcelModal()">✕</button>
+      </div>
+      <div class="excel-modal-sub">FP 고객 엑셀 파일을 여러 개 한 번에 올릴 수 있어요</div>
+
+      <input type="file" class="excel-file-input" id="excelFileInput" accept=".xlsx,.xls" multiple style="display:none">
+      <div class="excel-drop-zone" id="excelDropZone" onclick="document.getElementById('excelFileInput').click()">
+        <div class="excel-drop-icon">📂</div>
+        <div class="excel-drop-title">파일을 여기에 드래그하거나 클릭해서 선택</div>
+        <div class="excel-drop-sub">
+          <b>FP 파일 50개도 한 번에 OK</b> · .xlsx 파일만 지원<br>
+          담당FP 자동 인식: 양식 첫 줄 <b>FP명:</b> 칸에 입력하거나<br>
+          파일명을 <b>홍길동FP.xlsx</b> 형태로 저장
+        </div>
+      </div>
+      <div class="excel-result-area" id="excelResultArea"></div>
+      <div class="excel-actions-row" id="excelActionsRow" style="display:none">
+        <button class="excel-import-btn" id="excelImportBtn" onclick="doExcelImport()" disabled>
+          📥 선택한 파일 모두 가져오기
+        </button>
+        <button class="excel-cancel-btn" id="excelCancelBtn" onclick="cancelExcelUpload()">전체 취소</button>
+      </div>
+      <button class="excel-dedup-btn" onclick="dedupCustomers()">🧹 중복 고객 정리 (같은 연락처 1명만 남기기)</button>
+    </div>
+  </div>
+
   <!-- ══ 고객 조회 탭 ══ -->
   <div id="pageList" style="display:none">
 
-    <!-- 📊 엑셀 일괄 업로드 -->
-    <div class="excel-upload-wrap" id="excelUploadWrap">
-      <div class="excel-upload-header" onclick="toggleExcelPanel()">
-        <div class="excel-upload-title">
-          <div class="excel-upload-icon">📊</div>
-          <span>엑셀 일괄 업로드 <span style="font-size:11px;font-weight:400;color:var(--text2);margin-left:6px">FP 파일 여러 개 한 번에</span></span>
-        </div>
-        <span class="excel-upload-toggle" id="excelToggleArrow">▼ 펼치기</span>
-      </div>
-      <div class="excel-upload-body" id="excelUploadBody" style="display:none">
-        <input type="file" class="excel-file-input" id="excelFileInput" accept=".xlsx,.xls" multiple>
-        <div class="excel-drop-zone" id="excelDropZone" onclick="document.getElementById('excelFileInput').click()">
-          <div class="excel-drop-icon">📂</div>
-          <div class="excel-drop-title">파일을 여기에 드래그하거나 클릭해서 선택</div>
-          <div class="excel-drop-sub">
-            <b>FP 파일 50개도 한 번에 OK</b> · .xlsx 파일만 지원<br>
-            담당FP 자동 인식: 양식 첫 줄 <b>FP명:</b> 칸에 입력하거나<br>
-            파일명을 <b>홍길동FP.xlsx</b> 형태로 저장
-          </div>
-        </div>
-        <div class="excel-result-area" id="excelResultArea"></div>
-        <div class="excel-actions-row" id="excelActionsRow" style="display:none">
-          <button class="excel-import-btn" id="excelImportBtn" onclick="doExcelImport()" disabled>
-            📥 선택한 파일 모두 가져오기
-          </button>
-          <button class="excel-cancel-btn" id="excelCancelBtn" onclick="cancelExcelUpload()">전체 취소</button>
-        </div>
-        <button class="excel-dedup-btn" onclick="dedupCustomers()">🧹 중복 고객 정리 (같은 연락처 1명만 남기기)</button>
-      </div>
-    </div>
     <!-- 고객 통계 -->
     <div class="customer-stats">
       <div class="cstat cstat-all" onclick="setFilter('all', document.querySelector('.filter-chip.active, .filter-chip'))">
@@ -1085,11 +1116,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 // ── 엑셀 업로드 패널 토글 ─────────────────────────────
 function toggleExcelPanel() {
-  var body  = document.getElementById('excelUploadBody');
-  var arrow = document.getElementById('excelToggleArrow');
-  var open  = body.style.display === 'none';
-  body.style.display  = open ? '' : 'none';
-  arrow.textContent   = open ? '▲ 접기' : '▼ 펼치기';
+  openExcelModal();
+}
+function openExcelModal() {
+  var ov = document.getElementById('excelModalOverlay');
+  if (ov) ov.classList.add('open');
+}
+function closeExcelModal() {
+  var ov = document.getElementById('excelModalOverlay');
+  if (ov) ov.classList.remove('open');
 }
 
 // ── 드래그앤드롭 ──────────────────────────────────────
@@ -1098,7 +1133,7 @@ var importInProgress = false;
 
 document.addEventListener('DOMContentLoaded', function() {
   var zone  = document.getElementById('excelDropZone');
-  var wrap  = document.getElementById('excelUploadWrap');
+  var wrap  = zone;
   var input = document.getElementById('excelFileInput');
   if (!zone) return;
 
@@ -1280,10 +1315,7 @@ function doExcelImport() {
       if (actionsRow) actionsRow.style.display = 'none';
       if (impBtn) { impBtn.disabled = true; impBtn.textContent = '📥 선택한 파일 모두 가져오기'; }
       if (cancelBtn) cancelBtn.disabled = false;
-      var body = document.getElementById('excelUploadBody');
-      if (body) body.style.display = 'none';
-      var arrow = document.getElementById('excelToggleArrow');
-      if (arrow) arrow.textContent = '▼ 펼치기';
+      closeExcelModal();
       importInProgress = false;
       showToast('✅ 총 ' + totalAdded + '명 고객이 등록되었습니다');
     }, 900);
@@ -1350,7 +1382,8 @@ function _doImportWork() {
   });
 
   localStorage.setItem('unispace_customers', JSON.stringify(DB));
-  updateStats();
+  updateCustomerStats();
+  if (typeof updateHeaderCount === 'function') updateHeaderCount();
   renderCustomerList();
   return totalAdded;
 }
@@ -1395,7 +1428,7 @@ function dedupCustomers() {
     if (!ok) return;
     DB = cleaned;
     localStorage.setItem('unispace_customers', JSON.stringify(DB));
-    updateStats();
+    updateCustomerStats();
     renderCustomerList();
     showToast('🧹 중복 ' + removed + '명 정리 완료');
   });
@@ -1954,6 +1987,8 @@ function saveCustomer() {
       relation: document.getElementById('r_insured_relation').value,
       birth:    [document.getElementById('r_insured_birth_y').value, document.getElementById('r_insured_birth_m').value, document.getElementById('r_insured_birth_d').value].filter(Boolean).join('-'),
       gender:   document.getElementById('r_insured_gender').value,
+      phone:    document.getElementById('r_insured_phone') ? document.getElementById('r_insured_phone').value.trim() : '',
+      address:  document.getElementById('r_insured_address') ? document.getElementById('r_insured_address').value.trim() : '',
     } : null,
     address: document.getElementById('r_address').value.trim(),
     lat:     document.getElementById('r_lat').value,
@@ -1989,6 +2024,7 @@ function saveCustomer() {
 function resetForm() {
   ['r_name','r_phone','r_birth_y','r_birth_m','r_birth_d','r_memo','r_referrer','r_etc',
    'r_insured_name','r_insured_birth_y','r_insured_birth_m','r_insured_birth_d',
+   'r_insured_phone','r_insured_address',
    'r_address','r_lat','r_lng'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.value = '';
   });
@@ -2496,6 +2532,8 @@ function editCustomer() {
     el = document.getElementById('r_insured_birth_y'); if(el) el.value = ibp[0]||'';
     el = document.getElementById('r_insured_birth_m'); if(el) el.value = ibp[1]||'';
     el = document.getElementById('r_insured_birth_d'); if(el) el.value = ibp[2]||'';
+    el = document.getElementById('r_insured_phone');   if(el) el.value = ins.phone||'';
+    el = document.getElementById('r_insured_address'); if(el) el.value = ins.address||'';
   }
 
   // 계약 복원
@@ -2661,6 +2699,26 @@ function geocodeAddress() {
 }
 
 // ── 계피 구분 ─────────────────────────────────────────
+function copyInsuredFromContractor(field) {
+  if (field === 'phone') {
+    var src = document.getElementById('r_phone');
+    var dst = document.getElementById('r_insured_phone');
+    if (src && dst) {
+      if (!src.value.trim()) { showToast('계약자 연락처를 먼저 입력해 주세요'); return; }
+      dst.value = src.value;
+      showToast('계약자 연락처를 가져왔어요');
+    }
+  } else if (field === 'address') {
+    var srcA = document.getElementById('r_address');
+    var dstA = document.getElementById('r_insured_address');
+    if (srcA && dstA) {
+      if (!srcA.value.trim()) { showToast('계약자 주소를 먼저 입력해 주세요'); return; }
+      dstA.value = srcA.value;
+      showToast('계약자 주소를 가져왔어요');
+    }
+  }
+}
+
 function toggleInsured() {
   var isDiff = document.getElementById('policyTypeDiff').checked;
   var sec = document.getElementById('insuredSection');
