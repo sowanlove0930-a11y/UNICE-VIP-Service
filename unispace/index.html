@@ -2706,13 +2706,24 @@ function loadPlansFromGas(weekKey, cb){
   var cacheKey = weekKey || '__ALL__';
   var url = UNISPACE_GAS_URL + '?action=getPlans&fp=' + encodeURIComponent(currentUser.id);
   if(weekKey) url += '&weekKey=' + encodeURIComponent(weekKey);
+  console.log('[PLAN] request url=', url, 'currentUser=', currentUser && currentUser.id, currentUser && currentUser.role);
   fetch(url).then(function(r){return r.json();}).then(function(res){
+    console.log('[PLAN] response=', res);
     if(res && res.ok && res.plans){
+      console.log('[PLAN] plans count=', res.plans.length);
+      res.plans.forEach(function(pl){
+        console.log('[PLAN] fp=', pl.name, pl.fpId, 'weekKey=', pl.weekKey, 'customers=', (pl.customers||[]).length, pl.customers);
+      });
       _mergePlansToActivities(res.plans, weekKey || null);
       _loadedPlanKeys[cacheKey] = true;
+      var dbg={}; try{ dbg=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+      var planActs=Object.values(dbg).filter(function(a){ return a.planKey; });
+      console.log('[PLAN] activities with planKey now=', planActs.length, planActs);
+    } else {
+      console.log('[PLAN] no plans or not ok. msg=', res && res.msg);
     }
     if(cb) cb();
-  }).catch(function(){ if(cb) cb(); });
+  }).catch(function(err){ console.log('[PLAN] fetch error=', err); if(cb) cb(); });
 }
 
 function saveFpOverride(id, key, val) {
