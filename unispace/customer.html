@@ -988,6 +988,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <button class="excel-cancel-btn" id="excelCancelBtn" onclick="cancelExcelUpload()">전체 취소</button>
       </div>
       <button class="excel-dedup-btn" onclick="dedupCustomers()">🧹 중복 고객 정리 (같은 연락처 1명만 남기기)</button>
+      <button class="excel-dedup-btn" onclick="geocodeMissingCustomers()" style="margin-top:8px">📍 주소 → 좌표 일괄 변환 (지도 표시용)</button>
     </div>
   </div>
 
@@ -1318,6 +1319,8 @@ function doExcelImport() {
       closeExcelModal();
       importInProgress = false;
       showToast('✅ 총 ' + totalAdded + '명 고객이 등록되었습니다');
+      // 주소를 좌표로 일괄 변환 (지도 표시용)
+      geocodeMissingCustomers();
     }, 900);
   }, 50);
 }
@@ -2642,6 +2645,64 @@ function clearGeocode() {
   document.getElementById('r_lng').value = '';
   document.getElementById('geocodeStatus').textContent = '';
   document.getElementById('geocodeStatus').style.color = '';
+}
+
+function geocodeAddressOnce(addr, kakaoKey) {
+  function _kw() {
+    return fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(addr), {
+      headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
+    }).then(function(r){ return r.json(); });
+  }
+  function _addr() {
+    return fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr), {
+      headers: { 'Authorization': 'KakaoAK ' + kakaoKey }
+    }).then(function(r){ return r.json(); });
+  }
+  return _kw().then(function(d){
+    if (d.documents && d.documents.length) {
+      var p = d.documents[0];
+      return { lat: p.y, lng: p.x };
+    }
+    return _addr().then(function(d2){
+      if (d2.documents && d2.documents.length) {
+        var p2 = d2.documents[0];
+        return { lat: p2.y, lng: p2.x };
+      }
+      return null;
+    });
+  }).catch(function(){ return null; });
+}
+
+function geocodeMissingCustomers(onDone) {
+  var kakaoKey = localStorage.getItem('kakao_map_key') || '';
+  if (!kakaoKey) {
+    showToast('📍 좌표 변환은 주변 고객 찾기 화면에서 카카오 API 키 설정 후 가능합니다');
+    if (onDone) onDone(0);
+    return;
+  }
+  var targets = DB.filter(function(c){
+    return c && c.address && (!c.lat || !c.lng);
+  });
+  if (!targets.length) { if (onDone) onDone(0); return; }
+
+  showToast('📍 주소 좌표 변환 시작 (' + targets.length + '명)...');
+  var idx = 0, ok = 0;
+  function step() {
+    if (idx >= targets.length) {
+      localStorage.setItem('unispace_customers', JSON.stringify(DB));
+      renderCustomerList();
+      showToast('📍 좌표 변환 완료 (' + ok + '/' + targets.length + '명)');
+      if (onDone) onDone(ok);
+      return;
+    }
+    var c = targets[idx];
+    geocodeAddressOnce(c.address, kakaoKey).then(function(coord){
+      if (coord) { c.lat = coord.lat; c.lng = coord.lng; ok++; }
+      idx++;
+      setTimeout(step, 250);
+    });
+  }
+  step();
 }
 
 function geocodeAddress() {
