@@ -835,6 +835,8 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 
 /* ── 오늘 출결 현황 카드 ── */
 @keyframes uniSpin { from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+.ga-inp{ width:100%; box-sizing:border-box; padding:7px 9px; border:1px solid var(--bdr2); border-radius:7px; background:var(--surface); color:var(--text); font-size:13px; font-family:'Noto Sans KR',sans-serif; text-align:right; }
+.ga-inp:focus{ outline:none; border-color:var(--gold); }
 .uni-spinning { animation: uniSpin .7s linear infinite; }
 .att-today-card {
   grid-column: 1 / -1;
@@ -2705,6 +2707,16 @@ function _planCustToAct(c, idx, planKey, plan){
 }
 // merge plans array into unispace_activities (replace only this planKey portion)
 function _mergePlansToActivities(plans, planKeyFilter){
+  // cache FP plan goals (month/week life and non) for goal-adjust screen
+  try{
+    var pg=getPlanGoalsCache();
+    (plans||[]).forEach(function(pl){
+      if(!pl || !pl.fpId) return;
+      var mg=pl.monthGoal||{}, wg=pl.weekGoal||{};
+      pg[pl.fpId]={ month:{ life:_gaNum(mg.life), non:_gaNum(mg.non) }, week:{ life:_gaNum(wg.life), non:_gaNum(wg.non) } };
+    });
+    localStorage.setItem('unispace_plan_goals', JSON.stringify(pg));
+  }catch(e){}
   var db={};
   try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
   var prevCreated={};
@@ -2963,6 +2975,7 @@ const SUBMENUS = {
       { icon:'📊', name:'업적 조회',    desc:'월간 · 주간 · 일자별 조회', href:'#', action:'perf_view' },
       { icon:'🏆', name:'실시간 일보 산출',  desc:'지사 · 지점별 실시간 산출', href:'#', action:'fp_perf' },
       { icon:'👥', name:'매니저 매칭',   desc:'팀 구성 · 매니저/팀원 지정', href:'#', action:'team_config', adminOnly:true },
+      { icon:'🎯', name:'목표 조정',     desc:'지점·FP 목표 확인 및 조정', href:'#', action:'goal_adjust', adminOnly:true },
       { icon:'📋', name:'활동계획수립', desc:'월간 · 주간 활동계획 제출', href:'activity-plan.html', internal:true },
       // 활동관리 임시 숨김
       // { icon:'📌', name:'활동관리',   desc:'일별 활동 기록 및 현황 관리', href:'activity.html', internal:true },
@@ -3485,6 +3498,7 @@ function handleSubClick(e, action) {
   if (action === 'perf_view'){ openPerfView(); return false; }
   if (action === 'fp_perf'){ openFpPerf(); return false; }
   if (action === 'team_config'){ openTeamEdit(); var _openStamp=Date.now(); _teamOpenStamp=_openStamp; loadTeamsFromGas(function(){ if(_teamOpenStamp===_openStamp && document.getElementById('teamOverlay').classList.contains('open') && !_teamEdited){ _tempTeams=getTeamsDB().map(function(t){ return { id:t.id, branch:t.branch||'', managers:(t.managers||[]).slice(), members:(t.members||[]).slice() }; }); renderTeamList(); } }); return false; }
+  if (action === 'goal_adjust'){ openGoalAdj(); loadGoalAdjFromGas(function(){ if(document.getElementById('goalAdjOverlay').classList.contains('open')){ _gaRenderBranchGoal(); _gaRenderFpList(); _gaUpdateSum(); } }); loadPlansFromGas(null, function(){ if(document.getElementById('goalAdjOverlay').classList.contains('open')){ _gaRenderFpList(); _gaUpdateSum(); } }); return false; }
   if (action === 'transfer')  { openTransfer(); return false; }
   if (action === 'attendance') {
     window.location.href = 'attendance.html';
@@ -4395,6 +4409,167 @@ function _perfClassify(co){
 var FP_GOAL_KEY = 'unispace_fp_goal';
 function getFpGoalDB(){ try{ return JSON.parse(localStorage.getItem(FP_GOAL_KEY)||'{}'); }catch(e){ return {}; } }
 function saveFpGoalDB(db){ localStorage.setItem(FP_GOAL_KEY, JSON.stringify(db)); }
+
+// goal-adjust storage (admin set): { ym: { branch:{al:{life,non,wLife,wNon}, br:{...}}, fp:{ fpId:{life,non,wLife,wNon} } } }
+var GOAL_ADJ_KEY = 'unispace_goal_adjust';
+function getGoalAdjDB(){ try{ return JSON.parse(localStorage.getItem(GOAL_ADJ_KEY)||'{}'); }catch(e){ return {}; } }
+function saveGoalAdjDB(db){ localStorage.setItem(GOAL_ADJ_KEY, JSON.stringify(db)); }
+function _gaNum(v){ var n=parseInt((''+(v||'')).replace(/[^0-9]/g,'')); return isNaN(n)?0:n; }
+function _gaComma(n){ return (parseInt(n)||0).toLocaleString(); }
+// read FP original goal from GAS plan data cached in unispace_activities source: use _gaPlanGoals
+// FP plan goals live in localStorage 'unispace_plan_goals' = { fpId: {month:{life,non}, week:{life,non}} }
+function getPlanGoalsCache(){ try{ return JSON.parse(localStorage.getItem('unispace_plan_goals')||'{}'); }catch(e){ return {}; } }
+function _fpOrigGoal(fpId){ var c=getPlanGoalsCache()[fpId]; return c||{ month:{life:0,non:0}, week:{life:0,non:0} }; }
+
+var _gaBranch='all'; // all|al|br
+function openGoalAdj(){
+  _gaBranch = _myBranchScope()==='all' ? 'all' : _myBranchScope();
+  _gaRenderTabs();
+  _gaRenderBranchGoal();
+  _gaRenderFpList();
+  _gaUpdateSum();
+  document.getElementById('goalAdjOverlay').classList.add('open');
+}
+function closeGoalAdj(){ document.getElementById('goalAdjOverlay').classList.remove('open'); }
+function _gaSetBranch(b){ _gaBranch=b; _gaRenderTabs(); _gaRenderBranchGoal(); _gaRenderFpList(); _gaUpdateSum(); }
+function _gaRenderTabs(){
+  var scope=_myBranchScope();
+  var wrap=document.getElementById('gaBranchTabs'); if(!wrap) return;
+  var tabs=[];
+  if(scope==='all'){ tabs=[['all','전체'],['al','알파'],['br','브라보']]; }
+  else if(scope==='al'){ tabs=[['al','알파']]; }
+  else if(scope==='br'){ tabs=[['br','브라보']]; }
+  var h='';
+  tabs.forEach(function(t){
+    var on = _gaBranch===t[0];
+    h+='<span onclick="_gaSetBranch(\''+t[0]+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer;'+(on?'background:rgba(201,168,76,.16);color:var(--gold-d);font-weight:700':'border:1px solid var(--bdr2);color:var(--text2)')+'">'+t[1]+'</span>';
+  });
+  wrap.innerHTML=h;
+}
+function _gaYm(){ var n=new Date(); return n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2); }
+function _gaRenderBranchGoal(){
+  var box=document.getElementById('gaBranchGoalBox'); if(!box) return;
+  var db=getGoalAdjDB(); var ym=_gaYm();
+  var br=(db[ym]&&db[ym].branch)||{};
+  function row(bk,label){
+    var v=br[bk]||{};
+    return '<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:12px;margin-bottom:8px">'+
+      '<div style="font-size:13px;font-weight:700;margin-bottom:8px">'+label+' 지점 목표</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">월 생보</div><input type="text" id="gab_'+bk+'_life" value="'+_gaComma(v.life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">월 손보</div><input type="text" id="gab_'+bk+'_non" value="'+_gaComma(v.non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">주차 생보</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaComma(v.wLife)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">주차 손보</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaComma(v.wNon)+'" class="ga-inp"></div>'+
+      '</div>'+
+    '</div>';
+  }
+  var h='<div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:700">📍 지점 목표</div>';
+  if(_gaBranch==='all'||_gaBranch==='al') h+=row('al','알파');
+  if(_gaBranch==='all'||_gaBranch==='br') h+=row('br','브라보');
+  box.innerHTML=h;
+}
+function _gaFpRows(){
+  var scope=_myBranchScope();
+  var list=getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
+  if(_gaBranch!=='all') list=list.filter(function(fp){ return _pvBranchKey(fp.branch)===_gaBranch; });
+  else if(scope!=='all') list=list.filter(function(fp){ return _pvBranchKey(fp.branch)===scope; });
+  return list;
+}
+function _gaRenderFpList(){
+  var wrap=document.getElementById('gaFpList'); if(!wrap) return;
+  var db=getGoalAdjDB(); var ym=_gaYm();
+  var saved=(db[ym]&&db[ym].fp)||{};
+  var list=_gaFpRows();
+  if(!list.length){ wrap.innerHTML='<div class="pv-empty" style="padding:16px">FP가 없습니다</div>'; return; }
+  var h='';
+  list.forEach(function(fp){
+    var orig=_fpOrigGoal(fp.id);
+    var sv=saved[fp.id]||{};
+    // auto-fill input with saved value, else FP original
+    var life = sv.life!==undefined ? sv.life : orig.month.life;
+    var non  = sv.non!==undefined ? sv.non : orig.month.non;
+    var wlife= sv.wLife!==undefined ? sv.wLife : orig.week.life;
+    var wnon = sv.wNon!==undefined ? sv.wNon : orig.week.non;
+    var bk=_pvBranchKey(fp.branch);
+    var chip = bk==='al'?'<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(244,163,38,.16);color:#854F0B">알</span>':bk==='br'?'<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(37,99,235,.12);color:#0C447C">브</span>':'';
+    var hasOrig=(orig.month.life||orig.month.non||orig.week.life||orig.week.non);
+    var origTxt = hasOrig ? ('FP 작성: 월 생'+_gaComma(orig.month.life)+'·손'+_gaComma(orig.month.non)) : 'FP 작성: 없음';
+    h+='<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:11px 12px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+        '<div style="font-size:13px;font-weight:700">'+chip+' '+fp.name+'</div>'+
+        '<div style="font-size:10px;color:var(--text3)">'+origTxt+'</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">월 생보</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaComma(life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">월 손보</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaComma(non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">주차 생보</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaComma(wlife)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">주차 손보</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaComma(wnon)+'" class="ga-inp"></div>'+
+      '</div>'+
+    '</div>';
+  });
+  wrap.innerHTML=h;
+}
+function _gaUpdateSum(){
+  var box=document.getElementById('gaSumBox'); if(!box) return;
+  var list=_gaFpRows();
+  var sLife=0,sNon=0;
+  list.forEach(function(fp){
+    var le=document.getElementById('gaf_'+fp.id+'_life');
+    var ne=document.getElementById('gaf_'+fp.id+'_non');
+    sLife+=le?_gaNum(le.value):0;
+    sNon+=ne?_gaNum(ne.value):0;
+  });
+  box.innerHTML='<b>FP 합계 (월)</b> &nbsp; 생보 <b style="color:var(--gold-d)">'+_gaComma(sLife)+'</b> · 손보 <b style="color:#185FA5">'+_gaComma(sNon)+'</b> · 합계 <b>'+_gaComma(sLife+sNon)+'</b>원';
+}
+function saveGoalAdj(){
+  var db=getGoalAdjDB(); var ym=_gaYm();
+  if(!db[ym]) db[ym]={};
+  if(!db[ym].branch) db[ym].branch={};
+  if(!db[ym].fp) db[ym].fp={};
+  // branch goals (only branches currently shown)
+  ['al','br'].forEach(function(bk){
+    var le=document.getElementById('gab_'+bk+'_life');
+    if(!le) return; // not shown for this tab
+    db[ym].branch[bk]={
+      life:_gaNum(le.value),
+      non:_gaNum(document.getElementById('gab_'+bk+'_non').value),
+      wLife:_gaNum(document.getElementById('gab_'+bk+'_wlife').value),
+      wNon:_gaNum(document.getElementById('gab_'+bk+'_wnon').value)
+    };
+  });
+  // fp goals
+  var list=_gaFpRows();
+  var goalDb=getFpGoalDB();
+  if(!goalDb[ym]) goalDb[ym]={};
+  list.forEach(function(fp){
+    var le=document.getElementById('gaf_'+fp.id+'_life'); if(!le) return;
+    var life=_gaNum(le.value);
+    var non=_gaNum(document.getElementById('gaf_'+fp.id+'_non').value);
+    var wlife=_gaNum(document.getElementById('gaf_'+fp.id+'_wlife').value);
+    var wnon=_gaNum(document.getElementById('gaf_'+fp.id+'_wnon').value);
+    db[ym].fp[fp.id]={ life:life, non:non, wLife:wlife, wNon:wnon };
+    // reflect (life+non) sum into legacy daily-report goal (man-won unit)
+    var sumWon=life+non;
+    var sumMan=Math.round(sumWon/10000);
+    var prev=goalDb[ym][fp.id]||{};
+    goalDb[ym][fp.id]={ goal:sumMan, mgr:prev.mgr||'' };
+  });
+  saveGoalAdjDB(db);
+  saveFpGoalDB(goalDb);
+  if(typeof gasSaveGoalAdj==='function') gasSaveGoalAdj(db);
+  closeGoalAdj();
+  if(typeof renderFpPerf==='function') renderFpPerf();
+  showToast('🎯 목표가 저장되었습니다');
+}
+function gasSaveGoalAdj(db){
+  try{ fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'saveGoalAdjust', data:db }) }).catch(function(){}); }catch(e){}
+}
+function loadGoalAdjFromGas(cb){
+  fetch(UNISPACE_GAS_URL+'?action=getGoalAdjust').then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.data){ saveGoalAdjDB(res.data); }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
 
 // team structure: array of { id, branch, managers:[fpId...], members:[fpId...] }
 var TEAM_KEY = 'unispace_teams';
@@ -8366,8 +8541,28 @@ function doCheckin() { doSmartCheckin(); }
   </div>
 </div>
 
-<!-- 팀원/매니저 선택 모달 (FP 목록에서 선택) -->
-<div class="mgmt-overlay" id="fpPickOverlay" style="z-index:670">
+<!-- 목표 조정 모달 (대표/지점장 전용) -->
+<div class="mgmt-overlay" id="goalAdjOverlay" style="z-index:666">
+  <div class="mgmt-box" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div>
+        <div class="mgmt-title">🎯 목표 조정</div>
+        <div class="mgmt-sub" style="margin-bottom:0">FP가 써낸 목표를 확인하고 조정할 수 있어요 (생+손 합이 일보 목표에 반영됩니다)</div>
+      </div>
+      <button type="button" onclick="closeGoalAdj()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <div id="gaBranchTabs" style="display:flex;gap:6px;margin:8px 0 12px"></div>
+    <div style="flex:1;overflow-y:auto;min-height:0">
+      <div id="gaBranchGoalBox"></div>
+      <div style="font-size:12px;color:var(--text2);margin:14px 0 6px;font-weight:700">👤 FP 개인 목표</div>
+      <div id="gaFpList"></div>
+      <div id="gaSumBox" style="margin-top:12px;padding:12px;border-radius:10px;background:var(--bg3);font-size:12px;color:var(--text2)"></div>
+    </div>
+    <div class="mgmt-btns" style="margin-top:12px">
+      <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="saveGoalAdj()">목표 저장</button>
+    </div>
+  </div>
+</div>
   <div class="mgmt-box" style="max-width:380px;max-height:82vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <div class="mgmt-title" id="fpPickTitle">FP 선택</div>
