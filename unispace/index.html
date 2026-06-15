@@ -6685,7 +6685,15 @@ function deleteActFromPopup(){
   if(!_currentActId) return;
   var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
+  // permission: own activity, or admin (rep / branch head)
+  var _isAdmin = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'||(currentUser.title||'')==='교육지점장');
+  var _isOwn = act.fpId===currentUser.id || act.fpName===currentUser.name;
+  if(!_isOwn && !_isAdmin){
+    showToast('⚠️ 본인 활동만 삭제할 수 있어요 (지점장·대표 문의)');
+    return;
+  }
   var _delId=_currentActId;
+  var _delAct=act;
   closeActPopup();
   showConfirm({icon:'🗑️',iconCls:'confirm-icon-danger',title:'활동 삭제',
     msg:'<b>'+act.customerName+'</b>의 <b>'+act.type+' 상담</b>을<br>삭제할까요?',
@@ -6695,6 +6703,16 @@ function deleteActFromPopup(){
     var db2={};try{db2=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
     delete db2[_delId];
     localStorage.setItem('unispace_activities',JSON.stringify(db2));
+    // also delete from GAS plan so it does not come back on refresh
+    if(_delAct.planKey && _delAct.fpId){
+      var qs='action=deletePlanCustomer'+
+        '&weekKey='+encodeURIComponent(_delAct.planKey)+
+        '&fpCode='+encodeURIComponent(_delAct.fpId)+
+        '&date='+encodeURIComponent(_delAct.date||'')+
+        '&name='+encodeURIComponent(_delAct.customerName||'')+
+        '&time='+encodeURIComponent(_delAct.time||'');
+      try{ fetch(UNISPACE_GAS_URL+'?'+qs).catch(function(){}); }catch(e){}
+    }
     renderActView(); if(actViewMode=="month"&&selectedDayStr) renderDayPanel(selectedDayStr);
     showToast('삭제되었습니다');
   });
