@@ -295,9 +295,13 @@ input:focus,select,textarea:focus{border-color:var(--gold)}
   </div>
 
   <div id="statusView" style="display:none">
-    <div class="hero">
-      <div class="hero-t" id="stTitle">제출 현황</div>
-      <div class="hero-warn" id="stWarn"></div>
+    <div class="hero" style="display:flex;align-items:center;gap:10px">
+      <button type="button" id="stPrevWk" style="flex:0 0 auto;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;width:36px;height:36px;border-radius:8px;font-size:16px;cursor:pointer;font-family:inherit">‹</button>
+      <div style="flex:1;text-align:center">
+        <div class="hero-t" id="stTitle">제출 현황</div>
+        <div class="hero-warn" id="stWarn"></div>
+      </div>
+      <button type="button" id="stNextWk" style="flex:0 0 auto;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;width:36px;height:36px;border-radius:8px;font-size:16px;cursor:pointer;font-family:inherit">›</button>
     </div>
     <div class="st-stat">
       <div class="st-card"><div class="st-lbl">제출</div><div class="st-val" id="stDone" style="color:#1F9268">0</div></div>
@@ -447,6 +451,28 @@ function getWeekInfo(){
 
 function getPlanDB(){ try{ return JSON.parse(localStorage.getItem(PLAN_KEY)||'{}'); }catch(e){ return {}; } }
 function savePlanDB(db){ localStorage.setItem(PLAN_KEY, JSON.stringify(db)); }
+
+// status-view week info. Mon still shows previous week, switches on Tue.
+// offset: 0=base week, -1=one week back ... (older = more negative)
+var STATUS_MIN_OFFSET = -8; // up to 8 weeks back
+var statusWeekOffset = 0;
+function getStatusWeekInfo(offset){
+  var off = offset || 0;
+  var now = new Date(); now.setHours(0,0,0,0);
+  var dow = now.getDay();
+  // this week's monday
+  var mon = new Date(now); mon.setDate(now.getDate()-(dow===0?6:dow-1));
+  // Tuesday transition: on Monday (dow=1) status still points to previous week
+  if (dow === 1) mon.setDate(mon.getDate()-7);
+  // apply offset (weeks back)
+  mon.setDate(mon.getDate() + off*7);
+  var sun = new Date(mon); sun.setDate(mon.getDate()+6);
+  var m = mon.getMonth();
+  var weekNo = Math.ceil(mon.getDate()/7);
+  var deadline = new Date(mon); deadline.setHours(12,0,0,0);
+  var key = mon.getFullYear()+'-'+_pad2(m+1)+'-W'+weekNo;
+  return { mon:mon, sun:sun, month:m+1, weekNo:weekNo, deadline:deadline, key:key };
+}
 
 function getCurrentPerf(fpId){
   var log=[]; try{ log=JSON.parse(localStorage.getItem(PERF_LOG_KEY)||'[]'); }catch(e){}
@@ -1352,7 +1378,7 @@ function _planSummary(rec){
 }
 
 function renderStatus(){
-  var wi=getWeekInfo();
+  var wi=_statusWi||getStatusWeekInfo(statusWeekOffset);
   var db=getPlanDB();
   var weekRec=db[wi.key]||{};
   var roster=_getRoster().filter(function(fp){ return fp.active && fp.role!=='대표'; });
@@ -1450,7 +1476,7 @@ function _pvTagCell(tags){
 
 var _pvCurRec=null;
 function _viewFpPlan(fpId){
-  var wi=getWeekInfo();
+  var wi=_statusWi||getWeekInfo();
   var rec=(getPlanDB()[wi.key]||{})[fpId];
   if(!rec){ showToast('제출 내용이 없습니다'); return; }
   _pvCurRec=rec;
@@ -1541,7 +1567,7 @@ function _pvExportExcel(){
   if(!_pvCurRec){ showToast('내용이 없습니다'); return; }
   if(!window.ExcelJS){ showToast('엑셀 모듈 로딩중...'); return; }
   var rec=_pvCurRec;
-  var wi=getWeekInfo();
+  var wi=_statusWi||getWeekInfo();
   var wb=new ExcelJS.Workbook();
   var ws=wb.addWorksheet('활동계획서');
   _fillPlanSheet(ws, wi, { branch:rec.branch||'', name:rec.name||'', perf:getCurrentPerf(rec.fpId||'')||0 }, {
@@ -1559,7 +1585,7 @@ function _pvExportExcel(){
 
 function exportStatusExcel(){
   if(!window.ExcelJS){ showToast('엑셀 모듈 로딩중...'); return; }
-  var wi=getWeekInfo();
+  var wi=_statusWi||getWeekInfo();
   var weekRec=getPlanDB()[wi.key]||{};
   var roster=_getRoster().filter(function(fp){ return fp.active && fp.role!=='대표'; });
   if(currentUser.role==='지점장'){ var myb=_pBranchKey(currentUser.branch); roster=roster.filter(function(fp){ return _pBranchKey(fp.branch)===myb; }); }
@@ -1642,16 +1668,36 @@ function showWriteView(){
   document.getElementById('writeView').style.display='';
   document.getElementById('vtWrite').classList.add('on');
 }
+var _statusWi = null; // currently viewed week info for status view
 function showStatusView(){
   _hideAllViews();
   document.getElementById('statusView').style.display='';
   document.getElementById('vtStatus').classList.add('on');
-  var wi=getWeekInfo();
+  statusWeekOffset = 0;
+  _renderStatusWeek();
+}
+function moveStatusWeek(dir){
+  var next = statusWeekOffset + dir;
+  if(next > 0) next = 0; // no future beyond base week
+  if(next < STATUS_MIN_OFFSET) next = STATUS_MIN_OFFSET;
+  if(next === statusWeekOffset) return;
+  statusWeekOffset = next;
+  _renderStatusWeek();
+}
+function _renderStatusWeek(){
+  var wi = getStatusWeekInfo(statusWeekOffset);
+  _statusWi = wi;
   document.getElementById('stTitle').textContent='유니스지사 '+wi.month+'월 '+wi.weekNo+'주차 제출 현황';
   var dl=wi.deadline;
-  document.getElementById('stWarn').textContent='제출마감 '+_pad2(dl.getMonth()+1)+'/'+_pad2(dl.getDate())+'(월) 12:00';
+  var warn='제출마감 '+_pad2(dl.getMonth()+1)+'/'+_pad2(dl.getDate())+'(월) 12:00';
+  if(statusWeekOffset < 0) warn += '  ·  지난 주차 (조회)';
+  document.getElementById('stWarn').textContent=warn;
+  // enable/disable nav buttons
+  var pv=document.getElementById('stPrevWk'), nx=document.getElementById('stNextWk');
+  if(pv) pv.style.opacity = (statusWeekOffset <= STATUS_MIN_OFFSET) ? '.35' : '1';
+  if(nx) nx.style.opacity = (statusWeekOffset >= 0) ? '.35' : '1';
   renderStatus();
-  // GAS에서 이번 주 전체 계획 로드 후 다시 렌더 (관리자 권한대로)
+  // load that week's all plans from GAS then re-render (per permission)
   planGasGet({ action:'getPlans', fp:currentUser.id, weekKey:wi.key }).then(function(res){
     if(res && res.ok && res.plans){
       var db=getPlanDB();
@@ -1829,6 +1875,8 @@ function init(){
     document.getElementById('vtStatus').style.display='';
     document.getElementById('vtStatus').addEventListener('click', showStatusView);
     document.getElementById('stExcelBtn').addEventListener('click', exportStatusExcel);
+    var spw=document.getElementById('stPrevWk'); if(spw) spw.addEventListener('click', function(){ moveStatusWeek(-1); });
+    var snw=document.getElementById('stNextWk'); if(snw) snw.addEventListener('click', function(){ moveStatusWeek(1); });
     var pvc=document.getElementById('pvCloseBtn'); if(pvc) pvc.addEventListener('click', _closePlanView);
     var pve=document.getElementById('pvExcelBtn'); if(pve) pve.addEventListener('click', _pvExportExcel);
     var pvo=document.getElementById('planViewOverlay');
