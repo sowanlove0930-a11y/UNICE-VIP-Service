@@ -3101,14 +3101,26 @@ function showDashboard() {
         }
       }).catch(function(){});
 
-      // 2번 (FP): 내 고객수 (사번 기준, GAS 캐시)
+      // FP customer count (by fp code)
+      // show cached count first, then refresh from GAS so it works without visiting customer tab
       var DB2 = [];
       try { DB2 = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e) {}
-      var myCnt = DB2.filter(function(c){
-        return c.fpCode === currentUser.id || c.fp === currentUser.name;
-      }).length;
+      function _countMyCust(arr){
+        return arr.filter(function(c){
+          return c.fpCode === currentUser.id || c.fp === currentUser.name;
+        }).length;
+      }
       var st2 = document.getElementById('st2');
-      if(st2) st2.textContent = myCnt;
+      if(st2) st2.textContent = _countMyCust(DB2);
+      var custUrl = UNISPACE_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(currentUser.id);
+      fetch(custUrl).then(function(r){return r.json();}).then(function(res){
+        if(res && res.ok && res.customers){
+          try { localStorage.setItem('unispace_customers', JSON.stringify(res.customers)); } catch(e) {}
+          if(st2) st2.textContent = _countMyCust(res.customers);
+          var st4ref = document.getElementById('st4');
+          if(st4ref && typeof calcTodayCount==='function') st4ref.textContent = calcTodayCount();
+        }
+      }).catch(function(){});
 
       // 3번 (FP): 이번달 출결현황 (정상출근 일수 + 지각/미출석)
       var fpAttUrl = UNISPACE_GAS_URL + '?action=getAttendance&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(getCurrentYM());
@@ -5228,11 +5240,16 @@ function renderAttToday() {
       } catch(e) {}
     }
     var roster = (attRes && attRes.ok && attRes.roster) ? attRes.roster : [];
+    // admin/branch-head = all branches, others = own branch only
+    var _attSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
+    var _attNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
+    var _attMyBr = (currentUser && currentUser.branch) ? _attNb(currentUser.branch) : '';
     var FPS = [];
     roster.forEach(function(f){
       if(f.level==='admin'||f.level==='manager') return;
       if((f.branch||'').indexOf('교육')>=0) return;
       if(!f.active) return;
+      if(!_attSeeAll && _attMyBr && _attNb(f.branch) !== _attMyBr) return;
       FPS.push({ id:f.id, name:f.name, branch:(f.branch||'').replace('지점','') });
     });
     _renderAttTodayCards(FPS, todayDb, todayPr);
@@ -5290,10 +5307,14 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
   if(st3s) st3s.textContent = '알파 ' + na + '명 · 브라보 ' + nb + '명';
 
   // 사전보고 칸: 오늘 사전보고한 사람 전원 (증빙 상태 포함)
+  var _prSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
+  var _prNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
+  var _prMyBr = (currentUser && currentUser.branch) ? _prNb(currentUser.branch) : '';
   var preList = [];
   Object.keys(todayPr).forEach(function(fid) {
     var pr = todayPr[fid];
     if (!pr) return;
+    if (!_prSeeAll && _prMyBr && _prNb(pr.branch) !== _prMyBr) return;
     var br = (pr.branch || '').replace('지점','');
     preList.push({ id:fid, name:pr.name||'', branch:br, type:pr.type||'', proof:!!pr.proof });
   });
