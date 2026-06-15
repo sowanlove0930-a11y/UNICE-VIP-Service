@@ -2237,7 +2237,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
 
     <!-- 1번: 보장월초 -->
     <div class="stat s-gold">
-      <div class="stat-lbl">이번 달 보장월초 및 건수</div>
+      <div class="stat-lbl" id="st1-lbl">이번 달 보장월초 및 건수</div>
       <div style="display:flex;align-items:baseline;gap:8px">
         <div class="stat-val" id="st1">—</div>
         <div id="st1-rate" style="font-size:14px;font-weight:800;color:var(--gold2)"></div>
@@ -2249,7 +2249,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="stat s-blue" id="stat2-admin" style="display:none">
       <div class="stat-lbl">유니스 계약고객</div>
       <div class="stat-val" id="st2-admin">—</div>
-      <div class="stat-unit" id="st2-admin-sub">이번달 신규 · 알파 0 · 브라보 0</div>
+      <div class="stat-unit" id="st2-admin-sub"><span id="st2-month">이번달</span> 신규 · 알파 0 · 브라보 0</div>
     </div>
     <div class="stat s-blue" id="stat2-fp" style="display:none">
       <div class="stat-lbl">내 고객 수</div>
@@ -2271,7 +2271,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
 
     <!-- 4번: 리크루팅 (대표/지점장) / 오늘 챙길 고객 (FP) -->
     <div class="stat s-purple" id="stat4-recruit" style="display:none;cursor:pointer" onclick="openRecruitModal()">
-      <div class="stat-lbl">이번달 리크루팅 <span style="font-size:10px;color:var(--text3)">✏️ 클릭 입력</span></div>
+      <div class="stat-lbl"><span id="st4-recruit-lbl">이번달 리크루팅</span> <span style="font-size:10px;color:var(--text3)">✏️ 클릭 입력</span></div>
       <div class="stat-val" id="st4-recruit">—</div>
       <div class="stat-unit" id="st4-recruit-sub">입과확보 / 목표</div>
     </div>
@@ -2967,6 +2967,11 @@ const SUBMENUS = {
 
 // ── 초기화 ──────────────────────────────────────────
 function renderBojangCard() {
+  // set current-month labels
+  var _curMon=(new Date()).getMonth()+1;
+  var _l1=document.getElementById('st1-lbl'); if(_l1) _l1.textContent=_curMon+'월 보장월초 및 건수';
+  var _l4=document.getElementById('st4-recruit-lbl'); if(_l4) _l4.textContent=_curMon+'월 리크루팅';
+  var _l2=document.getElementById('st2-month'); if(_l2) _l2.textContent=_curMon+'월';
   // 보장월초 카드: 목표는 저장값, 실적/건수는 0 (GAS 연동 후 실데이터)
   var _g = {};
   try { _g = JSON.parse(localStorage.getItem('unispace_perf_goal') || '{}'); } catch(e) {}
@@ -6659,14 +6664,17 @@ function deleteActFromPopup(){
   if(!_currentActId) return;
   var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
+  var _delId=_currentActId;
+  closeActPopup();
   showConfirm({icon:'🗑️',iconCls:'confirm-icon-danger',title:'활동 삭제',
     msg:'<b>'+act.customerName+'</b>의 <b>'+act.type+' 상담</b>을<br>삭제할까요?',
     okLabel:'삭제',okCls:'red'
   }).then(function(ok){
     if(!ok) return;
-    delete db[_currentActId];
-    localStorage.setItem('unispace_activities',JSON.stringify(db));
-    closeActPopup(); renderActView(); if(actViewMode=="month"&&selectedDayStr) renderDayPanel(selectedDayStr);
+    var db2={};try{db2=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+    delete db2[_delId];
+    localStorage.setItem('unispace_activities',JSON.stringify(db2));
+    renderActView(); if(actViewMode=="month"&&selectedDayStr) renderDayPanel(selectedDayStr);
     showToast('삭제되었습니다');
   });
 }
