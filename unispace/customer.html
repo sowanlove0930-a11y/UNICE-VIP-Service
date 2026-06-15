@@ -1425,10 +1425,12 @@ function dedupCustomers() {
   var seen = {};
   var before = DB.length;
   var cleaned = [];
+  var removedList = [];
   DB.forEach(function(c) {
     var key = (c.phone || '').trim();
     if (!key) { cleaned.push(c); return; }
     if (!seen[key]) { seen[key] = true; cleaned.push(c); }
+    else { removedList.push(c); }
   });
   var removed = before - cleaned.length;
   if (removed === 0) { showToast('✅ 중복 고객이 없습니다'); return; }
@@ -1440,6 +1442,10 @@ function dedupCustomers() {
     if (!ok) return;
     DB = cleaned;
     localStorage.setItem('unispace_customers', JSON.stringify(DB));
+    // also delete duplicates from GAS so they do not come back on reload
+    removedList.forEach(function(c) {
+      if (c && c.id && typeof gasDeleteCustomer === 'function') gasDeleteCustomer(c.id);
+    });
     updateCustomerStats();
     renderCustomerList();
     showToast('🧹 중복 ' + removed + '명 정리 완료');
