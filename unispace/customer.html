@@ -1249,11 +1249,11 @@ function renderExcelPreview() {
 
     pf.rows.forEach(function(r) {
       var phone = String(r['연락처 *'] || r['연락처'] || '').trim();
-      if (existingPhones.indexOf(phone) >= 0) {
+      if (phone && existingPhones.indexOf(phone) >= 0) {
         skipRows.push(phone);
       } else {
         newRows.push(r);
-        existingPhones.push(phone);  // 같은 배치 내 중복 방지
+        if (phone) existingPhones.push(phone);  // only track non-empty phones for dedup
       }
     });
 
@@ -1335,15 +1335,17 @@ function _doImportWork() {
 
     // 고객별로 계약 취합 (같은 연락처 여러 행 → 계약 복수)
     var customerMap = {};
-    pf._newRows.forEach(function(r) {
+    pf._newRows.forEach(function(r, _ri) {
       var name  = String(r['고객명 *'] || r['고객명'] || '').trim();
       var phone = String(r['연락처 *'] || r['연락처'] || '').trim();
-      if (!name || !phone) return;
+      if (!name) return;
+      // key by phone when present; otherwise a unique key per row so no-phone customers are not merged
+      var cmKey = phone || ('__nophone_' + name + '_' + _ri);
 
-      if (!customerMap[phone]) {
+      if (!customerMap[cmKey]) {
         var insuredName = String(r['피보험자'] || '').trim();
-        customerMap[phone] = {
-          id:           'c_' + Date.now() + '_' + Math.random().toString(36).substr(2,6),
+        customerMap[cmKey] = {
+          id:           'c_' + Date.now() + '_' + Math.random().toString(36).substr(2,6) + '_' + _ri,
           name:         name,
           phone:        phone,
           birth:        fmtExcelDate(r['생년월일'] || ''),
@@ -1360,8 +1362,8 @@ function _doImportWork() {
           family:       [],
         };
         if (insuredName) {
-          customerMap[phone].policyType = '계피상이';
-          customerMap[phone].insured = { name: insuredName, relation: '', birth: '', gender: '' };
+          customerMap[cmKey].policyType = '계피상이';
+          customerMap[cmKey].insured = { name: insuredName, relation: '', birth: '', gender: '' };
         }
       }
 
@@ -1369,7 +1371,7 @@ function _doImportWork() {
       var insurer = String(r['보험사'] || '').trim();
       var product = String(r['상품명'] || '').trim();
       if (insurer || product) {
-        customerMap[phone].contracts.push({
+        customerMap[cmKey].contracts.push({
           insurer:    insurer,
           product:    product,
           date:       fmtExcelDate(r['계약일'] || ''),
