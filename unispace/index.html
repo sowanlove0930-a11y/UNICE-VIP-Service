@@ -1963,15 +1963,25 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
   </div>
 </div>
 
+<!-- ── 계획/결과 갈림길 선택 모달 ── -->
+<div class="quick-add-overlay" id="qaChoiceOverlay">
+  <div class="quick-add-box">
+    <div class="quick-add-title">QUICK ADD</div>
+    <div class="quick-add-date" id="qaChoiceDate"></div>
+    <div style="font-size:13px;color:var(--text2);text-align:center;margin:14px 0 14px">무엇을 입력할까요?</div>
+    <button type="button" onclick="qaChoosePlan()" style="width:100%;padding:15px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;font-family:'Noto Sans KR',sans-serif">📋 계획 입력<div style="font-size:11px;font-weight:400;color:#9FB0C9;margin-top:3px">앞으로 만날 미팅을 잡아둡니다</div></button>
+    <button type="button" onclick="qaChooseResult()" style="width:100%;padding:15px;background:#1F9268;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">✅ 결과 입력<div style="font-size:11px;font-weight:400;color:#C5E6D7;margin-top:3px">다녀온 활동 결과를 바로 기록합니다</div></button>
+    <div class="quick-btns" style="margin-top:14px">
+      <button type="button" class="quick-cancel" onclick="closeQaChoice()" style="width:100%">취소</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── 빠른 활동 입력 모달 ── -->
 <div class="quick-add-overlay" id="quickAddOverlay">
   <div class="quick-add-box">
     <div class="quick-add-title">QUICK ADD</div>
     <div class="quick-add-date" id="quickAddDate"></div>
-    <div id="qaModeToggle" style="display:flex;gap:0;margin-bottom:14px;border:1.5px solid var(--navy);border-radius:9px;overflow:hidden">
-      <button type="button" id="qaModePlan" onclick="setQaMode('plan')" style="flex:1;padding:9px 0;font-size:13px;font-weight:700;cursor:pointer;border:none;background:var(--navy);color:#fff;font-family:'Noto Sans KR',sans-serif">📋 계획 잡기</button>
-      <button type="button" id="qaModeVisited" onclick="setQaMode('visited')" style="flex:1;padding:9px 0;font-size:13px;font-weight:700;cursor:pointer;border:none;background:transparent;color:var(--text2);font-family:'Noto Sans KR',sans-serif">✅ 다녀옴</button>
-    </div>
     <div id="qaVisitedHint" style="display:none;font-size:11px;color:var(--text2);background:#F0F7F3;border:1px solid #BFE0CF;border-radius:8px;padding:8px 10px;margin-bottom:12px">고객명만 입력하면 됩니다. 차수·활동·상품은 다음 결과 입력창에서 작성해요.</div>
     <!-- 관리자용 FP 선택 -->
     <div class="quick-field" id="qaFpField" style="display:none">
@@ -5643,7 +5653,7 @@ function renderDayPanel(ds) {
 }
 
 function openQuickAddForDate(ds) {
-  openQuickAddModal(ds, '');
+  qaEntry(ds, '');
 }
 
 
@@ -7188,34 +7198,58 @@ function openQuickAddModal(dateStr, preselectedFpId) {
   } else {
     if(fpField) fpField.style.display = 'none';
   }
-  // mode default by date hint: past or today -> visited, future -> plan
-  var _todayStr = (function(){ var d=new Date(); var mm=d.getMonth()+1; var dd=d.getDate(); return d.getFullYear()+'-'+(mm<10?'0':'')+mm+'-'+(dd<10?'0':'')+dd; })();
-  var _defMode = (dateStr && dateStr <= _todayStr) ? 'visited' : 'plan';
-  setQaMode(_defMode);
+  setQaMode(_qaPendingMode || 'plan');
   document.getElementById('quickAddOverlay').classList.add('open');
   setTimeout(function(){ document.getElementById('qaCustomer').focus(); }, 100);
+}
+
+// qaEntry: future -> plan quick add directly; past/today -> choice modal
+var _qaPendingMode = 'plan';
+var _qaPendingDate = null, _qaPendingFp = '';
+function _qaTodayStr(){ var d=new Date(); var mm=d.getMonth()+1; var dd=d.getDate(); return d.getFullYear()+'-'+(mm<10?'0':'')+mm+'-'+(dd<10?'0':'')+dd; }
+function qaEntry(dateStr, fpId){
+  _qaPendingDate = dateStr; _qaPendingFp = fpId||'';
+  if(dateStr && dateStr <= _qaTodayStr()){
+    // past/today -> show choice modal
+    var dEl=document.getElementById('qaChoiceDate');
+    if(dEl){
+      var parts=dateStr.split('-'); var dObj=new Date(parts[0],parts[1]-1,parts[2]);
+      var days=['일','월','화','수','목','금','토'];
+      dEl.textContent=parseInt(parts[1])+'월 '+parseInt(parts[2])+'일 ('+days[dObj.getDay()]+')';
+    }
+    document.getElementById('qaChoiceOverlay').classList.add('open');
+  } else {
+    // future -> plan quick add directly
+    _qaPendingMode='plan';
+    openQuickAddModal(dateStr, fpId||'');
+  }
+}
+function closeQaChoice(){ document.getElementById('qaChoiceOverlay').classList.remove('open'); }
+function qaChoosePlan(){
+  closeQaChoice();
+  _qaPendingMode='plan';
+  openQuickAddModal(_qaPendingDate, _qaPendingFp);
+}
+function qaChooseResult(){
+  closeQaChoice();
+  _qaPendingMode='visited';
+  openQuickAddModal(_qaPendingDate, _qaPendingFp);
 }
 
 var _qaMode = 'plan';
 function setQaMode(mode){
   _qaMode = (mode==='visited') ? 'visited' : 'plan';
-  var planBtn=document.getElementById('qaModePlan');
-  var visBtn=document.getElementById('qaModeVisited');
   var hint=document.getElementById('qaVisitedHint');
   var confirmBtn=document.getElementById('qaConfirmBtn');
   var planOnly=document.querySelectorAll('.qa-plan-only');
   if(_qaMode==='visited'){
-    if(planBtn){ planBtn.style.background='transparent'; planBtn.style.color='var(--text2)'; }
-    if(visBtn){ visBtn.style.background='#1F9268'; visBtn.style.color='#fff'; }
     if(hint) hint.style.display='';
     for(var i=0;i<planOnly.length;i++) planOnly[i].style.display='none';
-    if(confirmBtn) confirmBtn.textContent='결과 입력하러 가기 →';
+    if(confirmBtn){ confirmBtn.textContent='결과 입력하러 가기 →'; confirmBtn.style.background='#1F9268'; }
   } else {
-    if(planBtn){ planBtn.style.background='var(--navy)'; planBtn.style.color='#fff'; }
-    if(visBtn){ visBtn.style.background='transparent'; visBtn.style.color='var(--text2)'; }
     if(hint) hint.style.display='none';
     for(var j=0;j<planOnly.length;j++) planOnly[j].style.display='';
-    if(confirmBtn) confirmBtn.textContent='+ 활동 등록';
+    if(confirmBtn){ confirmBtn.textContent='+ 활동 등록'; confirmBtn.style.background=''; }
   }
 }
 
@@ -7311,7 +7345,7 @@ function saveQuickAdd() {
 
 function onWeekCellClick(e, dateStr, fpId) {
   if(e.target.closest && e.target.closest('.week-act-chip')) return;
-  openQuickAddModal(dateStr, fpId||'');
+  qaEntry(dateStr, fpId||'');
 }
 
 
