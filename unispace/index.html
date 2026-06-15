@@ -5825,7 +5825,6 @@ function renderWeekActTable() {
   Object.values(db).forEach(function(a) {
     if(!a.fpId) return;
     if(weekBranchFilter !== 'all' && a.branch !== weekBranchFilter) return;
-    if(currentUser && currentUser.role === '지점장' && a.branch !== currentUser.branch) return;
     if(!fpMap[a.fpId]) fpMap[a.fpId] = {id:a.fpId, name:a.fpName, branch:a.branch};
   });
 
@@ -5833,7 +5832,6 @@ function renderWeekActTable() {
   var fpList = getMergedFpList().filter(function(fp){
     if(!fp.active) return false;
     if(weekBranchFilter !== 'all' && fp.branch !== weekBranchFilter) return false;
-    if(currentUser && currentUser.role === '지점장') return fp.branch === currentUser.branch;
     return true;
   });
   fpList.forEach(function(fp){ if(!fpMap[fp.id]) fpMap[fp.id] = {id:fp.id, name:fp.name, branch:fp.branch}; });
@@ -5846,9 +5844,21 @@ function renderWeekActTable() {
     return {fp:fp, acts:acts, total:total};
   });
 
+  var myId = (currentUser && currentUser.id) ? String(currentUser.id) : '';
+  var myBranch = (currentUser && currentUser.branch) ? currentUser.branch : '';
   fpActs.sort(function(a,b){
+    if(myId){
+      var ma = (String(a.fp.id)===myId)?0:1, mb = (String(b.fp.id)===myId)?0:1;
+      if(ma !== mb) return ma - mb;
+    }
     if(weekBranchFilter === 'all') {
-      var ba = a.fp.branch==='알파지점'?0:1, bb = b.fp.branch==='알파지점'?0:1;
+      // logged-in user's own branch comes first; otherwise alpha before bravo
+      var ba, bb;
+      if(myBranch){
+        ba = (a.fp.branch===myBranch)?0:1; bb = (b.fp.branch===myBranch)?0:1;
+      } else {
+        ba = a.fp.branch==='알파지점'?0:1; bb = b.fp.branch==='알파지점'?0:1;
+      }
       if(ba !== bb) return ba - bb;
     }
     return a.fp.name.localeCompare(b.fp.name,'ko');
@@ -5873,11 +5883,13 @@ function renderWeekActTable() {
   fpActs.forEach(function(row){
     var hasAct = row.total > 0;
     var isAlpha = row.fp.branch==='알파지점';
-    html += '<tr>';
-    html += '<td class="fp-name-cell'+(hasAct?'':' no-act-fp')+'" data-fpid="'+row.fp.id+'">'+
+    var isMe = myId && String(row.fp.id)===myId;
+    html += '<tr'+(isMe?' style="background:rgba(201,168,76,.07)"':'')+'>';
+    html += '<td class="fp-name-cell'+(hasAct?'':' no-act-fp')+'" data-fpid="'+row.fp.id+'"'+(isMe?' style="font-weight:700"':'')+'>'+
       '<span style="font-size:10px;font-weight:700;padding:1px 4px;border-radius:4px;margin-right:3px;'+
       (isAlpha?'background:rgba(201,168,76,.12);color:var(--gold2)':'background:rgba(59,130,246,.12);color:#60A5FA')+
-      '">'+(isAlpha?'알':'브')+'</span>'+row.fp.name+'</td>';
+      '">'+(isAlpha?'알':'브')+'</span>'+row.fp.name+
+      (isMe?'<span style="font-size:9px;color:var(--gold);margin-left:4px">나</span>':'')+'</td>';
     datestrs.forEach(function(ds,i){
       var isToday2 = dates[i].getTime()===today.getTime();
       var dayActs = row.acts[i].slice().sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
