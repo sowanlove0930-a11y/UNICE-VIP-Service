@@ -1334,13 +1334,19 @@ function renderPrereportTab(){
     var photoBtn=(item.rec.proof && item.rec.proofUrl)
       ?'<button type="button" class="proof-view-btn" onclick="viewProofPhoto(\''+item.rec.proofUrl+'\')">📷 인증샷</button>'
       :'';
+    // delete allowed: admin always; FP only if report date is still in the future (before that day)
+    var _isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
+    var _canDel = _isAdmin || (item.date > getTodayStr());
+    var delBtn = _canDel
+      ? '<button type="button" class="pr-delete" onclick="deletePrereport(\''+item.date+'\')">삭제</button>'
+      : '<span class="pr-delete" style="opacity:.4;cursor:not-allowed" title="해당일이 되어 삭제할 수 없습니다 (지점장·대표 문의)">삭제</span>';
     return '<div class="pr-item">'+
       '<div class="pr-item-date">'+item.date+'</div>'+
       '<span class="pr-item-type '+cls+'">'+emo+' '+item.rec.type+'</span>'+
       '<div class="pr-item-note">'+item.rec.note+'</div>'+
       proofHtml+
       photoBtn+
-      '<button type="button" class="pr-delete" onclick="deletePrereport(\''+item.date+'\')">삭제</button>'+
+      delBtn+
     '</div>';
   }).join('');
 }
@@ -1373,11 +1379,16 @@ function savePrereport(){
     if(!note){showToast('⚠️ 사유를 입력해 주세요');return;}
   }
 
-  // FP 당일 입력 차단 (이중 검증)
+  // FP block: can report only for future dates (before that day). admin can include today.
   var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
-  if(!isAdmin && _prSelDates.indexOf(getTodayStr())>=0){
-    showToast('⚠️ 당일 보고는 지점장·대표만 가능합니다');
-    return;
+  if(!isAdmin){
+    var _td=getTodayStr();
+    for(var _di=0;_di<_prSelDates.length;_di++){
+      if(!(_prSelDates[_di] > _td)){
+        showToast('⚠️ 사전보고는 해당일 전날까지만 가능합니다 (당일은 지점장·대표)');
+        return;
+      }
+    }
   }
 
   var db=getPrDB();
@@ -1493,6 +1504,12 @@ function confirmProof(){
 
 // ── 사전보고 삭제 ─────────────────────────────────────
 function deletePrereport(date){
+  // guard: FP can delete only future-dated reports; admin always
+  var _isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
+  if(!_isAdmin && !(date > getTodayStr())){
+    showToast('⚠️ 해당일이 되어 삭제할 수 없어요 (지점장·대표 문의)');
+    return;
+  }
   var db=getPrDB();
   if(db[date]&&db[date][currentUser.id]){
     delete db[date][currentUser.id];
