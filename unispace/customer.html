@@ -2842,22 +2842,24 @@ function geocodeMissingCustomers(onDone) {
 // 주소 변형 후보 생성 (동/호수 등 방해요소 제거, 점진적 단순화)
 function _addrVariants(addr) {
   var list = [];
-  function push(s){ s=(s||'').trim().replace(/\s+/g,' '); if(s && list.indexOf(s)<0) list.push(s); }
-  push(addr);
-  // "103동 1704호", "103-1704", "1704호" 등 동/호수 제거
-  var noUnit = addr
+  function push(s){ s=(s||'').trim().replace(/\s+/g,' ').replace(/[,]+$/,'').trim(); if(s && list.indexOf(s)<0) list.push(s); }
+  // preprocess: comma -> space, split roadname+number (e.g. road68 -> road 68)
+  var pre = String(addr||'').replace(/,/g,' ').replace(/(로|길)(\d)/g,'$1 $2').replace(/\s+/g,' ').trim();
+  push(pre);
+  // remove dong/ho/floor unit and trailing unit numbers
+  var noUnit = pre
     .replace(/\d+\s*동\s*\d+\s*호/g,' ')
     .replace(/\d+\s*동/g,' ')
     .replace(/\d+\s*호/g,' ')
     .replace(/\d+\s*층/g,' ')
     .replace(/[A-Za-z]?\d+\s*-\s*\d+\s*$/,' ');
   push(noUnit);
-  // 괄호 안 내용 제거
+  // remove bracket content
   push(noUnit.replace(/\([^)]*\)/g,' '));
-  // 끝의 숫자 토막 제거 (지번 아닌 동호수 잔여)
+  // remove trailing number chunk
   push(noUnit.replace(/\s+\d+\s*$/,' '));
-  // 단어 단위로 뒤에서부터 하나씩 떼면서 시도 (마지막 토큰 제거)
-  var toks = noUnit.split(' ').filter(Boolean);
+  // token-by-token trim from the end (after removing brackets)
+  var toks = noUnit.replace(/\([^)]*\)/g,' ').split(' ').filter(Boolean);
   for(var n=toks.length; n>=2; n--){
     push(toks.slice(0,n).join(' '));
   }
