@@ -2017,6 +2017,10 @@ function saveCustomer() {
 
   var fp = JSON.parse(localStorage.getItem('unispace_user') || '{}');
 
+  // preserve existing contact history when editing
+  var _prevC = null;
+  if (editingId) { var _pi = DB.findIndex(function(c){ return c.id === editingId; }); if (_pi >= 0) _prevC = DB[_pi]; }
+
   var customer = {
     id:          editingId || ('C' + Date.now()),
     name:        name,
@@ -2028,14 +2032,16 @@ function saveCustomer() {
     referrer:    document.getElementById('r_referrer').value,
     etcNote:     document.getElementById('r_etc').value,
     memo:        document.getElementById('r_memo').value,
-    fp:          fp.name || '',
-    branch:      fp.branch || '',
+    fp:          (_prevC && _prevC.fp) ? _prevC.fp : (fp.name || ''),
+    branch:      (_prevC && _prevC.branch) ? _prevC.branch : (fp.branch || ''),
+    fpCode:      (_prevC && _prevC.fpCode) ? _prevC.fpCode : _myFpCode(),
     customerType: selectedCustomerType,
     contracts:   contracts,
     family:      tempFamily,
     events:      events,
-    lastContact: '',
-    registered:  new Date().toISOString().split('T')[0],
+    lastContact: _prevC ? (_prevC.lastContact || '') : '',
+    contactLog:  (_prevC && Array.isArray(_prevC.contactLog)) ? _prevC.contactLog : [],
+    registered:  _prevC && _prevC.registered ? _prevC.registered : new Date().toISOString().split('T')[0],
     policyType:  document.querySelector('input[name="policyType"]:checked') ? document.querySelector('input[name="policyType"]:checked').value : '계피동일',
     insured: document.getElementById('policyTypeDiff').checked ? {
       name:     document.getElementById('r_insured_name').value.trim(),
@@ -2189,7 +2195,8 @@ function renderCustomerList() {
         '<div class="card-meta" style="margin-top:6px">'+
           '<div class="card-meta-row">📅 계약일 <span>'+(c.contracts&&c.contracts[0]?c.contracts[0].date:'—')+'</span></div>'+
           '<div class="card-meta-row" style="justify-content:space-between"><span>📞 최근연락 <span>'+(c.lastContact||'기록없음')+'</span></span>'+
-            '<button class="call-btn" onclick="openContactFromList(\''+c.id+'\',event)">📞 통화기록</button></div>'+
+            '<button class="call-btn" onclick="openContactFromList(\''+c.id+'\',event)">📞 통화기록</button>'+
+            '<button class="call-btn" style="background:rgba(244,163,38,.12);border-color:rgba(244,163,38,.35);color:var(--orange)" onclick="openEvAddFromList(\''+c.id+'\',event)">📌 이벤트</button></div>'+
         '</div>'+
         (cont>0?'<span class="contract-count">📋 계약 '+cont+'건</span>':'')+
         (fam>0?'<span class="family-count">👨‍👩‍👧 가족 '+fam+'명</span>':'')+
@@ -2244,7 +2251,8 @@ function renderCustomerList() {
           '<div class="list-cell val">'+(cont>0?cont+'건':'—')+'</div>'+
           '<div class="list-cell" style="display:flex;align-items:flex-end;justify-content:flex-start;gap:8px">'+
             '<span>'+formatContact(c.lastContact)+'</span>'+
-            '<button class="call-btn call-btn-list" onclick="openContactFromList(\''+c.id+'\',event)">📞</button></div>'+
+            '<button class="call-btn call-btn-list" onclick="openContactFromList(\''+c.id+'\',event)">📞</button>'+
+            '<button class="call-btn call-btn-list" style="background:rgba(244,163,38,.12);border-color:rgba(244,163,38,.35);color:var(--orange)" onclick="openEvAddFromList(\''+c.id+'\',event)">📌</button></div>'+
           '<div class="list-cell">'+renderAttrBadge(c.channel)+'</div>'+
         '</div>';
       }).join('');
@@ -2450,6 +2458,70 @@ function confirmContact() {
 
 function markContactDone() { openContactModal(); }
 
+var _evAddRepeat = '1회';
+function openEvAddFromList(id, ev) {
+  if (ev) { ev.stopPropagation(); }
+  var c = DB.find(function(x){ return x.id === id; });
+  if (!c) return;
+  selectedCustomer = c;
+  // reset fields
+  var nameEl = document.getElementById('evAddName'); if (nameEl) nameEl.value = '';
+  var subEl = document.getElementById('evAddSub'); if (subEl) subEl.textContent = c.name + ' 고객 - 특별한 날짜를 등록하면 그 날 알림이 떠요';
+  // build year options once
+  var ySel = document.getElementById('evAddY');
+  if (ySel && ySel.options.length <= 1) {
+    var cur = new Date().getFullYear();
+    for (var y = cur+10; y >= cur-1; y--) {
+      var o = document.createElement('option');
+      o.value = y; o.textContent = y+'년'; ySel.appendChild(o);
+    }
+  }
+  if (ySel) ySel.value = '';
+  var mSel = document.getElementById('evAddM'); if (mSel) mSel.value = '';
+  var dSel = document.getElementById('evAddD'); if (dSel) dSel.value = '';
+  _evAddRepeat = '1회';
+  var rbtns = document.querySelectorAll('#evAddRepeatBtns .ct-type-btn');
+  for (var i=0;i<rbtns.length;i++){
+    if (rbtns[i].getAttribute('data-repeat') == '1회') rbtns[i].classList.add('selected');
+    else rbtns[i].classList.remove('selected');
+  }
+  document.getElementById('evAddOverlay').classList.add('open');
+}
+function selectEvRepeat(el) {
+  if (!el) return;
+  var btns = document.querySelectorAll('#evAddRepeatBtns .ct-type-btn');
+  for (var i=0;i<btns.length;i++) btns[i].classList.remove('selected');
+  el.classList.add('selected');
+  _evAddRepeat = el.getAttribute('data-repeat') || '1회';
+}
+function closeEvAdd(e) {
+  if (!e || e.target === document.getElementById('evAddOverlay')) {
+    document.getElementById('evAddOverlay').classList.remove('open');
+  }
+}
+function confirmEvAdd() {
+  if (!selectedCustomer) return;
+  var name = document.getElementById('evAddName').value.trim();
+  if (!name) { showToast('이벤트명을 입력해 주세요'); return; }
+  var ay = document.getElementById('evAddY').value;
+  var am = document.getElementById('evAddM').value;
+  var ad = document.getElementById('evAddD').value;
+  if (!ay || !am || !ad) { showToast('알림 날짜를 선택해 주세요'); return; }
+  var dstr = ay+'-'+am+'-'+ad;
+  var newEvent = { name: name, alertDate: dstr, date: dstr, repeat: _evAddRepeat };
+  var idx = DB.findIndex(function(c){ return c.id === selectedCustomer.id; });
+  if (idx >= 0) {
+    if (!Array.isArray(DB[idx].events)) DB[idx].events = [];
+    DB[idx].events.push(newEvent);
+    selectedCustomer = DB[idx];
+    localStorage.setItem('unispace_customers', JSON.stringify(DB));
+    if (typeof gasSaveCustomer === 'function') gasSaveCustomer(DB[idx]);
+  }
+  document.getElementById('evAddOverlay').classList.remove('open');
+  showToast('📌 ' + name + ' 이벤트가 등록됐어요');
+  renderCustomerList();
+}
+
 function showConfirm(opts) {
   opts = opts || {};
   return new Promise(function(resolve) {
@@ -2639,10 +2711,18 @@ function editCustomer() {
   setTimeout(function(){
     (c.events || []).forEach(function(ev, i){
       var id = i+1;
-      ['name','date','trigger'].forEach(function(f){
-        var el = document.getElementById('ev'+id+'_'+f);
-        if(el) el.value = ev[f]||'';
-      });
+      var nameEl = document.getElementById('ev'+id+'_name');
+      if(nameEl) nameEl.value = ev.name || '';
+      var dstr = ev.alertDate || ev.date || '';
+      var dp = dstr.split('-');
+      var ayEl = document.getElementById('ev'+id+'_ay');
+      var amEl = document.getElementById('ev'+id+'_am');
+      var adEl = document.getElementById('ev'+id+'_ad');
+      if(ayEl && dp[0]) ayEl.value = dp[0];
+      if(amEl && dp[1]) amEl.value = dp[1];
+      if(adEl && dp[2]) adEl.value = dp[2];
+      var rpEl = document.getElementById('ev'+id+'_repeat');
+      if(rpEl) rpEl.value = ev.repeat || '1회';
     });
   }, 50);
 
@@ -2960,6 +3040,36 @@ function showToast(msg) {
     <div class="contact-modal-actions">
       <button class="contact-cancel-btn" onclick="closeContactModal()">취소</button>
       <button class="contact-confirm-btn" onclick="confirmContact()">✅ 기록 완료</button>
+    </div>
+  </div>
+</div>
+
+<div class="contact-modal-overlay" id="evAddOverlay" onclick="closeEvAdd(event)">
+  <div class="contact-modal">
+    <div class="contact-modal-title">📌 이벤트 추가</div>
+    <div class="contact-modal-sub" id="evAddSub">특별한 날짜를 등록하면 그 날 알림이 떠요</div>
+
+    <div class="ct-section-label">이벤트명</div>
+    <input class="form-input" id="evAddName" placeholder="보험가입 가능일, 수술일 등" style="width:100%">
+
+    <div class="ct-section-label">알림 날짜</div>
+    <div class="birth-wrap">
+      <select class="form-select" id="evAddY"><option value="">년도</option></select>
+      <span class="birth-sep">.</span>
+      <select class="form-select" id="evAddM"><option value="">월</option><option value="01">1월</option><option value="02">2월</option><option value="03">3월</option><option value="04">4월</option><option value="05">5월</option><option value="06">6월</option><option value="07">7월</option><option value="08">8월</option><option value="09">9월</option><option value="10">10월</option><option value="11">11월</option><option value="12">12월</option></select>
+      <span class="birth-sep">.</span>
+      <select class="form-select" id="evAddD"><option value="">일</option><option value="01">1일</option><option value="02">2일</option><option value="03">3일</option><option value="04">4일</option><option value="05">5일</option><option value="06">6일</option><option value="07">7일</option><option value="08">8일</option><option value="09">9일</option><option value="10">10일</option><option value="11">11일</option><option value="12">12일</option><option value="13">13일</option><option value="14">14일</option><option value="15">15일</option><option value="16">16일</option><option value="17">17일</option><option value="18">18일</option><option value="19">19일</option><option value="20">20일</option><option value="21">21일</option><option value="22">22일</option><option value="23">23일</option><option value="24">24일</option><option value="25">25일</option><option value="26">26일</option><option value="27">27일</option><option value="28">28일</option><option value="29">29일</option><option value="30">30일</option><option value="31">31일</option></select>
+    </div>
+
+    <div class="ct-section-label">반복</div>
+    <div class="ct-type-btns" id="evAddRepeatBtns">
+      <div class="ct-type-btn selected" data-repeat="1회" onclick="selectEvRepeat(this)">1회만</div>
+      <div class="ct-type-btn" data-repeat="매년" onclick="selectEvRepeat(this)">매년 반복</div>
+    </div>
+
+    <div class="contact-modal-actions">
+      <button class="contact-cancel-btn" onclick="closeEvAdd()">취소</button>
+      <button class="contact-confirm-btn" onclick="confirmEvAdd()">📌 이벤트 저장</button>
     </div>
   </div>
 </div>
