@@ -623,7 +623,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 }
 
 /* ── 엑셀 일괄 업로드 ── */
-.excel-open-btn{font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;background:rgba(239,159,39,.12);border:1px solid rgba(239,159,39,.4);color:var(--gold-d);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;}
+.excel-open-btn{font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;background:rgba(239,159,39,.12);border:1px solid rgba(239,159,39,.4);color:var(--gold2);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;}
 .insured-copy-btn{font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.3);color:var(--blue);cursor:pointer;font-family:inherit;transition:all .15s;}
 .insured-copy-btn:hover{background:rgba(37,99,235,.18);}
 .insured-copy-btn:active{transform:scale(.95);}
@@ -1032,6 +1032,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div style="margin-bottom:14px;">
 
       <div class="filter-table">
+        <div id="branchFpTabs" style="display:none;flex-direction:column;gap:8px;margin-bottom:10px"></div>
         <div class="filter-trow">
           <span class="filter-rlabel frl-all">전체</span>
           <div class="filter-chip chip-all active" onclick="setFilter('all',this)">전체 보기</div>
@@ -1775,6 +1776,9 @@ window.addEventListener('DOMContentLoaded', function() {
       renderCustomerList();
     }
   });
+  if (_custIsAdmin()) {
+    loadFpDirectory(function(){ renderBranchFpTabs(); });
+  }
 
   var params = new URLSearchParams(window.location.search);
   if (params.get('tab') == 'list') {
@@ -2206,8 +2210,78 @@ function setFilter(f, el) {
   renderCustomerList();
 }
 
+var _custBranch = 'all';
+var _custFp = 'all';
+var _fpDirectory = [];
+function _custUser(){ try{ return JSON.parse(localStorage.getItem('unispace_user')||'{}'); }catch(e){ return {}; } }
+function _custBranchKey(b){
+  var s=String(b||'');
+  if(s.indexOf('알파')>=0) return '알파';
+  if(s.indexOf('브라보')>=0) return '브라보';
+  return '';
+}
+function _custBranchOf(c){ return _custBranchKey(c.branch); }
+function _custIsAdmin(){
+  var u=_custUser(); var r=u.role||'', t=u.title||'';
+  return r==='대표'||r==='지점장'||t==='지점장'||t==='교육지점장';
+}
+function _custScope(){
+  var u=_custUser(); var r=u.role||'', t=u.title||'';
+  if(r==='대표'||t==='교육지점장') return 'all';
+  if(r==='지점장'||t==='지점장') return _custBranchKey(u.branch) || 'all';
+  return 'self';
+}
+function loadFpDirectory(cb){
+  fetch(CUST_GAS_URL+'?action=getAllFps').then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ok && Array.isArray(res.list)) _fpDirectory=res.list;
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
+function renderBranchFpTabs(){
+  var wrap=document.getElementById('branchFpTabs');
+  if(!wrap) return;
+  var scope=_custScope();
+  // only admins get the branch/fp tabs
+  if(!_custIsAdmin()){ wrap.style.display='none'; return; }
+  wrap.style.display='flex';
+  // branch row
+  var branches=[];
+  if(scope==='all') branches=[['all','전체'],['알파','알파'],['브라보','브라보']];
+  else branches=[['all',scope+' 전체'],[scope,scope]];
+  var bh='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2);font-weight:700;min-width:34px">지점</span>';
+  branches.forEach(function(b){
+    var on=_custBranch===b[0];
+    bh+='<button type="button" onclick="setCustBranch(\''+b[0]+'\')" style="font-size:12px;font-weight:700;padding:6px 13px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(on?'var(--gold)':'var(--bdr)')+';background:'+(on?'rgba(201,168,76,.14)':'var(--surface)')+';color:'+(on?'var(--gold2)':'var(--text2)')+'">'+b[1]+'</button>';
+  });
+  bh+='</div>';
+  // fp row (FPs in current branch scope)
+  var fps=_fpDirectory.filter(function(f){
+    if(scope!=='all' && _custBranchKey(f.branch)!==scope) return false;
+    if(_custBranch!=='all' && _custBranchKey(f.branch)!==_custBranch) return false;
+    return true;
+  });
+  // count customers per fp name
+  var cntMap={};
+  DB.forEach(function(c){ var n=c.fpName||c.fp||''; if(n) cntMap[n]=(cntMap[n]||0)+1; });
+  var fh='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2);font-weight:700;min-width:34px">FP</span>';
+  var onAll=_custFp==='all';
+  fh+='<button type="button" onclick="setCustFp(\'all\')" style="font-size:12px;font-weight:700;padding:6px 13px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(onAll?'var(--blue)':'var(--bdr)')+';background:'+(onAll?'rgba(37,99,235,.12)':'var(--surface)')+';color:'+(onAll?'#185FA5':'var(--text2)')+'">전체 FP</button>';
+  fps.sort(function(a,b){ return String(a.name).localeCompare(String(b.name),'ko'); });
+  fps.forEach(function(f){
+    var nm=f.name; var cnt=cntMap[nm]||0;
+    var on=_custFp===nm;
+    var dim = cnt===0;
+    fh+='<button type="button" onclick="setCustFp(\''+nm+'\')" style="font-size:12px;font-weight:'+(on?'700':'600')+';padding:6px 12px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(on?'var(--blue)':'var(--bdr)')+';background:'+(on?'rgba(37,99,235,.12)':'var(--surface)')+';color:'+(on?'#185FA5':(dim?'var(--text3)':'var(--text2)'))+'">'+nm+' <span style="font-size:10px;color:'+(dim?'var(--text3)':'var(--gold2)')+'">'+cnt+'</span></button>';
+  });
+  fh+='</div>';
+  wrap.innerHTML=bh+fh;
+}
+function setCustBranch(b){ _custBranch=b; _custFp='all'; renderBranchFpTabs(); renderCustomerList(); }
+function setCustFp(n){ _custFp=n; renderBranchFpTabs(); renderCustomerList(); }
+
 function renderCustomerList() {
   updateCustomerStats();
+  renderBranchFpTabs();
   var q = (document.getElementById('searchInput') ? document.getElementById('searchInput').value : '').toLowerCase();
   var list = DB.filter(function(c){
     var cType     = c.customerType || '계약';
@@ -2215,6 +2289,8 @@ function renderCustomerList() {
                     c.grade === currentFilter ||
                     c.channel === currentFilter ||
                     cType === currentFilter;
+    var matchBranch = (_custBranch==='all') || (_custBranchOf(c)===_custBranch);
+    var matchFp = (_custFp==='all') || ((c.fpName||c.fp||'')===_custFp);
     var matchQ;
     if (searchMode == 'insured') {
       var insName = (c.insured && c.insured.name) ? c.insured.name.toLowerCase() : '';
@@ -2222,7 +2298,7 @@ function renderCustomerList() {
     } else {
       matchQ = !q || c.name.includes(q) || (c.phone||'').includes(q);
     }
-    return matchType && matchQ;
+    return matchType && matchBranch && matchFp && matchQ;
   });
 
   /* 가나다순 기본 정렬 */
