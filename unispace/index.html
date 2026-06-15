@@ -5514,8 +5514,12 @@ function renderActView() {
 
 function actFilterMatch(a) {
   if (weekBranchFilter !== 'all' && a.branch !== weekBranchFilter) return false;
-  if (currentUser && currentUser.role === '지점장' && a.branch !== currentUser.branch) return false;
-  if (currentUser && currentUser.role === 'FP' && a.branch !== currentUser.branch) return false;
+  // 대표/지점장 = 전체, 그 외 = 자기 지점만 (지점명 정규화 비교)
+  var seeAll = currentUser && (currentUser.role === '대표' || currentUser.role === '지점장');
+  if (!seeAll && currentUser && currentUser.branch) {
+    var nb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
+    if (nb(a.branch) !== nb(currentUser.branch)) return false;
+  }
   return true;
 }
 
@@ -5821,10 +5825,16 @@ function renderWeekActTable() {
   });
 
   // DB에 있는 FP 수집 (FP목록 무관)
+  // branch permission: 대표/지점장 = all branches, others = own branch only
+  var _nb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
+  var _seeAllBranch = currentUser && (currentUser.role === '대표' || currentUser.role === '지점장');
+  var _myBr = (currentUser && currentUser.branch) ? _nb(currentUser.branch) : '';
+
   var fpMap = {};
   Object.values(db).forEach(function(a) {
     if(!a.fpId) return;
     if(weekBranchFilter !== 'all' && a.branch !== weekBranchFilter) return;
+    if(!_seeAllBranch && _myBr && _nb(a.branch) !== _myBr) return;
     if(!fpMap[a.fpId]) fpMap[a.fpId] = {id:a.fpId, name:a.fpName, branch:a.branch};
   });
 
@@ -5832,6 +5842,7 @@ function renderWeekActTable() {
   var fpList = getMergedFpList().filter(function(fp){
     if(!fp.active) return false;
     if(weekBranchFilter !== 'all' && fp.branch !== weekBranchFilter) return false;
+    if(!_seeAllBranch && _myBr && _nb(fp.branch) !== _myBr) return false;
     return true;
   });
   fpList.forEach(function(fp){ if(!fpMap[fp.id]) fpMap[fp.id] = {id:fp.id, name:fp.name, branch:fp.branch}; });
