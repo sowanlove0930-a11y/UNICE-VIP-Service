@@ -4525,15 +4525,25 @@ function schedDayClick(ds){
     else if(s.type==='non'){ col='#0C6B5E'; bg='rgba(15,142,126,.08)'; tag='📗 손보교육'; main=(s.company?s.company+' · ':'')+(s.title||'손보 교육'); }
     else { col='#C0392B'; bg='rgba(192,57,49,.07)'; tag='⭐ 중요'; main=(s.title||'중요 일정'); }
     var timeTxt = s.time ? (' · '+s.time) : '';
-    h+='<div onclick="'+(_schedIsAdmin()?'openSchedForm(\''+s.id+'\')':'')+'" style="background:'+bg+';border-radius:8px;padding:9px 11px;margin-bottom:6px;'+(_schedIsAdmin()?'cursor:pointer':'')+'">'+
+    var sid = s.id || '';
+    var clickAttr = (_schedIsAdmin() && sid) ? ' data-schedid="'+sid+'" onclick="schedItemClick(this)"' : '';
+    var curStyle = (_schedIsAdmin() && sid) ? 'cursor:pointer' : '';
+    var editHint = (_schedIsAdmin() && sid) ? '<span style="float:right;font-size:10px;color:var(--text3)">수정 ›</span>' : '';
+    h+='<div'+clickAttr+' style="background:'+bg+';border-radius:8px;padding:9px 11px;margin-bottom:6px;'+curStyle+'">'+
+      editHint+
       '<span style="font-size:10px;font-weight:700;color:'+col+'">'+tag+'</span> '+
       '<span style="font-size:13px;font-weight:600;color:var(--text)">'+escHtmlSch(main)+timeTxt+'</span>'+
     '</div>';
   });
   if(_schedIsAdmin()){
-    h+='<button type="button" onclick="schedAddForDate(\''+ds+'\')" style="width:100%;margin-top:4px;padding:8px;border:1px dashed var(--gold);background:rgba(201,168,76,.06);color:var(--gold-d);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ 이 날 일정 추가</button>';
+    h+='<button type="button" onclick="schedAddForDate(\''+ds+'\')" style="width:100%;margin-top:4px;padding:8px;border:1px dashed var(--gold);background:rgba(201,168,76,.06);color:var(--gold2);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ 이 날 일정 추가</button>';
   }
   dl.innerHTML=h;
+}
+function schedItemClick(el){
+  if(!el) return;
+  var id=el.getAttribute('data-schedid');
+  if(id) openSchedForm(id);
 }
 function schedAddForDate(ds){
   openSchedForm('');
@@ -4624,7 +4634,11 @@ function gasSaveSched(arr){
 }
 function loadSchedFromGas(cb){
   fetch(UNISPACE_GAS_URL+'?action=getSchedules').then(function(r){ return r.json(); }).then(function(res){
-    if(res && res.ok && Array.isArray(res.data)){ saveSchedDB(res.data); }
+    if(res && res.ok && Array.isArray(res.data)){
+      var arr=res.data;
+      for(var i=0;i<arr.length;i++){ if(!arr[i].id) arr[i].id='sch_'+Date.now()+'_'+i+'_'+Math.random().toString(36).substr(2,4); }
+      saveSchedDB(arr);
+    }
     if(cb) cb();
   }).catch(function(){ if(cb) cb(); });
 }
@@ -4648,7 +4662,7 @@ function _gaRenderTabs(){
   var h='';
   tabs.forEach(function(t){
     var on = _gaBranch===t[0];
-    h+='<span onclick="_gaSetBranch(\''+t[0]+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer;'+(on?'background:rgba(201,168,76,.16);color:var(--gold-d);font-weight:700':'border:1px solid var(--bdr2);color:var(--text2)')+'">'+t[1]+'</span>';
+    h+='<span onclick="_gaSetBranch(\''+t[0]+'\')" style="font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer;'+(on?'background:rgba(201,168,76,.16);color:var(--gold2);font-weight:700':'border:1px solid var(--bdr2);color:var(--text2)')+'">'+t[1]+'</span>';
   });
   wrap.innerHTML=h;
 }
@@ -4711,7 +4725,7 @@ function _gaRenderFpList(){
     h+='<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:11px 12px;margin-bottom:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
         '<div style="font-size:13px;font-weight:700">'+chip+' '+fp.name+'</div>'+
-        '<div style="font-size:10px;color:'+(hasOrig?'var(--gold-d)':'var(--text3)')+'">'+origTxt+'</div>'+
+        '<div style="font-size:10px;color:'+(hasOrig?'var(--gold2)':'var(--text3)')+'">'+origTxt+'</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
         '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 생보</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaComma(life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
@@ -4733,7 +4747,7 @@ function _gaUpdateSum(){
     sLife+=le?_gaNum(le.value):0;
     sNon+=ne?_gaNum(ne.value):0;
   });
-  box.innerHTML='<b>FP 합계 (월)</b> &nbsp; 생보 <b style="color:var(--gold-d)">'+_gaComma(sLife)+'</b> · 손보 <b style="color:#185FA5">'+_gaComma(sNon)+'</b> · 합계 <b>'+_gaComma(sLife+sNon)+'</b>원';
+  box.innerHTML='<b>FP 합계 (월)</b> &nbsp; 생보 <b style="color:var(--gold2)">'+_gaComma(sLife)+'</b> · 손보 <b style="color:#185FA5">'+_gaComma(sNon)+'</b> · 합계 <b>'+_gaComma(sLife+sNon)+'</b>원';
 }
 function saveGoalAdj(){
   var db=getGoalAdjDB(); var ym=_gaYm();
@@ -5268,13 +5282,13 @@ function renderTeamList(){
                 : '';
     h+='<div style="border:1px solid var(--bdr2);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--surface)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-        '<div style="font-size:13px;font-weight:800;color:var(--gold-d)">'+_teamNameTemp(t)+brBadge+'</div>'+
+        '<div style="font-size:13px;font-weight:800;color:var(--gold2)">'+_teamNameTemp(t)+brBadge+'</div>'+
         '<button type="button" onclick="removeTeam(\''+t.id+'\')" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer">✕</button>'+
       '</div>'+
       '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
         '<span style="font-size:11px;color:var(--text3)">매니저</span>'+
         _memberChips(t, 'manager')+
-        '<button type="button" onclick="openFpPick(\''+t.id+'\',\'manager\')" style="font-size:11px;border:1px dashed var(--gold);color:var(--gold-d);background:none;padding:3px 9px;border-radius:6px;cursor:pointer;font-family:inherit">+ 매니저</button>'+
+        '<button type="button" onclick="openFpPick(\''+t.id+'\',\'manager\')" style="font-size:11px;border:1px dashed var(--gold);color:var(--gold2);background:none;padding:3px 9px;border-radius:6px;cursor:pointer;font-family:inherit">+ 매니저</button>'+
       '</div>'+
       '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'+
         '<span style="font-size:11px;color:var(--text3)">팀원</span>'+
@@ -8711,7 +8725,7 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="pv-bf" id="fpTabAlpha" onclick="setFpTab('al',this)">알파지점</button>
       <button type="button" class="pv-bf" id="fpTabBravo" onclick="setFpTab('br',this)">브라보지점</button>
       <button type="button" class="pv-bf" id="fpTabMgr" onclick="setFpTab('mgr',this)">👥 매니저</button>
-      <button type="button" id="teamConfigBtn" onclick="openTeamEdit()" style="display:none;margin-left:auto;font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;border:1px solid var(--gold);background:rgba(201,168,76,.1);color:var(--gold-d);cursor:pointer;font-family:'Noto Sans KR',sans-serif">⚙️ 팀 구성</button>
+      <button type="button" id="teamConfigBtn" onclick="openTeamEdit()" style="display:none;margin-left:auto;font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;border:1px solid var(--gold);background:rgba(201,168,76,.1);color:var(--gold2);cursor:pointer;font-family:'Noto Sans KR',sans-serif">⚙️ 팀 구성</button>
     </div>
 
     <!-- KPI -->
@@ -8757,7 +8771,7 @@ function doCheckin() { doSmartCheckin(); }
       </div>
       <button type="button" onclick="closeTeamEdit()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
     </div>
-    <button type="button" onclick="addTeam()" style="width:100%;padding:10px;margin-bottom:12px;border:1px dashed var(--gold);background:rgba(201,168,76,.08);color:var(--gold-d);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">+ 새 팀 만들기</button>
+    <button type="button" onclick="addTeam()" style="width:100%;padding:10px;margin-bottom:12px;border:1px dashed var(--gold);background:rgba(201,168,76,.08);color:var(--gold2);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">+ 새 팀 만들기</button>
     <div id="teamList"></div>
     <div class="mgmt-btns" style="margin-top:12px">
       <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="saveTeams()">저장</button>
@@ -8778,7 +8792,7 @@ function doCheckin() { doSmartCheckin(); }
         <span id="schedMonthLabel" style="font-size:15px;font-weight:700;min-width:110px;text-align:center"></span>
         <button type="button" onclick="schedNextMonth()" style="background:var(--surface);border:1px solid var(--bdr);border-radius:7px;width:30px;height:30px;cursor:pointer;color:var(--text2)">›</button>
       </div>
-      <button type="button" id="schedAddBtn" onclick="openSchedForm('')" style="display:none;font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;border:1px solid var(--gold);background:rgba(201,168,76,.1);color:var(--gold-d);cursor:pointer;font-family:'Noto Sans KR',sans-serif">+ 일정 추가</button>
+      <button type="button" id="schedAddBtn" onclick="openSchedForm('')" style="display:none;font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;border:1px solid var(--gold);background:rgba(201,168,76,.1);color:var(--gold2);cursor:pointer;font-family:'Noto Sans KR',sans-serif">+ 일정 추가</button>
     </div>
     <div style="flex:1;overflow-y:auto;min-height:0">
       <div id="schedCalGrid"></div>
