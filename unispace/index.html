@@ -2957,6 +2957,7 @@ const SUBMENUS = {
       { icon:'✏️', name:'업적 입력',    desc:'FP별 계약 실적 입력', href:'#', action:'perf_input' },
       { icon:'📊', name:'업적 조회',    desc:'월간 · 주간 · 일자별 조회', href:'#', action:'perf_view' },
       { icon:'🏆', name:'실시간 일보 산출',  desc:'지사 · 지점별 실시간 산출', href:'#', action:'fp_perf' },
+      { icon:'👥', name:'매니저 매칭',   desc:'팀 구성 · 매니저/팀원 지정', href:'#', action:'team_config', adminOnly:true },
       { icon:'📋', name:'활동계획수립', desc:'월간 · 주간 활동계획 제출', href:'activity-plan.html', internal:true },
       // 활동관리 임시 숨김
       // { icon:'📌', name:'활동관리',   desc:'일별 활동 기록 및 현황 관리', href:'activity.html', internal:true },
@@ -3403,6 +3404,8 @@ function buildMenuHtml(data) {
   data.items.forEach(function(item) {
     // 실시간 일보 산출: 권한(대표/지점장/교육지점장/매니저) 없으면 숨김
     if (item.action === 'fp_perf' && !_canSeeReport(currentUser)) return;
+    // admin-only cards (manager matching): only 대표/지점장/교육지점장
+    if (item.adminOnly && !_isPerfAdmin()) return;
     var isHash   = item.href === '#';
     var action   = item.action || '';
     var onclick;
@@ -3470,6 +3473,7 @@ function handleSubClick(e, action) {
   if (action === 'perf_input'){ openPerfModal(); return false; }
   if (action === 'perf_view'){ openPerfView(); return false; }
   if (action === 'fp_perf'){ openFpPerf(); return false; }
+  if (action === 'team_config'){ openTeamEdit(); var _openStamp=Date.now(); _teamOpenStamp=_openStamp; loadTeamsFromGas(function(){ if(_teamOpenStamp===_openStamp && document.getElementById('teamOverlay').classList.contains('open') && !_teamEdited){ _tempTeams=getTeamsDB().map(function(t){ return { id:t.id, branch:t.branch||'', managers:(t.managers||[]).slice(), members:(t.members||[]).slice() }; }); renderTeamList(); } }); return false; }
   if (action === 'transfer')  { openTransfer(); return false; }
   if (action === 'attendance') {
     window.location.href = 'attendance.html';
@@ -4076,6 +4080,8 @@ function setPerfRange(r, el){
     if(e && !e.value) e.value=_pvRangeEnd||todayStr;
     _pvRangeStart = s ? s.value : todayStr;
     _pvRangeEnd = e ? e.value : todayStr;
+    _setRangeDisp('pvRangeStartDisp', _pvRangeStart);
+    _setRangeDisp('pvRangeEndDisp', _pvRangeEnd);
   }
   renderPerfView();
 }
@@ -4102,6 +4108,8 @@ function onPvRangeChange(){
   if(_pvRangeStart && _pvRangeEnd && _pvRangeStart > _pvRangeEnd){
     var tmp=_pvRangeStart; _pvRangeStart=_pvRangeEnd; _pvRangeEnd=tmp;
     if(s) s.value=_pvRangeStart; if(e) e.value=_pvRangeEnd;
+    _setRangeDisp('pvRangeStartDisp', _pvRangeStart);
+    _setRangeDisp('pvRangeEndDisp', _pvRangeEnd);
   }
   renderPerfView();
 }
@@ -4392,6 +4400,45 @@ function _perfClassify(co){
 var FP_GOAL_KEY = 'unispace_fp_goal';
 function getFpGoalDB(){ try{ return JSON.parse(localStorage.getItem(FP_GOAL_KEY)||'{}'); }catch(e){ return {}; } }
 function saveFpGoalDB(db){ localStorage.setItem(FP_GOAL_KEY, JSON.stringify(db)); }
+
+// team structure: array of { id, branch, managers:[fpId...], members:[fpId...] }
+var TEAM_KEY = 'unispace_teams';
+function getTeamsDB(){ try{ var a=JSON.parse(localStorage.getItem(TEAM_KEY)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function saveTeamsDB(arr){ localStorage.setItem(TEAM_KEY, JSON.stringify(arr||[])); }
+function gasSaveTeams(arr){
+  try{
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'saveTeams', teams:arr||[] }) }).catch(function(){});
+  }catch(e){}
+}
+function loadTeamsFromGas(cb){
+  try{
+    fetch(UNISPACE_GAS_URL+'?action=getTeams').then(function(r){ return r.json(); }).then(function(res){
+      if(res && res.ok && Array.isArray(res.teams)){
+        saveTeamsDB(res.teams);
+      }
+      if(cb) cb();
+    }).catch(function(){ if(cb) cb(); });
+  }catch(e){ if(cb) cb(); }
+}
+function _fpNameById(id){
+  var list=getMergedFpList();
+  for(var i=0;i<list.length;i++){ if(list[i].id===id) return list[i].name; }
+  return id;
+}
+function _teamName(team){
+  var mgrNames=(team.managers||[]).map(function(id){ return _fpNameById(id); }).filter(Boolean);
+  if(mgrNames.length) return mgrNames.join('\u00b7')+' \ud300';
+  return '\ud300';
+}
+// which team a given fpId belongs to (one person one team); returns team or null
+function _teamOfFp(fpId){
+  var teams=getTeamsDB();
+  for(var i=0;i<teams.length;i++){
+    var t=teams[i];
+    if((t.managers||[]).indexOf(fpId)>=0 || (t.members||[]).indexOf(fpId)>=0) return t;
+  }
+  return null;
+}
 function _fpYm(){ var n=new Date(); return n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2); }
 
 var _fpRange='month';
@@ -4419,7 +4466,12 @@ function openFpPerf(){
 }
 function closeFpPerf(){ document.getElementById('fpPerfOverlay').classList.remove('open'); }
 function setFpRange(r, el){ _fpRange=r; document.querySelectorAll('#fpPerfOverlay .pv-seg').forEach(function(b){ b.classList.remove('on'); }); if(el) el.classList.add('on'); _updateFpMonthNav(); renderFpPerf(); }
-function setFpTab(t, el){ _fpTab=t; ['fpTabAll','fpTabAlpha','fpTabBravo','fpTabMgr'].forEach(function(id){ var e=document.getElementById(id); if(e) e.classList.remove('on'); }); if(el) el.classList.add('on'); renderFpPerf(); }
+function _isPerfAdmin(){
+  if(!currentUser) return false;
+  var r=currentUser.role||'', tt=currentUser.title||'';
+  return r==='대표'||r==='지점장'||tt==='지점장'||tt==='교육지점장';
+}
+function setFpTab(t, el){ _fpTab=t; ['fpTabAll','fpTabAlpha','fpTabBravo','fpTabMgr'].forEach(function(id){ var e=document.getElementById(id); if(e) e.classList.remove('on'); }); if(el) el.classList.add('on'); var _tcb=document.getElementById('teamConfigBtn'); if(_tcb){ var _adm=_isPerfAdmin(); _tcb.style.display=(t==='mgr'&&_adm)?'':'none'; } renderFpPerf(); if(t==='mgr'){ loadTeamsFromGas(function(){ if(_fpTab==='mgr') renderFpPerf(); }); } }
 function _fpMonthRef(){ var d=_fpMonth?new Date(_fpMonth):new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }
 function _fpSelYm(){
   if(_fpRange==='range' && _fpRangeStart){ return _fpRangeStart.slice(0,7); }
@@ -4440,7 +4492,14 @@ function _updateFpMonthNav(){
     if(e && !e.value){ e.value = _fpRangeEnd || todayStr; }
     _fpRangeStart = s ? s.value : todayStr;
     _fpRangeEnd = e ? e.value : todayStr;
+    _setRangeDisp('fpRangeStartDisp', _fpRangeStart);
+    _setRangeDisp('fpRangeEndDisp', _fpRangeEnd);
   }
+}
+function _setRangeDisp(dispId, ds){
+  var el=document.getElementById(dispId); if(!el) return;
+  if(ds){ var p=ds.split('-'); el.textContent=parseInt(p[1])+'월 '+parseInt(p[2])+'일'; el.classList.remove('pk-ph'); }
+  else { el.textContent = dispId.indexOf('Start')>=0 ? '시작일' : '종료일'; el.classList.add('pk-ph'); }
 }
 function onFpRangeChange(){
   var s=document.getElementById('fpRangeStart'), e=document.getElementById('fpRangeEnd');
@@ -4449,6 +4508,8 @@ function onFpRangeChange(){
   if(_fpRangeStart && _fpRangeEnd && _fpRangeStart > _fpRangeEnd){
     var tmp=_fpRangeStart; _fpRangeStart=_fpRangeEnd; _fpRangeEnd=tmp;
     if(s) s.value=_fpRangeStart; if(e) e.value=_fpRangeEnd;
+    _setRangeDisp('fpRangeStartDisp', _fpRangeStart);
+    _setRangeDisp('fpRangeEndDisp', _fpRangeEnd);
   }
   renderFpPerf();
 }
@@ -4596,14 +4657,24 @@ function renderFpPerf(){
   wrap.innerHTML=h;
 }
 
-// \ub9e4\ub2c8\uc800 \ud0ed: \ub9e4\uce6d\ub9e4\ub2c8\uc800\ubcc4 \ubb36\uc74c + \ud300 \uc21c\uc704
+// \ub9e4\ub2c8\uc800 \ud0ed: \ud300 \uad6c\uc870\ubcc4 \ubb36\uc74c + \ud300 \uc21c\uc704
 function _renderFpMgrTable(wrap, allRows){
-  // \ub9e4\ub2c8\uc800\ubcc4 \uadf8\ub8f9 (\ubbf8\ubc30\uc815 = '\ub9e4\ub2c8\uc800 \ubbf8\uc9c0\uc815')
+  var teamsDB=getTeamsDB();
+  // build fpId -> teamId map
+  var fpTeam={};
+  teamsDB.forEach(function(t){
+    (t.managers||[]).forEach(function(id){ fpTeam[id]=t.id; });
+    (t.members||[]).forEach(function(id){ fpTeam[id]=t.id; });
+  });
   var teams={};
   allRows.forEach(function(f){
-    var key=f.mgr||'__none__';
-    if(!teams[key]) teams[key]={ mgr:f.mgr||'\ub9e4\ub2c8\uc800 \ubbf8\uc9c0\uc815', members:[], goal:0, total:0, life:0, non:0, cnt:0, branchKey:'' };
-    var t=teams[key];
+    var tid=fpTeam[f.id]||'__none__';
+    if(!teams[tid]){
+      var tdef=null;
+      for(var i=0;i<teamsDB.length;i++){ if(teamsDB[i].id===tid){ tdef=teamsDB[i]; break; } }
+      teams[tid]={ tid:tid, name: tdef?_teamName(tdef):'\ubbf8\ubc30\uc815', managerIds:(tdef?tdef.managers:[])||[], members:[], goal:0, total:0, life:0, non:0, cnt:0, branchKey:'' };
+    }
+    var t=teams[tid];
     t.members.push(f); t.goal+=f.goal; t.total+=f.total; t.life+=f.life; t.non+=f.non; t.cnt+=f.cnt;
   });
   var teamArr=Object.keys(teams).map(function(k){ return teams[k]; });
@@ -4613,8 +4684,12 @@ function _renderFpMgrTable(wrap, allRows){
     t.members.forEach(function(m){ var bk=_pvBranchKey(m.branch); if(bk==='al') al++; else if(bk==='br') br++; });
     t.branchKey = al>=br?'al':'br';
   });
-  // \ud604\uc7ac\uc5c5\uc801 \ud070 \uc21c \uc815\ub82c (\ud300 \uc21c\uc704)
-  teamArr.sort(function(a,b){ if(b.total!==a.total) return b.total-a.total; return b.cnt-a.cnt; });
+  // \ud604\uc7ac\uc5c5\uc801 \ud070 \uc21c \uc815\ub82c (\ud300 \uc21c\uc704), \ubbf8\ubc30\uc815\uc740 \ub9e8 \ub9c8\uc9c0\ub9c9
+  teamArr.sort(function(a,b){
+    if(a.tid==='__none__' && b.tid!=='__none__') return 1;
+    if(b.tid==='__none__' && a.tid!=='__none__') return -1;
+    if(b.total!==a.total) return b.total-a.total; return b.cnt-a.cnt;
+  });
   if(!teamArr.length){ wrap.innerHTML='<div class="pv-empty" style="padding:24px">\ub370\uc774\ud130\uac00 \uc5c6\uc2b5\ub2c8\ub2e4</div>'; return; }
 
   var medals=['\ud83e\udd47','\ud83e\udd48','\ud83e\udd49'];
@@ -4628,28 +4703,38 @@ function _renderFpMgrTable(wrap, allRows){
     '<th style="text-align:right">\uc190\ubcf4</th>'+
     '<th style="text-align:right;padding-right:12px">\uac74</th>'+
     '</tr></thead><tbody>';
-  teamArr.forEach(function(t, ti){
+  var rankN=0;
+  teamArr.forEach(function(t){
+    var isNone=t.tid==='__none__';
     var isAl=t.branchKey==='al';
-    var hdrBg=isAl?'#FAEEDA':'#E6F1FB';
-    var hdrColor=isAl?'#854F0B':'#0C447C';
-    var subColor=isAl?'#BA7517':'#185FA5';
-    var rankBadge = ti<3 ? medals[ti] : (ti+1)+'\uc704';
+    var hdrBg=isNone?'#F1EFE8':(isAl?'#FAEEDA':'#E6F1FB');
+    var hdrColor=isNone?'#5F5E5A':(isAl?'#854F0B':'#0C447C');
+    var subColor=isNone?'#888780':(isAl?'#BA7517':'#185FA5');
+    var rankBadge='';
+    if(!isNone){ rankN++; rankBadge = rankN<=3 ? medals[rankN-1] : rankN+'\uc704'; }
     var bLabel=isAl?'\uc54c\ud30c':'\ube0c\ub77c\ubcf4';
     var teamTotMan=Math.round(t.total/10000);
     var teamPct=t.goal>0?Math.round(teamTotMan/t.goal*100)+'%':'\u2014';
-    h+='<tr style="background:'+hdrBg+'"><td colspan="8" style="padding:7px 10px;font-weight:800;color:'+hdrColor+'">'+rankBadge+'  '+t.mgr+' \ub9e4\ub2c8\uc800\ud300 <span style="font-size:10px;font-weight:400;color:'+subColor+'">\u00b7 '+bLabel+' \u00b7 '+t.members.length+'\uba85 \u00b7 '+teamTotMan.toLocaleString()+'\ub9cc('+teamPct+')</span></td></tr>';
-    // \uad6c\uc131\uc6d0 \ud604\uc7ac\uc5c5\uc801 \uc21c
-    var mem=t.members.slice().sort(function(a,b){ if(b.total!==a.total) return b.total-a.total; return b.cnt-a.cnt; });
+    var titleTxt = isNone ? '\ud300 \ubbf8\ubc30\uc815' : (rankBadge+'  '+t.name);
+    h+='<tr style="background:'+hdrBg+'"><td colspan="8" style="padding:7px 10px;font-weight:800;color:'+hdrColor+'">'+titleTxt+' <span style="font-size:10px;font-weight:400;color:'+subColor+'">\u00b7 '+(isNone?'':(bLabel+' \u00b7 '))+t.members.length+'\uba85 \u00b7 '+teamTotMan.toLocaleString()+'\ub9cc('+teamPct+')</span></td></tr>';
+    // \uad6c\uc131\uc6d0 \ud604\uc7ac\uc5c5\uc801 \uc21c (\ub9e4\ub2c8\uc800 \uba3c\uc800)
+    var mem=t.members.slice().sort(function(a,b){
+      var am=t.managerIds.indexOf(a.id)>=0, bm=t.managerIds.indexOf(b.id)>=0;
+      if(am!==bm) return am?-1:1;
+      if(b.total!==a.total) return b.total-a.total; return b.cnt-a.cnt;
+    });
     mem.forEach(function(f){
       var bk=_pvBranchKey(f.branch);
       var chip = bk==='al'?'<span class="pv-bchip al">\uc54c</span>':bk==='br'?'<span class="pv-bchip br">\ube0c</span>':'';
+      var isMgr=t.managerIds.indexOf(f.id)>=0;
+      var mgrTag=isMgr?' <span style="font-size:9px;color:#BA7517;font-weight:700">\u2605\ub9e4\ub2c8\uc800</span>':'';
       var totMan=Math.round(f.total/10000);
       var pct=f.goal>0?Math.round(totMan/f.goal*100):-1;
       var pctColor=pct<0?'var(--text3)':pct>=100?'#1F9268':pct>=60?'var(--gold2)':'#C77D14';
       var pctTxt=pct<0?'\u2014':pct+'%';
       var remain=f.goal>0?Math.max(0,f.goal-totMan):-1;
       h+='<tr>'+
-        '<td style="padding-left:24px">'+chip+f.name+'</td>'+
+        '<td style="padding-left:24px">'+chip+f.name+mgrTag+'</td>'+
         '<td style="text-align:right;color:var(--text3)">'+(f.goal?f.goal.toLocaleString():'\u2014')+'</td>'+
         '<td style="text-align:right;font-weight:700">'+totMan.toLocaleString()+'</td>'+
         '<td style="text-align:right;font-weight:700;color:'+pctColor+'">'+pctTxt+'</td>'+
@@ -4661,7 +4746,7 @@ function _renderFpMgrTable(wrap, allRows){
     });
     // \ud300 \uc18c\uacc4
     var tRemain=t.goal>0?Math.max(0,t.goal-teamTotMan):-1;
-    h+='<tr style="background:'+(isAl?'#FCF6E8':'#EEF5FC')+';font-weight:700">'+
+    h+='<tr style="background:'+(isNone?'#F7F5EF':(isAl?'#FCF6E8':'#EEF5FC'))+';font-weight:700">'+
       '<td style="padding-left:24px">\ud300 \uc18c\uacc4</td>'+
       '<td style="text-align:right">'+(t.goal?t.goal.toLocaleString():'\u2014')+'</td>'+
       '<td style="text-align:right">'+teamTotMan.toLocaleString()+'</td>'+
@@ -4720,6 +4805,159 @@ function saveFpGoals(){
   closeFpGoalEdit();
   renderFpPerf();
   showToast('🎯 FP 목표·매니저가 저장되었습니다');
+}
+
+// ===== team builder =====
+var _tempTeams=[];
+var _teamSeq=0;
+var _teamEdited=false;
+var _teamOpenStamp=0;
+var _pickTarget=null; // { teamId, role:'manager'|'member' }
+function openTeamEdit(){
+  _tempTeams = getTeamsDB().map(function(t){ return { id:t.id, branch:t.branch||'', managers:(t.managers||[]).slice(), members:(t.members||[]).slice() }; });
+  _teamEdited=false;
+  renderTeamList();
+  document.getElementById('teamOverlay').classList.add('open');
+}
+function closeTeamEdit(){ document.getElementById('teamOverlay').classList.remove('open'); }
+function addTeam(){ _teamEdited=true;
+  _teamSeq++;
+  _tempTeams.push({ id:'T'+Date.now()+'_'+_teamSeq, branch:'', managers:[], members:[] });
+  renderTeamList();
+}
+function removeTeam(tid){ _teamEdited=true;
+  _tempTeams=_tempTeams.filter(function(t){ return t.id!==tid; });
+  renderTeamList();
+}
+function _teamNameTemp(t){
+  var names=(t.managers||[]).map(function(id){ return _fpNameById(id); }).filter(Boolean);
+  if(names.length) return names.join('\u00b7')+' \ud300';
+  return '(\ub9e4\ub2c8\uc800 \ubbf8\uc9c0\uc815)';
+}
+function renderTeamList(){
+  var wrap=document.getElementById('teamList');
+  if(!_tempTeams.length){ wrap.innerHTML='<div class="pv-empty" style="padding:18px">아직 팀이 없습니다. 새 팀을 만들어 주세요</div>'; return; }
+  var h='';
+  _tempTeams.forEach(function(t){
+    h+='<div style="border:1px solid var(--bdr2);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--surface)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+        '<div style="font-size:13px;font-weight:800;color:var(--gold-d)">'+_teamNameTemp(t)+'</div>'+
+        '<button type="button" onclick="removeTeam(\''+t.id+'\')" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer">✕</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
+        '<span style="font-size:11px;color:var(--text3)">매니저</span>'+
+        _memberChips(t, 'manager')+
+        '<button type="button" onclick="openFpPick(\''+t.id+'\',\'manager\')" style="font-size:11px;border:1px dashed var(--gold);color:var(--gold-d);background:none;padding:3px 9px;border-radius:6px;cursor:pointer;font-family:inherit">+ 매니저</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">'+
+        '<span style="font-size:11px;color:var(--text3)">팀원</span>'+
+        _memberChips(t, 'member')+
+        '<button type="button" onclick="openFpPick(\''+t.id+'\',\'member\')" style="font-size:11px;border:1px dashed #185FA5;color:#185FA5;background:none;padding:3px 9px;border-radius:6px;cursor:pointer;font-family:inherit">+ 팀원</button>'+
+      '</div>'+
+    '</div>';
+  });
+  wrap.innerHTML=h;
+}
+function _memberChips(t, role){
+  var ids = role==='manager' ? t.managers : t.members;
+  var bg = role==='manager' ? 'rgba(244,163,38,.14)' : 'rgba(37,99,235,.1)';
+  var col = role==='manager' ? '#854F0B' : '#185FA5';
+  var h='';
+  (ids||[]).forEach(function(id){
+    h+='<span style="font-size:12px;background:'+bg+';color:'+col+';padding:3px 9px;border-radius:6px">'+_fpNameById(id)+' <span onclick="removeMember(\''+t.id+'\',\''+role+'\',\''+id+'\')" style="cursor:pointer;font-weight:700">×</span></span>';
+  });
+  return h;
+}
+function removeMember(tid, role, fpId){ _teamEdited=true;
+  var t=_findTempTeam(tid); if(!t) return;
+  if(role==='manager') t.managers=t.managers.filter(function(x){ return x!==fpId; });
+  else t.members=t.members.filter(function(x){ return x!==fpId; });
+  renderTeamList();
+}
+function _findTempTeam(tid){ for(var i=0;i<_tempTeams.length;i++){ if(_tempTeams[i].id===tid) return _tempTeams[i]; } return null; }
+function openFpPick(tid, role){
+  _pickTarget={ teamId:tid, role:role };
+  document.getElementById('fpPickTitle').textContent = role==='manager' ? '★ 매니저 선택' : '팀원 선택';
+  var hint=document.getElementById('fpPickHint');
+  if(hint) hint.textContent = role==='manager' ? '매니저로 추가할 FP를 누르세요 · 다시 누르면 해제' : '팀원으로 추가할 FP를 누르세요 · 다시 누르면 해제';
+  document.getElementById('fpPickSearch').value='';
+  renderFpPickList();
+  document.getElementById('fpPickOverlay').classList.add('open');
+}
+function closeFpPick(){ document.getElementById('fpPickOverlay').classList.remove('open'); _pickTarget=null; }
+function _fpAssignedTeamId(fpId){
+  for(var i=0;i<_tempTeams.length;i++){
+    var t=_tempTeams[i];
+    if((t.managers||[]).indexOf(fpId)>=0 || (t.members||[]).indexOf(fpId)>=0) return t.id;
+  }
+  return null;
+}
+function _fpRoleInTeam(fpId, tid){
+  var t=_findTempTeam(tid); if(!t) return null;
+  if((t.managers||[]).indexOf(fpId)>=0) return 'manager';
+  if((t.members||[]).indexOf(fpId)>=0) return 'member';
+  return null;
+}
+function renderFpPickList(){
+  if(!_pickTarget) return;
+  var q=(document.getElementById('fpPickSearch').value||'').trim();
+  var list=getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
+  if(q) list=list.filter(function(fp){ return fp.name.indexOf(q)>=0; });
+  var wrap=document.getElementById('fpPickList');
+  var h='';
+  list.forEach(function(fp){
+    var assigned=_fpAssignedTeamId(fp.id);
+    var inThis = assigned===_pickTarget.teamId;
+    var roleHere = inThis ? _fpRoleInTeam(fp.id, _pickTarget.teamId) : null;
+    var bk=_pvBranchKey(fp.branch);
+    var chip = bk==='al'?'<span class="pv-bchip al">알</span>':bk==='br'?'<span class="pv-bchip br">브</span>':'';
+    var dis = assigned && !inThis;
+    // role tag
+    var tag='';
+    if(roleHere==='manager') tag=' <span style="font-size:10px;font-weight:700;color:#854F0B;background:rgba(244,163,38,.16);padding:1px 7px;border-radius:5px">★매니저</span>';
+    else if(roleHere==='member') tag=' <span style="font-size:10px;font-weight:700;color:#185FA5;background:rgba(37,99,235,.12);padding:1px 7px;border-radius:5px">팀원</span>';
+    else if(dis) tag=' <span style="font-size:10px;color:var(--text3)">(다른 팀)</span>';
+    // current target match: is selected in the SAME role we are picking now
+    var sameRole = (roleHere === _pickTarget.role);
+    var rowBg = sameRole ? (_pickTarget.role==='manager'?'rgba(244,163,38,.06)':'rgba(37,99,235,.05)') : 'transparent';
+    var rightMark = sameRole ? '<span style="color:#C0392B;font-weight:800;font-size:15px">−</span>' : (inThis?'':'<span style="color:var(--text3);font-size:15px">＋</span>');
+    h+='<div onclick="'+(dis?'':'pickFp(\''+fp.id+'\')')+'" style="display:flex;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px solid var(--bdr);cursor:'+(dis?'not-allowed':'pointer')+';opacity:'+(dis?'.4':'1')+';background:'+rowBg+';border-radius:6px">'+
+      '<div style="flex:1;font-size:13px;font-weight:700">'+chip+fp.name+tag+'</div>'+
+      rightMark+
+    '</div>';
+  });
+  wrap.innerHTML = h || '<div class="pv-empty" style="padding:18px">FP가 없습니다</div>';
+}
+function pickFp(fpId){ _teamEdited=true;
+  if(!_pickTarget) return;
+  var t=_findTempTeam(_pickTarget.teamId); if(!t) return;
+  var roleHere=_fpRoleInTeam(fpId, _pickTarget.teamId);
+  // toggle off if already selected in the same role
+  if(roleHere===_pickTarget.role){
+    if(_pickTarget.role==='manager') t.managers=t.managers.filter(function(id){ return id!==fpId; });
+    else t.members=t.members.filter(function(id){ return id!==fpId; });
+    renderTeamList();
+    renderFpPickList();
+    return;
+  }
+  // one person one team: remove from any other team and any role first
+  _tempTeams.forEach(function(x){
+    x.managers=x.managers.filter(function(id){ return id!==fpId; });
+    x.members=x.members.filter(function(id){ return id!==fpId; });
+  });
+  if(_pickTarget.role==='manager'){ if(t.managers.indexOf(fpId)<0) t.managers.push(fpId); }
+  else { if(t.members.indexOf(fpId)<0) t.members.push(fpId); }
+  renderTeamList();
+  renderFpPickList();
+}
+function saveTeams(){
+  // drop empty teams (no managers and no members)
+  var clean=_tempTeams.filter(function(t){ return (t.managers&&t.managers.length) || (t.members&&t.members.length); });
+  saveTeamsDB(clean);
+  closeTeamEdit();
+  renderFpPerf();
+  showToast('👥 팀 구성이 저장되었습니다');
+  if(typeof gasSaveTeams==='function') gasSaveTeams(clean);
 }
 
 // ── 일보 산출 (ExcelJS) ──
@@ -6901,16 +7139,49 @@ function _finishSaveResult(db, createdMsg){
   showToast('✓ 결과가 저장되었습니다'+(createdMsg||''));
 }
 
-var _pkDateOffset = 0, _pkDateTarget = '', _pkDateDisp = '';
+var _pkDateOffset = 0, _pkDateTarget = '', _pkDateDisp = '', _pkDateCb = null;
 function openResDatePicker(){
   _openDatePickerFor('resNextDate','resNextDateDisp');
 }
 function openEditDatePicker(){
   _openDatePickerFor('editActDate','editActDateDisp');
 }
-function _openDatePickerFor(targetId, dispId){
+function _rangeDispText(ds){ var p=ds.split('-'); return parseInt(p[1])+'월 '+parseInt(p[2])+'일'; }
+function openPvRangePicker(which){
+  if(which==='start'){
+    _openDatePickerFor('pvRangeStart','pvRangeStartDisp', function(ds){
+      // auto-fill end with same day if empty
+      var endEl=document.getElementById('pvRangeEnd');
+      if(ds && endEl && !endEl.value){
+        endEl.value=ds;
+        var ed=document.getElementById('pvRangeEndDisp');
+        if(ed){ ed.textContent=_rangeDispText(ds); ed.classList.remove('pk-ph'); }
+      }
+      if(typeof onPvRangeChange==='function') onPvRangeChange();
+    });
+  } else {
+    _openDatePickerFor('pvRangeEnd','pvRangeEndDisp', function(){ if(typeof onPvRangeChange==='function') onPvRangeChange(); });
+  }
+}
+function openFpRangePicker(which){
+  if(which==='start'){
+    _openDatePickerFor('fpRangeStart','fpRangeStartDisp', function(ds){
+      var endEl=document.getElementById('fpRangeEnd');
+      if(ds && endEl && !endEl.value){
+        endEl.value=ds;
+        var ed=document.getElementById('fpRangeEndDisp');
+        if(ed){ ed.textContent=_rangeDispText(ds); ed.classList.remove('pk-ph'); }
+      }
+      if(typeof onFpRangeChange==='function') onFpRangeChange();
+    });
+  } else {
+    _openDatePickerFor('fpRangeEnd','fpRangeEndDisp', function(){ if(typeof onFpRangeChange==='function') onFpRangeChange(); });
+  }
+}
+function _openDatePickerFor(targetId, dispId, cb){
   _pkDateTarget = targetId;
   _pkDateDisp = dispId;
+  _pkDateCb = (typeof cb==='function') ? cb : null;
   _pkDateOffset = 0;
   var cur = document.getElementById(targetId).value;
   if (cur) {
@@ -6957,6 +7228,7 @@ function pickResDate(ds){
   var disp = document.getElementById(_pkDateDisp);
   if (disp){ disp.textContent = (parseInt(p[1]))+'월 '+(parseInt(p[2]))+'일'; disp.classList.remove('pk-ph'); }
   document.getElementById('pkDateOverlay').classList.remove('open');
+  if(_pkDateCb){ var cb=_pkDateCb; _pkDateCb=null; cb(ds); }
 }
 function _bindPkDate(){
   var prev=document.getElementById('pkDatePrev'); if(prev) prev.addEventListener('click', function(){ _pkDateOffset--; renderPkDate(); });
@@ -6966,6 +7238,7 @@ function _bindPkDate(){
     document.getElementById(_pkDateTarget).value='';
     var disp=document.getElementById(_pkDateDisp); if(disp){ disp.textContent='날짜 선택'; disp.classList.add('pk-ph'); }
     document.getElementById('pkDateOverlay').classList.remove('open');
+    if(_pkDateCb){ var cb=_pkDateCb; _pkDateCb=null; cb(''); }
   });
   var ov=document.getElementById('pkDateOverlay'); if(ov) ov.addEventListener('click', function(e){ if(e.target===ov) ov.classList.remove('open'); });
 }
@@ -7826,9 +8099,17 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="pv-dnav" onclick="movePerfMonth(1)">›</button>
     </div>
     <div id="pvRangeNav" style="display:none;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <input type="date" id="pvRangeStart" onchange="onPvRangeChange()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif">
+      <div class="range-trig" onclick="openPvRangePicker('start')" style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);cursor:pointer">
+        <span style="font-size:14px;color:var(--gold2)">📅</span>
+        <span id="pvRangeStartDisp" class="pk-ph" style="font-size:13px;color:var(--text3)">시작일</span>
+      </div>
+      <input type="hidden" id="pvRangeStart">
       <span style="color:var(--text2);font-size:13px">~</span>
-      <input type="date" id="pvRangeEnd" onchange="onPvRangeChange()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif">
+      <div class="range-trig" onclick="openPvRangePicker('end')" style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);cursor:pointer">
+        <span style="font-size:14px;color:var(--gold2)">📅</span>
+        <span id="pvRangeEndDisp" class="pk-ph" style="font-size:13px;color:var(--text3)">종료일</span>
+      </div>
+      <input type="hidden" id="pvRangeEnd">
     </div>
     <div id="pvList"></div>
 
@@ -7904,9 +8185,17 @@ function doCheckin() { doSmartCheckin(); }
     </div>
     <!-- 기간 지정 (range 모드에서만) -->
     <div id="fpRangeNav" style="display:none;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <input type="date" id="fpRangeStart" onchange="onFpRangeChange()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif">
+      <div class="range-trig" onclick="openFpRangePicker('start')" style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);cursor:pointer">
+        <span style="font-size:14px;color:var(--gold2)">📅</span>
+        <span id="fpRangeStartDisp" class="pk-ph" style="font-size:13px;color:var(--text3)">시작일</span>
+      </div>
+      <input type="hidden" id="fpRangeStart">
       <span style="color:var(--text2);font-size:13px">~</span>
-      <input type="date" id="fpRangeEnd" onchange="onFpRangeChange()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif">
+      <div class="range-trig" onclick="openFpRangePicker('end')" style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);cursor:pointer">
+        <span style="font-size:14px;color:var(--gold2)">📅</span>
+        <span id="fpRangeEndDisp" class="pk-ph" style="font-size:13px;color:var(--text3)">종료일</span>
+      </div>
+      <input type="hidden" id="fpRangeEnd">
     </div>
     <!-- 보기 탭: 전체 / 알파지점 / 브라보지점 / 매니저 -->
     <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
@@ -7914,6 +8203,7 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="pv-bf" id="fpTabAlpha" onclick="setFpTab('al',this)">알파지점</button>
       <button type="button" class="pv-bf" id="fpTabBravo" onclick="setFpTab('br',this)">브라보지점</button>
       <button type="button" class="pv-bf" id="fpTabMgr" onclick="setFpTab('mgr',this)">👥 매니저</button>
+      <button type="button" id="teamConfigBtn" onclick="openTeamEdit()" style="display:none;margin-left:auto;font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;border:1px solid var(--gold);background:rgba(201,168,76,.1);color:var(--gold-d);cursor:pointer;font-family:'Noto Sans KR',sans-serif">⚙️ 팀 구성</button>
     </div>
 
     <!-- KPI -->
@@ -7946,6 +8236,38 @@ function doCheckin() { doSmartCheckin(); }
     <div class="mgmt-btns" style="margin-top:12px">
       <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="saveFpGoals()">저장</button>
     </div>
+  </div>
+</div>
+
+<!-- 팀 구성 모달 -->
+<div class="mgmt-overlay" id="teamOverlay" style="z-index:665">
+  <div class="mgmt-box" style="max-width:480px;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div>
+        <div class="mgmt-title">팀 구성</div>
+        <div class="mgmt-sub" style="margin-bottom:0">매니저·팀원을 지정하면 매니저 탭에 팀별로 묶여요</div>
+      </div>
+      <button type="button" onclick="closeTeamEdit()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <button type="button" onclick="addTeam()" style="width:100%;padding:10px;margin-bottom:12px;border:1px dashed var(--gold);background:rgba(201,168,76,.08);color:var(--gold-d);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">+ 새 팀 만들기</button>
+    <div id="teamList"></div>
+    <div class="mgmt-btns" style="margin-top:12px">
+      <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="saveTeams()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 팀원/매니저 선택 모달 (FP 목록에서 선택) -->
+<div class="mgmt-overlay" id="fpPickOverlay" style="z-index:670">
+  <div class="mgmt-box" style="max-width:380px;max-height:82vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="mgmt-title" id="fpPickTitle">FP 선택</div>
+      <button type="button" onclick="closeFpPick()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <div id="fpPickHint" style="font-size:11px;color:var(--text3);margin-bottom:10px">이름을 눌러 추가/해제 · 한 명은 한 팀만</div>
+    <input type="text" class="mgmt-input" id="fpPickSearch" placeholder="🔍 FP 이름 검색" oninput="renderFpPickList()" style="margin:0 0 10px">
+    <div id="fpPickList" style="flex:1;overflow-y:auto;min-height:0"></div>
+    <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="closeFpPick()" style="margin-top:10px">✓ 완료</button>
   </div>
 </div>
 
