@@ -1964,12 +1964,12 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
 </div>
 
 <!-- ── 계획/결과 갈림길 선택 모달 ── -->
-<div class="quick-add-overlay" id="qaChoiceOverlay">
+<div class="quick-add-overlay" id="qaChoiceOverlay" onclick="if(event.target===this)closeQaChoice()">
   <div class="quick-add-box">
     <div class="quick-add-title">QUICK ADD</div>
     <div class="quick-add-date" id="qaChoiceDate"></div>
     <div style="font-size:13px;color:var(--text2);text-align:center;margin:14px 0 14px">무엇을 입력할까요?</div>
-    <button type="button" onclick="qaChoosePlan()" style="width:100%;padding:15px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;font-family:'Noto Sans KR',sans-serif">📋 계획 입력<div style="font-size:11px;font-weight:400;color:#9FB0C9;margin-top:3px">앞으로 만날 미팅을 잡아둡니다</div></button>
+    <button type="button" onclick="qaChoosePlan()" style="width:100%;padding:15px;background:#1A2744;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;font-family:'Noto Sans KR',sans-serif">📋 계획 입력<div style="font-size:11px;font-weight:400;color:#9FB0C9;margin-top:3px">앞으로 만날 미팅을 잡아둡니다</div></button>
     <button type="button" onclick="qaChooseResult()" style="width:100%;padding:15px;background:#1F9268;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">✅ 결과 입력<div style="font-size:11px;font-weight:400;color:#C5E6D7;margin-top:3px">다녀온 활동 결과를 바로 기록합니다</div></button>
     <div class="quick-btns" style="margin-top:14px">
       <button type="button" class="quick-cancel" onclick="closeQaChoice()" style="width:100%">취소</button>
@@ -5644,7 +5644,7 @@ function renderDayPanel(ds) {
         '<div class="mcal-day-acts">'+chips+'</div></div>';
     });
   }
-  html += '<div class="mcal-add-row"><button type="button" class="mcal-add-btn" onclick="openQuickAddForDate(\''+ds+'\')">+ 활동 추가</button></div>';
+  html += '<div class="mcal-add-row"><button type="button" class="mcal-add-btn" onclick="openQuickAddForDate(\''+ds+'\', event)">+ 활동 추가</button></div>';
   panel.innerHTML = html;
 
   panel.querySelectorAll('.week-act-chip[data-aid]').forEach(function(chip){
@@ -5652,8 +5652,8 @@ function renderDayPanel(ds) {
   });
 }
 
-function openQuickAddForDate(ds) {
-  qaEntry(ds, '');
+function openQuickAddForDate(ds, ev) {
+  qaEntry(ds, '', ev);
 }
 
 
@@ -7207,7 +7207,31 @@ function openQuickAddModal(dateStr, preselectedFpId) {
 var _qaPendingMode = 'plan';
 var _qaPendingDate = null, _qaPendingFp = '';
 function _qaTodayStr(){ var d=new Date(); var mm=d.getMonth()+1; var dd=d.getDate(); return d.getFullYear()+'-'+(mm<10?'0':'')+mm+'-'+(dd<10?'0':'')+dd; }
-function qaEntry(dateStr, fpId){
+function _positionChoiceBox(ev){
+  var ov=document.getElementById('qaChoiceOverlay');
+  var box=ov ? ov.querySelector('.quick-add-box') : null;
+  if(!box) return;
+  var isMobile = window.innerWidth < 768;
+  if(isMobile || !ev){
+    // centered (default overlay flex centering)
+    box.style.position=''; box.style.left=''; box.style.top=''; box.style.margin='';
+    ov.style.alignItems='center'; ov.style.justifyContent='center';
+    ov.style.background='rgba(8,14,28,.75)';
+    return;
+  }
+  // PC: place near click, keep inside viewport
+  ov.style.alignItems='flex-start'; ov.style.justifyContent='flex-start';
+  ov.style.background='rgba(8,14,28,.25)';
+  box.style.position='absolute'; box.style.margin='0';
+  var bw=240, bh=190; // approx box size
+  var x=(ev.clientX||100)+12, y=(ev.clientY||100)+8;
+  if(x+bw > window.innerWidth-12) x=window.innerWidth-bw-12;
+  if(y+bh > window.innerHeight-12) y=window.innerHeight-bh-12;
+  if(x<12) x=12; if(y<12) y=12;
+  box.style.left=x+'px'; box.style.top=y+'px';
+  box.style.width='240px'; box.style.maxWidth='240px';
+}
+function qaEntry(dateStr, fpId, ev){
   _qaPendingDate = dateStr; _qaPendingFp = fpId||'';
   if(dateStr && dateStr <= _qaTodayStr()){
     // past/today -> show choice modal
@@ -7217,6 +7241,7 @@ function qaEntry(dateStr, fpId){
       var days=['일','월','화','수','목','금','토'];
       dEl.textContent=parseInt(parts[1])+'월 '+parseInt(parts[2])+'일 ('+days[dObj.getDay()]+')';
     }
+    _positionChoiceBox(ev);
     document.getElementById('qaChoiceOverlay').classList.add('open');
   } else {
     // future -> plan quick add directly
@@ -7224,7 +7249,15 @@ function qaEntry(dateStr, fpId){
     openQuickAddModal(dateStr, fpId||'');
   }
 }
-function closeQaChoice(){ document.getElementById('qaChoiceOverlay').classList.remove('open'); }
+function closeQaChoice(){
+  var ov=document.getElementById('qaChoiceOverlay');
+  if(ov){
+    ov.classList.remove('open');
+    var box=ov.querySelector('.quick-add-box');
+    if(box){ box.style.position=''; box.style.left=''; box.style.top=''; box.style.margin=''; box.style.width=''; box.style.maxWidth=''; }
+    ov.style.alignItems=''; ov.style.justifyContent=''; ov.style.background='';
+  }
+}
 function qaChoosePlan(){
   closeQaChoice();
   _qaPendingMode='plan';
@@ -7345,7 +7378,7 @@ function saveQuickAdd() {
 
 function onWeekCellClick(e, dateStr, fpId) {
   if(e.target.closest && e.target.closest('.week-act-chip')) return;
-  qaEntry(dateStr, fpId||'');
+  qaEntry(dateStr, fpId||'', e);
 }
 
 
