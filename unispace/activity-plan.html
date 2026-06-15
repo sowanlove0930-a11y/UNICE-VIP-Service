@@ -433,18 +433,23 @@ function askConfirm(title, msg, cb){
 function _pad2(n){ return ('0'+n).slice(-2); }
 function _ymd(d){ return d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-'+_pad2(d.getDate()); }
 
-// 이번 주 월요일 기준 주차 정보
+// week info. Switches at Monday 12:00 noon (deadline). Before noon Mon = previous week.
 function getWeekInfo(){
-  var now=new Date(); now.setHours(0,0,0,0);
+  var nowReal=new Date(); // keep real time for noon comparison
+  var now=new Date(nowReal); now.setHours(0,0,0,0);
   var dow=now.getDay();
   var mon=new Date(now); mon.setDate(now.getDate()-(dow===0?6:dow-1));
+  // this week's deadline = Monday 12:00 of this week's monday
+  var thisMonNoon=new Date(mon); thisMonNoon.setHours(12,0,0,0);
+  // before this Monday noon -> still belongs to previous week
+  if(nowReal.getTime() < thisMonNoon.getTime()) mon.setDate(mon.getDate()-7);
   var sun=new Date(mon); sun.setDate(mon.getDate()+6);
-  // 그 달 몇 주차인지 (월 기준, 1일부터 7일 단위)
+  // week number within month (Mon-based, 7-day units)
   var m=mon.getMonth();
   var weekNo=Math.ceil(mon.getDate()/7);
-  // 마감: 월요일 12:00
-  var deadline=new Date(mon); deadline.setHours(12,0,0,0);
-  // 주차 키
+  // deadline = next Monday 12:00 (the Monday AFTER this week's monday)
+  var deadline=new Date(mon); deadline.setDate(mon.getDate()+7); deadline.setHours(12,0,0,0);
+  // week key
   var key=mon.getFullYear()+'-'+_pad2(m+1)+'-W'+weekNo;
   return { mon:mon, sun:sun, month:m+1, weekNo:weekNo, deadline:deadline, key:key };
 }
@@ -452,24 +457,18 @@ function getWeekInfo(){
 function getPlanDB(){ try{ return JSON.parse(localStorage.getItem(PLAN_KEY)||'{}'); }catch(e){ return {}; } }
 function savePlanDB(db){ localStorage.setItem(PLAN_KEY, JSON.stringify(db)); }
 
-// status-view week info. Mon still shows previous week, switches on Tue.
-// offset: 0=base week, -1=one week back ... (older = more negative)
+// status-view week info = current week (from getWeekInfo) shifted by offset weeks.
+// offset: 0=current week, -1=one week back ... (older = more negative)
 var STATUS_MIN_OFFSET = -8; // up to 8 weeks back
 var statusWeekOffset = 0;
 function getStatusWeekInfo(offset){
   var off = offset || 0;
-  var now = new Date(); now.setHours(0,0,0,0);
-  var dow = now.getDay();
-  // this week's monday
-  var mon = new Date(now); mon.setDate(now.getDate()-(dow===0?6:dow-1));
-  // Tuesday transition: on Monday (dow=1) status still points to previous week
-  if (dow === 1) mon.setDate(mon.getDate()-7);
-  // apply offset (weeks back)
-  mon.setDate(mon.getDate() + off*7);
+  var base = getWeekInfo(); // already applies noon transition
+  var mon = new Date(base.mon); mon.setDate(mon.getDate() + off*7);
   var sun = new Date(mon); sun.setDate(mon.getDate()+6);
   var m = mon.getMonth();
   var weekNo = Math.ceil(mon.getDate()/7);
-  var deadline = new Date(mon); deadline.setHours(12,0,0,0);
+  var deadline = new Date(mon); deadline.setDate(mon.getDate()+7); deadline.setHours(12,0,0,0);
   var key = mon.getFullYear()+'-'+_pad2(m+1)+'-W'+weekNo;
   return { mon:mon, sun:sun, month:m+1, weekNo:weekNo, deadline:deadline, key:key };
 }
