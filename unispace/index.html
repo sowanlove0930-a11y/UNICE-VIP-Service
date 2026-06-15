@@ -4471,6 +4471,33 @@ function _isPerfAdmin(){
   var r=currentUser.role||'', tt=currentUser.title||'';
   return r==='대표'||r==='지점장'||tt==='지점장'||tt==='교육지점장';
 }
+// which branch the current user may view: 'all' | 'al' | 'br'
+function _myBranchScope(){
+  if(!currentUser) return 'all';
+  var r=currentUser.role||'', tt=currentUser.title||'', id=currentUser.id||'', br=currentUser.branch||'';
+  // admin: all branches
+  if(r==='대표') return 'all';
+  // edu-branch-head: all branches (match _reportScope identification)
+  if(tt==='교육지점장' || id==='H2503162' || br.indexOf('교육')>=0) return 'all';
+  // branch head: own branch only
+  if(r==='지점장' || tt==='지점장'){
+    var bk=_pvBranchKey(br);
+    if(bk==='al'||bk==='br') return bk;
+  }
+  return 'all';
+}
+// determine a team's branch by majority of its members
+function _teamBranchKey(team){
+  var al=0, br=0;
+  var ids=((team.managers||[]).concat(team.members||[]));
+  ids.forEach(function(id){
+    var nm=null, list=getMergedFpList();
+    for(var i=0;i<list.length;i++){ if(list[i].id===id){ nm=list[i]; break; } }
+    if(nm){ var bk=_pvBranchKey(nm.branch); if(bk==='al') al++; else if(bk==='br') br++; }
+  });
+  if(al===0 && br===0) return 'etc';
+  return al>=br ? 'al' : 'br';
+}
 function setFpTab(t, el){ _fpTab=t; ['fpTabAll','fpTabAlpha','fpTabBravo','fpTabMgr'].forEach(function(id){ var e=document.getElementById(id); if(e) e.classList.remove('on'); }); if(el) el.classList.add('on'); var _tcb=document.getElementById('teamConfigBtn'); if(_tcb){ var _adm=_isPerfAdmin(); _tcb.style.display=(t==='mgr'&&_adm)?'':'none'; } renderFpPerf(); if(t==='mgr'){ loadTeamsFromGas(function(){ if(_fpTab==='mgr') renderFpPerf(); }); } }
 function _fpMonthRef(){ var d=_fpMonth?new Date(_fpMonth):new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }
 function _fpSelYm(){
@@ -4592,7 +4619,11 @@ function renderFpPerf(){
 
   var wrap=document.getElementById('fpPerfTableWrap');
 
-  if(_fpTab==='mgr'){ _renderFpMgrTable(wrap, allRows); return; }
+  if(_fpTab==='mgr'){
+    var mgrScope=_myBranchScope();
+    var mgrRows = mgrScope==='all' ? allRows : allRows.filter(function(f){ return _pvBranchKey(f.branch)===mgrScope; });
+    _renderFpMgrTable(wrap, mgrRows); return;
+  }
 
   // \uc804\uccb4/\uc54c\ud30c/\ube0c\ub77c\ubcf4 = FP \uac1c\uc778 \uc21c\uc704 (\ud604\uc7ac\uc5c5\uc801 \ud070 \uc21c, TOP \uc81c\ud55c)
   var rows=scopeRows.slice().sort(function(a,b){ if(b.total!==a.total) return b.total-a.total; if(b.cnt!==a.cnt) return b.cnt-a.cnt; return (a.name>b.name?1:-1); });
@@ -4836,12 +4867,24 @@ function _teamNameTemp(t){
 }
 function renderTeamList(){
   var wrap=document.getElementById('teamList');
-  if(!_tempTeams.length){ wrap.innerHTML='<div class="pv-empty" style="padding:18px">아직 팀이 없습니다. 새 팀을 만들어 주세요</div>'; return; }
+  var scope=_myBranchScope();
+  // filter teams by branch scope (empty new team always shown so it can be filled)
+  var visible=_tempTeams.filter(function(t){
+    if(scope==='all') return true;
+    var ids=((t.managers||[]).concat(t.members||[]));
+    if(!ids.length) return true; // empty team being built
+    return _teamBranchKey(t)===scope;
+  });
+  if(!visible.length){ wrap.innerHTML='<div class="pv-empty" style="padding:18px">아직 팀이 없습니다. 새 팀을 만들어 주세요</div>'; return; }
   var h='';
-  _tempTeams.forEach(function(t){
+  visible.forEach(function(t){
+    var bk=_teamBranchKey(t);
+    var brBadge = bk==='al' ? '<span style="font-size:10px;font-weight:700;color:#854F0B;background:rgba(244,163,38,.16);padding:2px 8px;border-radius:6px;margin-left:6px">알파</span>'
+                : bk==='br' ? '<span style="font-size:10px;font-weight:700;color:#0C447C;background:rgba(37,99,235,.12);padding:2px 8px;border-radius:6px;margin-left:6px">브라보</span>'
+                : '';
     h+='<div style="border:1px solid var(--bdr2);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--surface)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-        '<div style="font-size:13px;font-weight:800;color:var(--gold-d)">'+_teamNameTemp(t)+'</div>'+
+        '<div style="font-size:13px;font-weight:800;color:var(--gold-d)">'+_teamNameTemp(t)+brBadge+'</div>'+
         '<button type="button" onclick="removeTeam(\''+t.id+'\')" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer">✕</button>'+
       '</div>'+
       '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
@@ -4901,8 +4944,11 @@ function _fpRoleInTeam(fpId, tid){
 function renderFpPickList(){
   if(!_pickTarget) return;
   var q=(document.getElementById('fpPickSearch').value||'').trim();
+  var scope=_myBranchScope();
   var list=getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
+  if(scope!=='all') list=list.filter(function(fp){ return _pvBranchKey(fp.branch)===scope; });
   if(q) list=list.filter(function(fp){ return fp.name.indexOf(q)>=0; });
+  list.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'', 'ko'); });
   var wrap=document.getElementById('fpPickList');
   var h='';
   list.forEach(function(fp){
