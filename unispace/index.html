@@ -2996,6 +2996,14 @@ function renderBojangCard() {
   try { _g = JSON.parse(localStorage.getItem('unispace_perf_goal') || '{}'); } catch(e) {}
   var GOAL_ALPHA = parseInt(_g.alpha) || 0;
   var GOAL_BRAVO = parseInt(_g.bravo) || 0;
+  // override with goal-adjust branch goals (life+non sum) if set
+  try {
+    var _gaDb = JSON.parse(localStorage.getItem('unispace_goal_adjust') || '{}');
+    var _gaYmKey = (new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2);
+    var _gaBr = (_gaDb[_gaYmKey] && _gaDb[_gaYmKey].branch) || {};
+    if(_gaBr.al && (_gaBr.al.life || _gaBr.al.non)){ GOAL_ALPHA = (parseInt(_gaBr.al.life)||0)+(parseInt(_gaBr.al.non)||0); }
+    if(_gaBr.br && (_gaBr.br.life || _gaBr.br.non)){ GOAL_BRAVO = (parseInt(_gaBr.br.life)||0)+(parseInt(_gaBr.br.non)||0); }
+  } catch(e) {}
   var GOAL_TOTAL = GOAL_ALPHA + GOAL_BRAVO;
   var AMT_ALPHA  = 0, AMT_BRAVO  = 0;
   var AMT_TOTAL  = AMT_ALPHA + AMT_BRAVO;
@@ -4054,12 +4062,10 @@ function openPerfView(){
   _pvRange = 'today';
   _pvBranch = 'all';
   _pvDay = new Date(); _pvDay.setHours(0,0,0,0);
-  // FP(비관리자)면 본인 업적만, 목표/카톡공유/지점필터 숨김
+  // FP(비관리자)면 본인 업적만, 카톡공유/지점필터 숨김
   var isAdminPv = _isManagerUser(currentUser);
-  var gBtn=document.getElementById('pvGoalBtn');
   var sBtn=document.getElementById('pvShareBtn');
   var bfWrap=document.getElementById('pvBranchFilterWrap');
-  if(gBtn) gBtn.style.display = isAdminPv ? '' : 'none';
   if(sBtn) sBtn.style.display = isAdminPv ? '' : 'none';
   if(bfWrap) bfWrap.style.display = isAdminPv ? 'flex' : 'none';
   if(!isAdminPv) _pvBranch = 'all'; // FP는 본인 것만 (renderPerfView에서 필터)
@@ -4420,6 +4426,16 @@ function _gaComma(n){ return (parseInt(n)||0).toLocaleString(); }
 // FP plan goals live in localStorage 'unispace_plan_goals' = { fpId: {month:{life,non}, week:{life,non}} }
 function getPlanGoalsCache(){ try{ return JSON.parse(localStorage.getItem('unispace_plan_goals')||'{}'); }catch(e){ return {}; } }
 function _fpOrigGoal(fpId){ var c=getPlanGoalsCache()[fpId]; return c||{ month:{life:0,non:0}, week:{life:0,non:0} }; }
+// current submission week label from plan period setting, e.g. month + week
+function _gaWeekLabel(){
+  try{
+    var s=localStorage.getItem('unispace_plan_period');
+    if(s){ var p=JSON.parse(s); if(p && p.month && p.week){ return p.month+'월 '+p.week+'주차'; } }
+  }catch(e){}
+  // fallback: compute from today (1st-based 7-day blocks)
+  var d=new Date(); var m=d.getMonth()+1; var wk=Math.ceil(d.getDate()/7);
+  return m+'월 '+wk+'주차';
+}
 
 var _gaBranch='all'; // all|al|br
 function openGoalAdj(){
@@ -4453,13 +4469,14 @@ function _gaRenderBranchGoal(){
   var br=(db[ym]&&db[ym].branch)||{};
   function row(bk,label){
     var v=br[bk]||{};
+    var wl=_gaWeekLabel();
     return '<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:12px;margin-bottom:8px">'+
       '<div style="font-size:13px;font-weight:700;margin-bottom:8px">'+label+' 지점 목표</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">월 생보</div><input type="text" id="gab_'+bk+'_life" value="'+_gaComma(v.life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">월 손보</div><input type="text" id="gab_'+bk+'_non" value="'+_gaComma(v.non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">주차 생보</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaComma(v.wLife)+'" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">주차 손보</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaComma(v.wNon)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 생보</div><input type="text" id="gab_'+bk+'_life" value="'+_gaComma(v.life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 손보</div><input type="text" id="gab_'+bk+'_non" value="'+_gaComma(v.non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 생보</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaComma(v.wLife)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 손보</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaComma(v.wNon)+'" class="ga-inp"></div>'+
       '</div>'+
     '</div>';
   }
@@ -4470,7 +4487,12 @@ function _gaRenderBranchGoal(){
 }
 function _gaFpRows(){
   var scope=_myBranchScope();
-  var list=getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
+  var list=getMergedFpList().filter(function(fp){
+    if(!fp.active) return false;
+    if(fp.role==='대표' || fp.role==='지점장') return false;
+    if((fp.title||'')==='지점장' || (fp.title||'')==='교육지점장') return false;
+    return true;
+  });
   if(_gaBranch!=='all') list=list.filter(function(fp){ return _pvBranchKey(fp.branch)===_gaBranch; });
   else if(scope!=='all') list=list.filter(function(fp){ return _pvBranchKey(fp.branch)===scope; });
   return list;
@@ -4480,12 +4502,14 @@ function _gaRenderFpList(){
   var db=getGoalAdjDB(); var ym=_gaYm();
   var saved=(db[ym]&&db[ym].fp)||{};
   var list=_gaFpRows();
+  var q=(document.getElementById('gaFpSearch')?document.getElementById('gaFpSearch').value:'').trim();
+  if(q) list=list.filter(function(fp){ return fp.name.indexOf(q)>=0; });
   if(!list.length){ wrap.innerHTML='<div class="pv-empty" style="padding:16px">FP가 없습니다</div>'; return; }
+  var wl=_gaWeekLabel();
   var h='';
   list.forEach(function(fp){
     var orig=_fpOrigGoal(fp.id);
     var sv=saved[fp.id]||{};
-    // auto-fill input with saved value, else FP original
     var life = sv.life!==undefined ? sv.life : orig.month.life;
     var non  = sv.non!==undefined ? sv.non : orig.month.non;
     var wlife= sv.wLife!==undefined ? sv.wLife : orig.week.life;
@@ -4497,13 +4521,13 @@ function _gaRenderFpList(){
     h+='<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:11px 12px;margin-bottom:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
         '<div style="font-size:13px;font-weight:700">'+chip+' '+fp.name+'</div>'+
-        '<div style="font-size:10px;color:var(--text3)">'+origTxt+'</div>'+
+        '<div style="font-size:10px;color:'+(hasOrig?'var(--gold-d)':'var(--text3)')+'">'+origTxt+'</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">월 생보</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaComma(life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">월 손보</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaComma(non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">주차 생보</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaComma(wlife)+'" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">주차 손보</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaComma(wnon)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 생보</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaComma(life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 손보</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaComma(non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 생보</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaComma(wlife)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 손보</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaComma(wnon)+'" class="ga-inp"></div>'+
       '</div>'+
     '</div>';
   });
@@ -8343,7 +8367,6 @@ function doCheckin() { doSmartCheckin(); }
         <div class="mgmt-sub" style="margin-bottom:0">📊 업적 조회 · 일자별 · 누계</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        <button type="button" id="pvGoalBtn" onclick="openPerfGoal()" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);color:var(--gold2);cursor:pointer;font-family:'Noto Sans KR',sans-serif">🎯 목표</button>
         <button type="button" id="pvShareBtn" onclick="openPerfShare()" style="font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;background:rgba(254,229,0,.18);border:1px solid rgba(201,168,76,.35);color:#854F0B;cursor:pointer;font-family:'Noto Sans KR',sans-serif">📋 카톡 공유</button>
         <button type="button" class="mgmt-btn mgmt-btn-cancel" style="width:auto;padding:7px 14px;font-size:12px" onclick="closePerfView()">✕ 닫기</button>
       </div>
@@ -8555,6 +8578,7 @@ function doCheckin() { doSmartCheckin(); }
     <div style="flex:1;overflow-y:auto;min-height:0">
       <div id="gaBranchGoalBox"></div>
       <div style="font-size:12px;color:var(--text2);margin:14px 0 6px;font-weight:700">👤 FP 개인 목표</div>
+      <input type="text" id="gaFpSearch" placeholder="🔍 FP 이름 검색" oninput="_gaRenderFpList()" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gold);border-radius:9px;background:rgba(201,168,76,.06);color:var(--text);font-size:13px;font-family:'Noto Sans KR',sans-serif;margin-bottom:10px">
       <div id="gaFpList"></div>
       <div id="gaSumBox" style="margin-top:12px;padding:12px;border-radius:10px;background:var(--bg3);font-size:12px;color:var(--text2)"></div>
     </div>
@@ -8563,6 +8587,9 @@ function doCheckin() { doSmartCheckin(); }
     </div>
   </div>
 </div>
+
+<!-- 팀원/매니저 선택 모달 (FP 목록에서 선택) -->
+<div class="mgmt-overlay" id="fpPickOverlay" style="z-index:670">
   <div class="mgmt-box" style="max-width:380px;max-height:82vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <div class="mgmt-title" id="fpPickTitle">FP 선택</div>
