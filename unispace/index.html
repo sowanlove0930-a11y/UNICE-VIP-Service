@@ -2167,6 +2167,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="header-right">
       <button type="button" class="checkin-smart-btn state-ready" id="checkinSmartBtn" onclick="doSmartCheckin()">📍 출근 체크인</button>
       <button type="button" class="cust-view-btn" id="custViewBtn" onclick="window.location.href='customer.html?tab=list'">🔍 고객 조회</button>
+      <button type="button" class="cust-view-btn" id="scheduleBtn" onclick="openScheduleModal()">📅 일정 조회</button>
       <button type="button" class="consult-btn" id="consultBtn" onclick="toggleConsultMode()">🎯 상담 모드</button>
       <div class="header-clock">
         <div class="clock-time" id="clockTime">00:00</div>
@@ -4438,6 +4439,170 @@ function _gaWeekLabel(){
 }
 
 var _gaBranch='all'; // all|al|br
+var SCHED_KEY = 'unispace_schedules';
+var _schedMonth = null; // Date, 1st of shown month
+var _schedType = 'edu';
+var _schedEditId = '';
+function getSchedDB(){ try{ var a=JSON.parse(localStorage.getItem(SCHED_KEY)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function saveSchedDB(arr){ localStorage.setItem(SCHED_KEY, JSON.stringify(arr||[])); }
+function _schedIsAdmin(){
+  if(!currentUser) return false;
+  var r=currentUser.role||'', tt=currentUser.title||'';
+  return r==='대표'||r==='지점장'||tt==='지점장'||tt==='교육지점장';
+}
+function _schedYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function openScheduleModal(){
+  _schedMonth = new Date(); _schedMonth.setDate(1); _schedMonth.setHours(0,0,0,0);
+  var addBtn=document.getElementById('schedAddBtn');
+  if(addBtn) addBtn.style.display = _schedIsAdmin() ? '' : 'none';
+  renderSchedCal();
+  document.getElementById('scheduleOverlay').classList.add('open');
+  if(typeof loadSchedFromGas==='function'){ loadSchedFromGas(function(){ if(document.getElementById('scheduleOverlay').classList.contains('open')) renderSchedCal(); }); }
+}
+function closeScheduleModal(){ document.getElementById('scheduleOverlay').classList.remove('open'); }
+function schedPrevMonth(){ _schedMonth.setMonth(_schedMonth.getMonth()-1); renderSchedCal(); }
+function schedNextMonth(){ _schedMonth.setMonth(_schedMonth.getMonth()+1); renderSchedCal(); }
+function renderSchedCal(){
+  var lbl=document.getElementById('schedMonthLabel');
+  if(lbl) lbl.textContent = _schedMonth.getFullYear()+'년 '+(_schedMonth.getMonth()+1)+'월';
+  var y=_schedMonth.getFullYear(), m=_schedMonth.getMonth();
+  var first=new Date(y,m,1), startDow=first.getDay();
+  var daysInMonth=new Date(y,m+1,0).getDate();
+  var db=getSchedDB();
+  var todayStr=_schedYmd(new Date());
+  var dows=['일','월','화','수','목','금','토'];
+  var h='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:11px">';
+  dows.forEach(function(d,i){ h+='<div style="text-align:center;color:'+(i===0?'#C0392B':i===6?'#2563EB':'var(--text3)')+';padding:4px 0">'+d+'</div>'; });
+  for(var b=0;b<startDow;b++){ h+='<div></div>'; }
+  for(var day=1;day<=daysInMonth;day++){
+    var ds=y+'-'+('0'+(m+1)).slice(-2)+'-'+('0'+day).slice(-2);
+    var dayScheds=db.filter(function(s){ return s.date===ds; });
+    var isToday=(ds===todayStr);
+    var chips='';
+    dayScheds.slice(0,2).forEach(function(s){
+      var bg = s.type==='edu' ? 'rgba(37,99,235,.14)' : 'rgba(192,57,49,.13)';
+      var col = s.type==='edu' ? '#185FA5' : '#C0392B';
+      var label = s.type==='edu' ? (s.company||'교육') : (s.title||'중요');
+      chips+='<div style="margin-top:2px;font-size:9px;background:'+bg+';color:'+col+';border-radius:3px;padding:1px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtmlSch(label)+'</div>';
+    });
+    if(dayScheds.length>2){ chips+='<div style="font-size:8px;color:var(--text3);margin-top:1px">+'+(dayScheds.length-2)+'</div>'; }
+    h+='<div onclick="schedDayClick(\''+ds+'\')" style="min-height:48px;border:'+(isToday?'1.5px solid var(--gold)':'0.5px solid var(--bdr)')+';border-radius:6px;padding:3px;cursor:pointer;font-size:11px">'+day+chips+'</div>';
+  }
+  h+='</div>';
+  var grid=document.getElementById('schedCalGrid'); if(grid) grid.innerHTML=h;
+  var dl=document.getElementById('schedDayList'); if(dl) dl.innerHTML='';
+}
+function escHtmlSch(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function schedDayClick(ds){
+  var db=getSchedDB();
+  var list=db.filter(function(s){ return s.date===ds; });
+  var dl=document.getElementById('schedDayList');
+  if(!dl) return;
+  if(!list.length){
+    dl.innerHTML='<div style="font-size:12px;color:var(--text3);padding:10px;text-align:center">'+ds+' — 등록된 일정이 없습니다'+(_schedIsAdmin()?' (+ 일정 추가로 등록)':'')+'</div>';
+    return;
+  }
+  var h='<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">'+ds+'</div>';
+  list.forEach(function(s){
+    var col = s.type==='edu' ? '#185FA5' : '#C0392B';
+    var bg = s.type==='edu' ? 'rgba(37,99,235,.08)' : 'rgba(192,57,49,.07)';
+    var tag = s.type==='edu' ? '📚 교육' : '⭐ 중요';
+    var main = s.type==='edu' ? ((s.company?s.company+' · ':'')+(s.title||'교육')) : (s.title||'중요 일정');
+    var timeTxt = s.time ? (' · '+s.time) : '';
+    h+='<div onclick="'+(_schedIsAdmin()?'openSchedForm(\''+s.id+'\')':'')+'" style="background:'+bg+';border-radius:8px;padding:9px 11px;margin-bottom:6px;'+(_schedIsAdmin()?'cursor:pointer':'')+'">'+
+      '<span style="font-size:10px;font-weight:700;color:'+col+'">'+tag+'</span> '+
+      '<span style="font-size:13px;font-weight:600;color:var(--text)">'+escHtmlSch(main)+timeTxt+'</span>'+
+    '</div>';
+  });
+  dl.innerHTML=h;
+}
+function schedSetType(t){
+  _schedType=t;
+  var e=document.getElementById('schedTypeEdu'), i=document.getElementById('schedTypeImp');
+  if(t==='edu'){
+    e.style.cssText='font-size:12px;padding:8px 16px;border-radius:9px;border:1px solid #2563EB;background:rgba(37,99,235,.1);color:#185FA5;font-weight:700;cursor:pointer;font-family:inherit';
+    i.style.cssText='font-size:12px;padding:8px 16px;border-radius:9px;border:1px solid var(--bdr);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit';
+  } else {
+    i.style.cssText='font-size:12px;padding:8px 16px;border-radius:9px;border:1px solid #C0392B;background:rgba(192,57,49,.1);color:#C0392B;font-weight:700;cursor:pointer;font-family:inherit';
+    e.style.cssText='font-size:12px;padding:8px 16px;border-radius:9px;border:1px solid var(--bdr);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit';
+  }
+  var cw=document.getElementById('schedCompanyWrap');
+  if(cw) cw.style.display = t==='edu' ? '' : 'none';
+}
+function openSchedForm(id){
+  if(!_schedIsAdmin()){ showToast('⚠️ 일정 등록은 대표·지점장만 가능합니다'); return; }
+  _schedEditId = id || '';
+  document.getElementById('schedFormTitle').textContent = id ? '일정 수정' : '일정 추가';
+  document.getElementById('schedDelBtn').style.display = id ? '' : 'none';
+  if(id){
+    var s=getSchedDB().filter(function(x){ return x.id===id; })[0];
+    if(s){
+      schedSetType(s.type||'edu');
+      document.getElementById('schedCompany').value=s.company||'';
+      document.getElementById('schedTitle').value=s.title||'';
+      document.getElementById('schedDate').value=s.date||'';
+      document.getElementById('schedTime').value=s.time||'';
+    }
+  } else {
+    schedSetType('edu');
+    document.getElementById('schedCompany').value='';
+    document.getElementById('schedTitle').value='';
+    document.getElementById('schedDate').value=_schedYmd(new Date());
+    document.getElementById('schedTime').value='';
+  }
+  document.getElementById('schedFormOverlay').classList.add('open');
+}
+function closeSchedForm(){ document.getElementById('schedFormOverlay').classList.remove('open'); }
+function saveSchedule(){
+  if(!_schedIsAdmin()){ showToast('⚠️ 권한이 없습니다'); return; }
+  var date=document.getElementById('schedDate').value;
+  var title=document.getElementById('schedTitle').value.trim();
+  var company=document.getElementById('schedCompany').value.trim();
+  var time=document.getElementById('schedTime').value.trim();
+  if(!date){ showToast('⚠️ 날짜를 선택해 주세요'); return; }
+  if(_schedType==='edu' && !company && !title){ showToast('⚠️ 교육 회사나 내용을 입력해 주세요'); return; }
+  if(_schedType==='imp' && !title){ showToast('⚠️ 일정 내용을 입력해 주세요'); return; }
+  var db=getSchedDB();
+  if(_schedEditId){
+    for(var i=0;i<db.length;i++){
+      if(db[i].id===_schedEditId){
+        db[i].type=_schedType; db[i].date=date; db[i].title=title; db[i].company=company; db[i].time=time;
+        break;
+      }
+    }
+  } else {
+    db.push({ id:'sch_'+Date.now()+'_'+Math.random().toString(36).substr(2,5), type:_schedType, date:date, title:title, company:company, time:time, by:(currentUser?currentUser.name:'') });
+  }
+  saveSchedDB(db);
+  if(typeof gasSaveSched==='function') gasSaveSched(db);
+  closeSchedForm();
+  renderSchedCal();
+  schedDayClick(date);
+  showToast('📅 일정이 저장되었습니다');
+}
+function deleteSchedule(){
+  if(!_schedEditId) return;
+  if(!_schedIsAdmin()){ showToast('⚠️ 권한이 없습니다'); return; }
+  var _id=_schedEditId;
+  closeSchedForm();
+  showConfirm({icon:'🗑️',iconCls:'confirm-icon-danger',title:'일정 삭제',msg:'이 일정을 삭제할까요?',okLabel:'삭제',okCls:'red'}).then(function(ok){
+    if(!ok) return;
+    var db=getSchedDB().filter(function(s){ return s.id!==_id; });
+    saveSchedDB(db);
+    if(typeof gasSaveSched==='function') gasSaveSched(db);
+    renderSchedCal();
+    showToast('삭제되었습니다');
+  });
+}
+function gasSaveSched(arr){
+  try{ fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'saveSchedules', data:arr||[] }) }).catch(function(){}); }catch(e){}
+}
+function loadSchedFromGas(cb){
+  fetch(UNISPACE_GAS_URL+'?action=getSchedules').then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ok && Array.isArray(res.data)){ saveSchedDB(res.data); }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
 function openGoalAdj(){
   _gaBranch = _myBranchScope()==='all' ? 'all' : _myBranchScope();
   _gaRenderTabs();
@@ -8560,6 +8725,71 @@ function doCheckin() { doSmartCheckin(); }
     <div id="teamList"></div>
     <div class="mgmt-btns" style="margin-top:12px">
       <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="saveTeams()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 일정 조회/관리 모달 -->
+<div class="mgmt-overlay" id="scheduleOverlay" style="z-index:667">
+  <div class="mgmt-box" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="mgmt-title">📅 일정</div>
+      <button type="button" onclick="closeScheduleModal()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" onclick="schedPrevMonth()" style="background:var(--surface);border:1px solid var(--bdr);border-radius:7px;width:30px;height:30px;cursor:pointer;color:var(--text2)">‹</button>
+        <span id="schedMonthLabel" style="font-size:15px;font-weight:700;min-width:110px;text-align:center"></span>
+        <button type="button" onclick="schedNextMonth()" style="background:var(--surface);border:1px solid var(--bdr);border-radius:7px;width:30px;height:30px;cursor:pointer;color:var(--text2)">›</button>
+      </div>
+      <button type="button" id="schedAddBtn" onclick="openSchedForm('')" style="display:none;font-size:12px;font-weight:700;padding:7px 12px;border-radius:9px;border:1px solid var(--gold);background:rgba(201,168,76,.1);color:var(--gold-d);cursor:pointer;font-family:'Noto Sans KR',sans-serif">+ 일정 추가</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;min-height:0">
+      <div id="schedCalGrid"></div>
+      <div style="display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--text2)">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#2563EB;vertical-align:-1px"></span> 교육 일정</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#C0392B;vertical-align:-1px"></span> 중요 일정</span>
+      </div>
+      <div id="schedDayList" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 일정 추가/수정 폼 모달 -->
+<div class="mgmt-overlay" id="schedFormOverlay" style="z-index:672">
+  <div class="mgmt-box" style="max-width:400px;max-height:88vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="mgmt-title" id="schedFormTitle">일정 추가</div>
+      <button type="button" onclick="closeSchedForm()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;min-height:0">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">일정 종류</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button type="button" id="schedTypeEdu" onclick="schedSetType('edu')" style="font-size:12px;padding:8px 16px;border-radius:9px;border:1px solid #2563EB;background:rgba(37,99,235,.1);color:#185FA5;font-weight:700;cursor:pointer;font-family:inherit">📚 교육</button>
+        <button type="button" id="schedTypeImp" onclick="schedSetType('imp')" style="font-size:12px;padding:8px 16px;border-radius:9px;border:1px solid var(--bdr);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit">⭐ 중요 일정</button>
+      </div>
+      <div id="schedCompanyWrap" style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">교육 회사</div>
+        <input type="text" id="schedCompany" placeholder="예) 한화생명, 메리츠화재" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">일정 내용</div>
+        <input type="text" id="schedTitle" placeholder="일정 제목·내용" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">날짜</div>
+          <input type="date" id="schedDate" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">시간 (선택)</div>
+          <input type="text" id="schedTime" placeholder="예) 10:00" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="saveSchedule()" style="flex:1">저장</button>
+      <button type="button" id="schedDelBtn" onclick="deleteSchedule()" style="display:none;padding:0 16px;border:1px solid var(--bdr);background:transparent;border-radius:9px;font-size:13px;color:#C0392B;cursor:pointer;font-family:inherit">🗑️ 삭제</button>
     </div>
   </div>
 </div>
