@@ -2403,7 +2403,10 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="accordion-section">
       <div class="accordion-header" onclick="toggleAccordion('acc1')">
         <div class="accordion-title" id="perfSecTitle">🏆 이번달 업적 현황</div>
-        <span class="accordion-chevron" id="chev1">▼</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" id="perfRefreshBtn" onclick="event.stopPropagation();refreshPerf()" style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer"><span id="perfRefreshIcon" style="display:inline-block">🔄</span> <span id="perfRefreshTxt">새로고침</span></button>
+          <span class="accordion-chevron" id="chev1">▼</span>
+        </div>
       </div>
       <div class="accordion-body" id="acc1">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 12px 16px">
@@ -5513,6 +5516,34 @@ function doTransfer() {
 
 // ── 오늘 출결 현황 렌더 ─────────────────────────────
 // TODO_GAS_ATT_2: GAS GET으로 전체 FP 실데이터 교체
+function refreshPerf() {
+  var btn=document.getElementById('perfRefreshBtn');
+  var icon=document.getElementById('perfRefreshIcon');
+  var txt=document.getElementById('perfRefreshTxt');
+  if(btn) btn.disabled=true;
+  if(icon) icon.classList.add('uni-spinning');
+  if(txt) txt.textContent='새로고침 중';
+  function done(){
+    if(typeof renderTop10==='function') renderTop10();
+    if(typeof renderBojangCard==='function') renderBojangCard();
+    if(icon){ icon.classList.remove('uni-spinning'); icon.textContent='✓'; }
+    if(txt) txt.textContent='완료';
+    setTimeout(function(){
+      if(icon) icon.textContent='🔄';
+      if(txt) txt.textContent='새로고침';
+      if(btn) btn.disabled=false;
+    }, 1200);
+  }
+  // reload performance from GAS, then re-render
+  if(typeof loadPerfFromGas==='function'){
+    var _called=false;
+    try{ loadPerfFromGas(function(){ if(_called) return; _called=true; done(); }); }
+    catch(e){ done(); }
+    setTimeout(function(){ if(!_called){ _called=true; done(); } }, 2500);
+  } else {
+    setTimeout(done, 600);
+  }
+}
 function refreshAttendance() {
   var btn=document.getElementById('attRefreshBtn');
   var icon=document.getElementById('attRefreshIcon');
