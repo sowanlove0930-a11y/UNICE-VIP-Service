@@ -914,7 +914,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
               </div>
             </div>
             <div style="font-size:11px;color:var(--text3);margin-top:10px">
-              💡 계약자(보험료 납부자)는 현재 등록 중인 고객입니다. 추후 가족 연결 기능으로 연계 예정.
+              💡 저장하면 피보험자가 별도 고객으로 자동 등록되고, 계약자와 가족으로 연결됩니다.
             </div>
           </div>
         </div>
@@ -1980,6 +1980,13 @@ function toggleReferrer() {
 }
 
 // ══ 고객 저장 ══════════════════════════════════════
+function _reverseRelation(rel){
+  if(rel==='자녀') return '부모';
+  if(rel==='부모') return '자녀';
+  if(rel==='배우자') return '배우자';
+  if(rel==='형제/자매') return '형제/자매';
+  return '가족';
+}
 function saveCustomer() {
   var name  = document.getElementById('r_name').value.trim();
   var phone = document.getElementById('r_phone').value.trim();
@@ -2067,9 +2074,62 @@ function saveCustomer() {
     DB.push(customer);
   }
 
+  // method A: auto-register insured as a customer and link as family (different policyholder)
+  var _insuredCust = null;
+  if (customer.policyType === '계피상이' && customer.insured && customer.insured.name) {
+    var ins = customer.insured;
+    var insId = customer.id + '_ins';
+    var relFwd = ins.relation || '가족';
+    var relRev = _reverseRelation(relFwd);
+    // find existing insured customer (re-save safe)
+    var insIdx = DB.findIndex(function(c){ return c.id === insId; });
+    var prevIns = insIdx>=0 ? DB[insIdx] : null;
+    _insuredCust = {
+      id: insId,
+      name: ins.name,
+      phone: ins.phone || '',
+      birth: ins.birth || '',
+      gender: ins.gender || '',
+      grade: prevIns ? (prevIns.grade||'일반') : '일반',
+      channel: prevIns ? (prevIns.channel||'') : (customer.channel||''),
+      referrer: '',
+      etcNote: prevIns ? (prevIns.etcNote||'') : '',
+      memo: prevIns ? (prevIns.memo||'') : (customer.name+' 고객의 피보험자(계피상이)'),
+      fp: customer.fp || '',
+      branch: customer.branch || '',
+      fpCode: customer.fpCode || _myFpCode(),
+      customerType: prevIns ? (prevIns.customerType||'관리') : '관리',
+      contracts: prevIns ? (prevIns.contracts||[]) : [],
+      family: prevIns && Array.isArray(prevIns.family) ? prevIns.family.slice() : [],
+      events: prevIns ? (prevIns.events||[]) : [],
+      lastContact: prevIns ? (prevIns.lastContact||'') : '',
+      contactLog: prevIns && Array.isArray(prevIns.contactLog) ? prevIns.contactLog : [],
+      registered: prevIns && prevIns.registered ? prevIns.registered : new Date().toISOString().split('T')[0],
+      policyType: '계피동일',
+      insured: null,
+      address: ins.address || '',
+      lat: prevIns ? (prevIns.lat||'') : '',
+      lng: prevIns ? (prevIns.lng||'') : '',
+      isInsuredOf: customer.id
+    };
+    // link family both ways
+    if(!Array.isArray(customer.family)) customer.family=[];
+    if(!customer.family.some(function(f){ return f.id===insId; })){
+      customer.family.push({ id: insId, name: ins.name, rel: relFwd });
+    }
+    if(!_insuredCust.family.some(function(f){ return f.id===customer.id; })){
+      _insuredCust.family.push({ id: customer.id, name: customer.name, rel: relRev });
+    }
+    if(insIdx>=0) DB[insIdx]=_insuredCust; else DB.push(_insuredCust);
+    // re-sync contractor record in DB (family was mutated after push)
+    var cIdx2=DB.findIndex(function(c){ return c.id===customer.id; });
+    if(cIdx2>=0) DB[cIdx2]=customer;
+  }
+
   localStorage.setItem('unispace_customers', JSON.stringify(DB));
   gasSaveCustomer(customer);
-  showToast('✅ ' + name + ' 고객님 등록 완료!');
+  if(_insuredCust && typeof gasSaveCustomer==='function') gasSaveCustomer(_insuredCust);
+  showToast('✅ ' + name + ' 고객님 등록 완료!' + (_insuredCust ? ' (피보험자 '+_insuredCust.name+' 자동 등록·가족 연결)' : ''));
   updateCustomerStats();
   resetForm();
   updateHeaderCount();
