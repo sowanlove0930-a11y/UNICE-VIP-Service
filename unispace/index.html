@@ -1312,6 +1312,7 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   background: var(--bg2); border: 1px solid var(--border2);
   border-radius: 24px; width: 100%; padding: 32px 28px;
   box-shadow: 0 32px 64px rgba(0,0,0,.6);
+  max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
   animation: loginIn .35s cubic-bezier(.34,1.4,.64,1) both;
 }
 .mgmt-title {
@@ -1617,6 +1618,7 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
   background: var(--bg2); border: 1px solid var(--border2);
   border-radius: 20px; width: 100%; max-width: 380px; margin: 20px;
   padding: 24px; box-shadow: 0 24px 56px rgba(0,0,0,.6);
+  max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
   animation: loginIn .3s cubic-bezier(.34,1.4,.64,1) both;
 }
 .quick-add-title { font-family: 'Syncopate', sans-serif; font-size: 11px; font-weight: 700; color: var(--gold2); letter-spacing: .1em; margin-bottom: 4px; }
@@ -2004,7 +2006,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
       <label class="quick-label">고객명 <span style="color:var(--red);font-size:9px">* 필수</span></label>
       <input type="text" class="quick-input" id="qaCustomer" placeholder="고객 이름">
     </div>
-    <div class="quick-field qa-plan-only">
+    <div class="quick-field qa-plan-only" id="qaChasuField">
       <label class="quick-label">차수 <span style="font-size:9px;color:var(--text3);font-weight:400">(선택)</span></label>
       <div id="qaChasuWrap" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
         <button type="button" class="res-chasu" data-qchasu="1" onclick="selectQaChasu(this)">1차</button>
@@ -2027,15 +2029,21 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
         <button type="button" class="res-tag" data-qtag="케어핏" onclick="toggleQaTag(this)">케어핏</button>
         <button type="button" class="res-tag" data-qtag="노파클" onclick="toggleQaTag(this)">노파클</button>
         <button type="button" class="res-tag" data-qtag="U고비" onclick="toggleQaTag(this)">U고비</button>
+        <button type="button" class="res-tag" data-qtag="문고리" onclick="toggleQaTag(this)">문고리</button>
         <button type="button" class="res-tag" data-qtag="내근" onclick="toggleQaTag(this)">내근</button>
       </div>
     </div>
-    <div class="quick-field qa-plan-only">
-      <label class="quick-label">시간</label>
-      <div class="pk-trigger" id="qaTimeTrig"><span id="qaTimeDisp" class="pk-ph">시간 선택</span><span class="pk-ico">🕐</span></div>
+    <div class="quick-field qa-plan-only" id="qaTimeField">
+      <label class="quick-label" id="qaTimeLabel">시간</label>
+      <div style="display:flex;gap:5px;align-items:center">
+        <div class="pk-trigger" id="qaTimeTrig" style="flex:1"><span id="qaTimeDisp" class="pk-ph">시간 선택</span><span class="pk-ico">🕐</span></div>
+        <span id="qaTimeTilde" style="display:none;color:var(--text3);font-weight:700">~</span>
+        <div class="pk-trigger" id="qaTimeEndTrig" style="flex:1;display:none"><span id="qaTimeEndDisp" class="pk-ph">종료</span><span class="pk-ico">🕐</span></div>
+      </div>
       <input type="hidden" id="qaTime">
+      <input type="hidden" id="qaTimeEnd">
     </div>
-    <div class="quick-field qa-plan-only">
+    <div class="quick-field qa-plan-only" id="qaPlaceField">
       <label class="quick-label">미팅 장소 <span style="font-size:9px;color:var(--text3);font-weight:400">(주소 입력 시 동선 지도에 표기)</span></label>
       <div style="display:flex;gap:5px;align-items:stretch">
         <input type="text" class="quick-input" id="qaPlace" placeholder="예) 부산 해운대구 우동 1407 또는 해운대 스벅" style="flex:1">
@@ -2085,8 +2093,8 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
         <input type="hidden" id="qaReqStart"><input type="hidden" id="qaReqEnd">
       </div>
     </div>
-    <div class="quick-field qa-plan-only">
-      <label class="quick-label">메모 <span style="font-size:9px;color:var(--text3);font-weight:400">(선택)</span></label>
+    <div class="quick-field qa-plan-only" id="qaMemoField">
+      <label class="quick-label" id="qaMemoLabel">메모 <span style="font-size:9px;color:var(--text3);font-weight:400">(선택)</span></label>
       <input type="text" class="quick-input" id="qaMemo" placeholder="예) 가족력 있음, 2차 니즈 파악 예정...">
     </div>
     <div class="quick-btns">
@@ -7909,6 +7917,25 @@ function toggleQaTag(el){
   if(area) area.style.display = showAmt ? '' : 'none';
   if(showAmt) renderQaProds();
   else updateQaProdSum();
+  _applyQaNaegeunMode();
+}
+// naegeun(office-work) mode: hide chasu/place, show end-time, relabel memo
+function _applyQaNaegeunMode(){
+  var on = _qaTags.indexOf('내근')>=0;
+  var chasu=document.getElementById('qaChasuField');
+  var place=document.getElementById('qaPlaceField');
+  var tilde=document.getElementById('qaTimeTilde');
+  var endTrig=document.getElementById('qaTimeEndTrig');
+  var timeLbl=document.getElementById('qaTimeLabel');
+  var memoLbl=document.getElementById('qaMemoLabel');
+  var memoInp=document.getElementById('qaMemo');
+  if(chasu) chasu.style.display = on ? 'none' : '';
+  if(place) place.style.display = on ? 'none' : '';
+  if(tilde) tilde.style.display = on ? '' : 'none';
+  if(endTrig) endTrig.style.display = on ? '' : 'none';
+  if(timeLbl) timeLbl.textContent = on ? '시간 (시작 ~ 종료)' : '시간';
+  if(memoLbl) memoLbl.innerHTML = on ? '업무 내용' : '메모 <span style="font-size:9px;color:var(--text3);font-weight:400">(선택)</span>';
+  if(memoInp) memoInp.placeholder = on ? '예) 사무실 행정업무, 교육 수강 등' : '예) 가족력 있음, 2차 니즈 파악 예정...';
 }
 function setQaStatus(status) {
   var on = document.getElementById('qaStatusOngoing');
@@ -7995,6 +8022,7 @@ function _pkSetTimeDisp(dispId, hiddenId, val, phText){
 function _pkBindTimeTriggers(){
   var map=[
     ['qaTimeTrig','qaTime','qaTimeDisp','미팅 시간','시간 선택'],
+    ['qaTimeEndTrig','qaTimeEnd','qaTimeEndDisp','종료 시간','종료'],
     ['qaReqStartTrig','qaReqStart','qaReqStartDisp','지원요청 시작','시작'],
     ['qaReqEndTrig','qaReqEnd','qaReqEndDisp','지원요청 종료','종료(선택)'],
     ['editActTimeTrig','editActTime','editActTimeDisp','미팅 시간','시간 선택'],
@@ -8094,11 +8122,13 @@ function openQuickAddModal(dateStr, preselectedFpId) {
   document.getElementById('qaChasuN').style.display='none';
   document.getElementById('qaChasuN').value='';
   _pkSetTimeDisp('qaTimeDisp','qaTime','','시간 선택');
+  _pkSetTimeDisp('qaTimeEndDisp','qaTimeEnd','','종료');
   document.getElementById('qaPlace').value    = '';
   qaResetGeo();
   _pkSetTimeDisp('qaReqStartDisp','qaReqStart','','시작');
   _pkSetTimeDisp('qaReqEndDisp','qaReqEnd','','종료(선택)');
   document.getElementById('qaMemo').value     = '';
+  _applyQaNaegeunMode();
   _qaProducts=[{company:'',amount:''}];
   document.getElementById('qaChungyakArea').style.display='none';
   setQaStatus('진행중');
@@ -8265,6 +8295,7 @@ function saveQuickAdd() {
       id: id, fpId: fpId, fpName: fpName, branch: fpBranch,
       date: _quickAddDate,
       time:  document.getElementById('qaTime').value,
+      endTime: document.getElementById('qaTimeEnd').value,
       place: placeStr,
       placeAddr: placeStr,
       lat: latVal || '',
@@ -8279,6 +8310,7 @@ function saveQuickAdd() {
       nextDate:'', nextTime:'', nextPlace:'',
       note: document.getElementById('qaMemo').value.trim(),
       planTags: _qaTags.slice(),
+      tags: _qaTags.slice(),
       planProducts: hasAmt ? _qaProducts.filter(function(p){return (p.company||'').trim()||(p.amount||'').trim();}).map(function(p){return {company:(p.company||'').trim(),amount:(p.amount||'').trim()};}) : [],
       planCompany: hasAmt && _qaProducts[0] ? (_qaProducts[0].company||'').trim() : '',
       planAmount:  hasAmt && _qaProducts[0] ? (_qaProducts[0].amount||'').trim() : '',
