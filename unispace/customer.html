@@ -1282,30 +1282,42 @@ function renderExcelPreview() {
 
     pf.rows.forEach(function(r) {
       var phone = String(r['연락처 *'] || r['연락처'] || '').trim();
+      // skip only when the phone already exists in the saved DB.
+      // do NOT skip duplicate phones within the same file - those are
+      // multiple contracts for one customer and get merged later.
       if (phone && existingPhones.indexOf(phone) >= 0) {
         skipRows.push(phone);
       } else {
         newRows.push(r);
-        if (phone) existingPhones.push(phone);  // only track non-empty phones for dedup
       }
     });
 
     pf._newRows  = newRows;
     pf._skipRows = skipRows;
-    totalRows += newRows.length;
+    // count unique customers (merge by phone) so the preview total
+    // matches what actually gets registered, not the raw row count
+    var _uniqPhones = {};
+    var _uniqCount = 0;
+    newRows.forEach(function(r, _i){
+      var ph = String(r['연락처 *'] || r['연락처'] || '').trim();
+      var key = ph || ('__np_' + _i);
+      if (!_uniqPhones[key]) { _uniqPhones[key] = true; _uniqCount++; }
+    });
+    pf._uniqCount = _uniqCount;
+    totalRows += _uniqCount;
 
     html += '<div class="excel-result-item">' +
       '<div>' +
         '<div class="excel-result-name">📄 ' + pf.fileName + '</div>' +
         '<div class="excel-result-stat">' +
           'FP: <b style="color:var(--gold2)">' + (pf.fpName||'미확인') + '</b> · ' +
-          '입력예정 <b style="color:#1F9268">' + newRows.length + '명</b>' +
+          '입력예정 <b style="color:#1F9268">' + _uniqCount + '명</b>' +
           (skipRows.length ? ' · 중복건너뜀 <b style="color:var(--orange)">' + skipRows.length + '명</b>' : '') +
         '</div>' +
       '</div>' +
       '<div style="display:flex;align-items:center">' +
-      '<span class="excel-result-badge ' + (newRows.length > 0 ? 'erb-success' : 'erb-skip') + '">' +
-        (newRows.length > 0 ? '+' + newRows.length + '명' : '신규없음') +
+      '<span class="excel-result-badge ' + (_uniqCount > 0 ? 'erb-success' : 'erb-skip') + '">' +
+        (_uniqCount > 0 ? '+' + _uniqCount + '명' : '신규없음') +
       '</span>' +
       '<button class="excel-file-remove" onclick="removeExcelFile(\'' + pf.pfId + '\')" title="이 파일 빼기">✕</button>' +
       '</div>' +
