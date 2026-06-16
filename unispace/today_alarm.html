@@ -710,9 +710,10 @@ function _alCustAlarmCount(c){
     if(!ev.alertDate && !ev.date) return;
     if(dateDiff(new Date(ev.alertDate||ev.date))===0) n++;
   });
-  if(c.lastContact){
-    var lc=new Date(c.lastContact.split(' ')[0]);
-    if(Math.round((TODAY-lc)/86400000)>=30) n++;
+  var nocBase = c.lastContact ? c.lastContact.split(' ')[0] : (c.registered || '');
+  if(nocBase){
+    var lc=new Date(nocBase);
+    if(!isNaN(lc.getTime()) && Math.round((TODAY-lc)/86400000)>=30) n++;
   }
   return n;
 }
@@ -881,15 +882,22 @@ function render() {
     }
 
     // ⑥ 장기 미연락 30일+
-    if (c.lastContact) {
-      var lc = new Date(c.lastContact.split(' ')[0]);
-      var nocDiff = Math.round((TODAY - lc) / 86400000);
-      if (nocDiff >= 30) {
-        manageItems.push({ c:c, colorCls:'ac-noc', typeCls:'type-noc', typeLabel:'📵 미연락 '+nocDiff+'일',
-          name:name, phone:phone, desc:'마지막 연락 '+fmtDate(c.lastContact.split(' ')[0])+' · '+nocDiff+'일 경과',
-          doneKey:'noc_'+c.id,
-          kakaoKey:'noc_'+c.id, kakaoType:'noc', customer:c, extra:{},
-          kakaoMsg: kakaoMsg('noc', c, {}) });
+    var nocBase = c.lastContact ? c.lastContact.split(' ')[0] : (c.registered || '');
+    if (nocBase) {
+      var lc = new Date(nocBase);
+      if (!isNaN(lc.getTime())) {
+        var nocDiff = Math.round((TODAY - lc) / 86400000);
+        if (nocDiff >= 30) {
+          var nocDesc = c.lastContact
+            ? '마지막 연락 '+fmtDate(nocBase)+' · '+nocDiff+'일 경과'
+            : '아직 연락 기록 없음 · 등록 후 '+nocDiff+'일 경과';
+          var nocLabel = c.lastContact ? '📵 미연락 '+nocDiff+'일' : '🆕 첫 연락 필요';
+          manageItems.push({ c:c, colorCls:'ac-noc', typeCls:'type-noc', typeLabel:nocLabel,
+            name:name, phone:phone, desc:nocDesc,
+            doneKey:'noc_'+c.id,
+            kakaoKey:'noc_'+c.id, kakaoType:'noc', customer:c, extra:{},
+            kakaoMsg: kakaoMsg('noc', c, {}) });
+        }
       }
     }
   });
