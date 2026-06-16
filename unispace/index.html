@@ -3765,18 +3765,19 @@ var PERF_COMPANIES = ['한화생명','라이나','미래에셋','신한라이프
 function getPerfLog(){ try{ return JSON.parse(localStorage.getItem(PERF_LOG_KEY)||'[]'); }catch(e){ return []; } }
 
 // GAS에서 업적 로드 -> localStorage 반영 -> 집계 갱신
-function loadPerfFromGas(cb){
+function loadPerfFromGas(cb, force){
   if(!currentUser || !currentUser.id){ if(cb) cb(); return; }
-  var url = UNISPACE_GAS_URL + '?action=getPerf&fp=' + encodeURIComponent(currentUser.id);
+  var url = UNISPACE_GAS_URL + '?action=getPerf&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now();
   fetch(url).then(function(r){return r.json();}).then(function(res){
     if(res && res.ok && res.perf){
       // guard: a transient empty response must not erase data already on screen.
-      // if the server returns 0 records but we already have local records,
-      // keep what we have instead of wiping the view to 0.
-      var existing = getPerfLog();
-      if((!res.perf.length) && existing && existing.length){
-        if(cb) cb();
-        return;
+      // skipped when force=true (full reload, e.g. opening the 일보 view).
+      if(!force){
+        var existing = getPerfLog();
+        if((!res.perf.length) && existing && existing.length){
+          if(cb) cb();
+          return;
+        }
       }
       var arr = res.perf.map(function(p){
         return { id:p.id, date:p.date, fpId:p.fpCode, fpName:p.fpName, branch:p.branch,
@@ -4115,7 +4116,7 @@ function openPerfView(){
   renderPerfView();
   document.getElementById('perfViewOverlay').classList.add('open');
   if(typeof loadPerfFromGas==='function'){
-    loadPerfFromGas(function(){ renderPerfView(); });
+    loadPerfFromGas(function(){ renderPerfView(); }, true);
   }
 }
 function closePerfView(){ document.getElementById('perfViewOverlay').classList.remove('open'); }
