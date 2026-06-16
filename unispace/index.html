@@ -3770,6 +3770,14 @@ function loadPerfFromGas(cb){
   var url = UNISPACE_GAS_URL + '?action=getPerf&fp=' + encodeURIComponent(currentUser.id);
   fetch(url).then(function(r){return r.json();}).then(function(res){
     if(res && res.ok && res.perf){
+      // guard: a transient empty response must not erase data already on screen.
+      // if the server returns 0 records but we already have local records,
+      // keep what we have instead of wiping the view to 0.
+      var existing = getPerfLog();
+      if((!res.perf.length) && existing && existing.length){
+        if(cb) cb();
+        return;
+      }
       var arr = res.perf.map(function(p){
         return { id:p.id, date:p.date, fpId:p.fpCode, fpName:p.fpName, branch:p.branch,
                  products:p.products, total:p.total, note:p.note||'', createdAt:p.createdAt||'' };
