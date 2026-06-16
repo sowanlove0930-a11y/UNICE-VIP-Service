@@ -3445,7 +3445,7 @@ function buildMenuHtml(data) {
   data.items.forEach(function(item) {
     // 실시간 일보 산출: 권한(대표/지점장/교육지점장/매니저) 없으면 숨김
     if (item.action === 'fp_perf' && !_canSeeReport(currentUser)) return;
-    // admin-only cards (manager matching): only 대표/지점장/교육지점장
+    // admin-only cards (manager matching)
     if (item.adminOnly && !_isPerfAdmin()) return;
     var isHash   = item.href === '#';
     var action   = item.action || '';
@@ -6636,6 +6636,44 @@ function renderWeekActTable() {
     return {fp:fp, acts:acts, total:total};
   });
 
+  // inject manager-support items into the matching branch manager row
+  (function(){
+    // find branch manager per branch from fp list
+    var mgrByBranch = {};
+    getMergedFpList().forEach(function(fp){
+      var isMgr = (fp.role==='지점장') || (fp.title==='지점장');
+      if(isMgr){ var bk=_nb(fp.branch); if(bk && !mgrByBranch[bk]) mgrByBranch[bk]=fp.id; }
+    });
+    // collect support activities targeting the manager
+    Object.values(db).forEach(function(a){
+      if(!a.fpId || a.support!=='지점장') return;
+      var bk=_nb(a.branch);
+      var mgrId=mgrByBranch[bk];
+      if(!mgrId || String(mgrId)===String(a.fpId)) return; // no manager, or activity is manager's own
+      var di=datestrs.indexOf(a.date);
+      if(di<0) return;
+      // find manager row
+      var mrow=null;
+      for(var r=0;r<fpActs.length;r++){ if(String(fpActs[r].fp.id)===String(mgrId)){ mrow=fpActs[r]; break; } }
+      if(!mrow) return;
+      // build a support-view activity object (clone, mark as support row)
+      var tagTxt = (a.tags && a.tags.length) ? a.tags.join('/') : '';
+      mrow.acts[di].push({
+        id: 'sup_'+a.id,
+        _isSupport: true,
+        customerName: a.customerName||'',
+        fromFp: a.fpName||'',
+        type: a.type||'',
+        tagTxt: tagTxt,
+        status: a.status||'진행중',
+        time: a.supportReqTime || a.time || '',
+        endTime: a.supportReqEndTime || '',
+        place: a.place||''
+      });
+      mrow.total += 1;
+    });
+  })();
+
   var myId = (currentUser && currentUser.id) ? String(currentUser.id) : '';
   var myBranch = (currentUser && currentUser.branch) ? currentUser.branch : '';
   fpActs.sort(function(a,b){
@@ -6690,6 +6728,16 @@ function renderWeekActTable() {
         html += '<div class="week-empty-cell" style="padding-top:10px;font-size:13px;opacity:0;transition:opacity .2s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0">+</div>';
       } else {
         dayActs.slice(0,3).forEach(function(a){
+          if(a._isSupport){
+            var sTime = a.time ? a.time.slice(0,5)+(a.endTime?'~'+a.endTime.slice(0,5):'') : '';
+            var sTag = a.tagTxt ? ' <span style="opacity:.7;font-size:9px">'+a.tagTxt+'</span>' : '';
+            var sTypeLabel = _typeLabel(a.type);
+            html += '<div class="week-act-chip" style="background:rgba(37,99,235,.14);border-left:2px solid #2563EB" data-aid="'+a.id+'">'+
+              '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#185FA5">🤝 '+a.fromFp+' 지원'+sTag+'</div>'+
+              '<div style="font-size:9px;opacity:.8;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(sTime?sTime+' · ':'')+a.customerName+(sTypeLabel?' '+sTypeLabel:'')+'</div>'+
+            '</div>';
+            return;
+          }
           var cls  = a.status==='완료' ? 'wac-done' : 'wac-ongoing';
           var icon = a.status==='완료' ? '✅' : (a.type==='1차'?'①':a.type==='2차'?'②':a.type==='3차'?'③':'●');
           var typeLabel = _typeLabel(a.type);
