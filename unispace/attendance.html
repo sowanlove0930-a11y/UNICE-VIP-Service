@@ -372,6 +372,7 @@ textarea.prm-input{resize:vertical;}
             <option value="알파지점">알파지점</option>
             <option value="브라보지점">브라보지점</option>
           </select>
+          <button type="button" id="prMultiToggle" onclick="togglePrMultiMode()" style="display:none;font-size:11px;font-weight:700;padding:5px 12px;border-radius:14px;border:1px solid var(--bdr2);background:var(--sur2);color:var(--text2);cursor:pointer">📅 여러 날 선택</button>
           <span id="prAdminBadge" style="display:none;font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;background:rgba(201,168,76,.15);color:var(--gold2)">관리자 모드</span>
         </span>
       </div>
@@ -521,17 +522,23 @@ textarea.prm-input{resize:vertical;}
     </div>
     <div class="prm-field">
       <label class="prm-label">유형</label>
-      <select class="prm-input" id="prAddType">
-        <option value="지각예정">지각예정</option>
-        <option value="미출석예정">미출석예정</option>
-        <option value="휴가">휴가</option>
-        <option value="반차">반차</option>
-        <option value="활동">활동</option>
+      <select class="prm-input" id="prAddType" onchange="onAddTypeChange()">
+        <option value="">유형 선택</option>
+        <option value="지각예정">⚠️ 지각 예정</option>
+        <option value="미출석예정">❌ 미출석 예정</option>
+        <option value="활동">📌 활동</option>
+        <option value="리프레쉬">🌿 리프레쉬</option>
+        <option value="기타사유">📝 기타 사유</option>
       </select>
     </div>
-    <div class="prm-field">
+    <div class="prm-field" id="prAddNoteField">
       <label class="prm-label">사유 / 내용</label>
       <textarea class="prm-input" id="prAddNote" rows="2" placeholder="사유를 입력하세요"></textarea>
+    </div>
+    <div class="prm-field" id="prAddActivityField" style="display:none">
+      <label class="prm-label">활동 내역</label>
+      <div id="prAddActList"></div>
+      <button type="button" class="pr-addact" onclick="addPrAddActivity()" style="margin-top:6px">+ 활동 추가</button>
     </div>
     <div class="prm-actions">
       <button type="button" class="prm-save" onclick="prAddSave()" style="flex:1">추가하기</button>
@@ -708,6 +715,7 @@ window.addEventListener('DOMContentLoaded',function(){
   if(isAdmin){
     var bf=document.getElementById('prBranchFilter'); if(bf) bf.style.display='';
     var ab=document.getElementById('prAdminBadge'); if(ab) ab.style.display='';
+    var mt=document.getElementById('prMultiToggle'); if(mt) mt.style.display='';
   }
 });
 
@@ -861,6 +869,7 @@ function checkPrDateLimit() {
 }
 var _prCalDate = new Date();
 var _prSelDates = [];
+var _prMultiMode = false;
 function _pad2(n){ return ('0'+n).slice(-2); }
 function _ymd(y,m,d){ return y+'-'+_pad2(m)+'-'+_pad2(d); }
 function prCalMove(delta){
@@ -889,7 +898,7 @@ function renderPrCalendar(){
     var isPast = ds<today;
     var isToday = ds===today;
     if(isToday) cls+=' today';
-    var clickable = !isPast && (!isToday || isAdmin);
+    var clickable = isAdmin || (!isPast && !isToday);
     if(!clickable) cls+=' disabled';
     if(_prSelDates.indexOf(ds)>=0 && clickable) cls+=' sel';
     var marker=_prDayMarker(db,ds,isAdmin);
@@ -1006,10 +1015,36 @@ function _escAttr(s){
   return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 function prSelectDate(ds){
-  var i=_prSelDates.indexOf(ds);
-  if(i>=0) _prSelDates.splice(i,1);
-  else _prSelDates.push(ds);
+  if(_prMultiMode){
+    var i=_prSelDates.indexOf(ds);
+    if(i>=0) _prSelDates.splice(i,1);
+    else _prSelDates.push(ds);
+  } else {
+    if(_prSelDates.length===1 && _prSelDates[0]===ds) _prSelDates=[];
+    else _prSelDates=[ds];
+  }
   _prSelDates.sort();
+  _prUpdateSelBar();
+  renderPrCalendar();
+  checkPrDateLimit();
+}
+function togglePrMultiMode(){
+  _prMultiMode = !_prMultiMode;
+  var btn=document.getElementById('prMultiToggle');
+  if(btn){
+    if(_prMultiMode){
+      btn.style.background='rgba(59,130,246,.12)';
+      btn.style.borderColor='rgba(59,130,246,.4)';
+      btn.style.color='#2563EB';
+      btn.textContent='📅 여러 날 선택 ON';
+    } else {
+      btn.style.background='var(--sur2)';
+      btn.style.borderColor='var(--bdr2)';
+      btn.style.color='var(--text2)';
+      btn.textContent='📅 여러 날 선택';
+    }
+  }
+  if(!_prMultiMode && _prSelDates.length>1){ _prSelDates=[_prSelDates[0]]; }
   _prUpdateSelBar();
   renderPrCalendar();
   checkPrDateLimit();
@@ -1041,13 +1076,17 @@ function _prUpdateSelBar(){
   }
   if(bar){ bar.textContent=label; bar.style.display=''; }
   if(inputArea){
-    var wasHidden = (inputArea.style.display==='none');
-    inputArea.style.display='';
-    if(wasHidden){
-      var ts=document.getElementById('prType'); if(ts) ts.value='';
-      var nt=document.getElementById('prNote'); if(nt) nt.value='';
-      _prActivities=[];
-      onPrTypeChange();
+    if(_isAdminUser()){
+      inputArea.style.display='none';
+    } else {
+      var wasHidden = (inputArea.style.display==='none');
+      inputArea.style.display='';
+      if(wasHidden){
+        var ts=document.getElementById('prType'); if(ts) ts.value='';
+        var nt=document.getElementById('prNote'); if(nt) nt.value='';
+        _prActivities=[];
+        onPrTypeChange();
+      }
     }
   }
   _renderPrAdminList();
@@ -1217,6 +1256,75 @@ function _loadRoster(cb){
   }).catch(function(){ _prRoster=[]; if(cb) cb(); });
 }
 var _prAddDate = null;
+var _prAddActs = [];
+function onAddTypeChange(){
+  var t=document.getElementById('prAddType').value;
+  var noteF=document.getElementById('prAddNoteField');
+  var actF=document.getElementById('prAddActivityField');
+  if(!t){
+    if(noteF) noteF.style.display='none';
+    if(actF) actF.style.display='none';
+    return;
+  }
+  if(t==='활동'){
+    if(noteF) noteF.style.display='none';
+    if(actF) actF.style.display='';
+    if(!_prAddActs.length) _prAddActs=[{cust:'',place:'',start:'',end:'',memo:''}];
+    renderPrAddActs();
+  } else {
+    if(noteF) noteF.style.display='';
+    if(actF) actF.style.display='none';
+  }
+}
+function addPrAddActivity(){
+  _syncPrAddActs();
+  _prAddActs.push({cust:'',place:'',start:'',end:'',memo:''});
+  renderPrAddActs();
+}
+function removePrAddActivity(idx){
+  _syncPrAddActs();
+  _prAddActs.splice(idx,1);
+  if(!_prAddActs.length) _prAddActs=[{cust:'',place:'',start:'',end:'',memo:''}];
+  renderPrAddActs();
+}
+function _syncPrAddActs(){
+  for(var i=0;i<_prAddActs.length;i++){
+    var c=document.getElementById('prAddActCust'+i);
+    var p=document.getElementById('prAddActPlace'+i);
+    var s=document.getElementById('prAddActStart'+i);
+    var e=document.getElementById('prAddActEnd'+i);
+    var m=document.getElementById('prAddActMemo'+i);
+    if(c) _prAddActs[i].cust=c.value;
+    if(p) _prAddActs[i].place=p.value;
+    if(s) _prAddActs[i].start=s.value;
+    if(e) _prAddActs[i].end=e.value;
+    if(m) _prAddActs[i].memo=m.value;
+  }
+}
+function renderPrAddActs(){
+  var box=document.getElementById('prAddActList');
+  if(!box) return;
+  var html='';
+  for(var i=0;i<_prAddActs.length;i++){
+    var a=_prAddActs[i];
+    var delBtn = _prAddActs.length>1 ? '<button type="button" class="pr-actdel" onclick="removePrAddActivity('+i+')">✕</button>' : '';
+    html+='<div class="pr-actcard">'+
+      '<div class="pr-actno">활동 '+(i+1)+'</div>'+delBtn+
+      '<div class="pr-actlbl">고객명 <span style="color:var(--red);font-size:10px">*</span></div>'+
+      '<input type="text" class="wn-input" id="prAddActCust'+i+'" style="width:100%" maxlength="30" placeholder="예) 김려원 고객" value="'+_escAttr(a.cust)+'">'+
+      '<div class="pr-actlbl">미팅 장소</div>'+
+      '<input type="text" class="wn-input" id="prAddActPlace'+i+'" style="width:100%" maxlength="40" placeholder="예) 서면 스타벅스" value="'+_escAttr(a.place)+'">'+
+      '<div class="pr-actlbl">시간</div>'+
+      '<div class="pr-actrow">'+
+        '<input type="time" class="wn-input" id="prAddActStart'+i+'" value="'+_escAttr(a.start)+'">'+
+        '<input type="time" class="wn-input" id="prAddActEnd'+i+'" value="'+_escAttr(a.end)+'">'+
+      '</div>'+
+      '<div class="pr-actlbl">활동 내용 <span style="color:var(--red);font-size:10px">*</span></div>'+
+      '<input type="text" class="wn-input" id="prAddActMemo'+i+'" style="width:100%" maxlength="60" placeholder="예) 보장분석 상담 · 청약 진행" value="'+_escAttr(a.memo)+'">'+
+    '</div>';
+  }
+  box.innerHTML=html;
+}
 function openPrAdd(date){
   if(!_isAdminUser()) return;
   _prAddDate = date;
@@ -1230,6 +1338,8 @@ function openPrAdd(date){
   document.getElementById('prAddDate').textContent = label;
   document.getElementById('prAddNote').value='';
   document.getElementById('prAddType').selectedIndex=0;
+  _prAddActs=[];
+  onAddTypeChange();
   var sel=document.getElementById('prAddFp');
   sel.innerHTML='<option value="">명단 불러오는 중...</option>';
   document.getElementById('prAddOverlay').classList.add('show');
@@ -1255,7 +1365,27 @@ function prAddSave(){
   var name=opt.getAttribute('data-name')||'';
   var branch=opt.getAttribute('data-branch')||'';
   var type=document.getElementById('prAddType').value;
-  var note=document.getElementById('prAddNote').value.trim();
+  if(!type){ showToast('⚠️ 유형을 선택해 주세요'); return; }
+  var note='';
+  var activities=null;
+  if(type==='활동'){
+    _syncPrAddActs();
+    activities=[];
+    for(var ai=0;ai<_prAddActs.length;ai++){
+      var a=_prAddActs[ai];
+      if(!a.cust.trim() && !a.memo.trim()) continue;
+      if(!a.cust.trim()){ showToast('⚠️ 활동 '+(ai+1)+'의 고객명을 입력해 주세요'); return; }
+      if(!a.memo.trim()){ showToast('⚠️ 활동 '+(ai+1)+'의 활동 내용을 입력해 주세요'); return; }
+      activities.push({cust:a.cust.trim(),place:a.place.trim(),start:a.start,end:a.end,memo:a.memo.trim()});
+    }
+    if(!activities.length){ showToast('⚠️ 활동 내용을 입력해 주세요'); return; }
+    note=activities.map(function(x){
+      var t=(x.start? x.start+(x.end?'~'+x.end:'') : '');
+      return x.cust+(t?' '+t:'')+' · '+x.memo;
+    }).join(' / ');
+  } else {
+    note=document.getElementById('prAddNote').value.trim();
+  }
 
   // 대상 날짜 목록
   var dates;
@@ -1269,7 +1399,9 @@ function prAddSave(){
     var date=dates[i];
     if(db[date] && db[date][fpCode]){ skipped++; continue; }
     if(!db[date]) db[date]={};
-    db[date][fpCode]={ name:name, branch:branch, type:type, note:note, proof:false, reportedAt:reportedAt };
+    var arec={ name:name, branch:branch, type:type, note:note, proof:false, reportedAt:reportedAt };
+    if(activities) arec.activities=activities;
+    db[date][fpCode]=arec;
     added++;
     attGasGet({ action:'savePrereport', date:date, fp:fpCode, name:name, branch:branch, type:type, note:note, proof:'N', reportedAt:reportedAt }).catch(function(){});
   }
