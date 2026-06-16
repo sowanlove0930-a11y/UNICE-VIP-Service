@@ -680,6 +680,42 @@ function _alFilteredDB(){
     return true;
   });
 }
+// count today-alarm-relevant items for one customer (birthday, anniv, event, d5, d30, no-contact)
+function _alCustAlarmCount(c){
+  var n=0;
+  if(c.birth){
+    var bp=c.birth.split('-');
+    if(bp.length>=3){
+      if(dateDiff(thisYearDate(bp[1]+'-'+bp[2]))===0) n++;
+      var bMonth=parseInt(bp[1])-1, bDay=parseInt(bp[2]);
+      var birthThisYear=new Date(TODAY.getFullYear(),bMonth,bDay);
+      var lastBirthday=birthThisYear<=TODAY?birthThisYear:new Date(TODAY.getFullYear()-1,bMonth,bDay);
+      var agingDate=new Date(lastBirthday); agingDate.setMonth(agingDate.getMonth()+6);
+      if(dateDiff(agingDate)===30) n++;
+    }
+  }
+  (c.contracts||[]).forEach(function(ct){
+    if(ct.date){
+      var cDate=new Date(ct.date);
+      var diff=Math.round((TODAY-cDate)/86400000);
+      if(diff===100) n++;
+      [1,2,3].forEach(function(yr){ var a=new Date(cDate); a.setFullYear(a.getFullYear()+yr); if(dateDiff(a)===0) n++; });
+    }
+    if(ct.payday){
+      var d5Date=new Date(TODAY.getFullYear(),TODAY.getMonth(),parseInt(ct.payday));
+      if(dateDiff(d5Date)===5) n++;
+    }
+  });
+  (c.events||[]).forEach(function(ev){
+    if(!ev.alertDate && !ev.date) return;
+    if(dateDiff(new Date(ev.alertDate||ev.date))===0) n++;
+  });
+  if(c.lastContact){
+    var lc=new Date(c.lastContact.split(' ')[0]);
+    if(Math.round((TODAY-lc)/86400000)>=30) n++;
+  }
+  return n;
+}
 function _alLoadFpDir(cb){
   // build FP directory from loaded customer data (fpName + branch)
   var seen={};
@@ -709,15 +745,25 @@ function renderAlTabs(){
     if(_alBranch!=='all' && _alBranchKey(f.branch)!==_alBranch) return false;
     return true;
   });
-  var cntMap={};
-  DB.forEach(function(c){ var n=c.fpName||c.fp||''; if(n) cntMap[n]=(cntMap[n]||0)+1; });
+  // count alarms per FP across the visible scope
+  var almMap={};
+  DB.forEach(function(c){
+    var b=_alBranchKey(c.branch);
+    if(scope!=='all' && b!==scope) return;
+    if(_alBranch!=='all' && b!==_alBranch) return;
+    var n=_alCustAlarmCount(c);
+    if(n>0){ var nm=c.fpName||c.fp||''; if(nm) almMap[nm]=(almMap[nm]||0)+n; }
+  });
+  // only FPs that have at least one alarm
+  fps=fps.filter(function(f){ return (almMap[f.name]||0)>0; });
+  var totalAlm=0; for(var k in almMap) totalAlm+=almMap[k];
   var fh='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2);font-weight:700;min-width:34px">FP</span>';
   var onAll=_alFp==='all';
-  fh+='<button type="button" onclick="setAlFp(\'all\')" style="font-size:12px;font-weight:700;padding:6px 13px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(onAll?'#2563EB':'var(--bdr)')+';background:'+(onAll?'rgba(37,99,235,.12)':'var(--bg2)')+';color:'+(onAll?'#185FA5':'var(--text2)')+'">전체 FP</button>';
+  fh+='<button type="button" onclick="setAlFp(\'all\')" style="font-size:12px;font-weight:700;padding:6px 13px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(onAll?'#2563EB':'var(--bdr)')+';background:'+(onAll?'rgba(37,99,235,.12)':'var(--bg2)')+';color:'+(onAll?'#185FA5':'var(--text2)')+'">전체 FP <span style="font-size:10px;opacity:.7">'+totalAlm+'</span></button>';
   fps.sort(function(a,b){ return String(a.name).localeCompare(String(b.name),'ko'); });
   fps.forEach(function(f){
-    var nm=f.name; var cnt=cntMap[nm]||0; var on=_alFp===nm; var dim=cnt===0;
-    fh+='<button type="button" onclick="setAlFp(\''+nm+'\')" style="font-size:12px;font-weight:'+(on?'700':'600')+';padding:6px 12px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(on?'#2563EB':'var(--bdr)')+';background:'+(on?'rgba(37,99,235,.12)':'var(--bg2)')+';color:'+(on?'#185FA5':(dim?'var(--text3)':'var(--text2)'))+'">'+nm+' <span style="font-size:10px;opacity:.7">'+cnt+'</span></button>';
+    var nm=f.name; var cnt=almMap[nm]||0; var on=_alFp===nm;
+    fh+='<button type="button" onclick="setAlFp(\''+nm+'\')" style="font-size:12px;font-weight:'+(on?'700':'600')+';padding:6px 12px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(on?'#2563EB':'var(--bdr)')+';background:'+(on?'rgba(37,99,235,.12)':'var(--bg2)')+';color:'+(on?'#185FA5':'var(--text2)')+'">'+nm+' <span style="font-size:10px;color:var(--orange)">'+cnt+'</span></button>';
   });
   fh+='</div>';
   wrap.innerHTML=bh+fh;
