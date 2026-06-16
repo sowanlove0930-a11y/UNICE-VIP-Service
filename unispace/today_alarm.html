@@ -91,7 +91,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 .alarm-card-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px 10px 18px;}
 .ac-left{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;}
-.ac-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.ac-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
 .ac-type-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;}
 .type-birthday   {background:rgba(201,168,76,.15);color:var(--gold2);}
 .type-anniversary{background:rgba(16,185,129,.12);color:#1F9268;}
@@ -103,6 +103,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .ac-desc{font-size:12px;color:var(--text2);margin-bottom:0;margin-top:3px;line-height:1.4;}
 .ac-phone{font-size:12px;color:var(--text3);}
 .ac-phone-inline{font-size:12px;color:#6B7FA3;text-decoration:none;margin-left:4px;transition:color .2s;}
+.ac-fp-chip{font-size:11px;font-weight:700;color:#5F5E5A;background:rgba(0,0,0,.05);border:1px solid var(--bdr2);border-radius:12px;padding:2px 9px;margin-left:auto;white-space:nowrap;}
 .ac-phone-inline:hover{color:#93A8CC;}
 .ac-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;margin-left:16px;}
 /* ⑧ 카톡 버튼 — FFE500 대신 골드 계열 amber로 통일 */
@@ -213,14 +214,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .gift-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 8px 16px;
-  background: rgba(199,125,20,.1);
-  border: 1px solid rgba(199,125,20,.3);
+  background: rgba(199,125,20,.92);
+  border: 1px solid rgba(199,125,20,1);
   border-radius: 20px;
-  color: var(--orange);
+  color: #fff;
   font-family: 'Noto Sans KR', sans-serif;
   font-size: 12px; font-weight: 700;
   cursor: pointer; transition: all .2s;
   white-space: nowrap; text-decoration: none;
+  opacity: 1 !important;
 }
 .gift-btn:hover { background: rgba(199,125,20,.2); transform: translateY(-1px); }
 
@@ -289,6 +291,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <div><span class="sum-count" id="cntManage">0</span><span class="sum-unit">건</span></div>
     </div>
   </div>
+
+  <div id="alBranchFpTabs" style="display:none;flex-direction:column;gap:8px;margin-bottom:18px"></div>
 
   <!-- 오늘 알림 -->
   <div class="alarm-section" id="section-today">
@@ -530,6 +534,19 @@ function toggleSection(id) {
 var DB   = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
 var DONE = JSON.parse(localStorage.getItem('unispace_alarm_done') || '{}');
 var TODAY = new Date();
+var _alUser = JSON.parse(localStorage.getItem('unispace_user') || '{}');
+function _alIsAdmin(){
+  var r=_alUser.role||'', t=_alUser.title||'';
+  return r==='대표'||r==='지점장'||t==='지점장'||t==='교육지점장';
+}
+function _alBranchKey(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return ''; }
+function _alScope(){
+  var r=_alUser.role||'', t=_alUser.title||'';
+  if(r==='대표'||t==='교육지점장') return 'all';
+  if(r==='지점장'||t==='지점장') return _alBranchKey(_alUser.branch)||'all';
+  return 'self';
+}
+var _alBranch='all', _alFp='all', _alFpDir=[];
 TODAY.setHours(0,0,0,0);
 
 function dateDiff(d) {
@@ -570,6 +587,14 @@ function makeCard(cfg) {
   var isDone  = !!DONE[doneKey];
   var card = document.createElement('div');
   card.className = 'alarm-card ' + cfg.colorCls + (isDone ? ' done' : '');
+  var fpChip = '';
+  if(_alIsAdmin() && cfg.customer){
+    var fn = cfg.customer.fpName || cfg.customer.fp || '';
+    var bk = _alBranchKey(cfg.customer.branch);
+    if(fn){
+      fpChip = '<span class="ac-fp-chip">👤 '+fn+(bk?' <span style="opacity:.7">· '+bk+'</span>':'')+'</span>';
+    }
+  }
   card.innerHTML =
     '<div class="alarm-card-inner">' +
       '<div class="ac-left">' +
@@ -577,6 +602,7 @@ function makeCard(cfg) {
           '<span class="ac-type-badge ' + cfg.typeCls + '">' + cfg.typeLabel + '</span>' +
           '<span class="ac-name">' + cfg.name + '</span>' +
           '<a href="tel:' + cfg.phone + '" class="ac-phone-inline">📞 ' + cfg.phone + '</a>' +
+          fpChip +
         '</div>' +
         '<div class="ac-desc">' + cfg.desc + '</div>' +
       '</div>' +
@@ -643,7 +669,63 @@ function kakaoMsg(type, c, extra) {
 }
 
 // ── 메인 렌더 ─────────────────────────────────────
+function _alFilteredDB(){
+  if(!_alIsAdmin()) return DB;
+  var scope=_alScope();
+  return DB.filter(function(c){
+    var bk=_alBranchKey(c.branch);
+    if(scope!=='all' && bk!==scope) return false;
+    if(_alBranch!=='all' && bk!==_alBranch) return false;
+    if(_alFp!=='all' && (c.fpName||c.fp||'')!==_alFp) return false;
+    return true;
+  });
+}
+function _alLoadFpDir(cb){
+  // build FP directory from loaded customer data (fpName + branch)
+  var seen={};
+  _alFpDir=[];
+  DB.forEach(function(c){
+    var nm=c.fpName||c.fp||''; if(!nm) return;
+    if(seen[nm]) return; seen[nm]=true;
+    _alFpDir.push({ name:nm, branch:c.branch||'' });
+  });
+  if(cb) cb();
+}
+function renderAlTabs(){
+  var wrap=document.getElementById('alBranchFpTabs');
+  if(!wrap) return;
+  if(!_alIsAdmin()){ wrap.style.display='none'; return; }
+  wrap.style.display='flex';
+  var scope=_alScope();
+  var branches = scope==='all' ? [['all','전체'],['알파','알파'],['브라보','브라보']] : [['all',scope+' 전체'],[scope,scope]];
+  var bh='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2);font-weight:700;min-width:34px">지점</span>';
+  branches.forEach(function(b){
+    var on=_alBranch===b[0];
+    bh+='<button type="button" onclick="setAlBranch(\''+b[0]+'\')" style="font-size:12px;font-weight:700;padding:6px 13px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(on?'var(--orange)':'var(--bdr)')+';background:'+(on?'rgba(199,125,20,.12)':'var(--bg2)')+';color:'+(on?'var(--orange)':'var(--text2)')+'">'+b[1]+'</button>';
+  });
+  bh+='</div>';
+  var fps=_alFpDir.filter(function(f){
+    if(scope!=='all' && _alBranchKey(f.branch)!==scope) return false;
+    if(_alBranch!=='all' && _alBranchKey(f.branch)!==_alBranch) return false;
+    return true;
+  });
+  var cntMap={};
+  DB.forEach(function(c){ var n=c.fpName||c.fp||''; if(n) cntMap[n]=(cntMap[n]||0)+1; });
+  var fh='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2);font-weight:700;min-width:34px">FP</span>';
+  var onAll=_alFp==='all';
+  fh+='<button type="button" onclick="setAlFp(\'all\')" style="font-size:12px;font-weight:700;padding:6px 13px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(onAll?'#2563EB':'var(--bdr)')+';background:'+(onAll?'rgba(37,99,235,.12)':'var(--bg2)')+';color:'+(onAll?'#185FA5':'var(--text2)')+'">전체 FP</button>';
+  fps.sort(function(a,b){ return String(a.name).localeCompare(String(b.name),'ko'); });
+  fps.forEach(function(f){
+    var nm=f.name; var cnt=cntMap[nm]||0; var on=_alFp===nm; var dim=cnt===0;
+    fh+='<button type="button" onclick="setAlFp(\''+nm+'\')" style="font-size:12px;font-weight:'+(on?'700':'600')+';padding:6px 12px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(on?'#2563EB':'var(--bdr)')+';background:'+(on?'rgba(37,99,235,.12)':'var(--bg2)')+';color:'+(on?'#185FA5':(dim?'var(--text3)':'var(--text2)'))+'">'+nm+' <span style="font-size:10px;opacity:.7">'+cnt+'</span></button>';
+  });
+  fh+='</div>';
+  wrap.innerHTML=bh+fh;
+}
+function setAlBranch(b){ _alBranch=b; _alFp='all'; renderAlTabs(); render(); }
+function setAlFp(n){ _alFp=n; renderAlTabs(); render(); }
 function render() {
+  renderAlTabs();
   // 날짜 표시
   var days = ['일','월','화','수','목','금','토'];
   var d = new Date();
@@ -658,7 +740,7 @@ function render() {
 
   var todayItems=[], d30Items=[], d5Items=[], manageItems=[];
 
-  DB.forEach(function(c) {
+  _alFilteredDB().forEach(function(c) {
     var name  = c.name;
     var phone = c.phone;
 
@@ -787,8 +869,9 @@ function renderSection(listId, labelId, items, emptyMsg) {
   var sectionEl = el.closest('.alarm-section');
   label.textContent = items.length ? items.length + '건' : '';
   if (!items.length) {
-    el.innerHTML = '<div class="empty-section" style="padding:12px;font-size:12px;">✨ ' + emptyMsg + '</div>';
-    if (sectionEl) sectionEl.style.opacity = '0.5';
+    var hint = (listId==='listToday') ? '<div style="font-size:11px;color:var(--text3);background:rgba(0,0,0,.03);border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5">💡 고객 생일 · 계약 100일/주년 기념일 · 등록한 커스텀 이벤트가 오늘이면 여기에 표시됩니다</div>' : '';
+    el.innerHTML = hint + '<div class="empty-section" style="padding:12px;font-size:12px;">✨ ' + emptyMsg + '</div>';
+    if (sectionEl) sectionEl.style.opacity = (listId==='listToday') ? '1' : '0.5';
     return;
   }
   if (sectionEl) sectionEl.style.opacity = '1';
@@ -811,6 +894,7 @@ function renderSection(listId, labelId, items, emptyMsg) {
 })();
 
 DB = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
+_alLoadFpDir();
 var d = new Date();
 render();
 </script>
