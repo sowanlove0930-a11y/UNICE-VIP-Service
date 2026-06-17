@@ -3010,7 +3010,8 @@ const SUBMENUS = {
 function renderBojangCard() {
   // set current-month labels
   var _curMon=(new Date()).getMonth()+1;
-  var _l1=document.getElementById('st1-lbl'); if(_l1) _l1.textContent=_curMon+'월 보장월초 및 건수';
+  var _isMgrUser = (typeof _isManagerUser==='function' && _isManagerUser(currentUser));
+  var _l1=document.getElementById('st1-lbl'); if(_l1) _l1.textContent=_curMon+'월 '+(_isMgrUser?'':'내 ')+'보장월초 및 건수';
   var _l4=document.getElementById('st4-recruit-lbl'); if(_l4) _l4.textContent=_curMon+'월 리크루팅';
   var _l2=document.getElementById('st2-month'); if(_l2) _l2.textContent=_curMon+'월';
   var _l3=document.getElementById('st3-fp-lbl'); if(_l3) _l3.textContent=_curMon+'월 출결현황';
@@ -3073,8 +3074,10 @@ function renderBojangCard() {
   var RATE_TOTAL = GOAL_TOTAL ? Math.round(AMT_TOTAL / GOAL_TOTAL * 100) : 0;
   var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / GOAL_ALPHA * 100) : 0;
   var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / GOAL_BRAVO * 100) : 0;
-  var e1 = document.getElementById('st1');      if(e1) e1.innerHTML = AMT_TOTAL.toLocaleString()+'<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2)">'+CNT_TOTAL+'건</span>';
-  var er = document.getElementById('st1-rate'); if(er) er.textContent = RATE_TOTAL+'%';
+  if(_isMgrUser){
+    var e1 = document.getElementById('st1');      if(e1) e1.innerHTML = AMT_TOTAL.toLocaleString()+'<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2)">'+CNT_TOTAL+'건</span>';
+    var er = document.getElementById('st1-rate'); if(er) er.textContent = RATE_TOTAL+'%';
+  }
   var eu = document.getElementById('st1-unit');
   if(eu){
     var _barW_a = RATE_ALPHA > 100 ? 100 : RATE_ALPHA;
@@ -3277,9 +3280,20 @@ function showDashboard() {
           var e1 = document.getElementById('st1');
           if(e1) e1.innerHTML = (res.myAmt||0).toLocaleString() + '<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2)">' + (res.myCnt||0) + '건</span>';
           var er = document.getElementById('st1-rate');
-          if(er) er.textContent = '';
-          var eu = document.getElementById('st1-unit');
-          if(eu) eu.innerHTML = '<span style="color:var(--gold2);font-weight:700">' + (res.branch||'우리지점') + '</span> 보장월초 ' + (res.branchAmt||0).toLocaleString() + '원 (' + (res.branchCnt||0) + '건)';
+          if(er){
+            var _myGoalMan = 0;
+            try {
+              var _gdb = getFpGoalDB()[getCurrentYM()] || {};
+              var _gg = _gdb[currentUser.id];
+              if(_gg) _myGoalMan = parseInt(_gg.goal) || 0;
+            } catch(e) {}
+            var _myGoalWon = _myGoalMan * 10000;
+            if(_myGoalWon > 0){
+              er.textContent = Math.round((res.myAmt||0) / _myGoalWon * 100) + '%';
+            } else {
+              er.textContent = '';
+            }
+          }
         }
       }).catch(function(){});
 
