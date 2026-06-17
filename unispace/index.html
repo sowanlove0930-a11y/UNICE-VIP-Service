@@ -2809,6 +2809,8 @@ window.addEventListener('DOMContentLoaded', function() {
   if(_scFile) _scFile.addEventListener('change', _sichaekFileChange);
   var _scRepFile = document.getElementById('sichaekRepFile');
   if(_scRepFile) _scRepFile.addEventListener('change', _sichaekRepFileChange);
+  var _scAddImg = document.getElementById('sichaekAddImgFile');
+  if(_scAddImg) _scAddImg.addEventListener('change', _sichaekAddImgChange);
   var _cOk = document.getElementById('confirmOkBtn');
   if(_cOk) _cOk.addEventListener('click', function(){ var cb=_confirmCb; _confirmClose(); if(cb) cb(); });
   var _cCancel = document.getElementById('confirmCancelBtn');
@@ -4863,11 +4865,19 @@ var SICHAEK_NON_ORDER = ['한화손보','현대해상','DB손보','메리츠화�
 
 function _sichaekCardHtml(c, canManage){
   var kindColor = c.kind==='생보' ? 'var(--gold2)' : '#60A5FA';
+  var imgs = (c.images && c.images.length) ? c.images : (c.imageUrl ? [c.imageUrl] : []);
+  var cnt = imgs.length;
+  var firstImg = imgs[0] || '';
   var statusLine = c.status==='active'
-    ? '<span style="color:#1F9268">● 진행 중 · '+(c.startWeek||'')+'~</span>'
-    : '<span style="color:var(--text3)">종료됨 · '+(c.startWeek||'')+'</span>';
+    ? '<span style="color:#1F9268">● 진행 중 · '+(c.startWeek||'')+'~'+(cnt>1?' · '+cnt+'장':'')+'</span>'
+    : '<span style="color:var(--text3)">종료됨 · '+(c.startWeek||'')+(cnt>1?' · '+cnt+'장':'')+'</span>';
+  var badge = cnt>1 ? '<span style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px">📑 1/'+cnt+'</span>' : '';
+  var imgsAttr = encodeURIComponent(JSON.stringify(imgs));
   var h = '<div class="sichaek-card">'+
-    '<img class="sichaek-card-img" src="'+c.imageUrl+'" alt="'+c.insurer+'" onclick="openSichaekImg(\''+c.imageUrl+'\')" onerror="this.style.opacity=0.3">'+
+    '<div style="position:relative">'+
+      '<img class="sichaek-card-img" src="'+firstImg+'" alt="'+c.insurer+'" onclick="openSichaekImgs(\''+imgsAttr+'\')" onerror="this.style.opacity=0.3">'+
+      badge+
+    '</div>'+
     '<div style="padding:9px 11px">'+
       '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">'+
         '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(c.kind||'')+'</span>'+
@@ -4877,6 +4887,7 @@ function _sichaekCardHtml(c, canManage){
   if(canManage){
     h += '<div style="display:flex;gap:5px;margin-top:8px">';
     if(c.status==='active'){
+      h += '<button type="button" onclick="addSichaekImage(\''+c.id+'\',\''+c.insurer+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#1F9268;cursor:pointer">＋장 추가</button>';
       h += '<button type="button" onclick="openSichaekReplace(\''+c.id+'\',\''+c.insurer+'\',\''+(c.kind||'')+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:var(--gold2);cursor:pointer">교체</button>';
       h += '<button type="button" onclick="endSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer">종료</button>';
     } else {
@@ -4934,10 +4945,28 @@ function renderSichaekList(list, canManage){
   wrap.innerHTML = h;
 }
 
-function openSichaekImg(url){
-  document.getElementById('sichaekBigImg').src = url;
+var _sichaekViewImgs = [];
+var _sichaekViewIdx = 0;
+function openSichaekImg(url){ openSichaekImgs(encodeURIComponent(JSON.stringify([url]))); }
+function openSichaekImgs(enc){
+  try { _sichaekViewImgs = JSON.parse(decodeURIComponent(enc)) || []; } catch(e){ _sichaekViewImgs = []; }
+  if(!_sichaekViewImgs.length) return;
+  _sichaekViewIdx = 0;
+  _renderSichaekView();
   document.getElementById('sichaekImgOverlay').classList.add('open');
 }
+function _renderSichaekView(){
+  var img = document.getElementById('sichaekBigImg');
+  img.src = _sichaekViewImgs[_sichaekViewIdx] || '';
+  var nav = document.getElementById('sichaekViewNav');
+  if(nav){
+    nav.style.display = _sichaekViewImgs.length>1 ? 'flex' : 'none';
+    var cnt = document.getElementById('sichaekViewCount');
+    if(cnt) cnt.textContent = (_sichaekViewIdx+1)+' / '+_sichaekViewImgs.length;
+  }
+}
+function sichaekViewPrev(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx>0){ _sichaekViewIdx--; _renderSichaekView(); } }
+function sichaekViewNext(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx<_sichaekViewImgs.length-1){ _sichaekViewIdx++; _renderSichaekView(); } }
 function closeSichaekImg(){ document.getElementById('sichaekImgOverlay').classList.remove('open'); }
 
 function openSichaekAdd(){
@@ -5095,6 +5124,34 @@ function submitSichaekReplace(){
       showToast('⚠️ ' + ((res&&res.msg)||'교체 실패'));
     }
   }).catch(function(){ btn.disabled=false; btn.textContent='교체하기'; showToast('⚠️ 네트워크 오류'); });
+}
+
+// 기존 시책에 장표 추가 (같은 주차로 자동 묶임)
+var _sichaekAddTargetId = null;
+function addSichaekImage(id, insurer){
+  _sichaekAddTargetId = id;
+  var inp = document.getElementById('sichaekAddImgFile');
+  if(inp){ inp.value = ''; inp.click(); }
+}
+function _sichaekAddImgChange(e){
+  var f = e.target.files && e.target.files[0];
+  if(!f || !_sichaekAddTargetId) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    showToast('장표 추가 중...');
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'addCampaignImage', data:{
+        fpCode: currentUser.id, id: _sichaekAddTargetId,
+        photoBase64: ev.target.result, mimeType: f.type
+      }})
+    }).then(function(r){return r.json();}).then(function(res){
+      if(res && res.ok){ showToast('✅ 장표를 추가했습니다'); loadSichaek(); }
+      else showToast('⚠️ ' + ((res&&res.msg)||'추가 실패'));
+      _sichaekAddTargetId = null;
+    }).catch(function(){ showToast('⚠️ 네트워크 오류'); _sichaekAddTargetId = null; });
+  };
+  reader.readAsDataURL(f);
 }
 
 function openScheduleModal(){
@@ -9743,9 +9800,15 @@ function doCheckin() { doSmartCheckin(); }
 </div>
 
 <!-- 시책 이미지 크게 보기 -->
+<input type="file" id="sichaekAddImgFile" accept="image/*" style="display:none">
 <div class="mgmt-overlay" id="sichaekImgOverlay" style="z-index:669" onclick="closeSichaekImg()">
-  <div style="max-width:94vw;max-height:92vh;display:flex;flex-direction:column;align-items:center">
-    <img id="sichaekBigImg" style="max-width:94vw;max-height:88vh;border-radius:10px" alt="시책 이미지">
+  <div style="max-width:94vw;max-height:92vh;display:flex;flex-direction:column;align-items:center" onclick="event.stopPropagation()">
+    <img id="sichaekBigImg" style="max-width:94vw;max-height:84vh;border-radius:10px" alt="시책 이미지">
+    <div id="sichaekViewNav" style="display:none;align-items:center;gap:18px;margin-top:12px">
+      <button type="button" onclick="sichaekViewPrev(event)" style="font-size:20px;padding:6px 16px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer">‹</button>
+      <span id="sichaekViewCount" style="color:#fff;font-size:14px;font-weight:700">1 / 1</span>
+      <button type="button" onclick="sichaekViewNext(event)" style="font-size:20px;padding:6px 16px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer">›</button>
+    </div>
   </div>
 </div>
 
