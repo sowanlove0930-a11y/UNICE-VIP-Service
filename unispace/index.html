@@ -1818,6 +1818,14 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
 .sichaek-tab-on { background:var(--gold); color:#fff; border-color:var(--gold); }
 .sichaek-card { background:var(--bg2); border:1px solid var(--bdr2); border-radius:12px; overflow:hidden; cursor:pointer; }
 .sichaek-card-img { width:100%; height:120px; object-fit:cover; background:var(--surface); display:block; }
+@keyframes skShimmer { 0%{background-position:-180px 0} 100%{background-position:180px 0} }
+.sk-load {
+  display:inline-block; border-radius:6px; color:transparent !important;
+  background:linear-gradient(90deg, var(--surface) 25%, var(--bdr2) 50%, var(--surface) 75%);
+  background-size:360px 100%; animation:skShimmer 1.1s infinite linear;
+  min-width:48px; vertical-align:middle;
+}
+.sk-load * { visibility:hidden; }
 </style>
 </head>
 <body class="theme-light">
@@ -3030,6 +3038,25 @@ const SUBMENUS = {
 };
 
 // ── 초기화 ──────────────────────────────────────────
+// ── 스켈레톤 로딩 표식 (GAS 로딩 중 카드 값에 적용) ──
+function skOn(ids, w){
+  for(var i=0;i<ids.length;i++){
+    var el = document.getElementById(ids[i]);
+    if(!el) continue;
+    if(!el.getAttribute('data-sk-html')) el.setAttribute('data-sk-html', el.innerHTML);
+    el.classList.add('sk-load');
+    if(w) el.style.minWidth = w + 'px';
+  }
+}
+function skOff(ids){
+  for(var i=0;i<ids.length;i++){
+    var el = document.getElementById(ids[i]);
+    if(!el) continue;
+    el.classList.remove('sk-load');
+    el.style.minWidth = '';
+  }
+}
+
 function renderBojangCard() {
   // set current-month labels
   var _curMon=(new Date()).getMonth()+1;
@@ -3272,7 +3299,10 @@ function showDashboard() {
 
   // load real stats from GAS
   setTimeout(function() {
-    renderBojangCard();
+    // 스켈레톤 ON (GAS 로딩 중 카드 값에 반짝 표시)
+    skOn(['st1','st1-rate','st2-admin','st4-recruit'], 60);
+    // 안전장치: 6초 후 남아있는 스켈레톤 강제 해제
+    setTimeout(function(){ skOff(['st1','st1-rate','st2-admin','st4-recruit']); if(typeof renderBojangCard==='function') renderBojangCard(); }, 6000);
 
     // GAS에서 전체 명단 로드 (명단 단일 기준) - 받으면 명단 의존 카드 갱신
     loadAllFpsFromGas(function(){
@@ -3281,6 +3311,7 @@ function showDashboard() {
 
     // 업적을 GAS에서 로드 후 카드 갱신
     loadPerfFromGas(function(){
+      skOff(['st1','st1-rate']);
       renderBojangCard();
       if(typeof renderGoals==='function') renderGoals();
       if(typeof renderTop10==='function') renderTop10();
@@ -3314,7 +3345,7 @@ function showDashboard() {
           }
         });
         var el2 = document.getElementById('st2-admin');
-        if(el2) el2.textContent = totalContract + '명';
+        if(el2){ skOff(['st2-admin']); el2.textContent = totalContract + '명'; }
         var sub2 = document.getElementById('st2-admin-sub');
         if(sub2) sub2.textContent = '이번달 신규 · 알파 '+alphaNew+' · 브라보 '+bravoNew;
       }).catch(function(){});
@@ -7018,6 +7049,7 @@ function renderRecruitStat() {
     var bravoConf = parseInt(bravo.confirmed)||0;
     var totalConfirmed = alphaConf + bravoConf;
 
+    if(typeof skOff==='function') skOff(['st4-recruit']);
     document.getElementById('st4-recruit').textContent = totalConfirmed + '명';
     document.getElementById('st4-recruit-sub').textContent =
       '입과확보 · 알파 ' + alphaConf + ' · 브라보 ' + bravoConf;
