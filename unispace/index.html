@@ -2238,7 +2238,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>상태</th><th>비번초기화</th>
+          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>상태</th><th>케어핏</th><th>비번초기화</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -2652,7 +2652,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false };
     });
   } else {
     baseList = FP_LIST;
@@ -2664,6 +2664,7 @@ function getMergedFpList() {
     return Object.assign({}, fp, {
       pw:     ov.pw     !== undefined ? ov.pw     : fp.pw,
       active: ov.active !== undefined ? ov.active : fp.active,
+      carefit: ov.carefit !== undefined ? ov.carefit : fp.carefit,
     });
   });
   // 활동계획수립 등 다른 페이지에서 쓰도록 명단 저장 (pw 제외)
@@ -3420,6 +3421,9 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.active?'on':'off') + '" onclick="toggleFpActive(\'' + fp.id + '\')">' +
         (fp.active ? '✅ 활성' : '🚫 비활성') +
       '</button></td>' +
+      '<td><button class="fp-active-toggle ' + (fp.carefit!==false?'on':'off') + '" onclick="toggleFpCarefit(\'' + fp.id + '\')">' +
+        (fp.carefit!==false ? '🌿 사용' : '🚫 차단') +
+      '</button></td>' +
       '<td><button class="fp-reset-pw" onclick="resetFpPw(\'' + fp.id + '\',\'' + fp.name + '\')">초기화</button></td>' +
     '</tr>';
   }).join('');
@@ -3433,6 +3437,26 @@ function toggleFpActive(id) {
   saveFpOverride(id, 'active', !fp.active);
   renderFpMgmtTable();
   showToast((fp.active ? '🚫 ' : '✅ ') + fp.name + ' 계정을 ' + (fp.active ? '비활성화' : '활성화') + '했습니다');
+}
+function toggleFpCarefit(id) {
+  var list = getMergedFpList();
+  var fp   = list.find(function(f){ return f.id === id; });
+  if (!fp) return;
+  var nextOn = (fp.carefit === false); // currently off -> turn on
+  var url = UNISPACE_GAS_URL + '?action=setCarefitAccess&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  showToast('🌿 케어핏 권한 변경 중...');
+  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok) {
+      fp.carefit = res.carefit;
+      saveFpOverride(id, 'carefit', res.carefit);
+      renderFpMgmtTable();
+      showToast((res.carefit ? '🌿 ' : '🚫 ') + fp.name + ' 케어핏 ' + (res.carefit ? '사용 허용' : '차단') + '했습니다');
+    } else {
+      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
+    }
+  }).catch(function(){
+    showToast('⚠️ 서버 연결 실패');
+  });
 }
 function resetFpPw(id, name) {
   showConfirm({
@@ -5924,6 +5948,17 @@ function toggleConsultMode() {
     btn.textContent = '🎯 상담 모드';
     document.body.style.overflow = '';
   }
+}
+// open carefit with logged-in fp code so it skips its own login
+function openCarefitConsult(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  var base = '올라이프_케어핏/carefit.html';
+  var url = base;
+  if (currentUser && currentUser.id) {
+    url = base + '?fp=' + encodeURIComponent(currentUser.id) + '&from=unispace';
+  }
+  window.open(url, '_blank');
+  return false;
 }
 // ── 고객 이관 관리 ─────────────────────────────────
 function openTransfer() {
@@ -9170,7 +9205,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="cc-name">U-GOBI</div>
       <div class="cc-desc">실시간 보험료 비교<br>손보 10사 · 생보 14사</div>
     </a>
-    <a class="consult-card cc-carefit" href="올라이프_케어핏/carefit.html" target="_blank">
+    <a class="consult-card cc-carefit" href="올라이프_케어핏/carefit.html" target="_blank" onclick="return openCarefitConsult(event)">
       <div class="cc-icon">🌿</div>
       <div class="cc-name">올라이프 케어핏</div>
       <div class="cc-desc">보장성 니즈 진단</div>
