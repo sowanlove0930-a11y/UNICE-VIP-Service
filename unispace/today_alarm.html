@@ -951,6 +951,25 @@ DB = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
 _alLoadFpDir();
 var d = new Date();
 render();
+
+// GAS에서 전체 고객 로드 후 다시 렌더 (localStorage가 비어도 서버 데이터로 표시)
+(function(){
+  var TA_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
+  var u = {};
+  try { u = JSON.parse(localStorage.getItem('unispace_user') || '{}'); } catch(e) {}
+  if(!u || !u.id) return;
+  fetch(TA_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(u.id))
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res && res.ok && res.customers){
+        DB = res.customers;
+        try { localStorage.setItem('unispace_customers', JSON.stringify(DB)); } catch(e) {}
+        if(typeof renderAlTabs==='function') renderAlTabs();
+        render();
+      }
+    })
+    .catch(function(){});
+})();
 </script>
 
 <!-- 카톡 버전 선택 모달 -->
