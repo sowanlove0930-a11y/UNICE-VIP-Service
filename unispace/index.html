@@ -1022,6 +1022,14 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
   cursor: pointer; transition: all 0.2s; white-space: nowrap;
 }
 .sched-view-btn:hover { background: rgba(31,146,104,0.2); }
+.sichaek-view-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(216,90,48,0.12); border: 1px solid rgba(216,90,48,0.4);
+  border-radius: 20px; padding: 7px 14px;
+  color: #E07A50; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.sichaek-view-btn:hover { background: rgba(216,90,48,0.22); }
 .consult-btn.active {
   background: linear-gradient(135deg, var(--gold), #8B6914);
   color: #080E1C; border-color: var(--gold);
@@ -2188,7 +2196,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="header-right">
       <button type="button" class="checkin-smart-btn state-ready" id="checkinSmartBtn" onclick="doSmartCheckin()">📍 출근 체크인</button>
       <button type="button" class="cust-view-btn" id="custViewBtn" onclick="window.location.href='customer.html?tab=list'">🔍 고객 조회</button>
-      <button type="button" class="sched-view-btn" id="sichaekBtn" onclick="openSichaekModal()">🎁 시책 조회</button>
+      <button type="button" class="sichaek-view-btn" id="sichaekBtn" onclick="openSichaekModal()">🎁 시책 조회</button>
       <button type="button" class="sched-view-btn" id="scheduleBtn" onclick="openScheduleModal()">📅 일정 조회</button>
       <button type="button" class="consult-btn" id="consultBtn" onclick="toggleConsultMode()">🎯 상담 모드</button>
       <div class="header-clock">
@@ -2799,6 +2807,12 @@ window.addEventListener('DOMContentLoaded', function() {
   _bindPkDate();
   var _scFile = document.getElementById('sichaekFile');
   if(_scFile) _scFile.addEventListener('change', _sichaekFileChange);
+  var _scRepFile = document.getElementById('sichaekRepFile');
+  if(_scRepFile) _scRepFile.addEventListener('change', _sichaekRepFileChange);
+  var _cOk = document.getElementById('confirmOkBtn');
+  if(_cOk) _cOk.addEventListener('click', function(){ var cb=_confirmCb; _confirmClose(); if(cb) cb(); });
+  var _cCancel = document.getElementById('confirmCancelBtn');
+  if(_cCancel) _cCancel.addEventListener('click', function(){ _confirmClose(); });
   // scroll-to-top button: show after scrolling down
   window.addEventListener('scroll', function(){
     var btn=document.getElementById('scrollTopBtn');
@@ -4844,6 +4858,49 @@ function loadSichaek(){
   }).catch(function(){ wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">네트워크 오류</div>'; });
 }
 
+var SICHAEK_LIFE_ORDER = ['한화생명','라이나생명','미래에셋','신한라이프','흥국생명','메트라이프'];
+var SICHAEK_NON_ORDER = ['한화손보','현대해상','DB손보','메리츠화재','KB손보','삼성화재'];
+
+function _sichaekCardHtml(c, canManage){
+  var kindColor = c.kind==='생보' ? 'var(--gold2)' : '#60A5FA';
+  var statusLine = c.status==='active'
+    ? '<span style="color:#1F9268">● 진행 중 · '+(c.startWeek||'')+'~</span>'
+    : '<span style="color:var(--text3)">종료됨 · '+(c.startWeek||'')+'</span>';
+  var h = '<div class="sichaek-card">'+
+    '<img class="sichaek-card-img" src="'+c.imageUrl+'" alt="'+c.insurer+'" onclick="openSichaekImg(\''+c.imageUrl+'\')" onerror="this.style.opacity=0.3">'+
+    '<div style="padding:9px 11px">'+
+      '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">'+
+        '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(c.kind||'')+'</span>'+
+        '<span style="font-size:13px;font-weight:700">'+c.insurer+'</span>'+
+      '</div>'+
+      '<div style="font-size:10.5px">'+statusLine+'</div>';
+  if(canManage){
+    h += '<div style="display:flex;gap:5px;margin-top:8px">';
+    if(c.status==='active'){
+      h += '<button type="button" onclick="openSichaekReplace(\''+c.id+'\',\''+c.insurer+'\',\''+(c.kind||'')+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:var(--gold2);cursor:pointer">교체</button>';
+      h += '<button type="button" onclick="endSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer">종료</button>';
+    } else {
+      h += '<button type="button" onclick="reactivateSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#1F9268;cursor:pointer">되돌리기</button>';
+      h += '<button type="button" onclick="deleteSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer">삭제</button>';
+    }
+    h += '</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+function _sichaekGrid(cards){
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:4px">'+cards.join('')+'</div>';
+}
+
+function _sichaekSortByOrder(arr, order){
+  return arr.slice().sort(function(a,b){
+    var ia = order.indexOf(a.insurer); if(ia<0) ia=999;
+    var ib = order.indexOf(b.insurer); if(ib<0) ib=999;
+    return ia - ib;
+  });
+}
+
 function renderSichaekList(list, canManage){
   var wrap = document.getElementById('sichaekListWrap');
   if(!list.length){
@@ -4851,33 +4908,29 @@ function renderSichaekList(list, canManage){
     wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">'+msg+'</div>';
     return;
   }
-  var h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:4px">';
-  for(var i=0;i<list.length;i++){
-    var c = list[i];
-    var kindColor = c.kind==='생보' ? 'var(--gold2)' : '#60A5FA';
-    var statusLine = c.status==='active'
-      ? '<span style="color:#1F9268">● 진행 중 · '+(c.startWeek||'')+'~</span>'
-      : '<span style="color:var(--text3)">종료됨 · '+(c.startWeek||'')+'</span>';
-    h += '<div class="sichaek-card">'+
-      '<img class="sichaek-card-img" src="'+c.imageUrl+'" alt="'+c.insurer+'" onclick="openSichaekImg(\''+c.imageUrl+'\')" onerror="this.style.opacity=0.3">'+
-      '<div style="padding:9px 11px">'+
-        '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">'+
-          '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(c.kind||'')+'</span>'+
-          '<span style="font-size:13px;font-weight:700">'+c.insurer+'</span>'+
-        '</div>'+
-        '<div style="font-size:10.5px">'+statusLine+'</div>';
-    if(canManage){
-      h += '<div style="display:flex;gap:5px;margin-top:8px">';
-      if(c.status==='active'){
-        h += '<button type="button" onclick="endSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer">종료</button>';
-      } else {
-        h += '<button type="button" onclick="deleteSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer">삭제</button>';
-      }
-      h += '</div>';
-    }
-    h += '</div></div>';
+  // 지난 시책: 최신순 그대로
+  if(_sichaekTab !== 'active'){
+    var allCards = list.map(function(c){ return _sichaekCardHtml(c, canManage); });
+    wrap.innerHTML = _sichaekGrid(allCards);
+    return;
   }
-  h += '</div>';
+  // 진행 중: 생보 구역 / 손보 구역으로 나눠 지정 순서대로
+  var lifeArr = _sichaekSortByOrder(list.filter(function(c){ return c.kind==='생보'; }), SICHAEK_LIFE_ORDER);
+  var nonArr = _sichaekSortByOrder(list.filter(function(c){ return c.kind==='손보'; }), SICHAEK_NON_ORDER);
+  var etcArr = list.filter(function(c){ return c.kind!=='생보' && c.kind!=='손보'; });
+  var h = '';
+  if(lifeArr.length){
+    h += '<div style="font-size:12px;font-weight:700;color:var(--gold2);margin:4px 4px 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr2)">🛡️ 생명보험</div>';
+    h += _sichaekGrid(lifeArr.map(function(c){ return _sichaekCardHtml(c, canManage); }));
+  }
+  if(nonArr.length){
+    h += '<div style="font-size:12px;font-weight:700;color:#60A5FA;margin:18px 4px 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr2)">☂️ 손해보험</div>';
+    h += _sichaekGrid(nonArr.map(function(c){ return _sichaekCardHtml(c, canManage); }));
+  }
+  if(etcArr.length){
+    h += '<div style="font-size:12px;font-weight:700;color:var(--text3);margin:18px 4px 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr2)">기타</div>';
+    h += _sichaekGrid(etcArr.map(function(c){ return _sichaekCardHtml(c, canManage); }));
+  }
   wrap.innerHTML = h;
 }
 
@@ -4940,26 +4993,108 @@ function submitSichaek(){
   }).catch(function(){ btn.disabled=false; btn.textContent='등록하기'; showToast('⚠️ 네트워크 오류'); });
 }
 
+// 커스텀 확인창
+var _confirmCb = null;
+function uniConfirm(msg, onOk){
+  _confirmCb = onOk;
+  document.getElementById('confirmMsg').textContent = msg;
+  document.getElementById('confirmOverlay').classList.add('open');
+}
+function _confirmClose(){ document.getElementById('confirmOverlay').classList.remove('open'); _confirmCb = null; }
+
 function endSichaek(id){
-  if(!confirm('이 시책을 종료할까요? 진행 중 목록에서 내려갑니다.')) return;
-  fetch(UNISPACE_GAS_URL, {
-    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action:'endCampaign', data:{ fpCode: currentUser.id, id: id }})
-  }).then(function(r){return r.json();}).then(function(res){
-    if(res && res.ok){ showToast('시책을 종료했습니다'); loadSichaek(); }
-    else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
-  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+  uniConfirm('이 시책을 종료할까요?\n지난 시책으로 넘어갑니다. (되돌릴 수 있어요)', function(){
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'endCampaign', data:{ fpCode: currentUser.id, id: id }})
+    }).then(function(r){return r.json();}).then(function(res){
+      if(res && res.ok){ showToast('시책을 종료했습니다'); loadSichaek(); }
+      else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+    }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+  });
+}
+
+function reactivateSichaek(id){
+  uniConfirm('이 시책을 다시 진행 중으로 되돌릴까요?', function(){
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'reactivateCampaign', data:{ fpCode: currentUser.id, id: id }})
+    }).then(function(r){return r.json();}).then(function(res){
+      if(res && res.ok){ showToast('다시 진행 중으로 되돌렸습니다'); loadSichaek(); }
+      else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+    }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+  });
 }
 
 function deleteSichaek(id){
-  if(!confirm('이 시책을 완전히 삭제할까요?')) return;
+  uniConfirm('이 시책을 완전히 삭제할까요?\n삭제하면 되돌릴 수 없습니다.', function(){
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'deleteCampaign', data:{ fpCode: currentUser.id, id: id }})
+    }).then(function(r){return r.json();}).then(function(res){
+      if(res && res.ok){ showToast('삭제했습니다'); loadSichaek(); }
+      else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+    }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+  });
+}
+
+// 시책 교체 (기존 종료 + 새로 등록)
+var _sichaekRepData = null;
+var _sichaekRepTarget = null;
+function openSichaekReplace(id, insurer, kind){
+  _sichaekRepTarget = { id:id, insurer:insurer, kind:kind };
+  _sichaekRepData = null;
+  document.getElementById('sichaekReplaceInfo').innerHTML = '<b>'+insurer+'</b> 시책을 새 이미지로 교체합니다.';
+  document.getElementById('sichaekRepWeek').innerHTML = _sichaekWeekOptions();
+  var prev = document.getElementById('sichaekRepPreview');
+  prev.style.display='none'; prev.src='';
+  document.getElementById('sichaekRepDrop').style.display='';
+  document.getElementById('sichaekReplaceOverlay').classList.add('open');
+}
+function closeSichaekReplace(){ document.getElementById('sichaekReplaceOverlay').classList.remove('open'); }
+
+function _sichaekRepFileChange(e){
+  var f = e.target.files && e.target.files[0];
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    _sichaekRepData = { data: ev.target.result, mime: f.type };
+    var prev = document.getElementById('sichaekRepPreview');
+    prev.src = ev.target.result; prev.style.display='block';
+    document.getElementById('sichaekRepDrop').style.display='none';
+  };
+  reader.readAsDataURL(f);
+}
+
+function submitSichaekReplace(){
+  if(!_sichaekRepData){ showToast('⚠️ 새 이미지를 선택하세요'); return; }
+  if(!_sichaekRepTarget){ return; }
+  var week = document.getElementById('sichaekRepWeek').value;
+  var btn = document.getElementById('sichaekRepSubmitBtn');
+  btn.disabled = true; btn.textContent = '교체 중...';
+  var t = _sichaekRepTarget;
   fetch(UNISPACE_GAS_URL, {
     method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action:'deleteCampaign', data:{ fpCode: currentUser.id, id: id }})
+    body: JSON.stringify({ action:'saveCampaign', data:{
+      fpCode: currentUser.id, insurer: t.insurer, kind: t.kind, startWeek: week,
+      photoBase64: _sichaekRepData.data, mimeType: _sichaekRepData.mime
+    }})
   }).then(function(r){return r.json();}).then(function(res){
-    if(res && res.ok){ showToast('삭제했습니다'); loadSichaek(); }
-    else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
-  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+    if(res && res.ok){
+      fetch(UNISPACE_GAS_URL, {
+        method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action:'endCampaign', data:{ fpCode: currentUser.id, id: t.id }})
+      }).then(function(r2){return r2.json();}).then(function(){
+        btn.disabled=false; btn.textContent='교체하기';
+        showToast('✅ 시책을 교체했습니다');
+        closeSichaekReplace();
+        loadSichaek();
+      }).catch(function(){ btn.disabled=false; btn.textContent='교체하기'; showToast('새 시책은 등록됐으나 기존 종료 실패'); loadSichaek(); });
+    } else {
+      btn.disabled=false; btn.textContent='교체하기';
+      showToast('⚠️ ' + ((res&&res.msg)||'교체 실패'));
+    }
+  }).catch(function(){ btn.disabled=false; btn.textContent='교체하기'; showToast('⚠️ 네트워크 오류'); });
 }
 
 function openScheduleModal(){
@@ -9611,6 +9746,45 @@ function doCheckin() { doSmartCheckin(); }
 <div class="mgmt-overlay" id="sichaekImgOverlay" style="z-index:669" onclick="closeSichaekImg()">
   <div style="max-width:94vw;max-height:92vh;display:flex;flex-direction:column;align-items:center">
     <img id="sichaekBigImg" style="max-width:94vw;max-height:88vh;border-radius:10px" alt="시책 이미지">
+  </div>
+</div>
+
+<!-- 시책 교체 모달 -->
+<div class="mgmt-overlay" id="sichaekReplaceOverlay" style="z-index:668">
+  <div class="mgmt-box" style="max-width:420px;width:92vw;max-height:92vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="mgmt-title">🔄 시책 교체</div>
+      <button type="button" onclick="closeSichaekReplace()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <div style="overflow-y:auto">
+      <div id="sichaekReplaceInfo" style="font-size:13px;color:var(--text2);background:var(--surface);border-radius:8px;padding:10px;margin-bottom:12px"></div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">새 시작 주차</div>
+        <select id="sichaekRepWeek" style="width:100%;padding:9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text1);font-size:14px"></select>
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">새 시상 이미지</div>
+        <input type="file" id="sichaekRepFile" accept="image/*" style="display:none">
+        <div id="sichaekRepDrop" onclick="document.getElementById('sichaekRepFile').click()" style="border:1px dashed var(--bdr2);border-radius:8px;padding:22px;text-align:center;color:var(--text3);cursor:pointer">
+          <div style="font-size:24px">📤</div>
+          <div style="font-size:13px;margin-top:5px">새 사진 선택 또는 촬영</div>
+        </div>
+        <img id="sichaekRepPreview" style="display:none;width:100%;border-radius:8px;margin-top:8px" alt="미리보기">
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">기존 시책은 자동으로 '지난 시책'으로 넘어가고, 새 시책이 진행 중이 됩니다.</div>
+      <button type="button" id="sichaekRepSubmitBtn" onclick="submitSichaekReplace()" style="width:100%;padding:11px;border:none;border-radius:8px;background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer">교체하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 커스텀 확인창 -->
+<div class="mgmt-overlay" id="confirmOverlay" style="z-index:9000">
+  <div class="mgmt-box" style="max-width:340px;width:88vw;padding:22px">
+    <div id="confirmMsg" style="font-size:14px;line-height:1.6;color:var(--text1);margin-bottom:18px;text-align:center"></div>
+    <div style="display:flex;gap:8px">
+      <button type="button" id="confirmCancelBtn" style="flex:1;padding:11px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text2);font-size:14px;font-weight:700;cursor:pointer">취소</button>
+      <button type="button" id="confirmOkBtn" style="flex:1;padding:11px;border:none;border-radius:8px;background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer">확인</button>
+    </div>
   </div>
 </div>
 
