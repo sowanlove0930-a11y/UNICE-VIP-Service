@@ -253,6 +253,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 }
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(27,58,107,.95);color:#fff;padding:11px 22px;border-radius:24px;font-size:13px;font-weight:500;z-index:500;opacity:0;transition:all .3s;white-space:nowrap;backdrop-filter:blur(8px);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+@keyframes skShimmer { 0%{background-position:-180px 0} 100%{background-position:180px 0} }
+.sk-load { display:inline-block; border-radius:6px; color:transparent !important; background:linear-gradient(90deg, rgba(150,150,150,.12) 25%, rgba(150,150,150,.28) 50%, rgba(150,150,150,.12) 75%); background-size:360px 100%; animation:skShimmer 1.1s infinite linear; min-width:36px; vertical-align:middle; }
+.sk-load * { visibility:hidden; }
 </style>
 </head>
 <body>
@@ -953,14 +956,19 @@ var d = new Date();
 render();
 
 // GAS에서 전체 고객 로드 후 다시 렌더 (localStorage가 비어도 서버 데이터로 표시)
+function _taSkOn(){ var ids=['cntToday','cntD30','cntD5','cntManage']; for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(el) el.classList.add('sk-load'); } }
+function _taSkOff(){ var ids=['cntToday','cntD30','cntD5','cntManage']; for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(el) el.classList.remove('sk-load'); } }
 (function(){
   var TA_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
   var u = {};
   try { u = JSON.parse(localStorage.getItem('unispace_user') || '{}'); } catch(e) {}
   if(!u || !u.id) return;
+  _taSkOn();
+  setTimeout(_taSkOff, 6000);
   fetch(TA_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(u.id))
     .then(function(r){ return r.json(); })
     .then(function(res){
+      _taSkOff();
       if(res && res.ok && res.customers){
         DB = res.customers;
         try { localStorage.setItem('unispace_customers', JSON.stringify(DB)); } catch(e) {}
@@ -968,7 +976,7 @@ render();
         render();
       }
     })
-    .catch(function(){});
+    .catch(function(){ _taSkOff(); });
 })();
 </script>
 
