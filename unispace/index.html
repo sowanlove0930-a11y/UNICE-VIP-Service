@@ -3015,19 +3015,10 @@ function renderBojangCard() {
   var _l4=document.getElementById('st4-recruit-lbl'); if(_l4) _l4.textContent=_curMon+'월 리크루팅';
   var _l2=document.getElementById('st2-month'); if(_l2) _l2.textContent=_curMon+'월';
   var _l3=document.getElementById('st3-fp-lbl'); if(_l3) _l3.textContent=_curMon+'월 출결현황';
-  // 보장월초 카드: 목표는 저장값, 실적/건수는 0 (GAS 연동 후 실데이터)
-  var _g = {};
-  try { _g = JSON.parse(localStorage.getItem('unispace_perf_goal') || '{}'); } catch(e) {}
-  var GOAL_ALPHA = parseInt(_g.alpha) || 0;
-  var GOAL_BRAVO = parseInt(_g.bravo) || 0;
-  // override with goal-adjust branch goals (life+non sum) if set
-  try {
-    var _gaDb = JSON.parse(localStorage.getItem('unispace_goal_adjust') || '{}');
-    var _gaYmKey = (new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2);
-    var _gaBr = (_gaDb[_gaYmKey] && _gaDb[_gaYmKey].branch) || {};
-    if(_gaBr.al && (_gaBr.al.life || _gaBr.al.non)){ GOAL_ALPHA = (parseInt(_gaBr.al.life)||0)+(parseInt(_gaBr.al.non)||0); }
-    if(_gaBr.br && (_gaBr.br.life || _gaBr.br.non)){ GOAL_BRAVO = (parseInt(_gaBr.br.life)||0)+(parseInt(_gaBr.br.non)||0); }
-  } catch(e) {}
+  // 보장월초 카드: 목표는 GAS 연동 goal_adjust 기준 (전체 공유), 만원 단위
+  var _bgoals = getBranchMonthGoals();
+  var GOAL_ALPHA = _bgoals.alpha || 0;
+  var GOAL_BRAVO = _bgoals.bravo || 0;
   var GOAL_TOTAL = GOAL_ALPHA + GOAL_BRAVO;
   var AMT_ALPHA  = 0, AMT_BRAVO  = 0;
   var CNT_ALPHA  = 0, CNT_BRAVO  = 0;
@@ -3071,9 +3062,9 @@ function renderBojangCard() {
   } catch(e) {}
   var AMT_TOTAL  = AMT_ALPHA + AMT_BRAVO;
   var CNT_TOTAL  = CNT_ALPHA + CNT_BRAVO;
-  var RATE_TOTAL = GOAL_TOTAL ? Math.round(AMT_TOTAL / GOAL_TOTAL * 100) : 0;
-  var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / GOAL_ALPHA * 100) : 0;
-  var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / GOAL_BRAVO * 100) : 0;
+  var RATE_TOTAL = GOAL_TOTAL ? Math.round(AMT_TOTAL / 10000 / GOAL_TOTAL * 100) : 0;
+  var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / 10000 / GOAL_ALPHA * 100) : 0;
+  var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / 10000 / GOAL_BRAVO * 100) : 0;
   if(_isMgrUser){
     var e1 = document.getElementById('st1');      if(e1) e1.innerHTML = AMT_TOTAL.toLocaleString()+'<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2)">'+CNT_TOTAL+'건</span>';
     var er = document.getElementById('st1-rate'); if(er) er.textContent = RATE_TOTAL+'%';
@@ -3109,20 +3100,12 @@ function renderBojangCard() {
 function renderBojangBarsFromSummary(res){
   var eu = document.getElementById('st1-unit');
   if(!eu || !res) return;
-  var GOAL_ALPHA = 0, GOAL_BRAVO = 0;
-  try {
-    var _g = JSON.parse(localStorage.getItem('unispace_perf_goal') || '{}');
-    GOAL_ALPHA = parseInt(_g.alpha) || 0;
-    GOAL_BRAVO = parseInt(_g.bravo) || 0;
-    var _gaDb = JSON.parse(localStorage.getItem('unispace_goal_adjust') || '{}');
-    var _gaYmKey = (new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2);
-    var _gaBr = (_gaDb[_gaYmKey] && _gaDb[_gaYmKey].branch) || {};
-    if(_gaBr.al && (_gaBr.al.life || _gaBr.al.non)){ GOAL_ALPHA = (parseInt(_gaBr.al.life)||0)+(parseInt(_gaBr.al.non)||0); }
-    if(_gaBr.br && (_gaBr.br.life || _gaBr.br.non)){ GOAL_BRAVO = (parseInt(_gaBr.br.life)||0)+(parseInt(_gaBr.br.non)||0); }
-  } catch(e) {}
+  var _bg2 = getBranchMonthGoals();
+  var GOAL_ALPHA = _bg2.alpha || 0;
+  var GOAL_BRAVO = _bg2.bravo || 0;
   var AMT_ALPHA = res.alAmt||0, AMT_BRAVO = res.brAmt||0;
-  var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / GOAL_ALPHA * 100) : 0;
-  var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / GOAL_BRAVO * 100) : 0;
+  var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / 10000 / GOAL_ALPHA * 100) : 0;
+  var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / 10000 / GOAL_BRAVO * 100) : 0;
   var _wa = RATE_ALPHA > 100 ? 100 : RATE_ALPHA;
   var _wb = RATE_BRAVO > 100 ? 100 : RATE_BRAVO;
   eu.innerHTML =
@@ -3279,6 +3262,13 @@ function showDashboard() {
       if(typeof renderGoals==='function') renderGoals();
       if(typeof renderTop10==='function') renderTop10();
     });
+
+    // 지점 목표(goal_adjust)를 GAS에서 로드 후 보장월초 카드 갱신 (전체 공유)
+    if(typeof loadGoalAdjFromGas === 'function'){
+      loadGoalAdjFromGas(function(){
+        if(typeof renderBojangCard==='function') renderBojangCard();
+      });
+    }
 
     if(isAdmin) {
       // 2번 (관리자 4명): 전체 계약고객 + 이번달 신규 — 대시보드 전용 전체 조회
@@ -4716,6 +4706,23 @@ function saveFpGoalDB(db){ localStorage.setItem(FP_GOAL_KEY, JSON.stringify(db))
 var GOAL_ADJ_KEY = 'unispace_goal_adjust';
 function getGoalAdjDB(){ try{ return JSON.parse(localStorage.getItem(GOAL_ADJ_KEY)||'{}'); }catch(e){ return {}; } }
 function saveGoalAdjDB(db){ localStorage.setItem(GOAL_ADJ_KEY, JSON.stringify(db)); }
+// 지점 월 목표(만원) 읽기 - GAS 연동된 goal_adjust 기준 (전체 공유)
+// 반환: { alpha:만원, bravo:만원 } (월 생보+손보 합)
+function getBranchMonthGoals(){
+  var out = { alpha:0, bravo:0 };
+  try{
+    var db = getGoalAdjDB();
+    var ym = getCurrentYM();
+    var br = (db[ym] && db[ym].branch) || {};
+    if(br.al){ out.alpha = (parseInt(br.al.life)||0) + (parseInt(br.al.non)||0); }
+    if(br.br){ out.bravo = (parseInt(br.br.life)||0) + (parseInt(br.br.non)||0); }
+  }catch(e){}
+  // 폴백: 구버전 unispace_perf_goal
+  if(!out.alpha && !out.bravo){
+    try{ var g=JSON.parse(localStorage.getItem('unispace_perf_goal')||'{}'); out.alpha=parseInt(g.alpha)||0; out.bravo=parseInt(g.bravo)||0; }catch(e){}
+  }
+  return out;
+}
 function _gaNum(v){ var n=parseInt((''+(v||'')).replace(/[^0-9]/g,'')); return isNaN(n)?0:n; }
 function _gaComma(n){ return (parseInt(n)||0).toLocaleString(); }
 // read FP original goal from GAS plan data cached in unispace_activities source: use _gaPlanGoals
@@ -5361,9 +5368,9 @@ function renderFpPerf(){
   scopeRows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumLifeCnt+=f.lifeCnt; sumNonCnt+=f.nonCnt; sumCnt+=f.cnt; });
   var _branchGoal = 0;
   try {
-    var _bg = JSON.parse(localStorage.getItem('unispace_perf_goal') || '{}');
-    var _gAl = parseInt(_bg.alpha) || 0;
-    var _gBr = parseInt(_bg.bravo) || 0;
+    var _bgF = getBranchMonthGoals();
+    var _gAl = _bgF.alpha || 0;
+    var _gBr = _bgF.bravo || 0;
     if(_fpTab==='al') _branchGoal = _gAl;
     else if(_fpTab==='br') _branchGoal = _gBr;
     else _branchGoal = _gAl + _gBr;
