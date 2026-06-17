@@ -5848,9 +5848,52 @@ document.addEventListener('touchend', function(e) {
     document.querySelector('#gate button').style.display='none';
     return;
   }
+  // UNISPACE에서 사번을 넘겨주면 로그인/비번 건너뛰고 바로 진입
+  try {
+    var qp = new URLSearchParams(location.search);
+    var urlFp = qp.get('fp');
+    if (urlFp) {
+      autoEnterFromUnispace(urlFp);
+      return;
+    }
+  } catch(e) {}
   // FP 코드 먼저 입력 → 유효하면 비밀번호 창 표시
   document.getElementById('fpModal').style.display='flex';
 })();
+
+// auto-enter when fp code is passed from UNISPACE (validates carefit access via GAS)
+async function autoEnterFromUnispace(code) {
+  var v = String(code).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!v) { document.getElementById('fpModal').style.display='flex'; return; }
+  try {
+    var res = await fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(v));
+    var data = await res.json();
+    if (!data.ok) {
+      document.getElementById('fpModal').style.display='flex';
+      var err = document.getElementById('fpErr');
+      if (err) { err.textContent = data.msg || '등록되지 않은 코드입니다.'; err.style.display='block'; }
+      return;
+    }
+    if (data.carefit === false) {
+      document.getElementById('gate').style.display='flex';
+      var ge = document.getElementById('gateErr');
+      if (ge) { ge.textContent = '케어핏 사용 권한이 없습니다. 관리자에게 문의해 주세요.'; ge.style.display='block'; }
+      var gi = document.getElementById('gateInput'); if (gi) gi.style.display='none';
+      var gb = document.querySelector('#gate button'); if (gb) gb.style.display='none';
+      return;
+    }
+    var fp = data.fp || { name:data.name, title:data.title, phone:data.phone, email:data.email, branch:data.branch };
+    state.fpCode = v;
+    state.fpInfo = fp;
+    localStorage.setItem('silson_fp', v);
+    var disp = document.getElementById('fpDisplay');
+    if (disp) disp.textContent = (fp.name || v) + ' ' + (fp.title || '');
+    try { sessionStorage.setItem('carefit_auth','ok'); } catch(e) {}
+    init();
+  } catch(e) {
+    document.getElementById('fpModal').style.display='flex';
+  }
+}
 
 // ── 노후파이 미리보기 ──────────────────────────────────────
 var NF_CATS = [
