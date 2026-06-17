@@ -1806,6 +1806,10 @@ body.theme-light .pk-cancel{background:var(--bg3);color:var(--text2);border:1px 
 body.theme-light .pk-wheel{border:1px solid var(--bdr2);background:var(--bg3);}
 .qa-addr-btn{padding:0 10px;border:1px solid rgba(96,165,250,.35);background:rgba(96,165,250,.1);color:#93C5FD;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;}
 body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgba(37,99,235,.08);color:#1D4FB8;}
+.sichaek-tab { font-size:13px; font-weight:700; padding:7px 16px; border:1px solid var(--bdr2); border-radius:8px; background:var(--bg2); color:var(--text2); cursor:pointer; }
+.sichaek-tab-on { background:var(--gold); color:#fff; border-color:var(--gold); }
+.sichaek-card { background:var(--bg2); border:1px solid var(--bdr2); border-radius:12px; overflow:hidden; cursor:pointer; }
+.sichaek-card-img { width:100%; height:120px; object-fit:cover; background:var(--surface); display:block; }
 </style>
 </head>
 <body class="theme-light">
@@ -2184,6 +2188,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="header-right">
       <button type="button" class="checkin-smart-btn state-ready" id="checkinSmartBtn" onclick="doSmartCheckin()">📍 출근 체크인</button>
       <button type="button" class="cust-view-btn" id="custViewBtn" onclick="window.location.href='customer.html?tab=list'">🔍 고객 조회</button>
+      <button type="button" class="sched-view-btn" id="sichaekBtn" onclick="openSichaekModal()">🎁 시책 조회</button>
       <button type="button" class="sched-view-btn" id="scheduleBtn" onclick="openScheduleModal()">📅 일정 조회</button>
       <button type="button" class="consult-btn" id="consultBtn" onclick="toggleConsultMode()">🎯 상담 모드</button>
       <div class="header-clock">
@@ -2313,6 +2318,15 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="main-panel">
       <div class="main-grid">
 
+        <div class="main-btn mb-perf" id="btn-perf" onclick="openSubmenu('perf')">
+          <div class="btn-icon-wrap">📈</div>
+          <div class="btn-label">
+            <div class="btn-title">업적 현황</div>
+            <div class="btn-sub">실적 · 프로모션</div>
+          </div>
+          <div class="btn-arrow">↓</div>
+        </div>
+
 <div class="main-btn mb-customer" id="btn-customer" onclick="openSubmenu('customer')">
           <div class="btn-icon-wrap">👥</div>
           <div class="btn-label">
@@ -2327,15 +2341,6 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
           <div class="btn-label">
             <div class="btn-title">출결 관리</div>
             <div class="btn-sub">체크인 · 출석현황</div>
-          </div>
-          <div class="btn-arrow">↓</div>
-        </div>
-
-        <div class="main-btn mb-perf" id="btn-perf" onclick="openSubmenu('perf')">
-          <div class="btn-icon-wrap">📈</div>
-          <div class="btn-label">
-            <div class="btn-title">업적 현황</div>
-            <div class="btn-sub">실적 · 프로모션</div>
           </div>
           <div class="btn-arrow">↓</div>
         </div>
@@ -2792,6 +2797,8 @@ window.addEventListener('DOMContentLoaded', function() {
   startClock();
   _pkBindTimeTriggers();
   _bindPkDate();
+  var _scFile = document.getElementById('sichaekFile');
+  if(_scFile) _scFile.addEventListener('change', _sichaekFileChange);
   // scroll-to-top button: show after scrolling down
   window.addEventListener('scroll', function(){
     var btn=document.getElementById('scrollTopBtn');
@@ -4785,6 +4792,176 @@ function _schedIsAdmin(){
   return r==='대표'||r==='지점장'||tt==='지점장'||tt==='교육지점장';
 }
 function _schedYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+// ── 시책 조회/등록 ─────────────────────────────────
+var _sichaekTab = 'active';
+var _sichaekFileData = null;
+
+function _sichaekWeekOptions(){
+  var n = new Date();
+  var mon = n.getMonth()+1;
+  var day = n.getDate();
+  var wk = Math.ceil(day/7); if(wk>4) wk=4;
+  var opts = '';
+  var months = [mon];
+  var prev = mon-1; if(prev<1) prev=12; months.unshift(prev);
+  for(var mi=0; mi<months.length; mi++){
+    var m = months[mi];
+    for(var w=1; w<=4; w++){
+      var sel = (m===mon && w===wk) ? ' selected' : '';
+      var label = m+'월 '+w+'주차' + ((m===mon && w===wk) ? ' (이번 주)' : '');
+      opts += '<option value="'+m+'월 '+w+'주차"'+sel+'>'+label+'</option>';
+    }
+  }
+  return opts;
+}
+
+function openSichaekModal(){
+  document.getElementById('sichaekOverlay').classList.add('open');
+  var canMng = (typeof _isManagerUser==='function' && _isManagerUser(currentUser));
+  var addBtn = document.getElementById('sichaekAddBtn');
+  if(addBtn) addBtn.style.display = canMng ? '' : 'none';
+  _sichaekTab = 'active';
+  document.getElementById('sichaekTabActive').classList.add('sichaek-tab-on');
+  document.getElementById('sichaekTabEnded').classList.remove('sichaek-tab-on');
+  loadSichaek();
+}
+function closeSichaekModal(){ document.getElementById('sichaekOverlay').classList.remove('open'); }
+
+function switchSichaekTab(tab){
+  _sichaekTab = tab;
+  document.getElementById('sichaekTabActive').classList.toggle('sichaek-tab-on', tab==='active');
+  document.getElementById('sichaekTabEnded').classList.toggle('sichaek-tab-on', tab==='ended');
+  loadSichaek();
+}
+
+function loadSichaek(){
+  var wrap = document.getElementById('sichaekListWrap');
+  wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">불러오는 중...</div>';
+  var url = UNISPACE_GAS_URL + '?action=getCampaigns&fp=' + encodeURIComponent(currentUser.id) + '&status=' + _sichaekTab;
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(!res || !res.ok){ wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">불러오기 실패</div>'; return; }
+    renderSichaekList(res.campaigns || [], res.canManage);
+  }).catch(function(){ wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">네트워크 오류</div>'; });
+}
+
+function renderSichaekList(list, canManage){
+  var wrap = document.getElementById('sichaekListWrap');
+  if(!list.length){
+    var msg = _sichaekTab==='active' ? '진행 중인 시책이 없습니다' : '지난 시책이 없습니다';
+    wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">'+msg+'</div>';
+    return;
+  }
+  var h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:4px">';
+  for(var i=0;i<list.length;i++){
+    var c = list[i];
+    var kindColor = c.kind==='생보' ? 'var(--gold2)' : '#60A5FA';
+    var statusLine = c.status==='active'
+      ? '<span style="color:#1F9268">● 진행 중 · '+(c.startWeek||'')+'~</span>'
+      : '<span style="color:var(--text3)">종료됨 · '+(c.startWeek||'')+'</span>';
+    h += '<div class="sichaek-card">'+
+      '<img class="sichaek-card-img" src="'+c.imageUrl+'" alt="'+c.insurer+'" onclick="openSichaekImg(\''+c.imageUrl+'\')" onerror="this.style.opacity=0.3">'+
+      '<div style="padding:9px 11px">'+
+        '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">'+
+          '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(c.kind||'')+'</span>'+
+          '<span style="font-size:13px;font-weight:700">'+c.insurer+'</span>'+
+        '</div>'+
+        '<div style="font-size:10.5px">'+statusLine+'</div>';
+    if(canManage){
+      h += '<div style="display:flex;gap:5px;margin-top:8px">';
+      if(c.status==='active'){
+        h += '<button type="button" onclick="endSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer">종료</button>';
+      } else {
+        h += '<button type="button" onclick="deleteSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer">삭제</button>';
+      }
+      h += '</div>';
+    }
+    h += '</div></div>';
+  }
+  h += '</div>';
+  wrap.innerHTML = h;
+}
+
+function openSichaekImg(url){
+  document.getElementById('sichaekBigImg').src = url;
+  document.getElementById('sichaekImgOverlay').classList.add('open');
+}
+function closeSichaekImg(){ document.getElementById('sichaekImgOverlay').classList.remove('open'); }
+
+function openSichaekAdd(){
+  document.getElementById('sichaekWeek').innerHTML = _sichaekWeekOptions();
+  _sichaekFileData = null;
+  var prev = document.getElementById('sichaekPreview');
+  prev.style.display = 'none'; prev.src = '';
+  document.getElementById('sichaekDrop').style.display = '';
+  document.getElementById('sichaekAddOverlay').classList.add('open');
+}
+function closeSichaekAdd(){ document.getElementById('sichaekAddOverlay').classList.remove('open'); }
+
+function _sichaekFileChange(e){
+  var f = e.target.files && e.target.files[0];
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    _sichaekFileData = { data: ev.target.result, mime: f.type };
+    var prev = document.getElementById('sichaekPreview');
+    prev.src = ev.target.result; prev.style.display = 'block';
+    document.getElementById('sichaekDrop').style.display = 'none';
+  };
+  reader.readAsDataURL(f);
+}
+
+function submitSichaek(){
+  if(!_sichaekFileData){ showToast('⚠️ 시상 이미지를 선택하세요'); return; }
+  var iv = document.getElementById('sichaekInsurer').value;
+  var parts = iv.split('|');
+  var insurer = parts[0];
+  var kind = parts[1] || '';
+  var week = document.getElementById('sichaekWeek').value;
+  var btn = document.getElementById('sichaekSubmitBtn');
+  btn.disabled = true; btn.textContent = '등록 중...';
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'saveCampaign', data:{
+      fpCode: currentUser.id, insurer: insurer, kind: kind, startWeek: week,
+      photoBase64: _sichaekFileData.data, mimeType: _sichaekFileData.mime
+    }})
+  }).then(function(r){return r.json();}).then(function(res){
+    btn.disabled = false; btn.textContent = '등록하기';
+    if(res && res.ok){
+      showToast('✅ 시책이 등록되었습니다');
+      closeSichaekAdd();
+      _sichaekTab = 'active';
+      document.getElementById('sichaekTabActive').classList.add('sichaek-tab-on');
+      document.getElementById('sichaekTabEnded').classList.remove('sichaek-tab-on');
+      loadSichaek();
+    } else {
+      showToast('⚠️ ' + ((res&&res.msg)||'등록 실패'));
+    }
+  }).catch(function(){ btn.disabled=false; btn.textContent='등록하기'; showToast('⚠️ 네트워크 오류'); });
+}
+
+function endSichaek(id){
+  if(!confirm('이 시책을 종료할까요? 진행 중 목록에서 내려갑니다.')) return;
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'endCampaign', data:{ fpCode: currentUser.id, id: id }})
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok){ showToast('시책을 종료했습니다'); loadSichaek(); }
+    else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+}
+
+function deleteSichaek(id){
+  if(!confirm('이 시책을 완전히 삭제할까요?')) return;
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'deleteCampaign', data:{ fpCode: currentUser.id, id: id }})
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok){ showToast('삭제했습니다'); loadSichaek(); }
+    else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+}
+
 function openScheduleModal(){
   _schedMonth = new Date(); _schedMonth.setDate(1); _schedMonth.setHours(0,0,0,0);
   var addHint=document.getElementById('schedAddHint');
@@ -9361,6 +9538,79 @@ function doCheckin() { doSmartCheckin(); }
     <div class="mgmt-btns" style="margin-top:12px">
       <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="saveTeams()">저장</button>
     </div>
+  </div>
+</div>
+
+<!-- 시책 조회/관리 모달 -->
+<div class="mgmt-overlay" id="sichaekOverlay" style="z-index:667">
+  <div class="mgmt-box" style="max-width:880px;width:94vw;max-height:92vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="mgmt-title">🎁 시책 조회</div>
+      <button type="button" onclick="closeSichaekModal()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <button type="button" id="sichaekTabActive" class="sichaek-tab sichaek-tab-on" onclick="switchSichaekTab('active')">진행 중</button>
+      <button type="button" id="sichaekTabEnded" class="sichaek-tab" onclick="switchSichaekTab('ended')">지난 시책</button>
+      <div style="flex:1"></div>
+      <button type="button" id="sichaekAddBtn" onclick="openSichaekAdd()" style="display:none;font-size:13px;font-weight:700;padding:7px 14px;border:none;border-radius:8px;background:var(--gold);color:#fff;cursor:pointer">➕ 시책 등록</button>
+    </div>
+    <div id="sichaekListWrap" style="overflow-y:auto;flex:1">
+      <div style="padding:30px;text-align:center;color:var(--text3)">불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 시책 등록 모달 -->
+<div class="mgmt-overlay" id="sichaekAddOverlay" style="z-index:668">
+  <div class="mgmt-box" style="max-width:420px;width:92vw;max-height:92vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="mgmt-title">➕ 시책 등록</div>
+      <button type="button" onclick="closeSichaekAdd()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>
+    </div>
+    <div style="overflow-y:auto">
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">보험사</div>
+        <select id="sichaekInsurer" style="width:100%;padding:9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text1);font-size:14px">
+          <optgroup label="생명보험">
+            <option value="한화생명|생보">한화생명</option>
+            <option value="라이나생명|생보">라이나생명</option>
+            <option value="미래에셋|생보">미래에셋</option>
+            <option value="신한라이프|생보">신한라이프</option>
+            <option value="흥국생명|생보">흥국생명</option>
+            <option value="메트라이프|생보">메트라이프</option>
+          </optgroup>
+          <optgroup label="손해보험">
+            <option value="한화손보|손보">한화손보</option>
+            <option value="현대해상|손보">현대해상</option>
+            <option value="DB손보|손보">DB손보</option>
+            <option value="메리츠화재|손보">메리츠화재</option>
+            <option value="KB손보|손보">KB손보</option>
+            <option value="삼성화재|손보">삼성화재</option>
+          </optgroup>
+        </select>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">시작 주차</div>
+        <select id="sichaekWeek" style="width:100%;padding:9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text1);font-size:14px"></select>
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">시상 이미지</div>
+        <input type="file" id="sichaekFile" accept="image/*" style="display:none">
+        <div id="sichaekDrop" onclick="document.getElementById('sichaekFile').click()" style="border:1px dashed var(--bdr2);border-radius:8px;padding:22px;text-align:center;color:var(--text3);cursor:pointer">
+          <div style="font-size:24px">📤</div>
+          <div style="font-size:13px;margin-top:5px">사진 선택 또는 촬영</div>
+        </div>
+        <img id="sichaekPreview" style="display:none;width:100%;border-radius:8px;margin-top:8px" alt="미리보기">
+      </div>
+      <button type="button" id="sichaekSubmitBtn" onclick="submitSichaek()" style="width:100%;padding:11px;border:none;border-radius:8px;background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer">등록하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 시책 이미지 크게 보기 -->
+<div class="mgmt-overlay" id="sichaekImgOverlay" style="z-index:669" onclick="closeSichaekImg()">
+  <div style="max-width:94vw;max-height:92vh;display:flex;flex-direction:column;align-items:center">
+    <img id="sichaekBigImg" style="max-width:94vw;max-height:88vh;border-radius:10px" alt="시책 이미지">
   </div>
 </div>
 
