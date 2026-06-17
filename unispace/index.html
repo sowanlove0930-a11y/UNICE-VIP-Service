@@ -2260,9 +2260,9 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <!-- 1번: 보장월초 -->
     <div class="stat s-gold" id="st1-card" onclick="onBojangCardClick()" style="cursor:pointer;position:relative">
       <div class="stat-lbl" id="st1-lbl">이번 달 보장월초 및 건수</div>
-      <div style="display:flex;align-items:baseline;gap:8px">
-        <div class="stat-val" id="st1">—</div>
-        <div id="st1-rate" style="font-size:14px;font-weight:800;color:var(--gold2)"></div>
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:nowrap;white-space:nowrap">
+        <div class="stat-val" id="st1" style="white-space:nowrap">—</div>
+        <div id="st1-rate" style="font-size:14px;font-weight:800;color:var(--gold2);flex-shrink:0"></div>
       </div>
       <div class="stat-unit" id="st1-unit"></div>
       <div id="st1-goal-hint" style="display:none;position:absolute;top:12px;right:14px;font-size:11px;font-weight:700;color:var(--gold2);opacity:.8">🎯 목표 설정</div>
@@ -3030,6 +3030,8 @@ function renderBojangCard() {
   var GOAL_TOTAL = GOAL_ALPHA + GOAL_BRAVO;
   var AMT_ALPHA  = 0, AMT_BRAVO  = 0;
   var CNT_ALPHA  = 0, CNT_BRAVO  = 0;
+  var LIFE_ALPHA = 0, NON_ALPHA = 0, LIFE_BRAVO = 0, NON_BRAVO = 0;
+  var LIFEC_ALPHA = 0, NONC_ALPHA = 0, LIFEC_BRAVO = 0, NONC_BRAVO = 0;
   // sum this-month perf from the perf log (loaded from GAS; admin sees all FPs)
   try {
     var _ym = (new Date()).getFullYear() + '-' + ('0' + ((new Date()).getMonth()+1)).slice(-2);
@@ -3042,8 +3044,28 @@ function renderBojangCard() {
       var _br = String(_r.branch || '');
       var _amt = parseInt(_r.total) || 0;
       var _cnt = (_r.products && _r.products.length) ? _r.products.length : 1;
-      if (_br.indexOf('알파') >= 0) { AMT_ALPHA += _amt; CNT_ALPHA += _cnt; }
-      else if (_br.indexOf('브라보') >= 0) { AMT_BRAVO += _amt; CNT_BRAVO += _cnt; }
+      var _isAlpha = _br.indexOf('알파') >= 0;
+      var _isBravo = _br.indexOf('브라보') >= 0;
+      if (_isAlpha) { AMT_ALPHA += _amt; CNT_ALPHA += _cnt; }
+      else if (_isBravo) { AMT_BRAVO += _amt; CNT_BRAVO += _cnt; }
+      // life/non split from products (by insurer name)
+      if ((_isAlpha || _isBravo) && _r.products && _r.products.length) {
+        for (var _qi = 0; _qi < _r.products.length; _qi++) {
+          var _pp = _r.products[_qi];
+          if (!_pp) continue;
+          var _pamt = parseInt(_pp.amount) || 0;
+          var _kind = (typeof _perfClassify === 'function') ? _perfClassify(_pp.co) : 'etc';
+          if (_isAlpha) {
+            if (_kind === 'life') { LIFE_ALPHA += _pamt; LIFEC_ALPHA++; }
+            else if (_kind === 'non') { NON_ALPHA += _pamt; NONC_ALPHA++; }
+            else { NON_ALPHA += _pamt; NONC_ALPHA++; }
+          } else {
+            if (_kind === 'life') { LIFE_BRAVO += _pamt; LIFEC_BRAVO++; }
+            else if (_kind === 'non') { NON_BRAVO += _pamt; NONC_BRAVO++; }
+            else { NON_BRAVO += _pamt; NONC_BRAVO++; }
+          }
+        }
+      }
     }
   } catch(e) {}
   var AMT_TOTAL  = AMT_ALPHA + AMT_BRAVO;
@@ -3051,16 +3073,80 @@ function renderBojangCard() {
   var RATE_TOTAL = GOAL_TOTAL ? Math.round(AMT_TOTAL / GOAL_TOTAL * 100) : 0;
   var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / GOAL_ALPHA * 100) : 0;
   var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / GOAL_BRAVO * 100) : 0;
-  var e1 = document.getElementById('st1');      if(e1) e1.textContent = AMT_TOTAL.toLocaleString()+'원 / '+CNT_TOTAL+'건';
+  var e1 = document.getElementById('st1');      if(e1) e1.innerHTML = AMT_TOTAL.toLocaleString()+'<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2)">'+CNT_TOTAL+'건</span>';
   var er = document.getElementById('st1-rate'); if(er) er.textContent = RATE_TOTAL+'%';
   var eu = document.getElementById('st1-unit');
-  if(eu) eu.innerHTML =
-    '<span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원 '+RATE_ALPHA+'%&nbsp;&nbsp;'+
-    '<span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원 '+RATE_BRAVO+'%';
+  if(eu){
+    var _barW_a = RATE_ALPHA > 100 ? 100 : RATE_ALPHA;
+    var _barW_b = RATE_BRAVO > 100 ? 100 : RATE_BRAVO;
+    eu.innerHTML =
+      '<div class="bojang-bar-row" data-life="'+LIFE_ALPHA+'" data-non="'+NON_ALPHA+'" data-lifec="'+LIFEC_ALPHA+'" data-nonc="'+NONC_ALPHA+'" style="margin-bottom:8px;cursor:default">'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+          '<span><span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원</span>'+
+          '<span style="color:var(--text2);font-weight:700">'+RATE_ALPHA+'%</span>'+
+        '</div>'+
+        '<div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden"><div style="width:'+_barW_a+'%;height:100%;background:var(--gold)"></div></div>'+
+      '</div>'+
+      '<div class="bojang-bar-row" data-life="'+LIFE_BRAVO+'" data-non="'+NON_BRAVO+'" data-lifec="'+LIFEC_BRAVO+'" data-nonc="'+NONC_BRAVO+'" style="cursor:default">'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+          '<span><span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원</span>'+
+          '<span style="color:var(--text2);font-weight:700">'+RATE_BRAVO+'%</span>'+
+        '</div>'+
+        '<div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden"><div style="width:'+_barW_b+'%;height:100%;background:#60A5FA"></div></div>'+
+      '</div>';
+    bindBojangBarTooltip();
+  }
   var _hint = document.getElementById('st1-goal-hint');
   if(_hint) _hint.style.display = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? 'block' : 'none';
   var _card = document.getElementById('st1-card');
   if(_card) _card.style.cursor = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? 'pointer' : 'default';
+}
+
+// 보장월초 막대 hover/tap -> 생보/손보 툴팁
+function bindBojangBarTooltip(){
+  var tip = document.getElementById('bojangBarTip');
+  if(!tip){
+    tip = document.createElement('div');
+    tip.id = 'bojangBarTip';
+    tip.style.cssText = 'position:fixed;display:none;background:#1c2230;color:#fff;font-size:12px;line-height:1.7;padding:9px 13px;border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.4);pointer-events:none;z-index:99999;white-space:nowrap;border:1px solid rgba(255,255,255,.08)';
+    document.body.appendChild(tip);
+  }
+  var rows = document.querySelectorAll('.bojang-bar-row');
+  rows.forEach(function(row){
+    function buildTip(){
+      var life = parseInt(row.getAttribute('data-life')) || 0;
+      var non = parseInt(row.getAttribute('data-non')) || 0;
+      var lifec = parseInt(row.getAttribute('data-lifec')) || 0;
+      var nonc = parseInt(row.getAttribute('data-nonc')) || 0;
+      tip.innerHTML =
+        '<span style="color:#FAC775;font-weight:700">생보</span> ' + life.toLocaleString() + '원 / ' + lifec + '건<br>' +
+        '<span style="color:#85B7EB;font-weight:700">손보</span> ' + non.toLocaleString() + '원 / ' + nonc + '건';
+    }
+    function place(x, y){
+      tip.style.display = 'block';
+      var tw = tip.offsetWidth, th = tip.offsetHeight;
+      var lx = x + 14, ly = y + 14;
+      if(lx + tw > window.innerWidth - 8) lx = x - tw - 14;
+      if(ly + th > window.innerHeight - 8) ly = y - th - 14;
+      tip.style.left = lx + 'px';
+      tip.style.top = ly + 'px';
+    }
+    row.addEventListener('mousemove', function(e){
+      e.stopPropagation();
+      buildTip();
+      place(e.clientX, e.clientY);
+    });
+    row.addEventListener('mouseleave', function(){
+      tip.style.display = 'none';
+    });
+    row.addEventListener('click', function(e){
+      e.stopPropagation();
+      buildTip();
+      place(e.clientX || (window.innerWidth/2), e.clientY || (window.innerHeight/2));
+      clearTimeout(tip._t);
+      tip._t = setTimeout(function(){ tip.style.display = 'none'; }, 2200);
+    });
+  });
 }
 
 function showDashboard() {
@@ -3189,7 +3275,7 @@ function showDashboard() {
       fetch(myPerfUrl).then(function(r){return r.json();}).then(function(res){
         if(res && res.ok){
           var e1 = document.getElementById('st1');
-          if(e1) e1.textContent = (res.myAmt||0).toLocaleString() + '원 / ' + (res.myCnt||0) + '건';
+          if(e1) e1.innerHTML = (res.myAmt||0).toLocaleString() + '<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2)">' + (res.myCnt||0) + '건</span>';
           var er = document.getElementById('st1-rate');
           if(er) er.textContent = '';
           var eu = document.getElementById('st1-unit');
@@ -4557,7 +4643,7 @@ function renderPerfTrend(log, now){
 
 // ── FP별 실적 ────────────────────────────────────────
 // 생보/손보 보험사 매핑
-var PERF_LIFE = ['한화생명','라이나','미래에셋','신한라이프','흥국생명','삼성생명','교보','동양생명','농협생명','메트라이프'];
+var PERF_LIFE = ['한화생명','라이나','미래에셋','신한라이프','흥국생명','삼성생명','교보','동양생명','농협생명','메트라이프','DB생명'];
 var PERF_NONLIFE = ['한화손보','현대해상','DB손보','KB손보','메리츠','삼성화재','롯데손보','흥국화재','농협손보','MG손보'];
 function _perfClassify(co){
   var c=(co||'').replace(/\s/g,'');
