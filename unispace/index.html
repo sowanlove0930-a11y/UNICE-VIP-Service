@@ -3105,9 +3105,46 @@ function renderBojangCard() {
   if(_card) _card.style.cursor = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? 'pointer' : 'default';
 }
 
+// FP 화면: getMyPerfSummary 결과로 알파/브라보 막대 렌더 (지점 전체)
+function renderBojangBarsFromSummary(res){
+  var eu = document.getElementById('st1-unit');
+  if(!eu || !res) return;
+  var GOAL_ALPHA = 0, GOAL_BRAVO = 0;
+  try {
+    var _g = JSON.parse(localStorage.getItem('unispace_perf_goal') || '{}');
+    GOAL_ALPHA = parseInt(_g.alpha) || 0;
+    GOAL_BRAVO = parseInt(_g.bravo) || 0;
+    var _gaDb = JSON.parse(localStorage.getItem('unispace_goal_adjust') || '{}');
+    var _gaYmKey = (new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2);
+    var _gaBr = (_gaDb[_gaYmKey] && _gaDb[_gaYmKey].branch) || {};
+    if(_gaBr.al && (_gaBr.al.life || _gaBr.al.non)){ GOAL_ALPHA = (parseInt(_gaBr.al.life)||0)+(parseInt(_gaBr.al.non)||0); }
+    if(_gaBr.br && (_gaBr.br.life || _gaBr.br.non)){ GOAL_BRAVO = (parseInt(_gaBr.br.life)||0)+(parseInt(_gaBr.br.non)||0); }
+  } catch(e) {}
+  var AMT_ALPHA = res.alAmt||0, AMT_BRAVO = res.brAmt||0;
+  var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / GOAL_ALPHA * 100) : 0;
+  var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / GOAL_BRAVO * 100) : 0;
+  var _wa = RATE_ALPHA > 100 ? 100 : RATE_ALPHA;
+  var _wb = RATE_BRAVO > 100 ? 100 : RATE_BRAVO;
+  eu.innerHTML =
+    '<div class="bojang-bar-row" data-life="'+(res.alLife||0)+'" data-non="'+(res.alNon||0)+'" data-lifec="'+(res.alLifeC||0)+'" data-nonc="'+(res.alNonC||0)+'" style="margin-bottom:8px;cursor:default">'+
+      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+        '<span><span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원</span>'+
+        '<span style="color:var(--text2);font-weight:700">'+RATE_ALPHA+'%</span>'+
+      '</div>'+
+      '<div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden"><div style="width:'+_wa+'%;height:100%;background:var(--gold)"></div></div>'+
+    '</div>'+
+    '<div class="bojang-bar-row" data-life="'+(res.brLife||0)+'" data-non="'+(res.brNon||0)+'" data-lifec="'+(res.brLifeC||0)+'" data-nonc="'+(res.brNonC||0)+'" style="cursor:default">'+
+      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+        '<span><span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원</span>'+
+        '<span style="color:var(--text2);font-weight:700">'+RATE_BRAVO+'%</span>'+
+      '</div>'+
+      '<div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden"><div style="width:'+_wb+'%;height:100%;background:#60A5FA"></div></div>'+
+    '</div>';
+  bindBojangBarTooltip();
+}
+
 // 보장월초 막대 hover/tap -> 생보/손보 툴팁
-function bindBojangBarTooltip(){
-  var tip = document.getElementById('bojangBarTip');
+function bindBojangBarTooltip(){  var tip = document.getElementById('bojangBarTip');
   if(!tip){
     tip = document.createElement('div');
     tip.id = 'bojangBarTip';
@@ -3294,6 +3331,8 @@ function showDashboard() {
               er.textContent = '';
             }
           }
+          // 막대: 알파/브라보 지점 전체 (FP도 동일하게 표시)
+          renderBojangBarsFromSummary(res);
         }
       }).catch(function(){});
 
