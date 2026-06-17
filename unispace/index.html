@@ -4707,6 +4707,7 @@ var GOAL_ADJ_KEY = 'unispace_goal_adjust';
 function getGoalAdjDB(){ try{ return JSON.parse(localStorage.getItem(GOAL_ADJ_KEY)||'{}'); }catch(e){ return {}; } }
 function saveGoalAdjDB(db){ localStorage.setItem(GOAL_ADJ_KEY, JSON.stringify(db)); }
 // 지점 월 목표(만원) 읽기 - GAS 연동된 goal_adjust 기준 (전체 공유)
+// goal_adjust의 지점 목표 입력칸은 '원 단위' -> 만원으로 변환
 // 반환: { alpha:만원, bravo:만원 } (월 생보+손보 합)
 function getBranchMonthGoals(){
   var out = { alpha:0, bravo:0 };
@@ -4714,10 +4715,10 @@ function getBranchMonthGoals(){
     var db = getGoalAdjDB();
     var ym = getCurrentYM();
     var br = (db[ym] && db[ym].branch) || {};
-    if(br.al){ out.alpha = (parseInt(br.al.life)||0) + (parseInt(br.al.non)||0); }
-    if(br.br){ out.bravo = (parseInt(br.br.life)||0) + (parseInt(br.br.non)||0); }
+    if(br.al){ out.alpha = Math.round(((parseInt(br.al.life)||0) + (parseInt(br.al.non)||0)) / 10000); }
+    if(br.br){ out.bravo = Math.round(((parseInt(br.br.life)||0) + (parseInt(br.br.non)||0)) / 10000); }
   }catch(e){}
-  // 폴백: 구버전 unispace_perf_goal
+  // 폴백: 구버전 unispace_perf_goal (이미 만원 단위)
   if(!out.alpha && !out.bravo){
     try{ var g=JSON.parse(localStorage.getItem('unispace_perf_goal')||'{}'); out.alpha=parseInt(g.alpha)||0; out.bravo=parseInt(g.bravo)||0; }catch(e){}
   }
@@ -8961,7 +8962,10 @@ var LATE_HOUR = 10, LATE_MIN = 11; // 10:11:00 이후 지각
 // 관리자 4명 판정 (대표 + 알파/브라보 지점장 + 교육지점장)
 function _isManagerUser(u) {
   if (!u) return false;
+  if (u.id === 'ktk01') return true; // 대표 (level 누락 대비 failsafe)
   if (u.role === '대표' || u.role === '지점장') return true;
+  if (u.level === 'admin' || u.level === 'manager') return true; // GAS level 기준
+  if ((u.title || '') === '지점장') return true;
   if (u.id === 'H2503162') return true; // 교육지점장 최성경
   if (u.branch && u.branch.indexOf('교육') >= 0) return true;
   return false;
@@ -8988,6 +8992,7 @@ function _reportScope(u) {
 
 function _isCheckinExempt(u) {
   if (!u) return false;
+  if (_isManagerUser(u)) return true; // 대표/지점장/교육지점장 (role 기준 포함)
   if (u.level === 'admin' || u.level === 'manager') return true;
   if (u.branch && u.branch.indexOf('교육') === 0) return true;
   if (u.id === 'H2503162') return true;
