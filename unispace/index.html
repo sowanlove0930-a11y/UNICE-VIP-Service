@@ -155,6 +155,7 @@ body::after {
 .stats-bar {
   display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 12px; margin-bottom: 32px;
+  align-items: end;
   animation: fadeUp 0.5s 0.1s ease both;
 }
 .stat {
@@ -2257,13 +2258,14 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
   <div class="stats-bar">
 
     <!-- 1번: 보장월초 -->
-    <div class="stat s-gold">
+    <div class="stat s-gold" id="st1-card" onclick="onBojangCardClick()" style="cursor:pointer;position:relative">
       <div class="stat-lbl" id="st1-lbl">이번 달 보장월초 및 건수</div>
       <div style="display:flex;align-items:baseline;gap:8px">
         <div class="stat-val" id="st1">—</div>
         <div id="st1-rate" style="font-size:14px;font-weight:800;color:var(--gold2)"></div>
       </div>
       <div class="stat-unit" id="st1-unit"></div>
+      <div id="st1-goal-hint" style="display:none;position:absolute;top:12px;right:14px;font-size:11px;font-weight:700;color:var(--gold2);opacity:.8">🎯 목표 설정</div>
     </div>
 
     <!-- 2번: 신규 계약고객 (대표/지점장) / 내 고객 수 (FP) -->
@@ -3055,6 +3057,10 @@ function renderBojangCard() {
   if(eu) eu.innerHTML =
     '<span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원 '+RATE_ALPHA+'%&nbsp;&nbsp;'+
     '<span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원 '+RATE_BRAVO+'%';
+  var _hint = document.getElementById('st1-goal-hint');
+  if(_hint) _hint.style.display = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? 'block' : 'none';
+  var _card = document.getElementById('st1-card');
+  if(_card) _card.style.cursor = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? 'pointer' : 'default';
 }
 
 function showDashboard() {
@@ -4834,6 +4840,21 @@ function openGoalAdj(){
   _gaRenderFpList();
   _gaUpdateSum();
   document.getElementById('goalAdjOverlay').classList.add('open');
+}
+// 보장월초 카드 클릭 -> 대표/지점장이면 목표 설정 모달 열기
+function onBojangCardClick(){
+  if(!_isManagerUser(currentUser)) return; // FP는 목표 설정 권한 없음
+  openGoalAdj();
+  if(typeof loadGoalAdjFromGas === 'function'){
+    loadGoalAdjFromGas(function(){
+      var ov = document.getElementById('goalAdjOverlay');
+      if(ov && ov.classList.contains('open')){
+        if(typeof _gaRenderBranchGoal==='function') _gaRenderBranchGoal();
+        if(typeof _gaRenderFpList==='function') _gaRenderFpList();
+        if(typeof _gaUpdateSum==='function') _gaUpdateSum();
+      }
+    });
+  }
 }
 function closeGoalAdj(){ document.getElementById('goalAdjOverlay').classList.remove('open'); }
 function _gaSetBranch(b){ _gaBranch=b; _gaRenderTabs(); _gaRenderBranchGoal(); _gaRenderFpList(); _gaUpdateSum(); }
