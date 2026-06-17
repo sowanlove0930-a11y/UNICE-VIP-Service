@@ -926,6 +926,16 @@ html, body {
     return;
   }
 
+  // UNISPACE에서 사번을 넘겨주면 비번 게이트 자동 통과
+  try{
+    var qp = new URLSearchParams(location.search);
+    if(qp.get('fp')){
+      try{ sessionStorage.setItem(SK,'ok'); }catch(e){}
+      gate.style.display = 'none';
+      return;
+    }
+  }catch(e){}
+
   try{
     if(sessionStorage.getItem(SK) === 'ok'){
       gate.style.display = 'none';
@@ -4100,6 +4110,29 @@ html, body {
         </div>
       </div>
 
+      <!-- 연락처 / 생년월일 / 주소 (UNISPACE 고객등록용) -->
+      <div style="display:grid; grid-template-columns:1fr 140px; gap:14px; margin-bottom:14px;">
+        <div>
+          <div style="font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; letter-spacing:0.3px;">연락처</div>
+          <input id="wu-phone" type="tel" placeholder="010-0000-0000"
+            style="width:100%; background:var(--card); border:1.5px solid var(--border); border-radius:12px; color:var(--text); font-family:inherit; font-size:16px; font-weight:700; padding:14px 18px; outline:none; box-sizing:border-box;"
+            onfocus="this.style.borderColor='rgba(232,160,32,0.5)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div>
+          <div style="font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; letter-spacing:0.3px;">생년월일 (선택)</div>
+          <input id="wu-birth" type="text" inputmode="numeric" placeholder="1985-03-21" maxlength="10"
+            style="width:100%; background:var(--card); border:1.5px solid var(--border); border-radius:12px; color:var(--text); font-family:inherit; font-size:15px; font-weight:700; padding:14px 14px; outline:none; box-sizing:border-box;"
+            oninput="wuBirthFmt(this)"
+            onfocus="this.style.borderColor='rgba(232,160,32,0.5)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; letter-spacing:0.3px;">주소 (선택)</div>
+        <input id="wu-addr" type="text" placeholder="예) 부산 해운대구 우동"
+          style="width:100%; background:var(--card); border:1.5px solid var(--border); border-radius:12px; color:var(--text); font-family:inherit; font-size:16px; font-weight:700; padding:14px 18px; outline:none; box-sizing:border-box;"
+          onfocus="this.style.borderColor='rgba(232,160,32,0.5)'" onblur="this.style.borderColor='var(--border)'">
+      </div>
+
       <!-- 다음 미팅 일정 -->
       <div style="flex-shrink:0;">
         <div style="font-size:13px; font-weight:700; color:var(--muted); letter-spacing:0.5px; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
@@ -4354,7 +4387,8 @@ html, body {
 
 <script>
 // ═══════════ STATE ═══════════
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz-dRaZ-4A-bH-TfbP26vcp3-wCHmn4n-_UdMi4G6ll7t6P-0qPTUSYVuYlNHzcxDUgag/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxUV1hWON8AwrcJATOTeN3hqR9FffP5JWvpPYy65byjKpploZW2lVddP9S6xtuxle5EAA/exec';
+const UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 
 let state = {
   currentScreen: 0,
@@ -7687,6 +7721,7 @@ async function manualSave(){
       fetch(APPS_SCRIPT_URL + '?' + p2.toString()).catch(()=>{});
       showToast('✅ 저장 완료! 언제든 다시 꺼내볼 수 있어요', 3000);
       if(btn){ btn.innerHTML='<span style="font-size:22px;">✅</span> 저장 완료'; btn.style.borderColor='rgba(82,183,136,0.9)'; btn.disabled=false; }
+      registerToUnispace(d.name);
     } else { throw new Error(data.msg || '저장 실패'); }
   }catch(e){
     if(location.protocol === 'file:'){
@@ -7705,6 +7740,105 @@ async function saveConsultation(name,monthly,pension,gap,lpct,products,saving,me
     fetch(APPS_SCRIPT_URL+'?'+p.toString()).catch(()=>{});
   }catch(e){}
 }
+
+// birth date auto hyphen (YYYY-MM-DD)
+function wuBirthFmt(el){
+  var v = el.value.replace(/[^0-9]/g,'');
+  if(v.length > 8) v = v.slice(0,8);
+  if(v.length <= 4) el.value = v;
+  else if(v.length <= 6) el.value = v.slice(0,4) + '-' + v.slice(4);
+  else el.value = v.slice(0,4) + '-' + v.slice(4,6) + '-' + v.slice(6,8);
+}
+
+// register customer to UNISPACE CRM - show custom confirm modal first
+function registerToUnispace(name){
+  try{
+    var fpCode = getActiveFpCode();
+    if(!fpCode) return;
+    var phoneEl = document.getElementById('wu-phone');
+    var phone = phoneEl ? phoneEl.value : '';
+    if(!name || !phone) return;
+    showUniConfirm(name);
+  }catch(uerr){}
+}
+
+// actual registration after user confirms
+function doRegisterToUnispace(name){
+  try{
+    var fpCode = getActiveFpCode();
+    if(!fpCode) return;
+    var phoneEl = document.getElementById('wu-phone');
+    var phone = phoneEl ? phoneEl.value : '';
+    if(!name || !phone) return;
+
+    var birthEl = document.getElementById('wu-birth');
+    var addrEl = document.getElementById('wu-addr');
+    var noteEl = document.getElementById('wu-note');
+    var memoParts = ['노후파이 상담'];
+    if(noteEl && noteEl.value) memoParts.push(noteEl.value);
+
+    var cust = {
+      fpCode: fpCode,
+      name: name,
+      phone: phone,
+      customerType: '\uAD00\uB9AC',
+      memo: memoParts.join('\n')
+    };
+    if(birthEl && birthEl.value) cust.birth = birthEl.value;
+    if(addrEl && addrEl.value) cust.address = addrEl.value;
+    var body = JSON.stringify({ action:'bulkAddCustomers', customers:[cust] });
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: body
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(dd){
+      if(dd && dd.ok){
+        if(dd.added > 0) showToast('\uD83D\uDCC7 \uC720\uB2C8\uC2A4\uD398\uC774\uC2A4 \uACE0\uAC1D \uB4F1\uB85D \uC644\uB8CC', 2500);
+        else if(dd.skipped > 0) showToast('\uD83D\uDCC7 \uC774\uBBF8 \uB4F1\uB85D\uB41C \uACE0\uAC1D\uC785\uB2C8\uB2E4', 2500);
+      }
+    })
+    .catch(function(){});
+  }catch(uerr){}
+}
+
+// custom confirm modal for UNISPACE registration
+function showUniConfirm(name){
+  var old = document.getElementById('uniConfirmOverlay');
+  if(old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'uniConfirmOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999999;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:linear-gradient(160deg,#1c2230,#141925);border:1px solid rgba(232,160,32,0.3);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-width:340px;width:100%;padding:28px 24px 22px;text-align:center;';
+  var safeName = String(name || '\uACE0\uAC1D').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  box.innerHTML =
+    '<div style="font-size:34px;margin-bottom:14px;">\uD83D\uDCC7</div>'
+    + '<div style="font-size:17px;font-weight:800;color:#fff;line-height:1.5;margin-bottom:8px;">' + safeName + '\uB2D8\uC744<br>\uC720\uB2C8\uC2A4\uD398\uC774\uC2A4\uC5D0 \uB4F1\uB85D\uD560\uAE4C\uC694?</div>'
+    + '<div style="font-size:12.5px;color:rgba(255,255,255,0.45);line-height:1.5;margin-bottom:22px;">\uACE0\uAC1D\uAD00\uB9AC \uBA85\uB2E8\uC5D0 \uC790\uB3D9 \uC800\uC7A5\uB429\uB2C8\uB2E4</div>'
+    + '<div style="display:flex;gap:10px;">'
+    + '<button id="uniConfirmNo" type="button" style="flex:1;padding:14px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.7);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;">\uB098\uC911\uC5D0</button>'
+    + '<button id="uniConfirmYes" type="button" style="flex:1.3;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,#E8A020,#d4840a);color:#0C1628;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer;">\uB4F1\uB85D\uD558\uAE30</button>'
+    + '</div>';
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  var closeModal = function(){
+    var ov = document.getElementById('uniConfirmOverlay');
+    if(ov) ov.remove();
+  };
+  var yesBtn = document.getElementById('uniConfirmYes');
+  var noBtn = document.getElementById('uniConfirmNo');
+  if(yesBtn) yesBtn.addEventListener('click', function(){
+    closeModal();
+    doRegisterToUnispace(name);
+  });
+  if(noBtn) noBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', function(ev){
+    if(ev.target === overlay) closeModal();
+  });
+}
+
 
 async function loadCustomer(){
   const name = document.getElementById('searchName').value.trim();
