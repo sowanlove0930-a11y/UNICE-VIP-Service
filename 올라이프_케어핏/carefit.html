@@ -1404,6 +1404,23 @@ input[type="date"]::-webkit-datetime-edit { color: var(--text); }
           </div>
         </div>
 
+        <!-- 생년월일 / 주소 (유니스페이스 등록용, 선택입력) -->
+        <div style="display:grid;grid-template-columns:140px 1fr;gap:14px;margin-bottom:14px;">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:0.5px;">생년월일 <span style="color:var(--muted);font-weight:500;">(선택)</span></div>
+            <input id="wu-birth" type="text" inputmode="numeric" placeholder="1985-03-21" autocomplete="off" maxlength="10"
+              style="width:100%;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:12px;color:var(--text);font-family:inherit;font-size:15px;font-weight:700;padding:13px 16px;outline:none;box-sizing:border-box;"
+              onfocus="this.style.borderColor='rgba(232,88,12,0.5)'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'"
+              oninput="wuBirthFmt(this)">
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:0.5px;">주소 <span style="color:var(--muted);font-weight:500;">(선택)</span></div>
+            <input id="wu-addr" type="text" placeholder="예) 부산 해운대구 우동" autocomplete="off"
+              style="width:100%;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:12px;color:var(--text);font-family:inherit;font-size:15px;font-weight:700;padding:13px 16px;outline:none;box-sizing:border-box;"
+              onfocus="this.style.borderColor='rgba(232,88,12,0.5)'" onblur="this.style.borderColor='rgba(255,255,255,0.12)'">
+          </div>
+        </div>
+
         <!-- 다음 미팅 일정 -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;position:relative;">
           <div style="background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px 18px;cursor:pointer;" onclick="document.getElementById('wu-date').showPicker ? document.getElementById('wu-date').showPicker() : document.getElementById('wu-date').click()">
@@ -1476,6 +1493,7 @@ input[type="date"]::-webkit-datetime-edit { color: var(--text); }
 
 // ── GAS URL ──
 var CAREFIT_GAS_URL = 'https://script.google.com/macros/s/AKfycby_ZErV9OS8WCCPY-kJArhooD8eAirTMzw1IykqmM0_FbG7f66yipCoosrpDyNlYHFDbg/exec';
+var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 
 
 // ── 토스트 메시지 ──
@@ -4851,6 +4869,15 @@ document.addEventListener('input', function(e) {
   }
 });
 
+// birth date auto hyphen (YYYY-MM-DD)
+function wuBirthFmt(el) {
+  var v = el.value.replace(/[^0-9]/g, '');
+  if (v.length > 8) v = v.slice(0, 8);
+  if (v.length <= 4) el.value = v;
+  else if (v.length <= 6) el.value = v.slice(0,4) + '-' + v.slice(4);
+  else el.value = v.slice(0,4) + '-' + v.slice(4,6) + '-' + v.slice(6,8);
+}
+
 // ── 커스텀 타임피커 ──────────────────────────────────────
 var wuTimeSel = { h: null, m: null };
 
@@ -5281,6 +5308,7 @@ async function s5Save() {
     if(data.ok || data.result === 'success') {
       showToast('✅ 저장 완료!', 3000);
       if(btn) { btn.innerHTML = '<span style="font-size:22px;">✅</span> 저장 완료'; btn.style.borderColor='rgba(58,184,122,0.7)'; btn.disabled = false; }
+      registerToUnispace(name);
     } else { throw new Error(data.msg || '저장 실패'); }
   } catch(e) {
     if(location.protocol === 'file:') {
@@ -5290,6 +5318,74 @@ async function s5Save() {
     }
     if(btn) { btn.innerHTML = '<span style="font-size:22px;">💾</span> 다시 저장하기'; btn.disabled = false; }
   }
+}
+
+// register customer to UNISPACE CRM (POST bulkAddCustomers, duplicate phone auto-skip on GAS side)
+function registerToUnispace(name) {
+  try {
+    if (!state.fpCode) return;
+    var phoneEl = document.getElementById('wu-phone');
+    var phone = phoneEl ? phoneEl.value : '';
+    if (!name || !phone) return;
+
+    if (!window.confirm('\uC774 \uACE0\uAC1D\uC744 \uC720\uB2C8\uC2A4\uD398\uC774\uC2A4\uC5D0 \uB4F1\uB85D\uD560\uAE4C\uC694?')) return;
+
+    var birthEl = document.getElementById('wu-birth');
+    var addrEl = document.getElementById('wu-addr');
+    var noteEl = document.getElementById('wu-note');
+    var refNameEl = document.getElementById('ref-name');
+    var refAgeEl = document.getElementById('ref-age');
+    var memoParts = ['\uCF00\uC5B4\uD54B \uC0C1\uB2F4'];
+    if (noteEl && noteEl.value) memoParts.push(noteEl.value);
+    if (refNameEl && refNameEl.value) {
+      var refLine = '\uC18C\uAC1C\uC778: ' + refNameEl.value;
+      if (refAgeEl && refAgeEl.value) refLine += ' (' + refAgeEl.value + '\uC138)';
+      memoParts.push(refLine);
+    }
+    try {
+      if (typeof cfGetFamilyData === 'function') {
+        var fam = cfGetFamilyData();
+        if (fam && fam.length) {
+          var famLines = [];
+          for (var fi = 0; fi < fam.length; fi++) {
+            var fm = fam[fi];
+            if (!fm) continue;
+            if (!fm.name && !fm.phone) continue;
+            var fline = '- ' + (fm.rel || '') + ' ' + (fm.name || '');
+            if (fm.phone) fline += ' (' + fm.phone + ')';
+            famLines.push(fline);
+          }
+          if (famLines.length) {
+            memoParts.push('\uD568\uAED8 \uC810\uAC80 \uAC00\uC871:');
+            memoParts.push(famLines.join('\n'));
+          }
+        }
+      }
+    } catch(ferr) {}
+    var cust = {
+      fpCode: state.fpCode,
+      name: name,
+      phone: phone,
+      customerType: '\uAD00\uB9AC',
+      memo: memoParts.join('\n')
+    };
+    if (birthEl && birthEl.value) cust.birth = birthEl.value;
+    if (addrEl && addrEl.value) cust.address = addrEl.value;
+    var body = JSON.stringify({ action: 'bulkAddCustomers', customers: [cust] });
+    fetch(UNISPACE_GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: body
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d && d.ok) {
+        if (d.added > 0) showToast('\uD83D\uDCC7 \uC720\uB2C8\uC2A4\uD398\uC774\uC2A4 \uACE0\uAC1D \uB4F1\uB85D \uC644\uB8CC', 2500);
+        else if (d.skipped > 0) showToast('\uD83D\uDCC7 \uC774\uBBF8 \uB4F1\uB85D\uB41C \uACE0\uAC1D\uC785\uB2C8\uB2E4', 2500);
+      }
+    })
+    .catch(function(){});
+  } catch(uerr) {}
 }
 
 // ── 전환 오버레이 메시지 ──────────────────────────────────
