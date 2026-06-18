@@ -920,40 +920,41 @@ function loadWeekActCal(){
     if(res && res.ok && res.plans){
       var db={}; try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
       var ms=_ymd(wi.mon), ss=_ymd(wi.sun);
-      // GAS에 실제 존재하는 (고객명+날짜) 집합
-      var gasSet={};
-      res.plans.forEach(function(pl){
-        (pl.customers||[]).forEach(function(c){
-          if(c && c.date) gasSet[(c.name||'')+'|'+(c.date||'')]=true;
-        });
-      });
-      // 이번주 _fromPlan 유령 제거 (GAS에 없는데 로컬에만 남은 것)
+      var myId=String(currentUser.id||'').toLowerCase();
+      // 이전 버전이 만든 임시 plan_ 기록은 제거한다.
+      // 활동계획과 대시보드는 act_plan_ 하나의 ID 규칙만 사용한다.
       Object.keys(db).forEach(function(k){
         var a=db[k];
-        if(a && a._fromPlan && a.fpId===currentUser.id && a.date>=ms && a.date<=ss){
-          if(!gasSet[(a.customerName||'')+'|'+(a.date||'')]) delete db[k];
-        }
+        if(!a || !a._fromPlan) return;
+        if(String(a.fpId||'').toLowerCase()!==myId) return;
+        if(a.date>=ms && a.date<=ss) delete db[k];
       });
-      // 이미 로컬(syncAllToActivities)에 있는 (고객명+날짜) 조합은 GAS 머지에서 제외 (중복 방지)
+      // 이미 로컬(syncAllToActivities)에 있는 계획은 GAS 머지에서 다시 만들지 않는다.
       var existKeys={};
       Object.keys(db).forEach(function(k){
         var a=db[k];
-        if(a && a.fpId===currentUser.id && a.customerName && a.date){
-          existKeys[(a.customerName||'')+'|'+(a.date||'')]=true;
+        if(a && String(a.fpId||'').toLowerCase()===myId && a.customerName && a.date){
+          existKeys[(a.customerName||'')+'|'+(a.date||'')+'|'+(a.time||'')]=true;
         }
       });
       res.plans.forEach(function(pl){
-        var custs=pl.customers||[];
-        custs.forEach(function(c){
-          if(!c || !c.date) return;
-          var dupKey=(c.name||'')+'|'+(c.date||'');
-          if(existKeys[dupKey]) return; // 로컬에 이미 있음 -> 건너뜀
-          var aid='plan_'+pl.fpId+'_'+(c.id||(c.name+'_'+c.date+'_'+(c.time||'')));
+        var planFp=String(pl.fpId||'');
+        var planKey=pl.weekKey||wi.key;
+        var planCustomers=pl.customers||[];
+        planCustomers.forEach(function(c, idx){
+          if(!c || !c.date || !(c.name||'').trim()) return;
+          var dupKey=(c.name||'')+'|'+(c.date||'')+'|'+(c.time||'');
+          if(existKeys[dupKey]) return;
+          var aid='act_plan_'+planKey+'_'+planFp+'_'+idx;
           db[aid]={
-            id:aid, fpId:pl.fpId, fpName:pl.name, branch:pl.branch,
+            id:aid, fpId:planFp, fpName:pl.name, branch:pl.branch,
             date:c.date, time:c.time||'', endTime:c.endTime||'',
-            type:c.chasu||c.type||'', customerName:c.name||'', place:c.place||'',
-            tags:c.tags||[], status:c.status||'예정', _fromPlan:true
+            type:c.chasu ? c.chasu+' 상담' : (c.type||((c.tags&&c.tags.length)?c.tags[0]:'상담')),
+            customerName:c.name||'', place:c.place||'',
+            tags:c.tags||[], status:c.status||'진행중',
+            planTags:c.tags||[], planProducts:c.products||[],
+            planKey:planKey, planCustIdx:idx, _fromPlan:true,
+            createdAt:pl.updatedAt||new Date().toISOString()
           };
           existKeys[dupKey]=true;
         });

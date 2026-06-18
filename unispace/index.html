@@ -2749,6 +2749,16 @@ function _planCustToAct(c, idx, planKey, plan){
     createdAt:(plan.updatedAt||new Date().toISOString())
   };
 }
+// plan activity fingerprint. Used to remove legacy temporary plan records before merging.
+function _planActKey(fpId, name, date, time){
+  return String(fpId||'').toLowerCase()+'|'+String(name||'').trim()+'|'+String(date||'')+'|'+String(time||'');
+}
+function _isPlanOriginAct(a, id){
+  if(!a) return false;
+  if(a.planKey || a._fromPlan) return true;
+  var s=String(id||a.id||'');
+  return s.indexOf('act_plan_')===0 || s.indexOf('plan_')===0;
+}
 // merge plans array into unispace_activities (replace only this planKey portion)
 function _mergePlansToActivities(plans, planKeyFilter){
   // cache FP plan goals (month/week life and non) for goal-adjust screen
@@ -2761,16 +2771,38 @@ function _mergePlansToActivities(plans, planKeyFilter){
     });
     localStorage.setItem('unispace_plan_goals', JSON.stringify(pg));
   }catch(e){}
+
   var db={};
   try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  var incoming={};
+  (plans||[]).forEach(function(pl){
+    if(!pl || !pl.fpId) return;
+    var pk=pl.weekKey||'';
+    if(planKeyFilter && pk!==planKeyFilter) return;
+    (pl.customers||[]).forEach(function(c){
+      if(!c || !c.date || !(c.name||'').trim()) return;
+      incoming[_planActKey(pl.fpId, c.name, c.date, c.time)]=true;
+    });
+  });
+
   var prevCreated={};
+  var prevCreatedByKey={};
   Object.keys(db).forEach(function(k){
     var a=db[k];
-    if(!a || !a.planKey) return;
+    if(!a) return;
+    var sig=_planActKey(a.fpId, a.customerName, a.date, a.time);
+    // 기존 버전의 plan_ 임시 기록과 키가 달라진 act_plan_ 기록을 모두 정리한다.
+    if(_isPlanOriginAct(a, k) && incoming[sig]){
+      if(a.createdAt) prevCreatedByKey[sig]=a.createdAt;
+      delete db[k];
+      return;
+    }
+    if(!a.planKey) return;
     if(planKeyFilter && a.planKey!==planKeyFilter) return;
     prevCreated[k]=a.createdAt;
     delete db[k];
   });
+
   (plans||[]).forEach(function(pl){
     if(!pl || !pl.fpId) return;
     var pk=pl.weekKey;
@@ -2778,7 +2810,9 @@ function _mergePlansToActivities(plans, planKeyFilter){
     (pl.customers||[]).forEach(function(c, idx){
       if(!c || !c.date || !(c.name||'').trim()) return;
       var act=_planCustToAct(c, idx, pk, pl);
+      var sig=_planActKey(pl.fpId, c.name, c.date, c.time);
       if(prevCreated[act.id]) act.createdAt=prevCreated[act.id];
+      else if(prevCreatedByKey[sig]) act.createdAt=prevCreatedByKey[sig];
       db[act.id]=act;
     });
   });
