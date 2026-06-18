@@ -1031,21 +1031,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
     <!-- 고객 통계 -->
     <div class="customer-stats">
-      <div class="cstat cstat-all" onclick="setFilter('all', document.querySelector('.filter-chip.active, .filter-chip'))">
+      <div class="cstat cstat-all" onclick="clearAllFilters()">
         <div class="cstat-icon">👥</div>
         <div class="cstat-info">
           <div class="cstat-label">전체 고객</div>
           <div class="cstat-value" id="statAll">0</div>
         </div>
       </div>
-      <div class="cstat cstat-contract" onclick="setFilter('계약', document.querySelectorAll('.filter-chip')[1])">
+      <div class="cstat cstat-contract" onclick="setOnlyType('계약')">
         <div class="cstat-icon">✅</div>
         <div class="cstat-info">
           <div class="cstat-label">계약 고객</div>
           <div class="cstat-value" id="statContract">0</div>
         </div>
       </div>
-      <div class="cstat cstat-manage" onclick="setFilter('관리', document.querySelectorAll('.filter-chip')[2])">
+      <div class="cstat cstat-manage" onclick="setOnlyType('관리')">
         <div class="cstat-icon">👤</div>
         <div class="cstat-info">
           <div class="cstat-label">관리 고객</div>
@@ -1068,7 +1068,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <div id="branchFpTabs" style="display:none;flex-direction:column;gap:8px;padding:8px 14px;margin-bottom:2px"></div>
         <div class="filter-trow">
           <span class="filter-rlabel frl-all">전체</span>
-          <div class="filter-chip chip-all active" onclick="setFilter('all',this)">전체 보기</div>
+          <div class="filter-chip chip-all active" onclick="clearAllFilters(this)">전체 보기</div>
           <div class="view-toggle" style="margin-left:auto;">
             <button class="view-btn" id="btnCard" onclick="setView('card')">⊞ 카드</button>
             <button class="view-btn active" id="btnList" onclick="setView('list')">≡ 리스트</button>
@@ -1076,22 +1076,23 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         </div>
         <div class="filter-trow">
           <span class="filter-rlabel frl-type">유형</span>
-          <div class="filter-chip chip-type" onclick="setFilter('계약',this)">계약고객</div>
-          <div class="filter-chip chip-type" onclick="setFilter('관리',this)">관리고객</div>
+          <div class="filter-chip chip-type" onclick="toggleFilter('type','계약',this)">계약고객</div>
+          <div class="filter-chip chip-type" onclick="toggleFilter('type','관리',this)">관리고객</div>
           <span class="filter-vsep"></span>
           <span class="filter-rlabel frl-grade">등급</span>
-          <div class="filter-chip chip-grade" onclick="setFilter('VIP',this)">VIP</div>
-          <div class="filter-chip chip-grade" onclick="setFilter('우량',this)">우량</div>
-          <div class="filter-chip chip-grade" onclick="setFilter('일반',this)">일반</div>
+          <div class="filter-chip chip-grade" onclick="toggleFilter('grade','VIP',this)">VIP</div>
+          <div class="filter-chip chip-grade" onclick="toggleFilter('grade','우량',this)">우량</div>
+          <div class="filter-chip chip-grade" onclick="toggleFilter('grade','일반',this)">일반</div>
         </div>
         <div class="filter-trow">
           <span class="filter-rlabel frl-attr">속성</span>
-          <div class="filter-chip chip-attr" onclick="setFilter('가족',this)">가족</div>
-          <div class="filter-chip chip-attr" onclick="setFilter('지인',this)">지인</div>
-          <div class="filter-chip chip-attr" onclick="setFilter('히든',this)">히든</div>
-          <div class="filter-chip chip-attr" onclick="setFilter('DB',this)">DB</div>
-          <div class="filter-chip chip-attr" onclick="setFilter('소개',this)">소개</div>
-          <div class="filter-chip chip-attr" onclick="setFilter('기타',this)">기타</div>
+          <div class="filter-chip chip-attr" id="attrChip-가족" onclick="toggleFilter('attr','가족',this)">가족</div>
+          <div class="filter-chip chip-attr" id="attrChip-지인" onclick="toggleFilter('attr','지인',this)">지인</div>
+          <div class="filter-chip chip-attr" id="attrChip-히든" onclick="toggleFilter('attr','히든',this)">히든</div>
+          <div class="filter-chip chip-attr" id="attrChip-DB" onclick="toggleFilter('attr','DB',this)">DB</div>
+          <div class="filter-chip chip-attr" id="attrChip-소개" onclick="toggleFilter('attr','소개',this)">소개</div>
+          <div class="filter-chip chip-attr" id="attrChip-기타" onclick="toggleFilter('attr','기타',this)">기타</div>
+          <div class="filter-chip chip-attr" id="attrChip-미분류" onclick="toggleFilter('attr','미분류',this)">미분류</div>
         </div>
       </div>
 
@@ -2261,11 +2262,34 @@ function setView(v) {
   renderCustomerList();
 }
 
-function setFilter(f, el) {
-  currentFilter = f;
-  document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); });
-  el.classList.add('active');
+// 다중 토글 필터: 카테고리별 Set (같은 줄=OR, 다른 줄=AND)
+var _filterSets = { type:{}, grade:{}, attr:{} };
+function _filterActive(cat, val){ return !!_filterSets[cat][val]; }
+function _anyFilterOn(){
+  return Object.keys(_filterSets.type).length || Object.keys(_filterSets.grade).length || Object.keys(_filterSets.attr).length;
+}
+function toggleFilter(cat, val, el){
+  if(_filterSets[cat][val]){ delete _filterSets[cat][val]; if(el) el.classList.remove('active'); }
+  else { _filterSets[cat][val]=true; if(el) el.classList.add('active'); }
+  _syncAllChip();
   renderCustomerList();
+}
+function clearAllFilters(el){
+  _filterSets = { type:{}, grade:{}, attr:{} };
+  document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); });
+  var allChip = document.querySelector('.chip-all'); if(allChip) allChip.classList.add('active');
+  renderCustomerList();
+}
+function setOnlyType(t){
+  _filterSets = { type:{}, grade:{}, attr:{} };
+  _filterSets.type[t] = true;
+  document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); });
+  document.querySelectorAll('.chip-type').forEach(function(c){ if(c.textContent.indexOf(t)>=0) c.classList.add('active'); });
+  renderCustomerList();
+}
+function _syncAllChip(){
+  var allChip = document.querySelector('.chip-all');
+  if(allChip){ if(_anyFilterOn()) allChip.classList.remove('active'); else allChip.classList.add('active'); }
 }
 
 var _custBranch = 'all';
@@ -2331,10 +2355,19 @@ function renderBranchFpTabs(){
   var cntMap={};
   DB.forEach(function(c){ var n=c.fpName||c.fp||''; if(n) cntMap[n]=(cntMap[n]||0)+1; });
   fps.sort(function(a,b){ return String(a.name).localeCompare(String(b.name),'ko'); });
-  var totalCust=0; for(var ck in cntMap) totalCust+=cntMap[ck];
+  // 현재 지점 필터에 속한 FP들의 고객만 합산 (전체 라벨 숫자)
+  var fpNameSet={}; fps.forEach(function(f){ fpNameSet[f.name]=true; });
+  var totalCust=0;
+  DB.forEach(function(c){
+    var n=c.fpName||c.fp||'';
+    if(_custBranch!=='all'){ if(_custBranchKey(c.branch)!==_custBranch) return; }
+    else if(scope!=='all'){ if(_custBranchKey(c.branch)!==scope) return; }
+    totalCust++;
+  });
   var fh='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text2);font-weight:700;width:38px;flex-shrink:0">FP</span>';
+  var allLabel = (_custBranch!=='all') ? (_custBranch+' 전체 FP') : '전체 FP';
   fh+='<select id="custFpSelect" onchange="setCustFp(this.value)" style="font-size:13px;font-weight:600;padding:7px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surface);color:var(--text);font-family:inherit;min-width:200px;cursor:pointer">';
-  fh+='<option value="all"'+(_custFp==='all'?' selected':'')+'>전체 FP ('+totalCust+'명)</option>';
+  fh+='<option value="all"'+(_custFp==='all'?' selected':'')+'>'+allLabel+' ('+totalCust+'명)</option>';
   fps.forEach(function(f){
     var nm=f.name; var cnt=cntMap[nm]||0;
     fh+='<option value="'+nm+'"'+(_custFp===nm?' selected':'')+'>'+nm+' ('+cnt+'명)</option>';
@@ -2346,16 +2379,59 @@ function renderBranchFpTabs(){
 function setCustBranch(b){ _custBranch=b; _custFp='all'; renderBranchFpTabs(); renderCustomerList(); }
 function setCustFp(n){ _custFp=n; renderBranchFpTabs(); renderCustomerList(); }
 
+// 속성 칩에 현재 지점/FP 필터 기준 고객 수 표기
+function _updateAttrCounts(){
+  var attrs=['가족','지인','히든','DB','소개','기타'];
+  var cnt={}; attrs.forEach(function(a){ cnt[a]=0; }); cnt['미분류']=0;
+  var scope=_custScope();
+  var typeKeys = Object.keys(_filterSets.type);
+  var gradeKeys = Object.keys(_filterSets.grade);
+  DB.forEach(function(c){
+    if(_custBranch!=='all'){ if(_custBranchKey(c.branch)!==_custBranch) return; }
+    else if(scope!=='all'){ if(_custBranchKey(c.branch)!==scope) return; }
+    if(_custFp!=='all'){ var n=c.fpName||c.fp||''; if(n!==_custFp) return; }
+    var cType = c.customerType || '계약';
+    if(typeKeys.length && typeKeys.indexOf(cType) < 0) return;
+    if(gradeKeys.length && gradeKeys.indexOf(c.grade) < 0) return;
+    var ch=String(c.channel||'').trim();
+    if(cnt.hasOwnProperty(ch)) cnt[ch]++;
+    else cnt['미분류']++;
+  });
+  attrs.push('미분류');
+  attrs.forEach(function(a){
+    var el=document.getElementById('attrChip-'+a);
+    if(el) el.textContent = a + ' (' + cnt[a] + ')';
+  });
+}
+
 function renderCustomerList() {
   updateCustomerStats();
   renderBranchFpTabs();
+  if(typeof _updateAttrCounts==='function') _updateAttrCounts();
   var q = (document.getElementById('searchInput') ? document.getElementById('searchInput').value : '').toLowerCase();
   var list = DB.filter(function(c){
     var cType     = c.customerType || '계약';
-    var matchType = currentFilter === 'all' ||
-                    c.grade === currentFilter ||
-                    c.channel === currentFilter ||
-                    cType === currentFilter;
+    var _attrList = ['가족','지인','히든','DB','소개','기타'];
+    var _ch       = String(c.channel||'').trim();
+    var _isUnclassified = (_attrList.indexOf(_ch) < 0);
+
+    // 유형 (같은 줄 OR)
+    var typeKeys = Object.keys(_filterSets.type);
+    var matchTypeCat = !typeKeys.length || typeKeys.indexOf(cType) >= 0;
+    // 등급 (같은 줄 OR)
+    var gradeKeys = Object.keys(_filterSets.grade);
+    var matchGradeCat = !gradeKeys.length || gradeKeys.indexOf(c.grade) >= 0;
+    // 속성 (같은 줄 OR, 미분류 = 6개 외)
+    var attrKeys = Object.keys(_filterSets.attr);
+    var matchAttrCat = !attrKeys.length;
+    if(!matchAttrCat){
+      for(var ai=0; ai<attrKeys.length; ai++){
+        if(attrKeys[ai]==='미분류'){ if(_isUnclassified){ matchAttrCat=true; break; } }
+        else if(attrKeys[ai]===_ch){ matchAttrCat=true; break; }
+      }
+    }
+    var matchType = matchTypeCat && matchGradeCat && matchAttrCat;
+
     var matchBranch = (_custBranch==='all') || (_custBranchOf(c)===_custBranch);
     var matchFp = (_custFp==='all') || ((c.fpName||c.fp||'')===_custFp);
     var matchQ;
