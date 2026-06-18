@@ -303,8 +303,8 @@ textarea.prm-input{resize:vertical;}
       <div class="checkin-date" id="heroDate">—</div>
       <div class="checkin-clock" id="heroClock">00:00:00</div>
       <div class="checkin-status-row">
-        <span class="checkin-standard">정상 출근 기준: 10:10:59 이전</span>
-        <span class="deadline-badge">10:11:00~ 지각</span>
+        <span class="checkin-standard" id="checkinStdText">정상 출근 기준: 10:10:59 이전</span>
+        <span class="deadline-badge" id="checkinLateText">10:11:00~ 지각</span>
       </div>
       <button type="button" class="checkin-btn" id="checkinBtn" onclick="doCheckin()">📍 출근 체크인</button>
     </div>
@@ -555,6 +555,11 @@ textarea.prm-input{resize:vertical;}
 // TODO_GAS_5: 월별 디메리트 집계 → GAS GET (action:'getDemerit', year, month)
 
 var LATE_HOUR = 10, LATE_MIN = 11;
+// 지각 기준 예외: 아래 사번은 10:31부터 지각 (10:30:59까지 정상)
+var LATE_EXCEPT_31 = ['H2503207','H2605024','H2502985','H2503173','H2505582'];
+function _lateMinFor(fpId){
+  return (LATE_EXCEPT_31.indexOf(String(fpId)) >= 0) ? 31 : LATE_MIN;
+}
 var currentUser = null;
 var ATT_KEY = 'unispace_attendance';  // 체크인 기록
 var PR_KEY  = 'unispace_prereport';   // 사전근태보고 { "YYYY-MM-DD": { "fpId": {name,branch,type,note,proof,reportedAt} } }
@@ -747,6 +752,19 @@ function renderCheckinTab(){
   var rec=db[today]&&db[today][currentUser.id];
   var btn=document.getElementById('checkinBtn');
 
+  // 사번별 지각 기준 안내 문구 갱신 (예외 5명은 10:31부터 지각)
+  var _stdEl=document.getElementById('checkinStdText');
+  var _lateEl=document.getElementById('checkinLateText');
+  if(_stdEl&&_lateEl){
+    if(_lateMinFor(currentUser.id)===31){
+      _stdEl.textContent='정상 출근 기준: 10:30:59 이전';
+      _lateEl.textContent='10:31:00~ 지각';
+    } else {
+      _stdEl.textContent='정상 출근 기준: 10:10:59 이전';
+      _lateEl.textContent='10:11:00~ 지각';
+    }
+  }
+
   if(rec){
     var isLate=rec.status==='지각';
     btn.textContent=(isLate?'⚠️ 지각 체크인 완료 · ':'✅ 출근 완료 · ')+_fmtTime(rec.time);
@@ -826,7 +844,8 @@ function doCheckin(){
   var now=new Date(),h=now.getHours(),m=now.getMinutes(),s=now.getSeconds();
   function _p2(n){ return (n<10?'0':'')+n; }
   var timeStr=_p2(h)+':'+_p2(m)+':'+_p2(s);
-  var isLate=(h>LATE_HOUR)||(h===LATE_HOUR&&m>=LATE_MIN);
+  var _lateMin=_lateMinFor(currentUser.id);
+  var isLate=(h>LATE_HOUR)||(h===LATE_HOUR&&m>=_lateMin);
   var rec={ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch, time:timeStr, status:isLate?'지각':'정상' };
 
   // GAS에 먼저 저장 시도 -> 이미 체크인됐으면 서버가 막음
