@@ -6,8 +6,8 @@
 <script>
 (function(){
   try {
-    var p = new URLSearchParams(window.location.search);
-    if (p.get('tab') == 'list') document.documentElement.className += ' start-list';
+    // 항상 고객 조회 탭을 기본으로 시작 (등록은 탭 눌러서)
+    document.documentElement.className += ' start-list';
   } catch(e) {}
 })();
 </script>
@@ -18,8 +18,8 @@
 <style>
 .start-list #pageRegister { display: none !important; }
 .start-list #pageList { display: block !important; }
-.start-list .tab-nav .tab-btn:first-child { background: transparent; color: var(--text2); font-weight: 600; box-shadow: none; }
-.start-list .tab-nav .tab-btn:last-child { background: var(--navy); color:#fff; font-weight: 700; box-shadow: 0 4px 16px rgba(26,39,68,.18); }
+.start-list .tab-nav .tab-btn:first-child { background: var(--navy); color:#fff; font-weight: 700; box-shadow: 0 4px 16px rgba(26,39,68,.18); }
+.start-list .tab-nav .tab-btn:last-child { background: transparent; color: var(--text2); font-weight: 600; box-shadow: none; }
 :root {
   --bg:      #FBF9F4; --bg2: #FFFFFF; --bg3: #F4F1E9;
   --sur:     rgba(26,39,68,0.03); --sur2: rgba(26,39,68,0.06);
@@ -645,6 +645,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .tab-noc        { background: rgba(239,68,68,.12);   color: #DC2626;       border: 1px solid rgba(239,68,68,.25); }
 /* 리스트뷰 고객명 옆 인라인 뱃지 */
 .list-name-wrap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fp-tag { display:inline-block; font-size:10.5px; font-weight:700; color:#7A5BD8; background:rgba(127,119,221,.12); border:1px solid rgba(127,119,221,.3); border-radius:10px; padding:1px 8px; white-space:nowrap; }
+.card-name + .fp-tag { margin-bottom:4px; }
 .list-alert-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--gold2);
@@ -759,9 +761,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   cursor: pointer; transition: all .2s; margin-top: 8px;
 }
 .excel-dedup-btn:hover { border-color: var(--gold); color: var(--gold2); }
-@keyframes skShimmer { 0%{background-position:-200px 0} 100%{background-position:200px 0} }
-.sk-card { background:var(--card,#fff); border:1px solid rgba(150,150,150,.15); border-radius:14px; padding:16px; }
-.sk-bar { background:linear-gradient(90deg, rgba(150,150,150,.1) 25%, rgba(150,150,150,.24) 50%, rgba(150,150,150,.1) 75%); background-size:400px 100%; animation:skShimmer 1.2s infinite linear; border-radius:6px; }
 </style>
 </head>
 <body>
@@ -789,8 +788,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
   <!-- 탭 -->
   <div class="tab-nav">
-    <button class="tab-btn active" id="regTabBtn" onclick="switchTab('register',this)">➕ 고객 등록</button>
-    <button class="tab-btn" onclick="switchTab('list',this)">🔍 고객 조회</button>
+    <button class="tab-btn active" id="listTabBtn" onclick="switchTab('list',this)">🔍 고객 조회</button>
+    <button class="tab-btn" id="regTabBtn" onclick="switchTab('register',this)">➕ 고객 등록</button>
   </div>
 
   <!-- ══ 고객 등록 탭 ══ -->
@@ -1652,13 +1651,13 @@ var selectedCustomerType = '계약';
 function cancelEdit() {
   editingId = null;
   resetForm();
-  var listBtn = document.querySelectorAll('.tab-btn')[1];
+  var listBtn = document.getElementById('listTabBtn');
   switchTab('list', listBtn);
   showToast('수정을 취소했어요.');
 }
 
 function _backToDetailAfterEdit(id) {
-  var listBtn = document.querySelectorAll('.tab-btn')[1];
+  var listBtn = document.getElementById('listTabBtn');
   if (listBtn) switchTab('list', listBtn);
   if (id) {
     var rc = DB.find(function(x){ return x.id === id; });
@@ -1828,13 +1827,10 @@ window.addEventListener('DOMContentLoaded', function() {
   renderCustomerList();
 
   // GAS에서 내 권한 고객 로드 후 다시 렌더 (캐시 갱신)
-  if(typeof _custShowSkeleton==='function' && (!DB || !DB.length)) _custShowSkeleton();
   loadCustomersFromGas().then(function(ok){
     if (ok) {
       updateCustomerStats();
       updateHeaderCount();
-      renderCustomerList();
-    } else {
       renderCustomerList();
     }
   });
@@ -1843,9 +1839,9 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 
   var params = new URLSearchParams(window.location.search);
-  if (params.get('tab') == 'list') {
-    var listTabBtn = document.querySelectorAll('.tab-btn')[1];
-    if (listTabBtn) switchTab('list', listTabBtn);
+  if (params.get('tab') == 'register') {
+    var regTabBtn = document.getElementById('regTabBtn');
+    if (regTabBtn) switchTab('register', regTabBtn);
   }
 
   // 주변고객 등에서 뒤로 돌아왔을 때 해당 고객 상세 복원
@@ -1853,7 +1849,7 @@ window.addEventListener('DOMContentLoaded', function() {
     var reopenId = sessionStorage.getItem('reopenDetailId');
     if (reopenId) {
       sessionStorage.removeItem('reopenDetailId');
-      var listTabBtn2 = document.querySelectorAll('.tab-btn')[1];
+      var listTabBtn2 = document.getElementById('listTabBtn');
       if (listTabBtn2) switchTab('list', listTabBtn2);
       var rc = DB.find(function(x){ return x.id === reopenId; });
       if (rc) openDetail(reopenId);
@@ -2218,7 +2214,7 @@ function saveCustomer() {
   if (_wasEditReturnId) {
     _backToDetailAfterEdit(_wasEditReturnId);
   } else {
-    var listBtn = document.querySelectorAll('.tab-btn')[1];
+    var listBtn = document.getElementById('listTabBtn');
     switchTab('list', listBtn);
   }
 }
@@ -2350,24 +2346,8 @@ function renderBranchFpTabs(){
 function setCustBranch(b){ _custBranch=b; _custFp='all'; renderBranchFpTabs(); renderCustomerList(); }
 function setCustFp(n){ _custFp=n; renderBranchFpTabs(); renderCustomerList(); }
 
-function _custShowSkeleton(){
-  var el = document.getElementById('customerGrid');
-  if(!el) return;
-  el.className = 'customer-grid';
-  var card = '<div class="sk-card">'+
-    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'+
-      '<div class="sk-bar" style="width:42px;height:42px;border-radius:50%"></div>'+
-      '<div style="flex:1"><div class="sk-bar" style="width:60%;height:13px;margin-bottom:6px"></div><div class="sk-bar" style="width:40%;height:11px"></div></div>'+
-    '</div>'+
-    '<div class="sk-bar" style="width:100%;height:11px;margin-bottom:7px"></div>'+
-    '<div class="sk-bar" style="width:80%;height:11px"></div>'+
-  '</div>';
-  var html = '';
-  for(var i=0;i<6;i++) html += card;
-  el.innerHTML = html;
-}
-
-function renderCustomerList() {  updateCustomerStats();
+function renderCustomerList() {
+  updateCustomerStats();
   renderBranchFpTabs();
   var q = (document.getElementById('searchInput') ? document.getElementById('searchInput').value : '').toLowerCase();
   var list = DB.filter(function(c){
@@ -2403,6 +2383,13 @@ function renderCustomerList() {  updateCustomerStats();
   var avColors = ['av-gold','av-green','av-blue'];
   var gradeMap = {'VIP':'grade-vip vip-badge','우량':'grade-good good-badge','일반':'grade-normal normal-badge'};
   var cardMap  = {'VIP':'grade-vip','우량':'grade-good','일반':'grade-normal'};
+  var _showFp = _custIsAdmin();
+  function _fpBadge(c){
+    if(!_showFp) return '';
+    var nm = c.fpName || c.fp || '';
+    if(!nm) return '';
+    return '<span class="fp-tag">담당 '+nm+'</span>';
+  }
 
   if (currentView === 'card') {
     el.className = 'customer-grid';
@@ -2427,6 +2414,7 @@ function renderCustomerList() {  updateCustomerStats();
           '</div>'+
         '</div>'+
         '<div class="card-name">'+c.name+insBadge+'</div>'+
+        _fpBadge(c)+
         '<div class="card-phone">'+c.phone+'</div>'+
         todayBadges+
         '<div class="card-meta" style="margin-top:6px">'+
@@ -2482,7 +2470,7 @@ function renderCustomerList() {  updateCustomerStats();
         else _stripe='transparent';
         return '<div class="list-row '+gradeRowCls+' '+typeRowCls+'" data-id="'+c.id+'" onclick="openDetail(this.dataset.id)" style="border-left:3px solid '+_stripe+'">'+
           '<div class="list-avatar '+av+'">'+c.name[0]+'</div>'+
-          '<div><div class="list-name-wrap">'+alertDot+'<span class="list-name">'+c.name+'</span>'+insBadgeL+'</div>'+alertBadges+'</div>'+
+          '<div><div class="list-name-wrap">'+alertDot+'<span class="list-name">'+c.name+'</span>'+insBadgeL+_fpBadge(c)+'</div>'+alertBadges+'</div>'+
           '<div class="list-cell val">'+c.phone+'</div>'+
           '<div class="list-cell list-addr-cell">'+(c.address ? '<span title="'+c.address.replace(/"/g,'&quot;')+'">📍 '+c.address+'</span>' : '<span style="color:var(--text3)">미등록</span>')+'</div>'+
           '<div><span class="grade-badge '+gbg+'" style="font-size:10px">'+c.grade+'</span></div>'+
@@ -3046,7 +3034,7 @@ function editCustomer() {
   }, 50);
 
   // 등록 탭으로 이동
-  var regBtn = document.querySelectorAll('.tab-btn')[0];
+  var regBtn = document.getElementById('regTabBtn');
   switchTab('register', regBtn);
   // 수정 모드 UI 변경
   document.getElementById('submitBtn').innerHTML = '✏️ &nbsp;고객 정보 수정 완료';
