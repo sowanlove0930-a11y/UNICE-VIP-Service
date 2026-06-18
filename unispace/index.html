@@ -3094,8 +3094,8 @@ function skOff(ids){
 function renderBojangCard() {
   // set current-month labels
   var _curMon=(new Date()).getMonth()+1;
-  var _isMgrUser = (typeof _isManagerUser==='function' && _isManagerUser(currentUser));
-  var _l1=document.getElementById('st1-lbl'); if(_l1) _l1.textContent=_curMon+'월 '+(_isMgrUser?'':'내 ')+'보장월초 및 건수';
+  var _showTotal = (typeof _bojangShowsTotal==='function' && _bojangShowsTotal(currentUser));
+  var _l1=document.getElementById('st1-lbl'); if(_l1) _l1.textContent=_curMon+'월 '+(_showTotal?'':'내 ')+'보장월초 및 건수';
   var _l4=document.getElementById('st4-recruit-lbl'); if(_l4) _l4.textContent=_curMon+'월 리크루팅';
   var _l2=document.getElementById('st2-month'); if(_l2) _l2.textContent=_curMon+'월';
   var _l3=document.getElementById('st3-fp-lbl'); if(_l3) _l3.textContent=_curMon+'월 출결현황';
@@ -3149,12 +3149,12 @@ function renderBojangCard() {
   var RATE_TOTAL = GOAL_TOTAL ? Math.round(AMT_TOTAL / 10000 / GOAL_TOTAL * 100) : 0;
   var RATE_ALPHA = GOAL_ALPHA ? Math.round(AMT_ALPHA / 10000 / GOAL_ALPHA * 100) : 0;
   var RATE_BRAVO = GOAL_BRAVO ? Math.round(AMT_BRAVO / 10000 / GOAL_BRAVO * 100) : 0;
-  if(_isMgrUser){
+  if(_showTotal){
     var e1 = document.getElementById('st1');      if(e1) e1.innerHTML = AMT_TOTAL.toLocaleString()+'<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2)">'+CNT_TOTAL+'건</span>';
     var er = document.getElementById('st1-rate'); if(er) er.textContent = RATE_TOTAL+'%';
   }
   var eu = document.getElementById('st1-unit');
-  if(eu){
+  if(eu && (typeof _isManagerUser!=='function' || _isManagerUser(currentUser))){
     var _barW_a = RATE_ALPHA > 100 ? 100 : RATE_ALPHA;
     var _barW_b = RATE_BRAVO > 100 ? 100 : RATE_BRAVO;
     eu.innerHTML =
@@ -9521,6 +9521,19 @@ function _isManagerUser(u) {
   if ((u.title || '') === '지점장') return true;
   if (u.id === 'H2503162') return true; // 교육지점장 최성경
   if (u.branch && u.branch.indexOf('교육') >= 0) return true;
+  return false;
+}
+
+// 보장월초 상단 금액을 '지사 전체'로 표시할 대상: 대표/지점장/교육지점장
+// (FP/매니저/센터장은 본인 업적 표시)
+function _bojangShowsTotal(u) {
+  if (!u) return false;
+  if (u.id === 'ktk01') return true; // 대표
+  if (u.role === '대표' || u.role === '지점장') return true;
+  if (u.level === 'admin') return true;
+  if ((u.title || '') === '지점장') return true; // 지점장(교육지점장 포함)
+  if (u.id === 'H2503162') return true; // 교육지점장 최성경 failsafe
+  if (u.branch && u.branch.indexOf('교육') >= 0) return true; // 교육 소속
   return false;
 }
 
