@@ -1030,6 +1030,14 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
   cursor: pointer; transition: all 0.2s; white-space: nowrap;
 }
 .sichaek-view-btn:hover { background: rgba(216,90,48,0.22); }
+.doc-view-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(124,92,200,0.12); border: 1px solid rgba(124,92,200,0.4);
+  border-radius: 20px; padding: 7px 14px;
+  color: #8B6FD6; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.doc-view-btn:hover { background: rgba(124,92,200,0.22); }
 .consult-btn.active {
   background: linear-gradient(135deg, var(--gold), #8B6914);
   color: #080E1C; border-color: var(--gold);
@@ -2207,6 +2215,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="header-right">
       <button type="button" class="checkin-smart-btn state-ready" id="checkinSmartBtn" onclick="doSmartCheckin()">📍 출근 체크인</button>
       <button type="button" class="cust-view-btn" id="custViewBtn" onclick="window.location.href='customer.html?tab=list'">🔍 고객 조회</button>
+      <button type="button" class="doc-view-btn" id="docViewBtn" onclick="openDocModal()">📁 자료 조회</button>
       <button type="button" class="sichaek-view-btn" id="sichaekBtn" onclick="openSichaekModal()">🎁 시책 조회</button>
       <button type="button" class="sched-view-btn" id="scheduleBtn" onclick="openScheduleModal()">📅 일정 조회</button>
       <button type="button" class="consult-btn" id="consultBtn" onclick="toggleConsultMode()">🎯 상담 모드</button>
@@ -5156,6 +5165,222 @@ function deleteSichaekViewImage(e){
   }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
 }
 function closeSichaekImg(){ document.getElementById('sichaekImgOverlay').classList.remove('open'); }
+
+// ── 자료조회 (자료실) ─────────────────────────────────
+var _docState = { folders: [], docs: [], canManage: false, curFolder: '' };
+function _docCanManage(){ return _docState.canManage === true; }
+function _docFmtSize(bytes){
+  var n = parseInt(bytes) || 0;
+  if (n <= 0) return '';
+  if (n < 1024) return n + 'B';
+  if (n < 1048576) return Math.round(n/1024) + 'KB';
+  return (Math.round(n/1048576*10)/10) + 'MB';
+}
+function _docIcon(name, mime){
+  var nm = String(name || '').toLowerCase();
+  var mm = String(mime || '').toLowerCase();
+  if (mm.indexOf('pdf') >= 0 || nm.indexOf('.pdf') >= 0) return '📕';
+  if (mm.indexOf('image') >= 0 || /\.(png|jpg|jpeg|gif|webp)$/.test(nm)) return '🖼️';
+  if (/\.(xlsx|xls|csv)$/.test(nm) || mm.indexOf('sheet') >= 0) return '📊';
+  if (/\.(pptx|ppt)$/.test(nm) || mm.indexOf('presentation') >= 0) return '📑';
+  if (/\.(docx|doc)$/.test(nm) || mm.indexOf('word') >= 0) return '📘';
+  if (/\.(zip|rar|7z)$/.test(nm)) return '🗜️';
+  return '📄';
+}
+function openDocModal(){
+  if (!currentUser) { showToast('로그인이 필요합니다'); return; }
+  var ov = document.getElementById('docModalOverlay');
+  if (!ov) { _docBuildModal(); ov = document.getElementById('docModalOverlay'); }
+  ov.classList.add('open');
+  _docLoad();
+}
+function closeDocModal(){
+  var ov = document.getElementById('docModalOverlay');
+  if (ov) ov.classList.remove('open');
+}
+function _docBuildModal(){
+  var ov = document.createElement('div');
+  ov.id = 'docModalOverlay';
+  ov.className = 'mgmt-overlay';
+  ov.onclick = function(e){ if (e.target === ov) closeDocModal(); };
+  var inner = ''
+    + '<div class="mgmt-box" onclick="event.stopPropagation()" style="max-width:760px;width:94vw;max-height:92vh;display:flex;flex-direction:column">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +     '<div class="mgmt-title">📁 자료 조회</div>'
+    +     '<button type="button" onclick="closeDocModal()" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;line-height:1">✕</button>'
+    +   '</div>'
+    +   '<div id="docFolderBar" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px 0;border-bottom:1px solid var(--bdr2);margin-bottom:12px"></div>'
+    +   '<div id="docToolbar" style="display:none;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>'
+    +   '<div id="docList" style="min-height:120px;overflow-y:auto">'
+    +   '</div>'
+    + '</div>';
+  ov.innerHTML = inner;
+  document.body.appendChild(ov);
+}
+function _docLoad(){
+  var listEl = document.getElementById('docList');
+  if (listEl) listEl.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">불러오는 중...</div>';
+  fetch(UNISPACE_GAS_URL + '?action=getDocs&fp=' + encodeURIComponent(currentUser.id))
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if (!res || !res.ok) { if(listEl) listEl.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">불러오기 실패</div>'; return; }
+      _docState.folders = res.folders || [];
+      _docState.docs = res.docs || [];
+      _docState.canManage = res.canManage === true;
+      if (!_docState.curFolder && _docState.folders.length) _docState.curFolder = _docState.folders[0];
+      _docRender();
+    })
+    .catch(function(){ if(listEl) listEl.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">네트워크 오류</div>'; });
+}
+function _docRender(){
+  // folder chips
+  var bar = document.getElementById('docFolderBar');
+  if (bar){
+    var bh = '';
+    for (var i=0;i<_docState.folders.length;i++){
+      var fn = _docState.folders[i];
+      var on = (fn === _docState.curFolder);
+      bh += '<span class="fp-filter-chip'+(on?' active':'')+'" style="cursor:pointer" onclick="_docSelectFolder(\''+_docEsc(fn)+'\')">'+_docEsc(fn)+'</span>';
+    }
+    if (_docCanManage()){
+      bh += '<span class="fp-filter-chip" style="cursor:pointer;border-style:dashed" onclick="_docNewFolder()">+ 새 폴더</span>';
+    }
+    if (!_docState.folders.length && !_docCanManage()){
+      bh = '<span style="color:var(--text2);font-size:13px">등록된 폴더가 없습니다</span>';
+    }
+    bar.innerHTML = bh;
+  }
+  // toolbar (관리자/매니저만)
+  var tb = document.getElementById('docToolbar');
+  if (tb){
+    if (_docCanManage() && _docState.curFolder){
+      tb.style.display = 'flex';
+      tb.innerHTML = ''
+        + '<button type="button" onclick="_docUploadClick()" style="font-size:12px;font-weight:700;padding:8px 14px;border:none;border-radius:8px;background:#8B6FD6;color:#fff;cursor:pointer">⬆ 파일 업로드</button>'
+        + '<button type="button" onclick="_docAddLink()" style="font-size:12px;font-weight:700;padding:8px 14px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text);cursor:pointer">🔗 링크 등록</button>'
+        + '<button type="button" onclick="_docDeleteFolder()" style="font-size:12px;font-weight:700;padding:8px 14px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:#C0392B;cursor:pointer">🗑 폴더 삭제</button>'
+        + '<input type="file" id="docFileInput" style="display:none" onchange="_docDoUpload(this)">';
+    } else {
+      tb.style.display = 'none';
+      tb.innerHTML = '';
+    }
+  }
+  // file list
+  var listEl = document.getElementById('docList');
+  if (!listEl) return;
+  var inFolder = [];
+  for (var j=0;j<_docState.docs.length;j++){
+    if (String(_docState.docs[j].folder).trim() === String(_docState.curFolder).trim()) inFolder.push(_docState.docs[j]);
+  }
+  if (!inFolder.length){
+    listEl.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px 20px">이 폴더에 자료가 없습니다</div>';
+    return;
+  }
+  var lh = '';
+  for (var k=0;k<inFolder.length;k++){
+    var d = inFolder[k];
+    var icon = _docIcon(d.name, d.mime);
+    var sz = _docFmtSize(d.size);
+    var meta = (d.createdByName || '') + (sz ? ' · ' + sz : '') + (d.fileType==='link' ? ' · 링크' : '');
+    lh += '<div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--bdr2);border-radius:10px;margin-bottom:8px;background:var(--bg2)">'
+        +   '<div style="font-size:24px">'+icon+'</div>'
+        +   '<div style="flex:1;min-width:0">'
+        +     '<div style="font-weight:700;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_docEsc(d.name)+'</div>'
+        +     '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+_docEsc(meta)+'</div>'
+        +   '</div>'
+        +   '<a href="'+_docEsc(d.fileUrl)+'" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;background:#8B6FD6;color:#fff;text-decoration:none;white-space:nowrap">⬇ 받기</a>';
+    if (_docCanManage()){
+      lh += '<button type="button" onclick="_docDelete(\''+_docEsc(d.id)+'\')" style="font-size:12px;padding:7px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:#C0392B;cursor:pointer">삭제</button>';
+    }
+    lh += '</div>';
+  }
+  listEl.innerHTML = lh;
+}
+function _docEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function _docSelectFolder(fn){ _docState.curFolder = fn; _docRender(); }
+function _docNewFolder(){
+  var name = prompt('새 폴더 이름을 입력하세요');
+  if (!name) return;
+  name = String(name).trim();
+  if (!name) return;
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'createDocFolder', data:{ fpCode: currentUser.id, folder: name } })
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok){ showToast('✅ 폴더가 생성되었습니다'); _docState.curFolder = name; _docLoad(); }
+    else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+}
+function _docDeleteFolder(){
+  if (!_docState.curFolder) return;
+  if (!confirm('"'+_docState.curFolder+'" 폴더를 삭제할까요? (폴더 안 자료가 있으면 삭제 불가)')) return;
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'deleteDocFolder', data:{ fpCode: currentUser.id, folder: _docState.curFolder } })
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok){ showToast('✅ 폴더가 삭제되었습니다'); _docState.curFolder = ''; _docLoad(); }
+    else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+}
+function _docUploadClick(){
+  var inp = document.getElementById('docFileInput');
+  if (inp) inp.click();
+}
+function _docDoUpload(inp){
+  if (!inp || !inp.files || !inp.files.length) return;
+  var file = inp.files[0];
+  inp.value = '';
+  var MAXB = 25 * 1024 * 1024;
+  if (file.size > MAXB){
+    showToast('⚠️ 25MB 이하만 업로드 가능 · 큰 파일은 링크 등록 이용');
+    return;
+  }
+  showToast('⬆ 업로드 중...');
+  var reader = new FileReader();
+  reader.onload = function(){
+    var b64 = String(reader.result || '');
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'uploadDoc', data:{
+        fpCode: currentUser.id, folder: _docState.curFolder,
+        name: file.name, mime: file.type || 'application/octet-stream',
+        size: file.size, fileBase64: b64
+      } })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if (res && res.ok){ showToast('✅ 업로드 완료'); _docLoad(); }
+      else showToast('⚠️ ' + ((res&&res.msg)||'업로드 실패'));
+    }).catch(function(){ showToast('⚠️ 업로드 실패 (네트워크/용량)'); });
+  };
+  reader.onerror = function(){ showToast('⚠️ 파일 읽기 실패'); };
+  reader.readAsDataURL(file);
+}
+function _docAddLink(){
+  var url = prompt('드라이브 공유 링크(URL)를 붙여넣으세요');
+  if (!url) return;
+  url = String(url).trim();
+  if (url.indexOf('http') !== 0){ showToast('⚠️ 올바른 링크가 아닙니다'); return; }
+  var name = prompt('자료 이름을 입력하세요');
+  if (!name) return;
+  name = String(name).trim();
+  if (!name) return;
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'addDocLink', data:{ fpCode: currentUser.id, folder: _docState.curFolder, name: name, url: url } })
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok){ showToast('✅ 링크가 등록되었습니다'); _docLoad(); }
+    else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+}
+function _docDelete(id){
+  if (!confirm('이 자료를 삭제할까요?')) return;
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'deleteDoc', data:{ fpCode: currentUser.id, id: id } })
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok){ showToast('✅ 삭제되었습니다'); _docLoad(); }
+    else showToast('⚠️ ' + ((res&&res.msg)||'실패'));
+  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+}
 
 function openSichaekAdd(){
   document.getElementById('sichaekWeek').innerHTML = _sichaekWeekOptions();
