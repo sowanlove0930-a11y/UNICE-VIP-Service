@@ -1533,7 +1533,16 @@ function buildExcel(){
   }).catch(function(){ showToast('⚠️ 엑셀 생성 실패'); });
 }
 var _stBranch='all';
-function _isAdmin(){ return currentUser && (currentUser.role==='대표' || currentUser.role==='지점장'); }
+function _isAdmin(){
+  if(!currentUser) return false;
+  var r=currentUser.role||'', t=currentUser.title||'', id=currentUser.id||'', b=currentUser.branch||'';
+  if(id==='ktk01') return true;
+  if(r==='대표'||r==='지점장') return true;
+  if(t==='지점장'||t==='교육지점장') return true;
+  if(id==='H2503162') return true;
+  if(String(b).indexOf('교육')>=0) return true;
+  return false;
+}
 var FP_ROSTER_BUILTIN=[
   {id:'ktk01',name:'김태규',role:'대표',branch:'유니스지사',active:true},
   {id:'H2502965',name:'이수아',role:'지점장',branch:'브라보지점',active:true},
@@ -2048,9 +2057,12 @@ function init(){
     _hu.textContent = currentUser.name + ' ' + ((currentUser.title && currentUser.title!=='유니스 대표') ? currentUser.title : (currentUser.role || 'FP'));
   }
   // show period setting button for admin
-  if(currentUser && (currentUser.role==='대표' || currentUser.role==='지점장')){
+  if(_isAdmin()){
     var _psb=document.getElementById('periodSettingBtn'); if(_psb) _psb.style.display='';
   }
+  // 탭 노출을 init 초반에 먼저 보장 (뒤쪽 에러와 무관하게 항상 노출)
+  var _vtw=document.getElementById('viewToggle'); if(_vtw) _vtw.style.display='';
+  if(_isAdmin()){ var _vts=document.getElementById('vtStatus'); if(_vts) _vts.style.display=''; }
   _loadPeriodLocal();
   _renderPlanHeader();
   // refresh from GAS then re-render
