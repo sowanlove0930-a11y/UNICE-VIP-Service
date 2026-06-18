@@ -5017,6 +5017,14 @@ var _sichaekViewIdx = 0;
 var _sichaekViewId = '';
 var _sichaekViewCanManage = false;
 var _sichaekZoom = 1;
+var _sichaekPanX = 0;
+var _sichaekPanY = 0;
+var _sichaekDragging = false;
+var _sichaekDragStartX = 0;
+var _sichaekDragStartY = 0;
+var _sichaekPanStartX = 0;
+var _sichaekPanStartY = 0;
+var _sichaekMoved = false;
 function openSichaekImg(url){ openSichaekImgs(encodeURIComponent(JSON.stringify([url])), '', false); }
 function openSichaekImgs(enc, campId, canManage){
   try { _sichaekViewImgs = JSON.parse(decodeURIComponent(enc)) || []; } catch(e){ _sichaekViewImgs = []; }
@@ -5024,14 +5032,24 @@ function openSichaekImgs(enc, campId, canManage){
   _sichaekViewIdx = 0;
   _sichaekViewId = campId || '';
   _sichaekViewCanManage = (canManage === true || canManage === 'true');
-  _sichaekZoom = 1;
+  _sichaekResetZoom();
   _renderSichaekView();
   document.getElementById('sichaekImgOverlay').classList.add('open');
+}
+function _sichaekResetZoom(){
+  _sichaekZoom = 1; _sichaekPanX = 0; _sichaekPanY = 0;
+}
+function _applySichaekTransform(){
+  var img = document.getElementById('sichaekBigImg');
+  if(!img) return;
+  if(_sichaekZoom <= 1){ _sichaekPanX = 0; _sichaekPanY = 0; }
+  img.style.transform = 'translate('+_sichaekPanX+'px,'+_sichaekPanY+'px) scale('+_sichaekZoom+')';
+  img.style.cursor = (_sichaekZoom > 1) ? (_sichaekDragging ? 'grabbing' : 'grab') : 'zoom-in';
 }
 function _renderSichaekView(){
   var img = document.getElementById('sichaekBigImg');
   img.src = _sichaekViewImgs[_sichaekViewIdx] || '';
-  img.style.transform = 'scale('+_sichaekZoom+')';
+  _applySichaekTransform();
   var nav = document.getElementById('sichaekViewNav');
   if(nav){
     nav.style.display = _sichaekViewImgs.length>1 ? 'flex' : 'none';
@@ -5041,23 +5059,65 @@ function _renderSichaekView(){
   var delBtn = document.getElementById('sichaekViewDelBtn');
   if(delBtn) delBtn.style.display = (_sichaekViewCanManage && _sichaekViewId) ? '' : 'none';
 }
-function sichaekViewPrev(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx>0){ _sichaekViewIdx--; _sichaekZoom=1; _renderSichaekView(); } }
-function sichaekViewNext(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx<_sichaekViewImgs.length-1){ _sichaekViewIdx++; _sichaekZoom=1; _renderSichaekView(); } }
-function sichaekZoomIn(e){ if(e) e.stopPropagation(); _sichaekZoom = Math.min(_sichaekZoom+0.25, 3); var img=document.getElementById('sichaekBigImg'); if(img) img.style.transform='scale('+_sichaekZoom+')'; }
-function sichaekZoomOut(e){ if(e) e.stopPropagation(); _sichaekZoom = Math.max(_sichaekZoom-0.25, 1); var img=document.getElementById('sichaekBigImg'); if(img) img.style.transform='scale('+_sichaekZoom+')'; }
+function sichaekViewPrev(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx>0){ _sichaekViewIdx--; _sichaekResetZoom(); _renderSichaekView(); } }
+function sichaekViewNext(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx<_sichaekViewImgs.length-1){ _sichaekViewIdx++; _sichaekResetZoom(); _renderSichaekView(); } }
+function sichaekZoomIn(e){ if(e) e.stopPropagation(); _sichaekZoom = Math.min(_sichaekZoom+0.25, 5); _applySichaekTransform(); }
+function sichaekZoomOut(e){ if(e) e.stopPropagation(); _sichaekZoom = Math.max(_sichaekZoom-0.25, 1); _applySichaekTransform(); }
 function sichaekImgClick(e){
   if(e) e.stopPropagation();
-  // 이미지 클릭으로 확대/원복 토글
-  if(_sichaekZoom>1){ _sichaekZoom=1; } else { _sichaekZoom=2; }
-  var img=document.getElementById('sichaekBigImg'); if(img) img.style.transform='scale('+_sichaekZoom+')';
+  // 드래그로 움직였으면 클릭 줌 무시
+  if(_sichaekMoved){ _sichaekMoved = false; return; }
+  if(_sichaekZoom > 1){ _sichaekResetZoom(); }
+  else { _sichaekZoom = 2; }
+  _applySichaekTransform();
 }
 function sichaekViewWheel(e){
-  // 마우스 휠로 확대/축소
+  // 마우스 커서 위치 기준 확대/축소
   if(!e) return;
   e.preventDefault();
-  if(e.deltaY < 0){ _sichaekZoom = Math.min(_sichaekZoom+0.2, 3); }
-  else { _sichaekZoom = Math.max(_sichaekZoom-0.2, 1); }
-  var img=document.getElementById('sichaekBigImg'); if(img) img.style.transform='scale('+_sichaekZoom+')';
+  var img = document.getElementById('sichaekBigImg');
+  if(!img) return;
+  var rect = img.getBoundingClientRect();
+  // 커서가 이미지 중심에서 떨어진 정도 (확대 전 기준)
+  var cx = e.clientX - (rect.left + rect.width/2);
+  var cy = e.clientY - (rect.top + rect.height/2);
+  var prev = _sichaekZoom;
+  var next = (e.deltaY < 0) ? Math.min(prev+0.25, 5) : Math.max(prev-0.25, 1);
+  if(next === prev) return;
+  if(next <= 1){ _sichaekResetZoom(); _applySichaekTransform(); return; }
+  // 커서 지점이 화면상 같은 위치에 머물도록 pan 보정
+  var ratio = next / prev;
+  _sichaekPanX = ratio * _sichaekPanX + cx * (1 - ratio);
+  _sichaekPanY = ratio * _sichaekPanY + cy * (1 - ratio);
+  _sichaekZoom = next;
+  _applySichaekTransform();
+}
+function sichaekDragStart(e){
+  if(_sichaekZoom <= 1) return;
+  _sichaekDragging = true;
+  _sichaekMoved = false;
+  var pt = (e.touches && e.touches.length) ? e.touches[0] : e;
+  _sichaekDragStartX = pt.clientX;
+  _sichaekDragStartY = pt.clientY;
+  _sichaekPanStartX = _sichaekPanX;
+  _sichaekPanStartY = _sichaekPanY;
+  _applySichaekTransform();
+}
+function sichaekDragMove(e){
+  if(!_sichaekDragging) return;
+  if(e.cancelable) e.preventDefault();
+  var pt = (e.touches && e.touches.length) ? e.touches[0] : e;
+  var dx = pt.clientX - _sichaekDragStartX;
+  var dy = pt.clientY - _sichaekDragStartY;
+  if(Math.abs(dx) > 3 || Math.abs(dy) > 3) _sichaekMoved = true;
+  _sichaekPanX = _sichaekPanStartX + dx;
+  _sichaekPanY = _sichaekPanStartY + dy;
+  _applySichaekTransform();
+}
+function sichaekDragEnd(e){
+  if(!_sichaekDragging) return;
+  _sichaekDragging = false;
+  _applySichaekTransform();
 }
 function deleteSichaekViewImage(e){
   if(e) e.stopPropagation();
@@ -5081,7 +5141,7 @@ function deleteSichaekViewImage(e){
       if(!_sichaekViewImgs.length){ closeSichaekImg(); }
       else {
         if(_sichaekViewIdx >= _sichaekViewImgs.length) _sichaekViewIdx = _sichaekViewImgs.length-1;
-        _sichaekZoom = 1;
+        _sichaekResetZoom();
         _renderSichaekView();
       }
       loadSichaek();
@@ -9927,8 +9987,8 @@ function doCheckin() { doSmartCheckin(); }
 <input type="file" id="sichaekAddImgFile" accept="image/*" style="display:none">
 <div class="mgmt-overlay" id="sichaekImgOverlay" style="z-index:669" onclick="closeSichaekImg()">
   <div style="max-width:94vw;max-height:92vh;display:flex;flex-direction:column;align-items:center" onclick="event.stopPropagation()">
-    <div style="max-width:94vw;max-height:84vh;overflow:auto;border-radius:10px" onwheel="sichaekViewWheel(event)">
-      <img id="sichaekBigImg" style="max-width:94vw;max-height:84vh;border-radius:10px;cursor:zoom-in;transform-origin:center center;transition:transform .12s ease" alt="시책 이미지" onclick="sichaekImgClick(event)">
+    <div style="max-width:94vw;max-height:84vh;overflow:hidden;border-radius:10px;touch-action:none" onwheel="sichaekViewWheel(event)" onmousemove="sichaekDragMove(event)" onmouseup="sichaekDragEnd(event)" onmouseleave="sichaekDragEnd(event)" ontouchmove="sichaekDragMove(event)" ontouchend="sichaekDragEnd(event)">
+      <img id="sichaekBigImg" style="max-width:94vw;max-height:84vh;border-radius:10px;cursor:zoom-in;transform-origin:center center;user-select:none;-webkit-user-drag:none" alt="시책 이미지" onclick="sichaekImgClick(event)" onmousedown="sichaekDragStart(event)" ontouchstart="sichaekDragStart(event)" draggable="false">
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
       <button type="button" onclick="sichaekZoomOut(event)" style="font-size:18px;padding:6px 14px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer">－</button>
