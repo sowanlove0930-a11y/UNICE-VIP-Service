@@ -4942,7 +4942,7 @@ function _sichaekCardHtml(c, canManage){
   var imgsAttr = encodeURIComponent(JSON.stringify(imgs));
   var h = '<div class="sichaek-card">'+
     '<div style="position:relative">'+
-      '<img class="sichaek-card-img" src="'+firstImg+'" alt="'+c.insurer+'" onclick="openSichaekImgs(\''+imgsAttr+'\')" onerror="this.style.opacity=0.3">'+
+      '<img class="sichaek-card-img" src="'+firstImg+'" alt="'+c.insurer+'" onclick="openSichaekImgs(\''+imgsAttr+'\',\''+c.id+'\','+(canManage?'true':'false')+')" onerror="this.style.opacity=0.3">'+
       badge+
     '</div>'+
     '<div style="padding:9px 11px">'+
@@ -5014,26 +5014,82 @@ function renderSichaekList(list, canManage){
 
 var _sichaekViewImgs = [];
 var _sichaekViewIdx = 0;
-function openSichaekImg(url){ openSichaekImgs(encodeURIComponent(JSON.stringify([url]))); }
-function openSichaekImgs(enc){
+var _sichaekViewId = '';
+var _sichaekViewCanManage = false;
+var _sichaekZoom = 1;
+function openSichaekImg(url){ openSichaekImgs(encodeURIComponent(JSON.stringify([url])), '', false); }
+function openSichaekImgs(enc, campId, canManage){
   try { _sichaekViewImgs = JSON.parse(decodeURIComponent(enc)) || []; } catch(e){ _sichaekViewImgs = []; }
   if(!_sichaekViewImgs.length) return;
   _sichaekViewIdx = 0;
+  _sichaekViewId = campId || '';
+  _sichaekViewCanManage = (canManage === true || canManage === 'true');
+  _sichaekZoom = 1;
   _renderSichaekView();
   document.getElementById('sichaekImgOverlay').classList.add('open');
 }
 function _renderSichaekView(){
   var img = document.getElementById('sichaekBigImg');
   img.src = _sichaekViewImgs[_sichaekViewIdx] || '';
+  img.style.transform = 'scale('+_sichaekZoom+')';
   var nav = document.getElementById('sichaekViewNav');
   if(nav){
     nav.style.display = _sichaekViewImgs.length>1 ? 'flex' : 'none';
     var cnt = document.getElementById('sichaekViewCount');
     if(cnt) cnt.textContent = (_sichaekViewIdx+1)+' / '+_sichaekViewImgs.length;
   }
+  var delBtn = document.getElementById('sichaekViewDelBtn');
+  if(delBtn) delBtn.style.display = (_sichaekViewCanManage && _sichaekViewId) ? '' : 'none';
 }
-function sichaekViewPrev(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx>0){ _sichaekViewIdx--; _renderSichaekView(); } }
-function sichaekViewNext(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx<_sichaekViewImgs.length-1){ _sichaekViewIdx++; _renderSichaekView(); } }
+function sichaekViewPrev(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx>0){ _sichaekViewIdx--; _sichaekZoom=1; _renderSichaekView(); } }
+function sichaekViewNext(e){ if(e) e.stopPropagation(); if(_sichaekViewIdx<_sichaekViewImgs.length-1){ _sichaekViewIdx++; _sichaekZoom=1; _renderSichaekView(); } }
+function sichaekZoomIn(e){ if(e) e.stopPropagation(); _sichaekZoom = Math.min(_sichaekZoom+0.25, 3); var img=document.getElementById('sichaekBigImg'); if(img) img.style.transform='scale('+_sichaekZoom+')'; }
+function sichaekZoomOut(e){ if(e) e.stopPropagation(); _sichaekZoom = Math.max(_sichaekZoom-0.25, 1); var img=document.getElementById('sichaekBigImg'); if(img) img.style.transform='scale('+_sichaekZoom+')'; }
+function sichaekImgClick(e){
+  if(e) e.stopPropagation();
+  // 이미지 클릭으로 확대/원복 토글
+  if(_sichaekZoom>1){ _sichaekZoom=1; } else { _sichaekZoom=2; }
+  var img=document.getElementById('sichaekBigImg'); if(img) img.style.transform='scale('+_sichaekZoom+')';
+}
+function sichaekViewWheel(e){
+  // 마우스 휠로 확대/축소
+  if(!e) return;
+  e.preventDefault();
+  if(e.deltaY < 0){ _sichaekZoom = Math.min(_sichaekZoom+0.2, 3); }
+  else { _sichaekZoom = Math.max(_sichaekZoom-0.2, 1); }
+  var img=document.getElementById('sichaekBigImg'); if(img) img.style.transform='scale('+_sichaekZoom+')';
+}
+function deleteSichaekViewImage(e){
+  if(e) e.stopPropagation();
+  if(!_sichaekViewId || !_sichaekViewCanManage) return;
+  if(!currentUser || !currentUser.id) return;
+  var total = _sichaekViewImgs.length;
+  var cur = _sichaekViewIdx+1;
+  if(!confirm(cur+'번째 장표를 삭제할까요? (전체 '+total+'장 중)')) return;
+  var delIdx = _sichaekViewIdx;
+  showToast('장표 삭제 중...');
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'deleteCampaignImage', data:{
+      fpCode: currentUser.id, id: _sichaekViewId, imgIdx: delIdx
+    }})
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok){
+      showToast('✅ 장표를 삭제했습니다');
+      // 로컬 배열에서도 제거 후 뷰어 갱신
+      _sichaekViewImgs.splice(delIdx, 1);
+      if(!_sichaekViewImgs.length){ closeSichaekImg(); }
+      else {
+        if(_sichaekViewIdx >= _sichaekViewImgs.length) _sichaekViewIdx = _sichaekViewImgs.length-1;
+        _sichaekZoom = 1;
+        _renderSichaekView();
+      }
+      loadSichaek();
+    } else {
+      showToast('⚠️ ' + ((res&&res.msg)||'삭제 실패'));
+    }
+  }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+}
 function closeSichaekImg(){ document.getElementById('sichaekImgOverlay').classList.remove('open'); }
 
 function openSichaekAdd(){
@@ -9871,7 +9927,14 @@ function doCheckin() { doSmartCheckin(); }
 <input type="file" id="sichaekAddImgFile" accept="image/*" style="display:none">
 <div class="mgmt-overlay" id="sichaekImgOverlay" style="z-index:669" onclick="closeSichaekImg()">
   <div style="max-width:94vw;max-height:92vh;display:flex;flex-direction:column;align-items:center" onclick="event.stopPropagation()">
-    <img id="sichaekBigImg" style="max-width:94vw;max-height:84vh;border-radius:10px" alt="시책 이미지">
+    <div style="max-width:94vw;max-height:84vh;overflow:auto;border-radius:10px" onwheel="sichaekViewWheel(event)">
+      <img id="sichaekBigImg" style="max-width:94vw;max-height:84vh;border-radius:10px;cursor:zoom-in;transform-origin:center center;transition:transform .12s ease" alt="시책 이미지" onclick="sichaekImgClick(event)">
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+      <button type="button" onclick="sichaekZoomOut(event)" style="font-size:18px;padding:6px 14px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer">－</button>
+      <button type="button" onclick="sichaekZoomIn(event)" style="font-size:18px;padding:6px 14px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer">＋</button>
+      <button type="button" id="sichaekViewDelBtn" onclick="deleteSichaekViewImage(event)" style="display:none;font-size:13px;font-weight:700;padding:7px 14px;border:none;border-radius:8px;background:rgba(192,57,49,0.85);color:#fff;cursor:pointer">🗑 이 장 삭제</button>
+    </div>
     <div id="sichaekViewNav" style="display:none;align-items:center;gap:18px;margin-top:12px">
       <button type="button" onclick="sichaekViewPrev(event)" style="font-size:20px;padding:6px 16px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer">‹</button>
       <span id="sichaekViewCount" style="color:#fff;font-size:14px;font-weight:700">1 / 1</span>
