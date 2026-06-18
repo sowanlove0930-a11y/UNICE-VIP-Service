@@ -5326,7 +5326,7 @@ function _docRender(){
       tb.innerHTML = ''
         + '<button type="button" onclick="_docUploadClick()" style="font-size:12px;font-weight:700;padding:8px 14px;border:none;border-radius:8px;background:#8B6FD6;color:#fff;cursor:pointer">⬆ 파일 업로드</button>'
         + '<button type="button" onclick="_docAddLink()" style="font-size:12px;font-weight:700;padding:8px 14px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text);cursor:pointer">🔗 링크 등록</button>'
-        + '<input type="file" id="docFileInput" style="display:none" onchange="_docDoUpload(this)">';
+        + '<input type="file" id="docFileInput" multiple style="display:none" onchange="_docDoUpload(this)">';
     } else { tb.style.display='none'; tb.innerHTML=''; }
   }
   // 자료 목록
@@ -5417,20 +5417,51 @@ function _docDeleteFolder(fn){
 function _docUploadClick(){ var inp = document.getElementById('docFileInput'); if (inp) inp.click(); }
 function _docDoUpload(inp){
   if (!inp || !inp.files || !inp.files.length) return;
-  var file = inp.files[0]; inp.value='';
   var MAXB = 25 * 1024 * 1024;
-  if (file.size > MAXB){ showToast('⚠️ 25MB 이하만 업로드 가능 · 큰 파일은 링크 등록 이용'); return; }
-  showToast('⬆ 업로드 중...');
-  var reader = new FileReader();
-  reader.onload = function(){
-    var b64 = String(reader.result || '');
-    _docPost({ action:'uploadDoc', data:{
-      fpCode: currentUser.id, parent: _docState.curParent, mid: _docState.curMid, folder: _docState.curFolder,
-      name: file.name, mime: file.type || 'application/octet-stream', size: file.size, fileBase64: b64
-    } }, null, '✅ 업로드 완료', '⚠️ 업로드 실패 (네트워크/용량)');
-  };
-  reader.onerror = function(){ showToast('⚠️ 파일 읽기 실패'); };
-  reader.readAsDataURL(file);
+  var files = [];
+  var tooBig = [];
+  for (var i = 0; i < inp.files.length; i++){
+    var f = inp.files[i];
+    if (f.size > MAXB) { tooBig.push(f.name); }
+    else files.push(f);
+  }
+  inp.value = '';
+  if (tooBig.length){ showToast('⚠️ 25MB 초과 ' + tooBig.length + '개 제외 (링크 등록 이용)'); }
+  if (!files.length){ return; }
+  var total = files.length;
+  var done = 0, failed = 0, idx = 0;
+  // 현재 업로드 위치 고정 (중간에 폴더 바뀌어도 일관)
+  var tgt = { parent: _docState.curParent, mid: _docState.curMid, folder: _docState.curFolder };
+  function _next(){
+    if (idx >= total){
+      // 전부 끝: 결과 안내 + 한 번만 새로고침
+      var msg = '✅ ' + done + '개 업로드 완료';
+      if (failed) msg += ' · ' + failed + '개 실패';
+      showToast(msg, 2500);
+      _docLoad();
+      return;
+    }
+    var file = files[idx];
+    idx++;
+    showToast('⬆ 업로드 중 ' + idx + '/' + total + ' · ' + file.name, 4000);
+    var reader = new FileReader();
+    reader.onload = function(){
+      var b64 = String(reader.result || '');
+      fetch(UNISPACE_GAS_URL, {
+        method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action:'uploadDoc', data:{
+          fpCode: currentUser.id, parent: tgt.parent, mid: tgt.mid, folder: tgt.folder,
+          name: file.name, mime: file.type || 'application/octet-stream', size: file.size, fileBase64: b64
+        } })
+      }).then(function(r){ return r.json(); }).then(function(res){
+        if (res && res.ok) done++; else failed++;
+        _next();
+      }).catch(function(){ failed++; _next(); });
+    };
+    reader.onerror = function(){ failed++; _next(); };
+    reader.readAsDataURL(file);
+  }
+  _next();
 }
 function _docAddLink(){
   _docPromptLink(function(url, name){
