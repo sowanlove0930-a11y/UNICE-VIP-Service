@@ -5321,7 +5321,7 @@ function _docRender(){
   // toolbar (하위까지 선택돼야 업로드)
   var tb = document.getElementById('docToolbar');
   if (tb){
-    if (_docCanManage() && _docState.curParent && _docState.curMid && _docState.curFolder){
+    if (_docCanManage() && _docState.curParent){
       tb.style.display='flex';
       tb.innerHTML = ''
         + '<button type="button" onclick="_docUploadClick()" style="font-size:12px;font-weight:700;padding:8px 14px;border:none;border-radius:8px;background:#8B6FD6;color:#fff;cursor:pointer">⬆ 파일 업로드</button>'
@@ -5333,14 +5333,16 @@ function _docRender(){
   var listEl = document.getElementById('docList');
   if (!listEl) return;
   if (!_docState.curParent){ listEl.innerHTML='<div style="text-align:center;color:var(--text2);padding:40px 20px">상위 폴더를 선택하세요</div>'; return; }
-  if (!_docState.curMid){ listEl.innerHTML='<div style="text-align:center;color:var(--text2);padding:40px 20px">중간 폴더를 선택하세요</div>'; return; }
-  if (!_docState.curFolder){ listEl.innerHTML='<div style="text-align:center;color:var(--text2);padding:40px 20px">하위 폴더를 선택하세요</div>'; return; }
+  // 현재 위치한 폴더의 자료만 (상위만/중간까지/하위까지 선택한 그 자리)
+  var curP = String(_docState.curParent).trim();
+  var curM = String(_docState.curMid || '').trim();
+  var curF = String(_docState.curFolder || '').trim();
   var inFolder = [];
   for (var j=0;j<_docState.docs.length;j++){
     var d0 = _docState.docs[j];
-    if (String(d0.parent).trim()===String(_docState.curParent).trim() && String(d0.mid).trim()===String(_docState.curMid).trim() && String(d0.folder).trim()===String(_docState.curFolder).trim()) inFolder.push(d0);
+    if (String(d0.parent).trim()===curP && String(d0.mid||'').trim()===curM && String(d0.folder||'').trim()===curF) inFolder.push(d0);
   }
-  if (!inFolder.length){ listEl.innerHTML='<div style="text-align:center;color:var(--text2);padding:40px 20px">이 폴더에 자료가 없습니다</div>'; return; }
+  if (!inFolder.length){ listEl.innerHTML='<div style="text-align:center;color:var(--text2);padding:40px 20px">이 폴더에 자료가 없습니다<br><span style="font-size:12px">하위 폴더가 있으면 위에서 선택하세요</span></div>'; return; }
   var lh = '';
   for (var m=0;m<inFolder.length;m++){
     var d = inFolder[m];
@@ -5363,42 +5365,54 @@ function _docSelectParent(pn){ _docState.curParent=pn; _docState.curMid=''; _doc
 function _docSelectMid(mn){ _docState.curMid=mn; _docState.curFolder=''; _docRender(); }
 function _docSelectFolder(fn){ _docState.curFolder=fn; _docRender(); }
 function _docNewParent(){
-  var name = prompt('상위 폴더 이름 (예: 26년 6월)'); if(!name) return; name=String(name).trim(); if(!name) return;
-  _docPost({ action:'createDocFolder', data:{ fpCode: currentUser.id, parent: name, mid:'', folder:'' } }, function(){ _docState.curParent=name; _docState.curMid=''; _docState.curFolder=''; });
+  _docPrompt('상위 폴더 만들기', '', '예: 26년 6월', function(name){
+    _docPost({ action:'createDocFolder', data:{ fpCode: currentUser.id, parent: name, mid:'', folder:'' } }, function(){ _docState.curParent=name; _docState.curMid=''; _docState.curFolder=''; });
+  });
 }
 function _docNewMid(){
   if(!_docState.curParent){ showToast('먼저 상위 폴더를 선택하세요'); return; }
-  var name = prompt('중간 폴더 이름 (예: 라이프 브리핑(6월))'); if(!name) return; name=String(name).trim(); if(!name) return;
-  _docPost({ action:'createDocFolder', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: name, folder:'' } }, function(){ _docState.curMid=name; _docState.curFolder=''; });
+  _docPrompt('중간 폴더 만들기', '', '예: 라이프 브리핑(6월)', function(name){
+    _docPost({ action:'createDocFolder', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: name, folder:'' } }, function(){ _docState.curMid=name; _docState.curFolder=''; });
+  });
 }
 function _docNewFolder(){
   if(!_docState.curParent || !_docState.curMid){ showToast('먼저 중간 폴더를 선택하세요'); return; }
-  var name = prompt('하위 폴더 이름 (예: 신상품)'); if(!name) return; name=String(name).trim(); if(!name) return;
-  _docPost({ action:'createDocFolder', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: _docState.curMid, folder: name } }, function(){ _docState.curFolder=name; });
+  _docPrompt('하위 폴더 만들기', '', '예: 신상품', function(name){
+    _docPost({ action:'createDocFolder', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: _docState.curMid, folder: name } }, function(){ _docState.curFolder=name; });
+  });
 }
 function _docRenameParent(pn){
-  var name = prompt('상위 폴더 새 이름', pn); if(!name) return; name=String(name).trim(); if(!name||name===pn) return;
-  _docPost({ action:'renameDocFolder', data:{ fpCode: currentUser.id, kind:'parent', parent: pn, newName: name } }, function(){ if(_docState.curParent===pn) _docState.curParent=name; });
+  _docPrompt('상위 폴더 이름 변경', pn, '', function(name){
+    if(name===pn) return;
+    _docPost({ action:'renameDocFolder', data:{ fpCode: currentUser.id, kind:'parent', parent: pn, newName: name } }, function(){ if(_docState.curParent===pn) _docState.curParent=name; });
+  });
 }
 function _docRenameMid(mn){
-  var name = prompt('중간 폴더 새 이름', mn); if(!name) return; name=String(name).trim(); if(!name||name===mn) return;
-  _docPost({ action:'renameDocFolder', data:{ fpCode: currentUser.id, kind:'mid', parent: _docState.curParent, mid: mn, newName: name } }, function(){ if(_docState.curMid===mn) _docState.curMid=name; });
+  _docPrompt('중간 폴더 이름 변경', mn, '', function(name){
+    if(name===mn) return;
+    _docPost({ action:'renameDocFolder', data:{ fpCode: currentUser.id, kind:'mid', parent: _docState.curParent, mid: mn, newName: name } }, function(){ if(_docState.curMid===mn) _docState.curMid=name; });
+  });
 }
 function _docRenameFolder(fn){
-  var name = prompt('하위 폴더 새 이름', fn); if(!name) return; name=String(name).trim(); if(!name||name===fn) return;
-  _docPost({ action:'renameDocFolder', data:{ fpCode: currentUser.id, kind:'folder', parent: _docState.curParent, mid: _docState.curMid, folder: fn, newName: name } }, function(){ if(_docState.curFolder===fn) _docState.curFolder=name; });
+  _docPrompt('하위 폴더 이름 변경', fn, '', function(name){
+    if(name===fn) return;
+    _docPost({ action:'renameDocFolder', data:{ fpCode: currentUser.id, kind:'folder', parent: _docState.curParent, mid: _docState.curMid, folder: fn, newName: name } }, function(){ if(_docState.curFolder===fn) _docState.curFolder=name; });
+  });
 }
 function _docDeleteParent(pn){
-  if(!confirm('"'+pn+'" 상위 폴더를 삭제할까요?\n안의 모든 중간폴더·하위폴더·자료가 함께 삭제됩니다.')) return;
-  _docPost({ action:'deleteDocFolder', data:{ fpCode: currentUser.id, parent: pn, mid:'', folder:'' } }, function(){ if(_docState.curParent===pn){ _docState.curParent=''; _docState.curMid=''; _docState.curFolder=''; } });
+  _docConfirm('상위 폴더 삭제', '"'+pn+'" 폴더를 삭제할까요?\n안의 모든 중간폴더·하위폴더·자료가 함께 삭제됩니다.', function(){
+    _docPost({ action:'deleteDocFolder', data:{ fpCode: currentUser.id, parent: pn, mid:'', folder:'' } }, function(){ if(_docState.curParent===pn){ _docState.curParent=''; _docState.curMid=''; _docState.curFolder=''; } });
+  }, true);
 }
 function _docDeleteMid(mn){
-  if(!confirm('"'+mn+'" 중간 폴더를 삭제할까요?\n안의 모든 하위폴더·자료가 함께 삭제됩니다.')) return;
-  _docPost({ action:'deleteDocFolder', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: mn, folder:'' } }, function(){ if(_docState.curMid===mn){ _docState.curMid=''; _docState.curFolder=''; } });
+  _docConfirm('중간 폴더 삭제', '"'+mn+'" 폴더를 삭제할까요?\n안의 모든 하위폴더·자료가 함께 삭제됩니다.', function(){
+    _docPost({ action:'deleteDocFolder', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: mn, folder:'' } }, function(){ if(_docState.curMid===mn){ _docState.curMid=''; _docState.curFolder=''; } });
+  }, true);
 }
 function _docDeleteFolder(fn){
-  if(!confirm('"'+fn+'" 폴더를 삭제할까요?\n안의 모든 자료가 함께 삭제됩니다.')) return;
-  _docPost({ action:'deleteDocFolder', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: _docState.curMid, folder: fn } }, function(){ if(_docState.curFolder===fn) _docState.curFolder=''; });
+  _docConfirm('하위 폴더 삭제', '"'+fn+'" 폴더를 삭제할까요?\n안의 모든 자료가 함께 삭제됩니다.', function(){
+    _docPost({ action:'deleteDocFolder', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: _docState.curMid, folder: fn } }, function(){ if(_docState.curFolder===fn) _docState.curFolder=''; });
+  }, true);
 }
 function _docUploadClick(){ var inp = document.getElementById('docFileInput'); if (inp) inp.click(); }
 function _docDoUpload(inp){
@@ -5419,14 +5433,14 @@ function _docDoUpload(inp){
   reader.readAsDataURL(file);
 }
 function _docAddLink(){
-  var url = prompt('드라이브 공유 링크(URL)를 붙여넣으세요'); if(!url) return; url=String(url).trim();
-  if (url.indexOf('http') !== 0){ showToast('⚠️ 올바른 링크가 아닙니다'); return; }
-  var name = prompt('자료 이름을 입력하세요'); if(!name) return; name=String(name).trim(); if(!name) return;
-  _docPost({ action:'addDocLink', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: _docState.curMid, folder: _docState.curFolder, name: name, url: url } }, null, '✅ 링크가 등록되었습니다');
+  _docPromptLink(function(url, name){
+    _docPost({ action:'addDocLink', data:{ fpCode: currentUser.id, parent: _docState.curParent, mid: _docState.curMid, folder: _docState.curFolder, name: name, url: url } }, null, '✅ 링크가 등록되었습니다');
+  });
 }
 function _docDelete(id){
-  if (!confirm('이 자료를 삭제할까요?')) return;
-  _docPost({ action:'deleteDoc', data:{ fpCode: currentUser.id, id: id } }, null, '✅ 삭제되었습니다');
+  _docConfirm('자료 삭제', '이 자료를 삭제할까요?', function(){
+    _docPost({ action:'deleteDoc', data:{ fpCode: currentUser.id, id: id } }, null, '✅ 삭제되었습니다');
+  }, true);
 }
 function _docPost(body, onOk, okMsg, failMsg){
   fetch(UNISPACE_GAS_URL, {
@@ -5443,6 +5457,105 @@ function _docPost(body, onOk, okMsg, failMsg){
   }).catch(function(){ showToast(failMsg || '⚠️ 네트워크 오류'); });
 }
 
+// ── 자료실 커스텀 모달 (confirm/prompt 대체) ──
+function _docCloseDlg(){
+  var d = document.getElementById('docDlgOverlay');
+  if (d) d.remove();
+}
+// 확인 모달: title, msg, onYes. danger=true면 빨간 확인버튼
+function _docConfirm(title, msg, onYes, danger){
+  _docCloseDlg();
+  var ov = document.createElement('div');
+  ov.id = 'docDlgOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999999;background:rgba(8,12,22,.62);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick = function(e){ if(e.target===ov) _docCloseDlg(); };
+  var yesBg = danger ? '#C0392B' : '#8B6FD6';
+  var safeMsg = _docEsc(msg).replace(/\n/g,'<br>');
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg1,#fff);border:1px solid var(--bdr2,rgba(0,0,0,.1));border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.4);max-width:340px;width:100%;padding:24px 22px 18px;text-align:center';
+  box.innerHTML = ''
+    + '<div style="font-size:30px;margin-bottom:10px">🗂️</div>'
+    + '<div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:8px">'+_docEsc(title)+'</div>'
+    + '<div style="font-size:13px;color:var(--text2);line-height:1.55;margin-bottom:20px">'+safeMsg+'</div>'
+    + '<div style="display:flex;gap:10px">'
+    +   '<button type="button" id="docDlgNo" style="flex:1;padding:13px;border-radius:11px;border:1.5px solid var(--bdr2);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">취소</button>'
+    +   '<button type="button" id="docDlgYes" style="flex:1.2;padding:13px;border-radius:11px;border:none;background:'+yesBg+';color:#fff;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">확인</button>'
+    + '</div>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  var y = document.getElementById('docDlgYes');
+  var n = document.getElementById('docDlgNo');
+  if (y) y.addEventListener('click', function(){ _docCloseDlg(); if(typeof onYes==='function') onYes(); });
+  if (n) n.addEventListener('click', _docCloseDlg);
+}
+// 입력 모달: title, defaultVal, onOk(value). fields 없으면 단일 입력
+function _docPrompt(title, defaultVal, placeholder, onOk){
+  _docCloseDlg();
+  var ov = document.createElement('div');
+  ov.id = 'docDlgOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999999;background:rgba(8,12,22,.62);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick = function(e){ if(e.target===ov) _docCloseDlg(); };
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg1,#fff);border:1px solid var(--bdr2,rgba(0,0,0,.1));border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.4);max-width:360px;width:100%;padding:24px 22px 18px';
+  box.innerHTML = ''
+    + '<div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:14px;text-align:center">'+_docEsc(title)+'</div>'
+    + '<input type="text" id="docDlgInput" placeholder="'+_docEsc(placeholder||'')+'" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--bdr2);border-radius:11px;background:var(--bg2,#f5f5f7);color:var(--text);font-family:inherit;font-size:14px;outline:none;margin-bottom:18px">'
+    + '<div style="display:flex;gap:10px">'
+    +   '<button type="button" id="docDlgNo" style="flex:1;padding:13px;border-radius:11px;border:1.5px solid var(--bdr2);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">취소</button>'
+    +   '<button type="button" id="docDlgYes" style="flex:1.2;padding:13px;border-radius:11px;border:none;background:#8B6FD6;color:#fff;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">확인</button>'
+    + '</div>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  var inp = document.getElementById('docDlgInput');
+  if (inp){ inp.value = defaultVal || ''; setTimeout(function(){ inp.focus(); inp.select(); }, 50); }
+  function _submit(){
+    var v = inp ? String(inp.value || '').trim() : '';
+    _docCloseDlg();
+    if (v && typeof onOk==='function') onOk(v);
+  }
+  var y = document.getElementById('docDlgYes');
+  var n = document.getElementById('docDlgNo');
+  if (y) y.addEventListener('click', _submit);
+  if (n) n.addEventListener('click', _docCloseDlg);
+  if (inp) inp.addEventListener('keydown', function(e){ if(e.key==='Enter') _submit(); });
+}
+// 링크 등록 전용 입력 모달 (링크 + 이름 2개)
+function _docPromptLink(onOk){
+  _docCloseDlg();
+  var ov = document.createElement('div');
+  ov.id = 'docDlgOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999999;background:rgba(8,12,22,.62);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick = function(e){ if(e.target===ov) _docCloseDlg(); };
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg1,#fff);border:1px solid var(--bdr2,rgba(0,0,0,.1));border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.4);max-width:380px;width:100%;padding:24px 22px 18px';
+  box.innerHTML = ''
+    + '<div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:14px;text-align:center">🔗 링크 등록</div>'
+    + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">드라이브 공유 링크</div>'
+    + '<input type="text" id="docDlgUrl" placeholder="https://drive.google.com/..." style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--bdr2);border-radius:11px;background:var(--bg2,#f5f5f7);color:var(--text);font-family:inherit;font-size:13px;outline:none;margin-bottom:14px">'
+    + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">자료 이름</div>'
+    + '<input type="text" id="docDlgName" placeholder="예: 6월 상품 가이드" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--bdr2);border-radius:11px;background:var(--bg2,#f5f5f7);color:var(--text);font-family:inherit;font-size:14px;outline:none;margin-bottom:18px">'
+    + '<div style="display:flex;gap:10px">'
+    +   '<button type="button" id="docDlgNo" style="flex:1;padding:13px;border-radius:11px;border:1.5px solid var(--bdr2);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">취소</button>'
+    +   '<button type="button" id="docDlgYes" style="flex:1.2;padding:13px;border-radius:11px;border:none;background:#8B6FD6;color:#fff;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">등록</button>'
+    + '</div>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  var urlEl = document.getElementById('docDlgUrl');
+  var nameEl = document.getElementById('docDlgName');
+  if (urlEl) setTimeout(function(){ urlEl.focus(); }, 50);
+  function _submit(){
+    var url = urlEl ? String(urlEl.value || '').trim() : '';
+    var name = nameEl ? String(nameEl.value || '').trim() : '';
+    if (url.indexOf('http') !== 0){ showToast('⚠️ 올바른 링크가 아닙니다'); return; }
+    if (!name){ showToast('⚠️ 자료 이름을 입력하세요'); return; }
+    _docCloseDlg();
+    if (typeof onOk==='function') onOk(url, name);
+  }
+  var y = document.getElementById('docDlgYes');
+  var n = document.getElementById('docDlgNo');
+  if (y) y.addEventListener('click', _submit);
+  if (n) n.addEventListener('click', _docCloseDlg);
+}
 function openSichaekAdd(){
   document.getElementById('sichaekWeek').innerHTML = _sichaekWeekOptions();
   _sichaekFileData = null;
