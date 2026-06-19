@@ -924,6 +924,9 @@ body.theme-light .pv-bf.on { background:#FAEEDA; border-color:#B8860B; color:#85
 .pv-kpi-val { font-size:19px; font-weight:800; color:var(--gold2); }
 .pv-kpi.pv-br .pv-kpi-val { color:#2563EB; }
 .pv-kpi-sub { font-size:10px; color:var(--text3); margin-top:3px; }
+.pv-kpi-ls { font-size:10px; margin-top:4px; line-height:1.5; }
+.pv-kpi-ls .ls-life { color:#1D9E75; font-weight:700; }
+.pv-kpi-ls .ls-non { color:#E08020; font-weight:700; }
 .pv-dnav { font-size:14px; color:var(--text2); padding:4px 12px; border:1px solid var(--bdr); border-radius:8px; background:var(--surface); cursor:pointer; }
 .pv-dnav:hover { border-color:var(--gold); }
 .pv-dlabel { font-size:13px; font-weight:800; color:var(--text); }
@@ -4535,17 +4538,25 @@ var _pvMonth = null; // Date (이번 달 모드에서 월 이동, 1일 기준)
 var _pvRangeStart = ''; // 기간 지정 시작
 var _pvRangeEnd = '';   // 기간 지정 종료
 var _pvBranch = 'all'; // all | al | br
+var _pvFp = ''; // 선택된 FP id ('' = 전체)
 function openPerfView(){
   _pvRange = 'today';
   _pvBranch = 'all';
   _pvDay = new Date(); _pvDay.setHours(0,0,0,0);
-  // FP(비관리자)면 본인 업적만, 카톡공유/지점필터 숨김
-  var isAdminPv = _isManagerUser(currentUser);
+  // 대표급(_canSeeReport)=카톡공유·지점필터 보임 / FP·센터장=숨김(본인 지점 고정)
+  var isAdminPv = _canSeeReport(currentUser);
   var sBtn=document.getElementById('pvShareBtn');
   var bfWrap=document.getElementById('pvBranchFilterWrap');
   if(sBtn) sBtn.style.display = isAdminPv ? '' : 'none';
   if(bfWrap) bfWrap.style.display = isAdminPv ? 'flex' : 'none';
-  if(!isAdminPv) _pvBranch = 'all'; // FP는 본인 것만 (renderPerfView에서 필터)
+  if(!isAdminPv) _pvBranch = 'all'; // FP는 본인 지점만 (renderPerfView에서 지점 필터)
+  // FP별 드롭다운: 대표급만 표시, 매번 전체로 초기화
+  _pvFp = '';
+  var fpfw=document.getElementById('pvFpFilterWrap');
+  if(fpfw) fpfw.style.display = isAdminPv ? '' : 'none';
+  var fpdb=document.getElementById('pvFpDdBody'); if(fpdb) fpdb.style.display='none';
+  var fpch=document.getElementById('pvFpDdChev'); if(fpch) fpch.textContent='▼';
+  var fplbl=document.getElementById('pvFpDdLabel'); if(fplbl) fplbl.textContent='FP별 보기 — 전체';
   ['pvSegToday','pvSegWeek','pvSegMonth'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.classList.toggle('on', id==='pvSegToday');
   });
@@ -4614,11 +4625,66 @@ function _pvSelYm(){
   return now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
 }
 function _pvBranchKey(b){ if((b||'').indexOf('알파')>=0) return 'al'; if((b||'').indexOf('브라보')>=0) return 'br'; return 'etc'; }
+function togglePvFpDd(){
+  var body=document.getElementById('pvFpDdBody');
+  var chev=document.getElementById('pvFpDdChev');
+  if(!body) return;
+  var open = body.style.display!=='none';
+  if(open){ body.style.display='none'; if(chev) chev.textContent='▼'; }
+  else { body.style.display='block'; if(chev) chev.textContent='▲'; renderPvFpList(); }
+}
+function _pvFpCandidates(){
+  // 현재 조회 범위(지점 필터 반영) 안에서 업적이 있는 FP 목록
+  var log=getPerfLog();
+  if(!_canSeeReport(currentUser)){
+    var myBk=_pvBranchKey((currentUser&&currentUser.branch)||'');
+    log=log.filter(function(r){ return _pvBranchKey(r.branch)===myBk; });
+  } else if(_pvBranch!=='all'){
+    log=log.filter(function(r){ return _pvBranchKey(r.branch)===_pvBranch; });
+  }
+  var seen={}, arr=[];
+  log.forEach(function(r){
+    if(!r.fpId || seen[r.fpId]) return;
+    seen[r.fpId]=1;
+    arr.push({ id:r.fpId, name:r.fpName||'', bk:_pvBranchKey(r.branch) });
+  });
+  arr.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  return arr;
+}
+function renderPvFpList(){
+  var el=document.getElementById('pvFpList'); if(!el) return;
+  var q=(document.getElementById('pvFpSearch')||{}).value||'';
+  q=q.trim();
+  var arr=_pvFpCandidates();
+  if(q) arr=arr.filter(function(f){ return (f.name||'').indexOf(q)>=0; });
+  var h='<div onclick="selectPvFp(\'\',\'전체\')" style="font-size:12px;padding:7px 8px;border-radius:6px;cursor:pointer;'+(_pvFp===''?'background:rgba(201,168,76,.15);color:var(--text);font-weight:700':'color:var(--text2)')+'">전체 FP</div>';
+  arr.forEach(function(f){
+    var on=(_pvFp===f.id);
+    var chip = f.bk==='al' ? '<span style="font-size:8px;padding:1px 4px;background:rgba(201,168,76,.18);color:var(--gold2);border-radius:3px;margin-right:5px">알</span>' : (f.bk==='br'?'<span style="font-size:8px;padding:1px 4px;background:rgba(47,125,208,.15);color:#2F7DD0;border-radius:3px;margin-right:5px">브</span>':'');
+    h+='<div onclick="selectPvFp(\''+f.id+'\',\''+(f.name||'').replace(/'/g,"")+'\')" style="font-size:12px;padding:7px 8px;border-radius:6px;cursor:pointer;'+(on?'background:rgba(201,168,76,.15);color:var(--text);font-weight:700':'color:var(--text2)')+'">'+chip+(f.name||'')+(on?'<span style="float:right;color:var(--gold2)">✓</span>':'')+'</div>';
+  });
+  if(!arr.length) h+='<div style="font-size:11px;color:var(--text3);padding:10px;text-align:center">FP가 없습니다</div>';
+  el.innerHTML=h;
+}
+function selectPvFp(id,name){
+  _pvFp=id;
+  var lbl=document.getElementById('pvFpDdLabel');
+  if(lbl) lbl.textContent = id ? ('FP별 보기 — '+name) : 'FP별 보기 — 전체';
+  togglePvFpDd();
+  renderPerfView();
+}
+
 function renderPerfView(){
   var log = getPerfLog();
-  // FP(비관리자)는 본인 업적만
-  if(!_isManagerUser(currentUser)){
-    log = log.filter(function(r){ return r.fpId === currentUser.id; });
+  // 권한: 대표급(_canSeeReport)=전체 / 그 외(FP·센터장)=본인 지점만
+  var _pvCanAll = _canSeeReport(currentUser);
+  if(!_pvCanAll){
+    var _myBk = _pvBranchKey((currentUser && currentUser.branch) || '');
+    log = log.filter(function(r){ return _pvBranchKey(r.branch) === _myBk; });
+  }
+  // FP별 필터 (선택 시)
+  if(_pvFp){
+    log = log.filter(function(r){ return r.fpId === _pvFp; });
   }
   var now = new Date(); now.setHours(0,0,0,0);
 
@@ -4644,30 +4710,52 @@ function renderPerfView(){
   }
 
   // KPI 집계
-  var tot={amt:0,cnt:0}, al={amt:0,cnt:0}, br={amt:0,cnt:0};
+  var tot={amt:0,cnt:0,life:0,non:0}, al={amt:0,cnt:0,life:0,non:0}, br={amt:0,cnt:0,life:0,non:0};
+  var self={amt:0,cnt:0,life:0,non:0};
   rangeRecs.forEach(function(r){
     var t=parseInt(r.total)||0;
     tot.amt+=t; tot.cnt++;
     var bk=_pvBranchKey(r.branch);
-    if(bk==='al'){ al.amt+=t; al.cnt++; }
-    else if(bk==='br'){ br.amt+=t; br.cnt++; }
+    var tgt = (bk==='al') ? al : (bk==='br' ? br : null);
+    if(tgt){ tgt.amt+=t; tgt.cnt++; }
+    var isSelf = currentUser && (r.fpId === currentUser.id);
+    if(isSelf){ self.amt+=t; self.cnt++; }
+    // 상품별 생보/손보 분류
+    var recHasLife=false, recHasNon=false;
+    (r.products||[]).forEach(function(p){
+      var a=parseInt(p.amount)||0;
+      var kind=(typeof _perfClassify==='function')?_perfClassify(p.co):'etc';
+      if(kind==='life'){ tot.life+=a; if(tgt) tgt.life+=a; if(isSelf) self.life+=a; recHasLife=true; }
+      else if(kind==='non'){ tot.non+=a; if(tgt) tgt.non+=a; if(isSelf) self.non+=a; recHasNon=true; }
+    });
+    if(isSelf){
+      self.lifeCnt = (self.lifeCnt||0) + (recHasLife?1:0);
+      self.nonCnt = (self.nonCnt||0) + (recHasNon?1:0);
+    }
   });
+  function _pvLsHtml(o){
+    var L=Math.round((o.life||0)/10000), N=Math.round((o.non||0)/10000);
+    return '<span class="ls-life">생 '+L.toLocaleString()+'만</span> <span class="ls-non">손 '+N.toLocaleString()+'만</span>';
+  }
+  function _pvLsCntHtml(o){
+    return '<span class="ls-life">생 '+(o.lifeCnt||0)+'</span> <span class="ls-non">손 '+(o.nonCnt||0)+'</span>';
+  }
 
-  var _pvIsAdmin = _isManagerUser(currentUser);
+  var _pvIsAdmin = _canSeeReport(currentUser);
   if(!_pvIsAdmin){
-    // FP: 내 목표 / 보장월초 / 건수
-    var goalDB2 = getFpGoalDB()[_pvSelYm()] || {};
-    var myGoal = parseInt((goalDB2[currentUser.id]||{}).goal) || 0;
-    var lblT=document.getElementById('pvTotLbl'); if(lblT) lblT.textContent='내 목표';
-    var lblA=document.getElementById('pvAlLbl'); if(lblA) lblA.textContent='내 보장월초';
-    var lblB=document.getElementById('pvBrLbl'); if(lblB) lblB.textContent='내 건수';
-    document.getElementById('pvTotAmt').textContent = myGoal.toLocaleString()+'만';
-    document.getElementById('pvTotCnt').textContent = '목표';
-    document.getElementById('pvAlAmt').textContent = Math.round(tot.amt/10000).toLocaleString()+'만';
-    var rate = myGoal ? Math.round(tot.amt/10000/myGoal*100) : 0;
-    document.getElementById('pvAlCnt').textContent = '달성 '+rate+'%';
-    document.getElementById('pvBrAmt').textContent = tot.cnt+'건';
-    document.getElementById('pvBrCnt').textContent = '계약';
+    // FP/센터장: 본인 지점만 (tot=본인 지점 합계) / 보장월초·건수는 본인
+    var lblT=document.getElementById('pvTotLbl'); if(lblT) lblT.textContent='지점 합계';
+    var lblA=document.getElementById('pvAlLbl'); if(lblA) lblA.textContent='보장월초(본인)';
+    var lblB=document.getElementById('pvBrLbl'); if(lblB) lblB.textContent='건수(본인)';
+    document.getElementById('pvTotAmt').textContent = Math.round(tot.amt/10000).toLocaleString()+'만';
+    document.getElementById('pvTotCnt').textContent = tot.cnt+'건';
+    document.getElementById('pvAlAmt').textContent = Math.round(self.amt/10000).toLocaleString()+'만';
+    document.getElementById('pvAlCnt').textContent = '';
+    document.getElementById('pvBrAmt').textContent = self.cnt+'건';
+    document.getElementById('pvBrCnt').textContent = '';
+    var lsT0=document.getElementById('pvTotLs'); if(lsT0) lsT0.innerHTML=_pvLsHtml(tot);
+    var lsA0=document.getElementById('pvAlLs'); if(lsA0) lsA0.innerHTML=_pvLsHtml(self);
+    var lsB0=document.getElementById('pvBrLs'); if(lsB0) lsB0.innerHTML=_pvLsCntHtml(self);
     var kTot0=document.getElementById('pvKpiTot'), kAl0=document.getElementById('pvKpiAl'), kBr0=document.getElementById('pvKpiBr');
     [kTot0,kAl0,kBr0].forEach(function(el){ if(el){ el.classList.remove('dim'); el.classList.remove('hi'); } });
   } else {
@@ -4680,6 +4768,9 @@ function renderPerfView(){
     document.getElementById('pvAlCnt').textContent = al.cnt+'건';
     document.getElementById('pvBrAmt').textContent = Math.round(br.amt/10000).toLocaleString()+'만';
     document.getElementById('pvBrCnt').textContent = br.cnt+'건';
+    var lsT=document.getElementById('pvTotLs'); if(lsT) lsT.innerHTML=_pvLsHtml(tot);
+    var lsA=document.getElementById('pvAlLs'); if(lsA) lsA.innerHTML=_pvLsHtml(al);
+    var lsB=document.getElementById('pvBrLs'); if(lsB) lsB.innerHTML=_pvLsHtml(br);
 
     // KPI 강조 (필터에 따라)
     var kTot=document.getElementById('pvKpiTot'), kAl=document.getElementById('pvKpiAl'), kBr=document.getElementById('pvKpiBr');
@@ -4732,10 +4823,16 @@ function renderPerfView(){
     listRecs.forEach(function(r){
       var bk=_pvBranchKey(r.branch);
       var chip = bk==='al' ? '<span class="pv-bchip al">알</span>' : (bk==='br'?'<span class="pv-bchip br">브</span>':'');
-      var cats = (r.products||[]).map(function(p){ return (p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원'; }).join(' · ');
+      var cats = (r.products||[]).map(function(p){
+        var kind=(typeof _perfClassify==='function')?_perfClassify(p.co):'etc';
+        var badge = kind==='life' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#1D9E75;color:#fff;margin-right:4px">생</span>' : (kind==='non' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#E08020;color:#fff;margin-right:4px">손</span>' : '');
+        return '<span style="display:inline-block;white-space:nowrap">'+badge+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원</span>';
+      }).join('<br>');
       var dateCol = (_pvRange!=='today') ? '<td style="white-space:nowrap;color:var(--text3)">'+(r.date?r.date.slice(5):'')+'</td>' : '';
       var delCol = canDel ? '<td style="text-align:center;width:30px"><span onclick="deletePerfRec(\''+r.id+'\')" style="color:#C0392B;font-size:13px;cursor:pointer;padding:4px" title="삭제">🗑️</span></td>' : '';
-      rows+='<tr>'+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span></span></td><td style="color:var(--text2)">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원</td>'+delCol+'</tr>';
+      var isSelfRow = currentUser && (r.fpId === currentUser.id);
+      var meBadge = isSelfRow ? '<span style="font-size:9px;color:#854F0B;background:rgba(201,168,76,.15);padding:1px 5px;border-radius:4px;margin-left:4px">나</span>' : '';
+      rows+='<tr>'+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td style="color:var(--text2)">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원</td>'+delCol+'</tr>';
     });
     var dateHead = (_pvRange!=='today') ? '<th>날짜</th>' : '';
     var delHead = canDel ? '<th></th>' : '';
@@ -10108,10 +10205,12 @@ function _bojangShowsTotal(u) {
 // 일보 산출 권한: 대표/지점장/교육지점장/매니저는 보임, 센터장/FP는 숨김
 function _canSeeReport(u) {
   if (!u) return false;
+  var tt = String(u.title || '').trim();
   if (u.role === '대표' || u.role === '지점장') return true;
+  if (u.id === 'ktk01' || u.level === 'admin' || u.level === 'manager') return true; // GAS level
   if (u.id === 'H2503162' || (u.branch && u.branch.indexOf('교육') >= 0)) return true; // 교육지점장
-  if ((u.title || '') === '매니저') return true;
-  if ((u.title || '') === '지점장') return true;
+  if (tt.indexOf('매니저') >= 0) return true;
+  if (tt.indexOf('지점장') >= 0) return true; // 지점장/교육지점장
   return false; // 센터장, FP 등은 숨김
 }
 // 일보 범위: 대표/교육지점장은 전체('all'), 지점장/매니저는 자기 지점
@@ -10364,17 +10463,31 @@ function doCheckin() { doSmartCheckin(); }
     </div>
 
     <!-- 지점 필터 (작게) -->
-    <div id="pvBranchFilterWrap" style="display:flex;gap:5px;margin-bottom:14px">
+    <div id="pvBranchFilterWrap" style="display:flex;gap:5px;margin-bottom:10px">
       <button type="button" class="pv-bf on" id="pvBfAll" onclick="setPerfBranch('all',this)">전체</button>
       <button type="button" class="pv-bf" id="pvBfAlpha" onclick="setPerfBranch('al',this)">알파</button>
       <button type="button" class="pv-bf" id="pvBfBravo" onclick="setPerfBranch('br',this)">브라보</button>
     </div>
 
+    <div id="pvFpFilterWrap" style="margin-bottom:14px">
+      <div id="pvFpDdHead" onclick="togglePvFpDd()" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:10px;cursor:pointer;background:var(--card2)">
+        <span style="font-size:12px;color:var(--gold2);font-weight:700"><span id="pvFpDdLabel">FP별 보기 — 전체</span></span>
+        <span id="pvFpDdChev" style="font-size:11px;color:var(--text3)">▼</span>
+      </div>
+      <div id="pvFpDdBody" style="display:none;border:1px solid var(--border2);border-top:none;border-radius:0 0 10px 10px;padding:8px 10px;background:var(--card)">
+        <div style="display:flex;align-items:center;gap:7px;padding:7px 10px;background:var(--card2);border-radius:8px;margin-bottom:6px">
+          <span style="font-size:12px;color:var(--text3)">🔍</span>
+          <input type="text" id="pvFpSearch" oninput="renderPvFpList()" placeholder="FP 이름 검색" style="border:none;background:transparent;outline:none;font-size:12px;color:var(--text);width:100%;font-family:'Noto Sans KR',sans-serif">
+        </div>
+        <div id="pvFpList" style="max-height:160px;overflow-y:auto"></div>
+      </div>
+    </div>
+
     <!-- KPI -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-      <div class="pv-kpi pv-tot" id="pvKpiTot"><div class="pv-kpi-lbl" id="pvTotLbl">합계</div><div class="pv-kpi-val" id="pvTotAmt">0만</div><div class="pv-kpi-sub" id="pvTotCnt">0건</div></div>
-      <div class="pv-kpi pv-al" id="pvKpiAl"><div class="pv-kpi-lbl" id="pvAlLbl">알파지점</div><div class="pv-kpi-val" id="pvAlAmt">0만</div><div class="pv-kpi-sub" id="pvAlCnt">0건</div></div>
-      <div class="pv-kpi pv-br" id="pvKpiBr"><div class="pv-kpi-lbl" id="pvBrLbl">브라보지점</div><div class="pv-kpi-val" id="pvBrAmt">0만</div><div class="pv-kpi-sub" id="pvBrCnt">0건</div></div>
+      <div class="pv-kpi pv-tot" id="pvKpiTot"><div class="pv-kpi-lbl" id="pvTotLbl">합계</div><div class="pv-kpi-val" id="pvTotAmt">0만</div><div class="pv-kpi-sub" id="pvTotCnt">0건</div><div class="pv-kpi-ls" id="pvTotLs"></div></div>
+      <div class="pv-kpi pv-al" id="pvKpiAl"><div class="pv-kpi-lbl" id="pvAlLbl">알파지점</div><div class="pv-kpi-val" id="pvAlAmt">0만</div><div class="pv-kpi-sub" id="pvAlCnt">0건</div><div class="pv-kpi-ls" id="pvAlLs"></div></div>
+      <div class="pv-kpi pv-br" id="pvKpiBr"><div class="pv-kpi-lbl" id="pvBrLbl">브라보지점</div><div class="pv-kpi-val" id="pvBrAmt">0만</div><div class="pv-kpi-sub" id="pvBrCnt">0건</div><div class="pv-kpi-ls" id="pvBrLs"></div></div>
     </div>
 
     <!-- 날짜 이동 + 건별 리스트 -->
