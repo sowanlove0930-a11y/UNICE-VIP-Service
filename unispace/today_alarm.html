@@ -47,6 +47,16 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 /* ── 요약 카드 ── */
 .summary-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px;}
+
+@media (max-width: 768px) {
+  .summary-cards { gap: 7px; }
+  .sum-card { padding: 11px 6px; }
+  .sum-icon { font-size: 18px; }
+  .sum-label { font-size: 9px; white-space: nowrap; text-align: center; letter-spacing: -0.6px; margin-left: -4px; margin-right: -4px; }
+  .sum-card > div:last-child { text-align: center; }
+  .sum-count { font-size: 18px; }
+  .sum-unit { font-size: 10px; }
+}
 .sum-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:14px 16px;position:relative;overflow:hidden;cursor:pointer;transition:all .2s;}
 .sum-card:hover{border-color:var(--bdr2);transform:translateY(-2px);}
 .sum-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
@@ -253,9 +263,6 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 }
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(27,58,107,.95);color:#fff;padding:11px 22px;border-radius:24px;font-size:13px;font-weight:500;z-index:500;opacity:0;transition:all .3s;white-space:nowrap;backdrop-filter:blur(8px);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-@keyframes skShimmer { 0%{background-position:-180px 0} 100%{background-position:180px 0} }
-.sk-load { display:inline-block; border-radius:6px; color:transparent !important; background:linear-gradient(90deg, rgba(150,150,150,.12) 25%, rgba(150,150,150,.28) 50%, rgba(150,150,150,.12) 75%); background-size:360px 100%; animation:skShimmer 1.1s infinite linear; min-width:36px; vertical-align:middle; }
-.sk-load * { visibility:hidden; }
 </style>
 </head>
 <body>
@@ -275,7 +282,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   <div class="summary-cards">
     <div class="sum-card sum-today" onclick="scrollToSection('today')">
       <div class="sum-icon">📋</div>
-      <div class="sum-label">오늘 챙길 고객</div>
+      <div class="sum-label">오늘 알림</div>
       <div><span class="sum-count" id="cntToday">0</span><span class="sum-unit">건</span></div>
     </div>
     <div class="sum-card sum-d30" onclick="scrollToSection('d30')">
@@ -550,6 +557,7 @@ function _alScope(){
   return 'self';
 }
 var _alBranch='all', _alFp='all', _alFpDir=[];
+var _alFpCache=[], _alFpAlmMap={}, _alFpTotal=0;
 TODAY.setHours(0,0,0,0);
 
 function dateDiff(d) {
@@ -761,16 +769,46 @@ function renderAlTabs(){
   // only FPs that have at least one alarm
   fps=fps.filter(function(f){ return (almMap[f.name]||0)>0; });
   var totalAlm=0; for(var k in almMap) totalAlm+=almMap[k];
-  var fh='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text2);font-weight:700;min-width:34px">FP</span>';
-  var onAll=_alFp==='all';
-  fh+='<button type="button" onclick="setAlFp(\'all\')" style="font-size:12px;font-weight:700;padding:6px 13px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(onAll?'#2563EB':'var(--bdr)')+';background:'+(onAll?'rgba(37,99,235,.12)':'var(--bg2)')+';color:'+(onAll?'#185FA5':'var(--text2)')+'">전체 FP <span style="font-size:10px;opacity:.7">'+totalAlm+'</span></button>';
   fps.sort(function(a,b){ return String(a.name).localeCompare(String(b.name),'ko'); });
-  fps.forEach(function(f){
-    var nm=f.name; var cnt=almMap[nm]||0; var on=_alFp===nm;
-    fh+='<button type="button" onclick="setAlFp(\''+nm+'\')" style="font-size:12px;font-weight:'+(on?'700':'600')+';padding:6px 12px;border-radius:16px;cursor:pointer;font-family:inherit;border:1px solid '+(on?'#2563EB':'var(--bdr)')+';background:'+(on?'rgba(37,99,235,.12)':'var(--bg2)')+';color:'+(on?'#185FA5':'var(--text2)')+'">'+nm+' <span style="font-size:10px;color:var(--orange)">'+cnt+'</span></button>';
-  });
+  _alFpCache = fps;
+  _alFpAlmMap = almMap;
+  _alFpTotal = totalAlm;
+  var curLabel = (_alFp==='all') ? ('전체 FP ('+totalAlm+')') : (_alFp+' ('+(almMap[_alFp]||0)+')');
+  var fh='<div style="display:flex;align-items:center;gap:6px"><span style="font-size:12px;color:var(--text2);font-weight:700;min-width:34px">FP</span>';
+  fh+='<div style="flex:1;position:relative">';
+  fh+='<div onclick="toggleAlFpDd()" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border:1px solid var(--bdr2);border-radius:12px;background:var(--bg2);cursor:pointer">';
+  fh+='<span style="font-size:12px;font-weight:700;color:#185FA5" id="alFpDdLabel">'+curLabel+'</span>';
+  fh+='<span style="font-size:11px;color:var(--text3)" id="alFpDdChev">▾</span>';
   fh+='</div>';
+  fh+='<div id="alFpDdBody" style="display:none;margin-top:4px;border:1px solid var(--bdr2);border-radius:12px;background:var(--bg2);overflow:hidden">';
+  fh+='<div style="padding:8px 10px;border-bottom:1px solid var(--bdr)"><input type="text" id="alFpSearch" placeholder="FP 검색" oninput="renderAlFpList()" autocomplete="off" style="width:100%;box-sizing:border-box;border:1px solid var(--bdr);border-radius:8px;padding:7px 10px;font-size:12px;background:var(--bg2);color:var(--text);font-family:inherit;outline:none"></div>';
+  fh+='<div id="alFpList" style="max-height:200px;overflow-y:auto"></div>';
+  fh+='</div></div></div>';
   wrap.innerHTML=bh+fh;
+}
+
+function toggleAlFpDd(){
+  var body=document.getElementById('alFpDdBody');
+  var chev=document.getElementById('alFpDdChev');
+  if(!body) return;
+  var open=body.style.display!=='none';
+  if(open){ body.style.display='none'; if(chev) chev.textContent='▾'; }
+  else { body.style.display='block'; if(chev) chev.textContent='▴'; var s=document.getElementById('alFpSearch'); if(s) s.value=''; renderAlFpList(); }
+}
+
+function renderAlFpList(){
+  var el=document.getElementById('alFpList'); if(!el) return;
+  var q=''; var si=document.getElementById('alFpSearch'); if(si) q=String(si.value||'').trim();
+  var h='';
+  var onAll=(_alFp==='all');
+  h+='<div onclick="setAlFp(\'all\')" style="padding:9px 12px;font-size:12px;cursor:pointer;'+(onAll?'background:rgba(37,99,235,.1);color:#185FA5;font-weight:700':'color:var(--text2)')+'">전체 FP <span style="color:var(--orange)">'+_alFpTotal+'</span></div>';
+  var list=_alFpCache.filter(function(f){ return !q || String(f.name).indexOf(q)>=0; });
+  list.forEach(function(f){
+    var nm=f.name; var cnt=_alFpAlmMap[nm]||0; var on=(_alFp===nm);
+    h+='<div onclick="setAlFp(\''+nm.replace(/'/g,"")+'\')" style="padding:9px 12px;font-size:12px;cursor:pointer;'+(on?'background:rgba(37,99,235,.1);color:#185FA5;font-weight:700':'color:var(--text)')+'">'+nm+' <span style="color:var(--orange);float:right">'+cnt+'</span></div>';
+  });
+  if(!list.length) h+='<div style="padding:12px;text-align:center;font-size:11px;color:var(--text3)">FP가 없습니다</div>';
+  el.innerHTML=h;
 }
 function setAlBranch(b){ _alBranch=b; _alFp='all'; renderAlTabs(); render(); }
 function setAlFp(n){ _alFp=n; renderAlTabs(); render(); }
@@ -954,30 +992,6 @@ DB = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
 _alLoadFpDir();
 var d = new Date();
 render();
-
-// GAS에서 전체 고객 로드 후 다시 렌더 (localStorage가 비어도 서버 데이터로 표시)
-function _taSkOn(){ var ids=['cntToday','cntD30','cntD5','cntManage']; for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(el) el.classList.add('sk-load'); } }
-function _taSkOff(){ var ids=['cntToday','cntD30','cntD5','cntManage']; for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(el) el.classList.remove('sk-load'); } }
-(function(){
-  var TA_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
-  var u = {};
-  try { u = JSON.parse(localStorage.getItem('unispace_user') || '{}'); } catch(e) {}
-  if(!u || !u.id) return;
-  _taSkOn();
-  setTimeout(_taSkOff, 6000);
-  fetch(TA_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(u.id))
-    .then(function(r){ return r.json(); })
-    .then(function(res){
-      _taSkOff();
-      if(res && res.ok && res.customers){
-        DB = res.customers;
-        try { localStorage.setItem('unispace_customers', JSON.stringify(DB)); } catch(e) {}
-        if(typeof renderAlTabs==='function') renderAlTabs();
-        render();
-      }
-    })
-    .catch(function(){ _taSkOff(); });
-})();
 </script>
 
 <!-- 카톡 버전 선택 모달 -->
