@@ -1304,7 +1304,7 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
 @keyframes fadeIn   { from { opacity:0; } to { opacity:1; } }
 
 /* ─── RESPONSIVE ─── */
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   /* 가로 넘침(좌우 잘림) 원천 차단 */
   html, body { max-width: 100%; overflow-x: hidden; }
   .app { padding: 0 12px 12px; max-width: 100%; overflow-x: hidden; box-sizing: border-box; }
@@ -10217,13 +10217,59 @@ function doSmartCheckin() {
 
 function doCheckin() { doSmartCheckin(); }
 
-// Keep dashboard as a back-navigation trap so the browser back button
-// does not leave the app to a previously visited external site.
+// 핸드폰 뒤로가기: 열린 모달/메뉴가 있으면 그것부터 닫고, 없으면 정상 뒤로가기
 (function(){
   try {
+    // 닫기 우선순위 목록 (위에 뜬 것부터). check: 열려있나, close: 닫기 동작
+    function _backClosers(){
+      return [
+        // 커스텀 확인/입력 다이얼로그 (자료실)
+        { check: function(){ return !!document.getElementById('docDlgOverlay'); },
+          close: function(){ if(typeof _docCloseDlg==='function') _docCloseDlg(); else { var d=document.getElementById('docDlgOverlay'); if(d) d.remove(); } } },
+        // 시책 이미지 뷰어
+        { check: function(){ var e=document.getElementById('sichaekImgOverlay'); return e && e.classList.contains('open'); },
+          close: function(){ if(typeof closeSichaekImg==='function') closeSichaekImg(); } },
+        // 일반 오버레이 모달들 (.open 켜진 것 중 가장 위 z-index 하나)
+        { check: function(){ return _topOpenOverlay() != null; },
+          close: function(){ var ov=_topOpenOverlay(); if(ov) ov.classList.remove('open'); } },
+        // 펼친 메뉴 (업적/고객/출결)
+        { check: function(){ var p=document.getElementById('dropdownPanel'); return p && p.classList.contains('open'); },
+          close: function(){ if(typeof closeSubmenu==='function') closeSubmenu(); else { var p=document.getElementById('dropdownPanel'); if(p) p.classList.remove('open'); } } }
+      ];
+    }
+    // 화면에 열린(.open) 오버레이 중 z-index가 가장 높은 것
+    function _topOpenOverlay(){
+      var nodes = document.querySelectorAll('.mgmt-overlay.open, .confirm-overlay.open, .modal-overlay.open, [id$="Overlay"].open');
+      var best = null, bestZ = -1;
+      for (var i=0;i<nodes.length;i++){
+        var el = nodes[i];
+        // 화면에 실제로 보이는 것만
+        if (el.offsetParent === null && getComputedStyle(el).display === 'none') continue;
+        var z = parseInt(getComputedStyle(el).zIndex) || 0;
+        if (z >= bestZ){ bestZ = z; best = el; }
+      }
+      return best;
+    }
+    function _anyOpen(){
+      var list = _backClosers();
+      for (var i=0;i<list.length;i++){ if (list[i].check()) return true; }
+      return false;
+    }
+    function _closeTopOne(){
+      var list = _backClosers();
+      for (var i=0;i<list.length;i++){ if (list[i].check()){ list[i].close(); return true; } }
+      return false;
+    }
     history.pushState(null, '', location.href);
     window.addEventListener('popstate', function(){
-      history.pushState(null, '', location.href);
+      if (_anyOpen()){
+        _closeTopOne();
+        // 히스토리 단계를 다시 채워서, 다음 뒤로가기도 받을 수 있게
+        history.pushState(null, '', location.href);
+      } else {
+        // 열린 게 없으면 진짜로 한 단계 뒤로
+        history.back();
+      }
     });
   } catch(e) {}
 })();
