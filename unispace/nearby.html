@@ -25,6 +25,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 /* 좌측 패널 */
 .left{width:280px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--bdr);display:flex;flex-direction:column;overflow:hidden;position:relative;}
 .lhead{padding:14px 16px;border-bottom:1px solid var(--bdr);}
+.panel-toggle-mobile{display:none;}
 .ltitle{font-size:11px;font-weight:700;color:var(--gold2);letter-spacing:.06em;margin-bottom:10px;}
 .mcard{background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.14);border-left:3px solid rgba(96,165,250,.55);border-radius:8px;padding:9px 12px;margin-bottom:14px;}
 .mlabel{font-size:9px;color:#60A5FA;font-weight:700;margin-bottom:3px;letter-spacing:.04em;text-transform:uppercase;opacity:.85;}
@@ -287,16 +288,36 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   #headerSub { margin-left: auto !important; min-width: 0; }
   #headerUser { margin-left: 8px !important; font-size: 11px; white-space: nowrap; flex-shrink: 0; }
 
-  /* 레이아웃: 좌우 → 위아래 */
-  .main { flex-direction: column; }
+  /* ── A방식: 지도 전체 + 패널 오버레이 ── */
+  .main { flex-direction: column; position: relative; }
+  /* 지도: 화면 전체 */
+  .map-wrap { flex: 1; width: 100%; min-height: 0; }
+  /* 패널: 지도 위에 떠 있는 오버레이 카드 */
   .left {
-    width: 100%; flex: 0 0 auto;
-    border-right: none; border-bottom: 2px solid var(--bdr);
-    max-height: 44vh; overflow-y: auto;
+    position: absolute; top: 8px; left: 8px; right: 8px;
+    width: auto; flex: none;
+    max-height: 72vh; overflow-y: auto;
+    background: rgba(13,22,40,.96);
+    border: 1px solid var(--bdr2); border-right: none;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    z-index: 30;
+    transition: max-height .25s ease, padding .25s ease;
   }
-  .map-wrap { flex: 1; min-height: 320px; width: 100%; }
+  /* 접힘 상태: 헤더(검색토글)만 보임 */
+  .left.panel-collapsed { max-height: 46px; overflow: hidden; }
 
-  /* ── 패널 내용 압축(세로 길이 단축) ── */
+  /* 패널 접기 토글 버튼 (모바일에서만 표시) */
+  .panel-toggle-mobile {
+    display: flex !important; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 12px 14px;
+    background: transparent; border: none; cursor: pointer;
+    color: var(--gold2); font-size: 13px; font-weight: 700;
+    font-family: 'Noto Sans KR', sans-serif;
+    position: sticky; top: 0; z-index: 5;
+  }
+
+  /* ── 패널 내용 압축 ── */
   .lhead { padding: 8px 14px; }
   .ltitle { margin-bottom: 5px; font-size: 10px; }
   .mcard { padding: 6px 10px; margin-bottom: 8px; }
@@ -341,7 +362,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
 <div class="main">
   <!-- 좌측 패널 -->
-  <div class="left">
+  <div class="left" id="leftPanel">
+    <button type="button" class="panel-toggle-mobile" id="panelToggleBtn" onclick="togglePanel()">🔍 검색 · 반경 설정 <span id="panelToggleChev">▴</span></button>
     <div class="lhead">
       <div class="ltitle">기준 위치</div>
       <div class="mcard" id="targetCard" style="cursor:pointer;" title="클릭하면 이 위치로 이동">
@@ -3892,6 +3914,17 @@ function selectCustomer(idx) {
 }
 
 // ── 팝업 표시 ────────────────────────────────────────
+function togglePanel() {
+  var p = document.getElementById('leftPanel');
+  var chev = document.getElementById('panelToggleChev');
+  if(!p) return;
+  var collapsed = p.classList.toggle('panel-collapsed');
+  if(chev) chev.textContent = collapsed ? '▾' : '▴';
+  if(typeof kakaoMap !== 'undefined' && kakaoMap && kakaoMap.relayout){
+    setTimeout(function(){ kakaoMap.relayout(); }, 280);
+  }
+}
+
 function showPopup(c, dist) {
   // 이미 열린 팝업의 같은 고객 클릭 → 닫기 + 선택 카드 숨김
   var popup = document.getElementById('mapPopup');
