@@ -89,6 +89,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .channel-extra .form-input { border-radius: 0 var(--r-md) var(--r-md) 0; }
 .channel-extra-hidden { display: none; }
 
+/* 보험사 커스텀 드롭다운 */
+.ins-dd { position: relative; }
+.ins-dd-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1.5px solid var(--bdr); border-radius: var(--r-md); background: var(--sur); cursor: pointer; }
+.ins-dd-head:hover { border-color: var(--bdr2); }
+.ins-dd-val { font-size: 14px; color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ins-dd-chev { font-size: 12px; color: var(--text2); font-style: normal; flex-shrink: 0; }
+.ins-dd-body { margin-top: 4px; border: 1px solid var(--bdr2); border-radius: var(--r-md); background: var(--sur); overflow: hidden; }
+.ins-dd-search { padding: 8px 10px; border-bottom: 1px solid var(--bdr); background: var(--bg2); }
+.ins-dd-search input { width: 100%; box-sizing: border-box; border: 1px solid var(--bdr); border-radius: var(--r-md); padding: 7px 10px; font-size: 13px; background: var(--sur); color: var(--text); font-family: inherit; outline: none; }
+.ins-dd-list { max-height: 240px; overflow-y: auto; }
+.ins-sec { padding: 6px 12px; font-size: 10px; font-weight: 700; background: rgba(26,39,68,.03); }
+.ins-opt { padding: 9px 14px; font-size: 13px; color: var(--text); cursor: pointer; }
+.ins-opt:hover { background: var(--bg2); }
+.ins-opt.on { background: rgba(55,138,221,.1); font-weight: 600; }
+.ins-direct { color: #BA7517; font-weight: 600; border-top: 1px solid var(--bdr); }
+.ins-empty { padding: 16px; text-align: center; font-size: 12px; color: var(--text3); }
+.ins-direct-link { color: #BA7517; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.ins-dd-custom { margin-top: 6px; }
+.ins-dd-custom input { width: 100%; box-sizing: border-box; border: 1.5px solid #BA7517; border-radius: var(--r-md); padding: 9px 12px; font-size: 14px; background: var(--sur); color: var(--text); font-family: inherit; outline: none; }
+
+
 /* 생년월일 셀렉트 */
 .birth-wrap { display: flex; align-items: center; gap: 6px; }
 .birth-wrap .form-select { flex: 1; }
@@ -311,7 +332,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .family-confirm:hover{transform:translateY(-1px);}
 
 /* ── 토스트 ── */
-.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(27,58,107,.95);color:#fff;padding:11px 22px;border-radius:24px;font-size:13px;font-weight:500;z-index:500;opacity:0;transition:all .3s;white-space:nowrap;backdrop-filter:blur(8px);}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(27,58,107,.95);color:#fff;padding:11px 22px;border-radius:24px;font-size:13px;font-weight:500;z-index:500;opacity:0;transition:all .3s;white-space:nowrap;backdrop-filter:blur(8px);pointer-events:none;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
 
@@ -1958,8 +1979,114 @@ function removeContract(id) {
   tempContracts = tempContracts.filter(function(c){ return c !== id; });
   renderContracts();
 }
+var INSURER_LIFE = ['한화생명','삼성생명','교보생명','신한라이프','메트라이프','AIA생명','DB생명','흥국생명','ABL생명','DGB생명','하나생명','iM라이프','동양생명','NH농협생명','미래에셋생명','KB라이프','KDB생명'];
+var INSURER_NON = ['삼성화재','현대해상','DB손보','KB손보','메리츠화재','한화손보','롯데손보','예별손해보험','흥국화재','농협손보','카카오손보','캐롯손보','하나손보','라이나손보'];
+
+function _insurerDdHtml(id){
+  var h = '';
+  h += '<div class="ins-dd" id="insDd'+id+'">';
+  h += '<div class="ins-dd-head" onclick="toggleInsDd(\''+id+'\')">';
+  h += '<span class="ins-dd-val" id="insVal'+id+'">선택</span>';
+  h += '<i class="ins-dd-chev" id="insChev'+id+'">▾</i>';
+  h += '</div>';
+  h += '<input type="hidden" id="c'+id+'_insurer" value="">';
+  h += '<div class="ins-dd-body" id="insBody'+id+'" style="display:none">';
+  h += '<div class="ins-dd-search"><input type="text" id="insSearch'+id+'" placeholder="보험사 검색" oninput="renderInsList(\''+id+'\')" autocomplete="off"></div>';
+  h += '<div class="ins-dd-list" id="insList'+id+'"></div>';
+  h += '</div>';
+  h += '<div class="ins-dd-custom" id="insCustomWrap'+id+'" style="display:none">';
+  h += '<input type="text" id="insCustom'+id+'" placeholder="보험사명 직접 입력" oninput="setInsCustom(\''+id+'\')">';
+  h += '</div>';
+  h += '</div>';
+  return h;
+}
+
+function toggleInsDd(id){
+  var body = document.getElementById('insBody'+id);
+  var chev = document.getElementById('insChev'+id);
+  if(!body) return;
+  var open = body.style.display !== 'none';
+  if(open){ body.style.display='none'; if(chev) chev.textContent='▾'; }
+  else {
+    body.style.display='block'; if(chev) chev.textContent='▴';
+    var s=document.getElementById('insSearch'+id); if(s) s.value='';
+    renderInsList(id);
+  }
+}
+
+function renderInsList(id){
+  var el = document.getElementById('insList'+id);
+  if(!el) return;
+  var q = '';
+  var si = document.getElementById('insSearch'+id);
+  if(si) q = String(si.value||'').trim();
+  var cur = '';
+  var hid = document.getElementById('c'+id+'_insurer');
+  if(hid) cur = hid.value;
+  var h = '';
+  function _section(label, color, arr){
+    var hit = arr.filter(function(v){ return !q || v.indexOf(q)>=0; });
+    if(!hit.length) return '';
+    var s = '<div class="ins-sec" style="color:'+color+'">'+label+'</div>';
+    hit.forEach(function(v){
+      var on = (cur===v);
+      s += '<div class="ins-opt'+(on?' on':'')+'" onclick="selectIns(\''+id+'\',\''+v.replace(/'/g,"")+'\')">'+v+(on?'<i class="ti ti-check" style="float:right;color:#185FA5"></i>':'')+'</div>';
+    });
+    return s;
+  }
+  h += _section('생명보험', '#1D9E75', INSURER_LIFE);
+  h += _section('손해보험', '#185FA5', INSURER_NON);
+  if(!q){
+    h += '<div class="ins-opt ins-direct" onclick="chooseInsCustom(\''+id+'\')"><i class="ti ti-pencil" style="margin-right:5px"></i>직접 입력</div>';
+  }
+  if(!h){ h = '<div class="ins-empty">검색 결과 없음 — <span class="ins-direct-link" onclick="chooseInsCustom(\''+id+'\')">직접 입력</span></div>'; }
+  el.innerHTML = h;
+}
+
+function selectIns(id, v){
+  var hid = document.getElementById('c'+id+'_insurer');
+  if(hid) hid.value = v;
+  var lbl = document.getElementById('insVal'+id);
+  if(lbl){ lbl.textContent = v; lbl.classList.remove('placeholder'); }
+  var cw = document.getElementById('insCustomWrap'+id);
+  if(cw) cw.style.display='none';
+  toggleInsDd(id);
+}
+
+function chooseInsCustom(id){
+  var cw = document.getElementById('insCustomWrap'+id);
+  if(cw) cw.style.display='block';
+  var ci = document.getElementById('insCustom'+id);
+  if(ci){ ci.value=''; ci.focus(); }
+  var lbl = document.getElementById('insVal'+id);
+  if(lbl){ lbl.textContent='직접 입력'; }
+  var hid = document.getElementById('c'+id+'_insurer');
+  if(hid) hid.value='';
+  toggleInsDd(id);
+}
+
+function setInsCustom(id){
+  var ci = document.getElementById('insCustom'+id);
+  var hid = document.getElementById('c'+id+'_insurer');
+  var lbl = document.getElementById('insVal'+id);
+  if(!ci) return;
+  var v = String(ci.value||'').trim();
+  if(hid) hid.value = v;
+  if(lbl) lbl.textContent = v || '직접 입력';
+}
+
 function renderContracts() {
   var el = document.getElementById('contractList');
+  // 다시 그리기 전 현재 입력값 보존 (계약 추가/삭제 시 값 유지)
+  var _preserve = {};
+  tempContracts.forEach(function(pid){
+    var rec = {};
+    ['insurer','product','premium','payday','paymethod','date_y','date_m','date_d'].forEach(function(f){
+      var pe = document.getElementById('c'+pid+'_'+f);
+      if(pe) rec[f] = pe.value;
+    });
+    _preserve[pid] = rec;
+  });
   el.innerHTML = tempContracts.map(function(id, i) {
     return '<div class="contract-item" id="contract_'+id+'">' +
       '<div class="contract-item-header">' +
@@ -1968,20 +2095,8 @@ function renderContracts() {
       '</div>' +
       '<div class="form-grid" style="padding:14px">' +
         '<div class="form-group"><div class="form-label">보험사</div>' +
-          '<select class="form-select" id="c'+id+'_insurer">' +
-            '<option value="">선택</option>' +
-            '<optgroup label="── 생명보험 ──">' +
-            ['한화생명','삼성생명','교보생명','신한라이프','메트라이프','AIA생명','DB생명','흥국생명','ABL생명','DGB생명','하나생명','iM라이프','동양생명','NH농협생명'].map(function(v){
-              return '<option>'+v+'</option>';
-            }).join('') +
-            '</optgroup>' +
-            '<optgroup label="── 손해보험 ──">' +
-            ['삼성화재','현대해상','DB손보','KB손보','메리츠화재','한화손보','롯데손보','예별손해보험','흥국화재','농협손보','카카오손보','캐롯손보','하나손보'].map(function(v){
-              return '<option>'+v+'</option>';
-            }).join('') +
-            '</optgroup>' +
-            '<optgroup label="── 기타 ──"><option>기타</option></optgroup>' +
-          '</select></div>' +
+          _insurerDdHtml(id) +
+        '</div>' +
         '<div class="form-group"><div class="form-label">상품명</div><input class="form-input" id="c'+id+'_product" placeholder="상품명"></div>' +
         '<div class="form-group"><div class="form-label">계약일</div>' +
         '<div class="birth-wrap">' +
@@ -2017,6 +2132,19 @@ function renderContracts() {
         o.value = y; o.textContent = y+'년'; ySel.appendChild(o);
       }
     }
+  });
+
+  // 보존한 입력값 복원 (계약 추가/삭제 시 기존 입력 유지)
+  tempContracts.forEach(function(rid){
+    var rec = _preserve[rid];
+    if(!rec) return;
+    ['insurer','product','premium','payday','paymethod','date_y','date_m','date_d'].forEach(function(f){
+      var re = document.getElementById('c'+rid+'_'+f);
+      if(re && rec[f] !== undefined) re.value = rec[f];
+    });
+    // 보험사 커스텀 드롭다운 라벨 복원
+    var iv = document.getElementById('insVal'+rid);
+    if(iv && rec.insurer) iv.textContent = rec.insurer;
   });
 }
 
@@ -3149,6 +3277,9 @@ function editCustomer() {
         var el = document.getElementById('c'+id+'_'+f);
         if (el) el.value = ct[f] || '';
       });
+      // 보험사 커스텀 드롭다운 라벨 복원
+      var insV = document.getElementById('insVal'+id);
+      if (insV) insV.textContent = ct.insurer || '선택';
       // 계약일 복원
       var dp = (ct.date||'').split('-');
       setTimeout(function(){
