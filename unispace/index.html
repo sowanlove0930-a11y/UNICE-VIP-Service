@@ -1378,6 +1378,17 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   .att-col-label { font-size: 12px; white-space: nowrap; }
   .att-col-count { font-size: 16px; }
   .att-col-br { font-size: 9px; margin-right: 2px; }
+  /* 업적 입력 모달: 화면 폭에 맞추고 가로 넘침 차단 */
+  .perf-modal-overlay { padding: 12px !important; }
+  .perf-modal { max-width: 100% !important; width: 100% !important; padding: 8px 16px 28px !important; box-sizing: border-box; overflow-x: hidden; }
+  .perf-modal * { max-width: 100%; box-sizing: border-box; }
+  .perf-co-wrap { gap: 4px; }
+  .perf-modal-title { font-size: 17px; }
+  .perf-modal-sub { font-size: 12px; margin-bottom: 16px; }
+  .perf-amt-big { font-size: 15px !important; }
+  .perf-modal-actions { gap: 8px; }
+  /* 금액+분류 선택이 한 줄에 안 잘리게 */
+  .perf-modal #perfProdRows select.perf-select { width: 90px !important; flex-shrink: 0; font-size: 11px !important; padding-left: 8px !important; padding-right: 8px !important; }
   /* 제목 + '진행중 1점·완료 2점' 설명을 한 줄로 (제목 좌, 설명 우) */
   .perf-rank-grid .dash-card-title[style*="space-between"] {
     flex-direction: row; align-items: center !important; gap: 8px; flex-wrap: nowrap;
@@ -10229,6 +10240,9 @@ function doCheckin() { doSmartCheckin(); }
         // 시책 이미지 뷰어
         { check: function(){ var e=document.getElementById('sichaekImgOverlay'); return e && e.classList.contains('open'); },
           close: function(){ if(typeof closeSichaekImg==='function') closeSichaekImg(); } },
+        // 업적 입력 모달
+        { check: function(){ var e=document.getElementById('perfModalOverlay'); return e && e.classList.contains('open'); },
+          close: function(){ if(typeof closePerfModal==='function') closePerfModal(); else { var e=document.getElementById('perfModalOverlay'); if(e) e.classList.remove('open'); } } },
         // 일반 오버레이 모달들 (.open 켜진 것 중 가장 위 z-index 하나)
         { check: function(){ return _topOpenOverlay() != null; },
           close: function(){ var ov=_topOpenOverlay(); if(ov) ov.classList.remove('open'); } },
@@ -10239,12 +10253,12 @@ function doCheckin() { doSmartCheckin(); }
     }
     // 화면에 열린(.open) 오버레이 중 z-index가 가장 높은 것
     function _topOpenOverlay(){
-      var nodes = document.querySelectorAll('.mgmt-overlay.open, .confirm-overlay.open, .modal-overlay.open, [id$="Overlay"].open');
+      var nodes = document.querySelectorAll('.open[class*="overlay"], .open[class*="Overlay"], [id$="Overlay"].open, [id$="overlay"].open, .perf-modal-overlay.open, .mgmt-overlay.open, .confirm-overlay.open');
       var best = null, bestZ = -1;
       for (var i=0;i<nodes.length;i++){
         var el = nodes[i];
-        // 화면에 실제로 보이는 것만
-        if (el.offsetParent === null && getComputedStyle(el).display === 'none') continue;
+        // .open 클래스가 실제로 있는 것만 (보임 상태)
+        if (!el.classList.contains('open')) continue;
         var z = parseInt(getComputedStyle(el).zIndex) || 0;
         if (z >= bestZ){ bestZ = z; best = el; }
       }
