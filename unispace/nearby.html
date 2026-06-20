@@ -27,6 +27,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .lhead{padding:14px 16px;border-bottom:1px solid var(--bdr);}
 .panel-toggle-mobile{display:none;}
 .mobile-map-chips, .mobile-map-modes{display:none;}
+.mrs-handle{display:none;}
 .ltitle{font-size:11px;font-weight:700;color:var(--gold2);letter-spacing:.06em;margin-bottom:10px;}
 .mcard{background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.14);border-left:3px solid rgba(96,165,250,.55);border-radius:8px;padding:9px 12px;margin-bottom:14px;}
 .mlabel{font-size:9px;color:#60A5FA;font-weight:700;margin-bottom:3px;letter-spacing:.04em;text-transform:uppercase;opacity:.85;}
@@ -352,6 +353,28 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   }
   .mmm-btn.on { border-color: #60A5FA; background: rgba(59,130,246,.2); color: #93C5FD; }
 
+  /* ── 결과 목록: 독립 바텀시트 ── */
+  .mobile-result-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    z-index: 28;
+    background: rgba(13,22,40,.97);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 30px rgba(0,0,0,.5);
+    max-height: 50vh; display: flex; flex-direction: column;
+    transform: translateY(100%);
+    transition: transform .25s ease;
+    padding-bottom: 8px;
+  }
+  .mobile-result-sheet.open { transform: translateY(0); }
+  .mrs-handle {
+    display: flex !important; justify-content: center;
+    padding: 8px 0 4px; cursor: pointer; flex-shrink: 0;
+  }
+  .mrs-bar { width: 44px; height: 4px; background: rgba(255,255,255,.3); border-radius: 2px; }
+  .mobile-result-sheet .rcnt { flex-shrink: 0; padding: 4px 16px 8px; }
+  .mobile-result-sheet .clist { flex: 1; overflow-y: auto; padding: 0 12px; }
+  .mobile-result-sheet .route-open-bar { flex-shrink: 0; padding: 8px 12px 0; }
+
   /* ── 패널 내용 압축 ── */
   .lhead { padding: 6px 12px; }
   .ltitle { margin-bottom: 4px; font-size: 10px; }
@@ -497,12 +520,15 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       </div>
     </div>
 
+    <div class="mobile-result-sheet" id="mobileResultSheet">
+    <div class="mrs-handle" id="mrsHandle"><div class="mrs-bar"></div></div>
     <div class="rcnt" id="resultCount">주소를 검색하면 주변 고객이 표시됩니다</div>
     <div class="clist" id="clist"><div class="empty">🔍 주소를 검색해주세요</div></div>
 
     <!-- 길찾기 열기 버튼 -->
     <div class="route-open-bar">
       <button type="button" class="route-open-btn" id="routeOpenBtn">🗺️ 길찾기 열기</button>
+    </div>
     </div>
   </div>
 
@@ -2628,6 +2654,18 @@ window.addEventListener('DOMContentLoaded', function() {
 
   if(btnClose) btnClose.addEventListener('click', closePopup);
 
+  // 결과 시트 핸들: 탭하면 닫기 + 아래로 스와이프하면 닫기
+  (function(){
+    var handle = document.getElementById('mrsHandle');
+    var sheet = document.getElementById('mobileResultSheet');
+    if(!handle || !sheet) return;
+    handle.addEventListener('click', function(){ closeResultSheet(); });
+    var sy=0, moved=0, active=false;
+    handle.addEventListener('touchstart', function(e){ active=true; sy=e.touches[0].clientY; moved=0; sheet.style.transition='none'; }, {passive:true});
+    handle.addEventListener('touchmove', function(e){ if(!active) return; moved=e.touches[0].clientY-sy; if(moved>0) sheet.style.transform='translateY('+moved+'px)'; }, {passive:true});
+    handle.addEventListener('touchend', function(){ if(!active) return; active=false; sheet.style.transition='transform .2s ease'; if(moved>70){ sheet.style.transform=''; closeResultSheet(); } else { sheet.style.transform='translateY(0)'; } }, {passive:true});
+  })();
+
   var btnDetail = document.getElementById('btnDetail');
   if(btnDetail) btnDetail.addEventListener('click', goDetail);
 
@@ -3473,6 +3511,7 @@ function refreshNearbyOnly(lat, lng) {
     });
   }
   document.getElementById('clist').innerHTML = pinHtml + listHtml;
+  if(typeof openResultSheet === 'function' && nearby && nearby.length) openResultSheet();
   window._nearbyList = nearby;
   window._nearbyMarkers = nearbyMarkers;
 
@@ -3890,6 +3929,7 @@ function drawNearby(lat, lng) {
     });
   }
   document.getElementById('clist').innerHTML = pinHtml + listHtml;
+  if(typeof openResultSheet === 'function' && nearby && nearby.length) openResultSheet();
   window._nearbyList = nearby;
   window._nearbyMarkers = nearbyMarkers;
 
@@ -4076,6 +4116,24 @@ function updateMobileChips() {
     var chipR = document.getElementById('mmcRadius');
     if(chipR && typeof radiusKm !== 'undefined'){ chipR.textContent = radiusKm + 'km'; }
   } catch(e){}
+}
+
+// 결과 시트 열기(모바일) + 검색 패널 닫기
+function openResultSheet() {
+  if(window.innerWidth > 768) return;
+  var rs = document.getElementById('mobileResultSheet');
+  if(rs) rs.classList.add('open');
+  // 검색 패널은 접기
+  var lp = document.getElementById('leftPanel');
+  var chev = document.getElementById('panelToggleChev');
+  if(lp && !lp.classList.contains('panel-collapsed')){
+    lp.classList.add('panel-collapsed');
+    if(chev) chev.textContent = '\u25BE';
+  }
+}
+function closeResultSheet() {
+  var rs = document.getElementById('mobileResultSheet');
+  if(rs) rs.classList.remove('open');
 }
 
 function showPopup(c, dist) {
