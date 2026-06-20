@@ -1757,6 +1757,8 @@ body.theme-light .wv-toggle-btn.on { color: #fff; }
   cursor: pointer; transition: opacity .15s; line-height: 1.4;
 }
 .week-act-chip:hover { opacity: .75; }
+/* 오늘 등록된 활동: 왼쪽 빨간 테두리로 표시 */
+.week-act-chip.is-new-today { border-left: 3px solid #E24B4A; padding-left: 6px; }
 .wac-ongoing { background: rgba(59,130,246,.13); color: #93C5FD; }
 .wac-done    { background: rgba(16,185,129,.1);  color: #6EE7B7; }
 .week-empty-cell { text-align: center; color: var(--bdr2); font-size: 11px; padding: 8px 0; }
@@ -8327,7 +8329,7 @@ function renderDayPanel(ds) {
         var icon = a.status==='완료' ? '✅' : (a.type==='1차'?'①':a.type==='2차'?'②':a.type==='3차'?'③':'●');
         var typeLabel = _typeLabel(a.type);
         var sub = a.time ? ' <span style="font-size:9px;color:var(--text2)">'+a.time.slice(0,5)+(a.place?' · '+shortAddr(a.place):'')+'</span>' : '';
-        chips += '<span class="week-act-chip '+cls+'" style="display:inline-block;width:auto;margin:0" data-aid="'+a.id+'">'+icon+' '+a.customerName+' <span style="opacity:.65;font-size:9px">'+typeLabel+'</span>'+sub+resultBadgeHtml(a)+newBadgeHtml(a)+'</span>';
+        chips += '<span class="week-act-chip '+cls+(_isNewToday(a)?' is-new-today':'')+'" style="display:inline-block;width:auto;margin:0" data-aid="'+a.id+'">'+icon+' '+a.customerName+' <span style="opacity:.65;font-size:9px">'+typeLabel+'</span>'+sub+resultBadgeHtml(a)+newBadgeHtml(a)+'</span>';
       });
       html += '<div class="mcal-day-row">' +
         '<div class="mcal-day-fp"><span style="font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px;margin-right:3px;'+
@@ -8452,14 +8454,16 @@ function resultBadgeHtml(a) {
   return ' <span style="background:'+bg+';color:#fff;font-size:9px;padding:1px 6px;border-radius:5px;margin-left:3px">✓'+label+extra+'</span>';
 }
 function newBadgeHtml(a){
-  if(!a || !a.createdAt) return '';
-  var c=new Date(a.createdAt);
-  if(isNaN(c.getTime())) return '';
-  var now=new Date();
-  if(c.getFullYear()===now.getFullYear() && c.getMonth()===now.getMonth() && c.getDate()===now.getDate()){
-    return ' <span style="background:#E24B4A;color:#fff;font-size:8px;font-weight:800;padding:1px 5px;border-radius:5px;margin-left:3px;letter-spacing:.5px">NEW</span>';
-  }
+  // NEW 배지(빨간 글자)는 제거 — 대신 칩 왼쪽 테두리로 표시(_isNewToday)
   return '';
+}
+// 오늘 등록(생성)된 활동인지 — 칩 왼쪽 빨간 테두리 표시용
+function _isNewToday(a){
+  if(!a || !a.createdAt) return false;
+  var c=new Date(a.createdAt);
+  if(isNaN(c.getTime())) return false;
+  var now=new Date();
+  return c.getFullYear()===now.getFullYear() && c.getMonth()===now.getMonth() && c.getDate()===now.getDate();
 }
 function nextPlanText(a) {
   if (!a || !a.hasResult || !a.nextPlan) return '';
@@ -8678,7 +8682,7 @@ function renderWeekActTable() {
           } else if(a.helper) {
             supportTag = ' <span style="opacity:.8">(헬퍼 '+a.helper+')</span>';
           }
-          html += '<div class="week-act-chip '+cls+'" data-aid="'+a.id+'">' +
+          html += '<div class="week-act-chip '+cls+(_isNewToday(a)?' is-new-today':'')+'" data-aid="'+a.id+'">' +
             '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+icon+' '+a.customerName+' <span style="opacity:.65;font-size:9px">'+typeLabel+'</span>'+supportTag+resultBadgeHtml(a)+newBadgeHtml(a)+'</div>'+
             subLine+
             nextPlanText(a)+
@@ -10231,15 +10235,39 @@ function openNearbyFromPopup() {
   var act=db[_currentActId]; if(!act) return;
   var customers=[]; try{customers=JSON.parse(localStorage.getItem('unispace_customers')||'[]');}catch(e){}
   var matched=customers.filter(function(c){ return c.name==act.customerName; })[0];
-  sessionStorage.setItem('nearbyTarget', JSON.stringify({
-    id: matched ? (matched.id||'') : '',
-    name: act.customerName,
-    address: matched ? (matched.address||act.place||'') : (act.place||''),
-    lat: matched ? (matched.lat||'') : '',
-    lng: matched ? (matched.lng||'') : '',
-    phone: matched ? (matched.phone||'') : ''
-  }));
-  window.location.href = 'nearby.html';
+
+  var addr = (matched && matched.address) ? matched.address : (act.place || act.placeAddr || '');
+  var la = (matched && matched.lat) ? matched.lat : (act.lat || '');
+  var ln = (matched && matched.lng) ? matched.lng : (act.lng || '');
+
+  function go(){
+    sessionStorage.setItem('nearbyTarget', JSON.stringify({
+      id: matched ? (matched.id||'') : '',
+      name: act.customerName,
+      address: addr,
+      lat: la || '',
+      lng: ln || '',
+      phone: matched ? (matched.phone||'') : ''
+    }));
+    window.location.href = 'nearby.html';
+  }
+
+  // 좌표 없고 주소만 있으면 → 지오코딩 후 진행 (변환 좌표는 활동에도 저장)
+  if((!la || !ln) && addr && typeof qaGeocode==='function'){
+    showToast('📍 주소를 좌표로 변환 중...');
+    qaGeocode(addr, function(gla, gln){
+      if(gla && gln){
+        la=gla; ln=gln;
+        if(db[_currentActId]){ db[_currentActId].lat=gla; db[_currentActId].lng=gln;
+          try{ localStorage.setItem('unispace_activities', JSON.stringify(db)); }catch(e){} }
+      } else {
+        showToast('⚠️ 주소를 좌표로 변환하지 못했습니다');
+      }
+      go();
+    });
+  } else {
+    go();
+  }
 }
 
 function closeActPopup(){document.getElementById('actPopup').style.display='none'; _currentActId=null; _restoreResPopupWidth();}
@@ -10344,30 +10372,59 @@ function openDayRoute(fpId, fpName, dateStr) {
   var acts = Object.values(db).filter(function(a){ return a.fpId===fpId && a.date===dateStr; });
   acts.sort(function(a,b){ return (a.time||'99:99').localeCompare(b.time||'99:99'); });
 
-  var stops=[]; var skipped=0;
-  acts.forEach(function(a){
+  // 1차: 이미 좌표가 있거나 고객명단에서 빌릴 수 있는 것 정리 + 주소만 있고 좌표 없는 것은 지오코딩 대상으로
+  var prepared = acts.map(function(a){
     var la=a.lat, ln=a.lng, addr=a.place||a.placeAddr||'';
     if(!la || !ln){
       var c=findCust(a.customerName);
       if(c && c.lat && c.lng){ la=c.lat; ln=c.lng; if(!addr) addr=c.address||''; }
     }
-    if(!la || !ln){ skipped++; return; }
-    stops.push({
-      id: a.id, name: a.customerName, address: addr,
-      lat: String(la), lng: String(ln),
-      time: a.time||'', type: a.type||'', status: a.status||'',
-      support: a.support||'', supportReqTime: a.supportReqTime||'', supportReqEndTime: a.supportReqEndTime||''
-    });
+    return { act:a, lat:la, lng:ln, addr:addr };
   });
 
-  if(!stops.length){
-    showToast('이 날 좌표가 등록된 활동이 없습니다 (미팅 장소에 주소 입력 필요)');
-    return;
+  // 좌표 없이 주소만 있는 것들 → 지오코딩 필요
+  var needGeo = prepared.filter(function(p){ return (!p.lat||!p.lng) && p.addr; });
+
+  function buildAndGo(){
+    var stops=[]; var skipped=0;
+    prepared.forEach(function(p){
+      if(!p.lat || !p.lng){ skipped++; return; }
+      var a=p.act;
+      stops.push({
+        id: a.id, name: a.customerName, address: p.addr,
+        lat: String(p.lat), lng: String(p.lng),
+        time: a.time||'', type: a.type||'', status: a.status||'',
+        support: a.support||'', supportReqTime: a.supportReqTime||'', supportReqEndTime: a.supportReqEndTime||''
+      });
+    });
+    if(!stops.length){
+      showToast('이 날 좌표가 등록된 활동이 없습니다 (미팅 장소에 주소 입력 필요)');
+      return;
+    }
+    sessionStorage.setItem('nearbyRoute', JSON.stringify({
+      fpId: fpId, fpName: fpName||'', date: dateStr, stops: stops, skipped: skipped
+    }));
+    window.location.href = 'nearby.html';
   }
-  sessionStorage.setItem('nearbyRoute', JSON.stringify({
-    fpId: fpId, fpName: fpName||'', date: dateStr, stops: stops, skipped: skipped
-  }));
-  window.location.href = 'nearby.html';
+
+  if(needGeo.length === 0){ buildAndGo(); return; }
+
+  // 주소 → 좌표 변환 후 진행 (변환된 좌표는 활동에도 저장해 다음부터 빠르게)
+  showToast('📍 주소를 좌표로 변환 중...');
+  var done=0;
+  needGeo.forEach(function(p){
+    qaGeocode(p.addr, function(la, ln){
+      if(la && ln){
+        p.lat=la; p.lng=ln;
+        if(db[p.act.id]){ db[p.act.id].lat=la; db[p.act.id].lng=ln; }
+      }
+      done++;
+      if(done===needGeo.length){
+        try{ localStorage.setItem('unispace_activities', JSON.stringify(db)); }catch(e){}
+        buildAndGo();
+      }
+    });
+  });
 }
 document.addEventListener('click',function(e){
   var popup=document.getElementById('actPopup');
