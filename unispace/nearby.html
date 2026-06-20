@@ -28,6 +28,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .lhead{padding:14px 16px;border-bottom:1px solid var(--bdr);}
 .panel-toggle-mobile{display:none;}
 .mobile-map-chips, .mobile-map-modes{display:none;}
+#routeMinifiedBtn{display:none;}
 .mrs-handle{display:none;}
 .ltitle{font-size:11px;font-weight:700;color:var(--gold2);letter-spacing:.06em;margin-bottom:10px;}
 .mcard{background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.14);border-left:3px solid rgba(96,165,250,.55);border-radius:8px;padding:9px 12px;margin-bottom:14px;}
@@ -697,6 +698,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
         </div>
       </div>
     </div>
+
+    <!-- 길찾기 최소화 시 하단 복원 바 (모바일 전용) -->
+    <button type="button" id="routeMinifiedBtn" style="display:none" onclick="restoreRoutePopup()">🧭 동선관리 중 · 길찾기 열기 <span id="routeMinifiedCount"></span>▲</button>
 
     <!-- 팝업 -->
     <div class="map-popup" id="mapPopup" style="display:none">
@@ -1706,11 +1710,9 @@ function addToDsQueue(customer) {
   if(centerLat && centerLng && window._nearbyList) refreshNearbyOnly(centerLat, centerLng);
   rerenderDsQueue();
   setTimeout(function(){ flashHighlightInList(customer); }, 100);
-  // 모바일: 길찾기 창이 닫혀 있으면 다시 열기
-  if(window.innerWidth <= 768){
-    var _rp = document.getElementById('routePopup');
-    if(_rp && _rp.style.display === 'none'){ _rp.style.display = 'flex'; _rp.style.transform = ''; }
-  }
+  // 모바일: 길찾기 창을 손으로 내려둔 상태면 자동으로 다시 열지 않음.
+  // 동선에는 담기되, 다시 보려면 하단 '동선관리 중 · 길찾기 열기' 바를 누른다.
+  if(typeof refreshRouteMinifiedCount === 'function') refreshRouteMinifiedCount();
 }
 
 function updateDsMarkerLabels() {
@@ -2802,7 +2804,7 @@ window.addEventListener('DOMContentLoaded', function() {
     function isMobile(){ return window.innerWidth <= 768; }
     hd.addEventListener('touchstart', function(e){ if(!isMobile()) return; active=true; sy=e.touches[0].clientY; moved=0; rp.style.transition='none'; }, {passive:true});
     hd.addEventListener('touchmove', function(e){ if(!active||!isMobile()) return; moved=e.touches[0].clientY-sy; if(moved>0) rp.style.transform='translateY('+moved+'px)'; }, {passive:true});
-    hd.addEventListener('touchend', function(){ if(!active||!isMobile()) return; active=false; rp.style.transition='transform .2s ease'; if(moved>80){ rp.style.transform='translateY(100%)'; setTimeout(function(){ rp.style.display='none'; rp.style.transform=''; rp.style.transition=''; }, 200); } else { rp.style.transform='translateY(0)'; } }, {passive:true});
+    hd.addEventListener('touchend', function(){ if(!active||!isMobile()) return; active=false; rp.style.transition='transform .2s ease'; if(moved>80){ rp.style.transform='translateY(100%)'; setTimeout(function(){ rp.style.display='none'; rp.style.transform=''; rp.style.transition=''; if(typeof showRouteMinifiedBar==='function') showRouteMinifiedBar(); }, 200); } else { rp.style.transform='translateY(0)'; } }, {passive:true});
   })();
 });
 
@@ -4176,6 +4178,30 @@ function restoreRoutePopup() {
   if(rp){ rp.style.display = 'flex'; rp.style.transform = ''; }
 }
 
+// 길찾기 하단 복원 바 표시(모바일 전용) + 동선 인원수 갱신
+function showRouteMinifiedBar() {
+  if(window.innerWidth > 768) return;
+  var mb = document.getElementById('routeMinifiedBtn');
+  if(!mb) return;
+  var cntEl = document.getElementById('routeMinifiedCount');
+  if(cntEl){
+    var n = (typeof dsQueue !== 'undefined' && dsQueue) ? dsQueue.length : 0;
+    cntEl.textContent = n > 0 ? ('(' + n + ') ') : '';
+  }
+  mb.style.display = 'block';
+}
+
+// 길찾기 하단 복원 바가 떠 있으면 인원수만 갱신
+function refreshRouteMinifiedCount() {
+  var mb = document.getElementById('routeMinifiedBtn');
+  if(!mb || mb.style.display === 'none') return;
+  var cntEl = document.getElementById('routeMinifiedCount');
+  if(cntEl){
+    var n = (typeof dsQueue !== 'undefined' && dsQueue) ? dsQueue.length : 0;
+    cntEl.textContent = n > 0 ? ('(' + n + ') ') : '';
+  }
+}
+
 // 칩 탭 -> 패널 펴기
 function openPanelMobile() {
   var p = document.getElementById('leftPanel');
@@ -4198,8 +4224,9 @@ function mobileSetMode(mode) {
     var rpEl = document.getElementById('routePopup');
     var rpClosed = rpEl && (rpEl.style.display === 'none' || rpEl.style.display === '');
     if(alreadyRoute && rpClosed){
-      // 이미 동선관리 모드인데 길찾기 창이 닫혀있으면 다시 띄우기만 함
-      rpEl.style.display = 'flex';
+      // 이미 동선관리 모드인데 길찾기 창이 닫혀있으면 다시 띄우기만 함(하단 바도 숨김)
+      if(typeof restoreRoutePopup === 'function') restoreRoutePopup();
+      else rpEl.style.display = 'flex';
     } else {
       var mAdd = document.getElementById('modeAddBtn');
       if(mAdd) mAdd.click();
@@ -4208,6 +4235,8 @@ function mobileSetMode(mode) {
     var wasOn = bN && bN.classList.contains('on');
     if(bR) bR.classList.remove('on');
     if(bN) bN.classList.add('on');
+    var _mb = document.getElementById('routeMinifiedBtn');
+    if(_mb) _mb.style.display = 'none';
     if(!wasOn){
       var mView = document.getElementById('modeViewBtn');
       if(mView) mView.click();
