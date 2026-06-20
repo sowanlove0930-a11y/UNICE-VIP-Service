@@ -1139,6 +1139,16 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
 .consult-card:hover { transform: translateY(-6px) scale(1.02); box-shadow: 0 24px 60px rgba(0,0,0,0.5); border-color: var(--border2); }
 .consult-card:active { transform: scale(0.97); }
 
+/* PC·태블릿 전용 뱃지 — 기본 숨김, 폰에서만 표시 */
+.pc-only-badge {
+  display: none; position: absolute; top: 12px; left: 50%;
+  transform: translateX(-50%); z-index: 3;
+  font-size: 10px; font-weight: 700; white-space: nowrap;
+  padding: 4px 10px; border-radius: 20px;
+  background: rgba(120,120,120,.25); color: var(--text2);
+  border: 1px solid var(--border2);
+}
+
 .cc-ugobi   { background: linear-gradient(145deg, #0F1F3D 0%, #0D1628 50%, #1a0e00 100%); }
 .cc-carefit { background: linear-gradient(145deg, #0a1a2e 0%, #0D1628 50%, #0a1a0f 100%); }
 .cc-nohupai { background: linear-gradient(145deg, #1a0e2e 0%, #0D1628 50%, #0a0a20 100%); }
@@ -1300,6 +1310,21 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
 .login-btn:active { transform: scale(0.98); }
 .login-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 
+/* 버튼 안 인라인 로딩 스피너 (로그인/체크인 공통) */
+.btn-spinner {
+  display: inline-block; width: 15px; height: 15px;
+  border: 2px solid rgba(0,0,0,.25); border-top-color: #080E1C;
+  border-radius: 50%; animation: uniSpin .6s linear infinite;
+  vertical-align: -2px; margin-right: 7px;
+}
+.btn-spinner.light {
+  border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+}
+.btn-spinner.purple {
+  border: 2px solid rgba(167,139,250,.3); border-top-color: #A78BFA;
+  width: 13px; height: 13px;
+}
+
 /* 하단 안내 */
 .login-footer {
   margin-top: 20px; font-size: 11px; color: var(--text3); line-height: 1.7;
@@ -1313,6 +1338,24 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
 
 /* ─── RESPONSIVE ─── */
 @media (max-width: 768px) {
+  /* ── 상담 모드 모바일 최적화 ── */
+  .consult-header { padding: 14px 16px; }
+  .consult-brand-text { font-size: 13px; }
+  .consult-brand-sub { font-size: 10px; }
+  .consult-brand-mark { width: 38px; height: 38px; }
+  .consult-close-btn { padding: 8px 12px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+  .consult-greeting { padding: 18px 16px 12px; }
+  .consult-greeting-sub { font-size: 12px; }
+  .consult-tools { gap: 10px; padding: 0 14px 24px; }
+  .consult-card { gap: 10px; padding: 18px 10px; }
+  .cc-icon { width: 56px; height: 56px; font-size: 26px; }
+  .cc-name { font-size: 18px; }
+  .cc-desc { font-size: 11px; line-height: 1.4; }
+  /* 폰에서 PC전용 도구 3개: 흐리게 + 뱃지 표시 (잠긴 느낌) */
+  .pc-only-tool { opacity: .55; filter: grayscale(.35); }
+  .pc-only-tool:active { transform: none; }
+  .pc-only-tool .pc-only-badge { display: inline-block; }
+  .pc-only-tool .cc-icon, .pc-only-tool .cc-name, .pc-only-tool .cc-desc { margin-top: 2px; }
   /* FP 순위표: 옵션 컬럼(목표/현재업적/잔여) 숨겨서 가로 스크롤 없이 한 화면에 */
   .fp-rank-tbl .fp-col-opt { display: none; }
   .fp-rank-tbl { min-width: 0 !important; width: 100%; }
@@ -3066,7 +3109,7 @@ function doLogin() {
     errEl.innerHTML = '⚠️ 비밀번호를 입력해 주세요'; return;
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = '확인 중...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span>확인 중'; }
   errEl.innerHTML = '';
 
   var url = UNISPACE_GAS_URL + '?action=login&fp=' + encodeURIComponent(idVal) + '&pw=' + encodeURIComponent(pwVal);
@@ -7583,8 +7626,17 @@ function toggleConsultMode() {
   }
 }
 // open carefit with logged-in fp code so it skips its own login
+// 폰(좁은 화면) 여부 — 태블릿/PC(769px 이상)에서는 false
+function _isPhoneWidth() { return window.innerWidth <= 768; }
+// PC 전용 상담 도구를 폰에서 눌렀을 때 안내
+function _pcOnlyToolBlocked() {
+  showToast('💻 이 도구는 PC·태블릿에서 이용해 주세요');
+  return false;
+}
+
 function openCarefitConsult(e) {
   if (e && e.preventDefault) e.preventDefault();
+  if (_isPhoneWidth()) return _pcOnlyToolBlocked();
   var base = 'https://unice-vip.co.kr/올라이프_케어핏/carefit.html';
   var url = base;
   if (currentUser && currentUser.id) {
@@ -7596,6 +7648,7 @@ function openCarefitConsult(e) {
 // open ugobi with logged-in fp code so it skips its own login
 function openUgobiConsult(e) {
   if (e && e.preventDefault) e.preventDefault();
+  if (_isPhoneWidth()) return _pcOnlyToolBlocked();
   var base = 'https://unice-vip.co.kr/ugobi/index.html';
   var url = base;
   if (currentUser && currentUser.id) {
@@ -7607,6 +7660,7 @@ function openUgobiConsult(e) {
 // open nohupai with logged-in fp code so it skips its own login
 function openNohupaiConsult(e) {
   if (e && e.preventDefault) e.preventDefault();
+  if (_isPhoneWidth()) return _pcOnlyToolBlocked();
   var base = 'https://unice-vip.co.kr/노후파이/index.html';
   var url = base;
   if (currentUser && currentUser.id) {
@@ -10438,7 +10492,7 @@ function doSmartCheckin() {
   var status  = isLate ? '지각' : '정상';
 
   var btn = document.getElementById('checkinSmartBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '확인 중...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner purple"></span>처리 중'; }
 
   // GAS에 먼저 저장 (GET 방식) -> 성공 확인 후에만 완료 처리
   var qs = 'action=checkin&date=' + encodeURIComponent(today)
@@ -11078,20 +11132,23 @@ function doCheckin() { doSmartCheckin(); }
   </div>
 
   <div class="consult-tools">
-    <a class="consult-card cc-ugobi" href="https://unice-vip.co.kr/ugobi/index.html" target="_blank" onclick="return openUgobiConsult(event)">
+    <a class="consult-card cc-ugobi pc-only-tool" href="https://unice-vip.co.kr/ugobi/index.html" target="_blank" onclick="return openUgobiConsult(event)">
       <div class="cc-icon">💎</div>
       <div class="cc-name">U-GOBI</div>
       <div class="cc-desc">실시간 보험료 비교<br>손보 10사 · 생보 14사</div>
+      <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
     </a>
-    <a class="consult-card cc-carefit" href="https://unice-vip.co.kr/올라이프_케어핏/carefit.html" target="_blank" onclick="return openCarefitConsult(event)">
+    <a class="consult-card cc-carefit pc-only-tool" href="https://unice-vip.co.kr/올라이프_케어핏/carefit.html" target="_blank" onclick="return openCarefitConsult(event)">
       <div class="cc-icon">🌿</div>
       <div class="cc-name">올라이프 케어핏</div>
       <div class="cc-desc">지금 가입한 보장,<br>최신 의료 환경에 맞는지 점검</div>
+      <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
     </a>
-    <a class="consult-card cc-nohupai" href="https://unice-vip.co.kr/노후파이/index.html" target="_blank" onclick="return openNohupaiConsult(event)">
+    <a class="consult-card cc-nohupai pc-only-tool" href="https://unice-vip.co.kr/노후파이/index.html" target="_blank" onclick="return openNohupaiConsult(event)">
       <div class="cc-icon">🌙</div>
       <div class="cc-name">노후파이클래스</div>
       <div class="cc-desc">내 노후 준비,<br>어디까지 왔는지 심층 분석</div>
+      <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
     </a>
     <a class="consult-card cc-jenius" href="https://unice-vip.co.kr/coverage.html" target="_blank" onclick="return openJeniusConsult(event)">
       <div class="cc-icon">⚡</div>
