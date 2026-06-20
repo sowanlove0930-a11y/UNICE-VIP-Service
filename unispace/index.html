@@ -10536,6 +10536,9 @@ function doCheckin() { doSmartCheckin(); }
     // 닫기 우선순위 목록 (위에 뜬 것부터). check: 열려있나, close: 닫기 동작
     function _backClosers(){
       return [
+        // 상담 모드 (오버레이 + 버튼 상태까지 정리되도록 toggle 호출)
+        { check: function(){ return typeof consultMode!=='undefined' && consultMode; },
+          close: function(){ if(typeof toggleConsultMode==='function') toggleConsultMode(); } },
         // 활동 팝업(display 방식)
         { check: function(){ var e=document.getElementById('actPopup'); return e && e.style.display !== 'none' && e.style.display !== ''; },
           close: function(){ if(typeof closeActPopup==='function') closeActPopup(); else { var e=document.getElementById('actPopup'); if(e) e.style.display='none'; } } },
@@ -10579,16 +10582,17 @@ function doCheckin() { doSmartCheckin(); }
       for (var i=0;i<list.length;i++){ if (list[i].check()){ list[i].close(); return true; } }
       return false;
     }
-    history.pushState(null, '', location.href);
+    // 뒤로가기 버퍼를 여러 칸 미리 쌓아둠 (PC 연타 대비)
+    for (var _bi = 0; _bi < 3; _bi++) {
+      history.pushState(null, '', location.href);
+    }
     window.addEventListener('popstate', function(){
+      // 어떤 경우든 즉시 히스토리를 다시 채워, 연타로도 사이트를 벗어나지 않게
+      history.pushState(null, '', location.href);
       if (_anyOpen()){
         _closeTopOne();
-        // 히스토리 단계를 다시 채워서, 다음 뒤로가기도 받을 수 있게
-        history.pushState(null, '', location.href);
-      } else {
-        // 메인화면에서는 뒤로가기로 다른 사이트로 빠져나가지 않고 그대로 머문다.
-        history.pushState(null, '', location.href);
       }
+      // 메인화면(_anyOpen=false)에서는 위 pushState로 그대로 머문다.
     });
   } catch(e) {}
 })();
