@@ -26,6 +26,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .left{width:280px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--bdr);display:flex;flex-direction:column;overflow:hidden;position:relative;}
 .lhead{padding:14px 16px;border-bottom:1px solid var(--bdr);}
 .panel-toggle-mobile{display:none;}
+.mobile-map-chips, .mobile-map-modes{display:none;}
 .ltitle{font-size:11px;font-weight:700;color:var(--gold2);letter-spacing:.06em;margin-bottom:10px;}
 .mcard{background:rgba(59,130,246,.05);border:1px solid rgba(59,130,246,.14);border-left:3px solid rgba(96,165,250,.55);border-radius:8px;padding:9px 12px;margin-bottom:14px;}
 .mlabel{font-size:9px;color:#60A5FA;font-weight:700;margin-bottom:3px;letter-spacing:.04em;text-transform:uppercase;opacity:.85;}
@@ -317,6 +318,36 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     position: sticky; top: 0; z-index: 5;
   }
 
+  /* 지도 위 요약 칩 */
+  .mobile-map-chips {
+    display: flex !important; gap: 6px;
+    position: absolute; top: 10px; left: 10px; right: 10px; z-index: 25;
+  }
+  .mmc-chip {
+    background: rgba(13,22,40,.94); border: 1px solid rgba(232,201,122,.35);
+    border-radius: 20px; padding: 9px 13px; font-size: 12px; font-weight: 700;
+    color: #fff; display: flex; align-items: center; gap: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4); cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mmc-base { flex: 1; min-width: 0; }
+  .mmc-base #mmcBaseName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mmc-ic { color: var(--gold2); flex-shrink: 0; }
+  .mmc-radius { color: #85B7EB; flex-shrink: 0; }
+
+  /* 지도 위 모드 버튼 */
+  .mobile-map-modes {
+    display: flex !important; gap: 8px;
+    position: absolute; bottom: 14px; left: 10px; right: 10px; z-index: 25;
+  }
+  .mmm-btn {
+    flex: 1; background: rgba(13,22,40,.94); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 14px; padding: 12px; font-size: 12px; font-weight: 700;
+    color: #8B98B8; cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  }
+  .mmm-btn.on { border-color: #60A5FA; background: rgba(59,130,246,.2); color: #93C5FD; }
+
   /* ── 패널 내용 압축 ── */
   .lhead { padding: 6px 12px; }
   .ltitle { margin-bottom: 4px; font-size: 10px; }
@@ -474,6 +505,21 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   <!-- 지도 -->
   <div class="map-wrap">
     <div id="kakaoMap"></div>
+
+    <!-- 모바일 전용: 지도 위 요약 칩 + 모드 버튼 -->
+    <div class="mobile-map-chips" id="mobileMapChips">
+      <div class="mmc-chip mmc-base" onclick="openPanelMobile()">
+        <span class="mmc-ic">📍</span>
+        <span id="mmcBaseName">기준 선택</span>
+      </div>
+      <div class="mmc-chip mmc-radius" onclick="openPanelMobile()">
+        <span id="mmcRadius">5km</span> ▾
+      </div>
+    </div>
+    <div class="mobile-map-modes" id="mobileMapModes">
+      <button type="button" class="mmm-btn on" id="mmmNearby" onclick="mobileSetMode('nearby')">🔍 주변고객</button>
+      <button type="button" class="mmm-btn" id="mmmRoute" onclick="mobileSetMode('route')">🧭 동선관리</button>
+    </div>
 
     <!-- 동선 순서 팝업 -->
     <div id="dsOrderPopup" style="display:none;position:absolute;top:12px;right:12px;background:rgba(13,22,40,.96);border:1px solid rgba(232,201,122,.3);border-radius:14px;width:250px;max-height:340px;z-index:9000;overflow:hidden;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.6);">
@@ -2247,6 +2293,7 @@ window.addEventListener('DOMContentLoaded', function() {
       var _chev = document.getElementById('panelToggleChev');
       if (_lp) _lp.classList.add('panel-collapsed');
       if (_chev) _chev.textContent = '\u25BE';
+      setTimeout(function(){ if(typeof updateMobileChips === 'function') updateMobileChips(); }, 600);
     }
   } catch(e) {}
 
@@ -2269,13 +2316,16 @@ window.addEventListener('DOMContentLoaded', function() {
     var _u = JSON.parse(localStorage.getItem('unispace_user') || 'null');
     if(_u && _u.role === 'FP' && _u.id) window._myFpId = _u.id;
     else window._myFpId = '';
-    // FP 동선 조회는 대표/지점장(관리자)만 노출. 로그인 정보 없으면(개발 모드) 노출.
+    // 담당 FP 표시는 일반 FP만 가림(기존 동작 유지)
     window._isAdmin = !(_u && _u.role === 'FP');
-  } catch(e){ window._myFpId = ''; window._isAdmin = true; }
+    // FP 동선 조회는 대표/지점장(교육지점장 포함)만 노출. 매니저·센터장·FP는 숨김.
+    var _ttl = (_u && _u.title) ? String(_u.title) : '';
+    window._canSeeRoute = _u ? ((_ttl.indexOf('대표') >= 0) || (_ttl.indexOf('지점장') >= 0)) : true;
+  } catch(e){ window._myFpId = ''; window._isAdmin = true; window._canSeeRoute = true; }
   // FP 동선 조회 영역 권한 제어
   (function(){
     var rsb = document.getElementById('routeSearchBar');
-    if(rsb) rsb.style.display = window._isAdmin ? '' : 'none';
+    if(rsb) rsb.style.display = window._canSeeRoute ? '' : 'none';
   })();
 
   // sessionStorage에서 타겟 정보
@@ -2899,6 +2949,7 @@ function setRadius(km, el) {
   document.querySelectorAll('.rchip').forEach(function(c){ c.className='rchip off'; });
   el.className = 'rchip on';
   if(centerLat && centerLng) drawNearby(centerLat, centerLng);
+  if(typeof updateMobileChips === 'function') updateMobileChips();
 }
 
 // ── 주소 검색 ────────────────────────────────────────
@@ -3454,6 +3505,7 @@ function refreshNearbyOnly(lat, lng) {
 function drawNearby(lat, lng) {
   clearMarkers();
   kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+  if(typeof updateMobileChips === 'function') updateMobileChips();
 
   // 기준 마커 (파란 핀)
   var centerPos = new kakao.maps.LatLng(lat, lng);
@@ -3976,10 +4028,50 @@ function togglePanel() {
   var chev = document.getElementById('panelToggleChev');
   if(!p) return;
   var collapsed = p.classList.toggle('panel-collapsed');
-  if(chev) chev.textContent = collapsed ? '▾' : '▴';
+  if(chev) chev.textContent = collapsed ? '\u25BE' : '\u25B4';
   if(typeof kakaoMap !== 'undefined' && kakaoMap && kakaoMap.relayout){
     setTimeout(function(){ kakaoMap.relayout(); }, 280);
   }
+}
+
+// 칩 탭 -> 패널 펴기
+function openPanelMobile() {
+  var p = document.getElementById('leftPanel');
+  if(!p) return;
+  if(p.classList.contains('panel-collapsed')){
+    togglePanel();
+  }
+}
+
+// 지도 위 모드 버튼 -> 기존 모드 버튼으로 연결
+function mobileSetMode(mode) {
+  var bN = document.getElementById('mmmNearby');
+  var bR = document.getElementById('mmmRoute');
+  if(mode === 'route'){
+    if(bN) bN.classList.remove('on');
+    if(bR) bR.classList.add('on');
+    var mAdd = document.getElementById('modeAddBtn');
+    if(mAdd) mAdd.click();
+  } else {
+    if(bR) bR.classList.remove('on');
+    if(bN) bN.classList.add('on');
+    var mView = document.getElementById('modeViewBtn');
+    if(mView) mView.click();
+  }
+}
+
+// 요약 칩 내용 갱신
+function updateMobileChips() {
+  try {
+    var nmEl = document.getElementById('targetName');
+    var chipNm = document.getElementById('mmcBaseName');
+    if(nmEl && chipNm){
+      var t = (nmEl.textContent || '').trim();
+      chipNm.textContent = (t && t !== '\u2014') ? (t + ' \uc8fc\ubcc0') : '\uae30\uc900 \uc120\ud0dd';
+    }
+    var chipR = document.getElementById('mmcRadius');
+    if(chipR && typeof radiusKm !== 'undefined'){ chipR.textContent = radiusKm + 'km'; }
+  } catch(e){}
 }
 
 function showPopup(c, dist) {
