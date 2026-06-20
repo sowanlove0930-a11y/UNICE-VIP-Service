@@ -9941,6 +9941,20 @@ function qaGetCustomerDB(){
   if(!Array.isArray(arr)) arr=[];
   return arr;
 }
+// 수정 모달: 활동의 고객명으로 등록주소/좌표 불러오기
+function editLoadCustomerAddr(){
+  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var act=_currentActId?db[_currentActId]:null;
+  var name=act?(act.customerName||''):'';
+  var st=document.getElementById('editGeoStatus');
+  if(!name){ showToast('고객 정보가 없습니다 — 주소를 직접 입력해 주세요'); return; }
+  var cdb=qaGetCustomerDB(), hit=null;
+  for(var i=0;i<cdb.length;i++){ if(cdb[i] && cdb[i].name==name){ hit=cdb[i]; break; } }
+  if(!hit){ showToast('등록된 고객이 아닙니다 ('+name+') — 주소를 직접 입력해 주세요'); return; }
+  if(hit.address) document.getElementById('editActPlace').value=hit.address;
+  if(st){ st.textContent='고객 주소 적용됨 · 저장 시 좌표 변환'; st.style.color='var(--text3)'; }
+  showToast('고객 등록주소를 불러왔습니다');
+}
 function qaLoadCustomerAddr(){
   var name=document.getElementById('qaCustomer').value.trim();
   var st=document.getElementById('qaGeoStatus');
@@ -11426,6 +11440,7 @@ function doCheckin() { doSmartCheckin(); }
         <button type="button" class="res-tag" data-etag="케어핏" onclick="toggleEditTag(this)">케어핏</button>
         <button type="button" class="res-tag" data-etag="노파클" onclick="toggleEditTag(this)">노파클</button>
         <button type="button" class="res-tag" data-etag="U고비" onclick="toggleEditTag(this)">U고비</button>
+        <button type="button" class="res-tag" data-etag="문고리" onclick="toggleEditTag(this)">문고리</button>
         <button type="button" class="res-tag" data-etag="내근" onclick="toggleEditTag(this)">내근</button>
       </div>
     </div>
@@ -11435,8 +11450,12 @@ function doCheckin() { doSmartCheckin(); }
       <input type="hidden" id="editActTime">
     </div>
     <div style="margin-bottom:8px">
-      <div style="font-size:10px;color:var(--text3);margin-bottom:3px">장소</div>
-      <input type="text" id="editActPlace" placeholder="장소" style="width:100%;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px">미팅 장소 <span style="font-size:9px;color:var(--text3);font-weight:400">(주소 입력 시 동선 지도에 표기)</span></div>
+      <div style="display:flex;gap:5px;align-items:stretch">
+        <input type="text" id="editActPlace" placeholder="예) 부산 해운대구 우동 1407 또는 해운대 스벅" style="flex:1;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px">
+        <button type="button" id="editLoadCustAddr" onclick="editLoadCustomerAddr()" class="qa-addr-btn">👤 고객주소</button>
+      </div>
+      <div id="editGeoStatus" style="font-size:9px;margin-top:4px;color:var(--text3)">저장 시 주소를 자동으로 좌표 변환합니다</div>
     </div>
     <div id="editChungyakArea" style="display:none;margin-bottom:8px">
       <div style="font-size:10px;color:var(--text3);margin-bottom:5px" id="editChungyakLabel">📋 PT/청약 상세</div>
