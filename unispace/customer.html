@@ -43,6 +43,14 @@
 ::-webkit-scrollbar-thumb:hover{background:rgba(201,168,76,.45);}
 *{scrollbar-width:thin;scrollbar-color:rgba(201,168,76,.25) transparent;}
 body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+/* 맨 위로 스크롤 버튼 */
+#scrollTopBtn{position:fixed;right:18px;bottom:24px;width:48px;height:48px;border-radius:50%;border:none;background:linear-gradient(135deg,#E8C97A,#C9A84C);color:#1a1408;font-size:22px;font-weight:700;line-height:1;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.28);z-index:900;opacity:0;visibility:hidden;transform:translateY(10px);transition:opacity .25s ease,transform .25s ease,visibility .25s ease;}
+#scrollTopBtn.show{opacity:1;visibility:visible;transform:translateY(0);}
+/* PC(큰 화면): 버튼 더 크게, 위치 여유, 호버 효과 */
+@media(min-width:769px){
+  #scrollTopBtn{right:32px;bottom:32px;width:56px;height:56px;font-size:26px;box-shadow:0 8px 26px rgba(0,0,0,.32);}
+  #scrollTopBtn.show:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(0,0,0,.38);}
+}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background:radial-gradient(ellipse 60% 40% at 15% 10%,rgba(201,168,76,.05) 0%,transparent 60%),
              radial-gradient(ellipse 50% 50% at 85% 80%,rgba(37,99,235,.04) 0%,transparent 60%);}
@@ -211,11 +219,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 /* ── 고객조회 탭 ── */
 .search-wrap{position:relative;margin-bottom:12px;}
-.search-icon{position:absolute;left:126px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text2);}
+.search-icon{position:absolute;left:140px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text2);pointer-events:none;}
 .search-input{width:100%;padding:12px 14px 12px 42px;background:var(--bg2);border:1.5px solid var(--bdr);border-radius:var(--r-lg);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;transition:border-color .2s;}
 .search-input:focus{outline:none;border-color:var(--gold);}
 .search-input::placeholder{color:var(--text3);}
-.search-input.has-seg{padding-left:152px;}
+.search-input.has-seg{padding-left:170px;}
 .search-seg{position:absolute;left:6px;top:50%;transform:translateY(-50%);display:flex;background:var(--bg3);border-radius:var(--r-sm);padding:2px;gap:2px;z-index:2;}
 .search-seg-btn{font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;white-space:nowrap;}
 .search-seg-btn.on{background:var(--blue);color:#fff;}
@@ -640,6 +648,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 }
 @media(max-width:480px){
   .customer-grid{grid-template-columns:1fr;}
+
+  /* 검색창: 좁은 화면에선 돋보기 숨기고 토글 옆 바로 입력 */
+  .search-icon{display:none;}
+  .search-input.has-seg{padding-left:140px;}
+
+  /* ── 고객 상세 헤더: 제목 위, 버튼 3열 그리드로 정렬 ── */
+  .detail-header { flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; position: relative; }
+  .detail-title { font-size: 19px; padding-right: 44px; }
+  .detail-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex-wrap: nowrap; }
+  .detail-actions .detail-edit-btn,
+  .detail-actions .detail-del-btn { width: 100%; padding: 10px 6px; text-align: center; font-size: 12px; }
+  /* ✕는 그리드에서 빼고 우측 상단 고정 */
+  .detail-actions .detail-close { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border-radius: 50%; padding: 0; }
 
   /* ── 필터 칩: 작고 촘촘하게 (유형/등급/속성) ── */
   .filter-trow { flex-wrap: wrap; gap: 5px 6px; align-items: center; }
@@ -2711,11 +2732,18 @@ function renderCustomerList() {
     var matchBranch = (_custBranch==='all') || (_custBranchOf(c)===_custBranch);
     var matchFp = (_custFp==='all') || ((c.fpName||c.fp||'')===_custFp);
     var matchQ;
+    var qDigits = q.replace(/[^0-9]/g, '');
     if (searchMode == 'insured') {
       var insName = (c.insured && c.insured.name) ? c.insured.name.toLowerCase() : '';
-      matchQ = !q || insName.includes(q);
+      var insPhone = (c.insured && c.insured.phone) ? String(c.insured.phone) : '';
+      var insPhoneDigits = insPhone.replace(/[^0-9]/g, '');
+      matchQ = !q || insName.includes(q) || (qDigits && insPhoneDigits.indexOf(qDigits) >= 0);
     } else {
-      matchQ = !q || c.name.includes(q) || (c.phone||'').includes(q);
+      var phoneDigits = String(c.phone || '').replace(/[^0-9]/g, '');
+      var nameHit = c.name && c.name.toLowerCase().includes(q);
+      var phoneHit = (c.phone || '').includes(q);
+      var digitHit = qDigits && phoneDigits.indexOf(qDigits) >= 0;
+      matchQ = !q || nameHit || phoneHit || digitHit;
     }
     return matchType && matchBranch && matchFp && matchQ;
   });
@@ -3757,5 +3785,27 @@ function showToast(msg) {
     </div>
   </div>
 </div>
+
+<!-- 맨 위로 스크롤 버튼 -->
+<button type="button" id="scrollTopBtn" aria-label="맨 위로" onclick="scrollToTopSmooth()">↑</button>
+<script>
+(function(){
+  function scrollToTopSmooth(){
+    try { window.scrollTo({ top:0, behavior:'smooth' }); }
+    catch(e){ window.scrollTo(0,0); }
+  }
+  window.scrollToTopSmooth = scrollToTopSmooth;
+  var _stBtn = null;
+  function _toggleScrollTop(){
+    if(!_stBtn) _stBtn = document.getElementById('scrollTopBtn');
+    if(!_stBtn) return;
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    if(y > 400){ _stBtn.classList.add('show'); }
+    else { _stBtn.classList.remove('show'); }
+  }
+  window.addEventListener('scroll', _toggleScrollTop, { passive:true });
+  document.addEventListener('DOMContentLoaded', _toggleScrollTop);
+})();
+</script>
 </body>
 </html>
