@@ -2947,12 +2947,41 @@ function openDetail(id) {
 
   document.getElementById('detailBody').innerHTML = body;
   document.getElementById('detailOverlay').classList.add('open');
+  // 뒤로가기로 이 창만 닫을 수 있도록 히스토리 단계 추가
+  try {
+    if(!window._detailHistoryPushed){
+      history.pushState({ unispaceDetail:true }, '', location.href);
+      window._detailHistoryPushed = true;
+    }
+  } catch(e) {}
 }
 
 function closeDetail(e) {
-  if (!e || e.target === document.getElementById('detailOverlay'))
+  if (!e || e.target === document.getElementById('detailOverlay')){
     document.getElementById('detailOverlay').classList.remove('open');
+    // 열 때 추가한 히스토리 단계 되돌리기 (단, popstate로 들어온 경우는 제외)
+    if(window._detailHistoryPushed && !window._detailClosingByPop){
+      window._detailHistoryPushed = false;
+      try { history.back(); } catch(e2) {}
+    }
+    window._detailHistoryPushed = false;
+    window._detailClosingByPop = false;
+  }
 }
+
+// 뒤로가기로 고객 상세창만 닫기
+(function(){
+  try {
+    window.addEventListener('popstate', function(){
+      var ov = document.getElementById('detailOverlay');
+      if(ov && ov.classList.contains('open')){
+        // 상세창이 열려있으면 이 창만 닫는다 (페이지 이동 차단)
+        window._detailClosingByPop = true;
+        closeDetail();
+      }
+    });
+  } catch(e) {}
+})();
 
 var contactDateMode = 'today';
 var contactType = '친숙';
