@@ -4068,6 +4068,30 @@ function selectCustomer(idx) {
 }
 
 // ── 팝업 표시 ────────────────────────────────────────
+// 모바일: 다른 시트들 닫기(한 번에 하나만 표시)
+function mobileCloseSheetsExcept(keep) {
+  if(window.innerWidth > 768) return;
+  // 검색 패널
+  if(keep !== 'panel'){
+    var lp = document.getElementById('leftPanel');
+    var chev = document.getElementById('panelToggleChev');
+    if(lp && !lp.classList.contains('panel-collapsed')){
+      lp.classList.add('panel-collapsed');
+      if(chev) chev.textContent = '\u25BE';
+    }
+  }
+  // 결과 시트
+  if(keep !== 'result'){
+    var rs = document.getElementById('mobileResultSheet');
+    if(rs){ rs.style.transform=''; rs.style.transition=''; rs.classList.remove('open'); }
+  }
+  // 고객 정보 팝업
+  if(keep !== 'popup'){
+    var pp = document.getElementById('mapPopup');
+    if(pp && pp.style.display !== 'none' && typeof closePopup === 'function'){ closePopup(); }
+  }
+}
+
 function togglePanel() {
   var p = document.getElementById('leftPanel');
   var chev = document.getElementById('panelToggleChev');
@@ -4083,6 +4107,7 @@ function togglePanel() {
 function openPanelMobile() {
   var p = document.getElementById('leftPanel');
   if(!p) return;
+  mobileCloseSheetsExcept('panel');
   if(p.classList.contains('panel-collapsed')){
     togglePanel();
   }
@@ -4126,7 +4151,7 @@ function updateMobileChips() {
   } catch(e){}
 }
 
-// 결과 시트 열기(모바일) + 검색 패널 닫기
+// 결과 시트 열기(모바일) + 다른 시트 닫기
 function openResultSheet() {
   if(window.innerWidth > 768) return;
   var rs = document.getElementById('mobileResultSheet');
@@ -4134,14 +4159,8 @@ function openResultSheet() {
   if(rs && rs.parentElement && rs.parentElement.id === 'leftPanel'){
     document.body.appendChild(rs);
   }
+  mobileCloseSheetsExcept('result');
   if(rs) rs.classList.add('open');
-  // 검색 패널은 접기
-  var lp = document.getElementById('leftPanel');
-  var chev = document.getElementById('panelToggleChev');
-  if(lp && !lp.classList.contains('panel-collapsed')){
-    lp.classList.add('panel-collapsed');
-    if(chev) chev.textContent = '\u25BE';
-  }
 }
 function closeResultSheet() {
   var rs = document.getElementById('mobileResultSheet');
@@ -4149,6 +4168,8 @@ function closeResultSheet() {
 }
 
 function showPopup(c, dist) {
+  // 다른 시트(검색/결과) 닫기
+  if(typeof mobileCloseSheetsExcept === 'function') mobileCloseSheetsExcept('popup');
   // 이미 열린 팝업의 같은 고객 클릭 → 닫기 + 선택 카드 숨김
   var popup = document.getElementById('mapPopup');
   if(popup && popup.style.display !== 'none' && selectedCustomerId === c.id) {
