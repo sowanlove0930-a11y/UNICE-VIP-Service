@@ -615,7 +615,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
             <button type="button" class="rp-reset-btn" id="rpResetBtn" style="white-space:nowrap;">초기화</button>
-            <button type="button" class="rp-popup-close" id="rpMinBtn" title="최소화" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:0;line-height:1;">─</button>
             <button type="button" class="rp-popup-close" id="routePopupClose">✕</button>
           </div>
         </div>
@@ -860,7 +859,10 @@ function switchTab(tab) {
     if(dsQueue.length > 0) injectDsRoleLabels();
     updateDsMarkerLabels();
     var rp = document.getElementById('routePopup');
-    if(rp && dsQueue.length > 0) rp.style.display = '';
+    // 모바일에서 사용자가 길찾기를 손으로 내려둔 상태면 자동으로 다시 열지 않음(하단 바로만 복원)
+    var _userClosedMobile = (window.innerWidth <= 768) && window._routeUserClosed;
+    if(rp && dsQueue.length > 0 && !_userClosedMobile) rp.style.display = '';
+    if(_userClosedMobile && typeof showRouteMinifiedBar === 'function') showRouteMinifiedBar();
   } else {
     closeDsEditSheet();
     clearAllRoutePins();
@@ -2753,19 +2755,11 @@ window.addEventListener('DOMContentLoaded', function() {
 
   var routePopupClose = document.getElementById('routePopupClose');
   if(routePopupClose) routePopupClose.addEventListener('click', function(){
+    if(window.innerWidth <= 768) window._routeUserClosed = true;
     var popup = document.getElementById('routePopup');
     if(popup) popup.style.display = 'none';
     var mb = document.getElementById('routeMinifiedBtn');
     if(mb) mb.style.display = 'none';
-  });
-
-  var rpMinBtn = document.getElementById('rpMinBtn');
-  if(rpMinBtn) rpMinBtn.addEventListener('click', function(){
-    var body = document.querySelector('#routePopup .route-popup-body');
-    if(!body) return;
-    var collapsed = body.style.display === 'none';
-    if(collapsed){ body.style.display = ''; rpMinBtn.textContent = '─'; }
-    else { body.style.display = 'none'; rpMinBtn.textContent = '▢'; }
   });
 
   // 초기화
@@ -2804,7 +2798,7 @@ window.addEventListener('DOMContentLoaded', function() {
     function isMobile(){ return window.innerWidth <= 768; }
     hd.addEventListener('touchstart', function(e){ if(!isMobile()) return; active=true; sy=e.touches[0].clientY; moved=0; rp.style.transition='none'; }, {passive:true});
     hd.addEventListener('touchmove', function(e){ if(!active||!isMobile()) return; moved=e.touches[0].clientY-sy; if(moved>0) rp.style.transform='translateY('+moved+'px)'; }, {passive:true});
-    hd.addEventListener('touchend', function(){ if(!active||!isMobile()) return; active=false; rp.style.transition='transform .2s ease'; if(moved>80){ rp.style.transform='translateY(100%)'; setTimeout(function(){ rp.style.display='none'; rp.style.transform=''; rp.style.transition=''; if(typeof showRouteMinifiedBar==='function') showRouteMinifiedBar(); }, 200); } else { rp.style.transform='translateY(0)'; } }, {passive:true});
+    hd.addEventListener('touchend', function(){ if(!active||!isMobile()) return; active=false; rp.style.transition='transform .2s ease'; if(moved>80){ window._routeUserClosed=true; rp.style.transform='translateY(100%)'; setTimeout(function(){ rp.style.display='none'; rp.style.transform=''; rp.style.transition=''; if(typeof showRouteMinifiedBar==='function') showRouteMinifiedBar(); }, 200); } else { rp.style.transform='translateY(0)'; } }, {passive:true});
   })();
 });
 
@@ -4172,6 +4166,7 @@ function togglePanel() {
 
 // 길찾기 최소화 복원
 function restoreRoutePopup() {
+  window._routeUserClosed = false;
   var rp = document.getElementById('routePopup');
   var mb = document.getElementById('routeMinifiedBtn');
   if(mb) mb.style.display = 'none';
@@ -4232,6 +4227,7 @@ function mobileSetMode(mode) {
       if(mAdd) mAdd.click();
     }
   } else {
+    window._routeUserClosed = false;
     var wasOn = bN && bN.classList.contains('on');
     if(bR) bR.classList.remove('on');
     if(bN) bN.classList.add('on');
