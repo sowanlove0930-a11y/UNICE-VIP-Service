@@ -9963,11 +9963,12 @@ function qaLoadCustomerAddr(){
 function qaGeocode(addr, cb){
   var kakaoKey=localStorage.getItem('kakao_map_key')||'';
   if(!addr || !kakaoKey){ cb(null, null); return; }
-  fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(addr), {
+  // 1순위: 주소 검색(도로명/지번에 정확) → 실패 시 키워드 검색(상호/장소명)
+  fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr), {
     headers:{ 'Authorization':'KakaoAK '+kakaoKey }
   }).then(function(r){ return r.json(); }).then(function(data){
     if(data.documents && data.documents.length>0){ cb(data.documents[0].y, data.documents[0].x); return null; }
-    return fetch('https://dapi.kakao.com/v2/local/search/address.json?query='+encodeURIComponent(addr), {
+    return fetch('https://dapi.kakao.com/v2/local/search/keyword.json?query='+encodeURIComponent(addr), {
       headers:{ 'Authorization':'KakaoAK '+kakaoKey }
     }).then(function(r){ return r.json(); }).then(function(d2){
       if(d2.documents && d2.documents.length>0){ cb(d2.documents[0].y, d2.documents[0].x); }
@@ -10409,13 +10410,21 @@ function openDayRoute(fpId, fpName, dateStr) {
 
   if(needGeo.length === 0){ buildAndGo(); return; }
 
+  // 카카오 키 없으면 변환 불가 — 명확히 안내
+  var _kk = localStorage.getItem('kakao_map_key')||'';
+  if(!_kk){
+    showToast('⚠️ 지도 키가 없어 주소→좌표 변환을 할 수 없습니다');
+    buildAndGo();
+    return;
+  }
+
   // 주소 → 좌표 변환 후 진행 (변환된 좌표는 활동에도 저장해 다음부터 빠르게)
   showToast('📍 주소를 좌표로 변환 중...');
-  var done=0;
+  var done=0, okCnt=0;
   needGeo.forEach(function(p){
     qaGeocode(p.addr, function(la, ln){
       if(la && ln){
-        p.lat=la; p.lng=ln;
+        p.lat=la; p.lng=ln; okCnt++;
         if(db[p.act.id]){ db[p.act.id].lat=la; db[p.act.id].lng=ln; }
       }
       done++;
