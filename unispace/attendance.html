@@ -241,6 +241,16 @@ textarea.prm-input{resize:vertical;}
 .photo-upload-sub { font-size: 11px; color: var(--text2); line-height: 1.6; }
 .photo-upload-sub b { color: var(--gold); }
 .photo-file-input { display: none; }
+#photoPickerBtns { display: none; }
+#photoPickerBtns.show { display: flex !important; }
+.photo-pick-btn {
+  flex: 1; padding: 13px 10px; border: 1px solid var(--bdr2);
+  border-radius: 12px; background: var(--sur); color: var(--text);
+  font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all .2s; white-space: nowrap;
+}
+.photo-pick-btn:hover { border-color: var(--gold); background: rgba(201,168,76,.08); }
+.photo-pick-btn:active { transform: scale(.97); }
 .photo-preview-wrap {
   margin-top: 14px; display: none;
   border-radius: 12px; overflow: hidden;
@@ -472,15 +482,23 @@ textarea.prm-input{resize:vertical;}
 
       <!-- 인증샷 업로드 -->
       <input type="file" class="photo-file-input" id="proofPhotoInput"
+        accept="image/*" capture="environment" onchange="handlePhotoSelect(this)">
+      <input type="file" class="photo-file-input" id="proofPhotoInputGallery"
         accept="image/*" onchange="handlePhotoSelect(this)">
 
-      <div class="photo-upload-area" id="photoUploadArea" onclick="document.getElementById('proofPhotoInput').click()">
+      <div class="photo-upload-area" id="photoUploadArea" onclick="togglePhotoPicker()">
         <div class="photo-upload-icon">📷</div>
         <div class="photo-upload-title">인증샷 첨부 (선택)</div>
         <div class="photo-upload-sub">
-          클릭하면 <b>카메라로 바로 찍거나</b> 갤러리·폴더에서 선택<br>
+          눌러서 <b>카메라로 촬영</b>하거나 <b>갤러리에서 선택</b><br>
           PC · 스마트폰 모두 가능
         </div>
+      </div>
+
+      <!-- 카메라/갤러리 선택 버튼 -->
+      <div id="photoPickerBtns" style="display:none;gap:10px;margin-top:10px">
+        <button type="button" class="photo-pick-btn" onclick="pickPhoto('camera')">📷 카메라로 촬영</button>
+        <button type="button" class="photo-pick-btn" onclick="pickPhoto('gallery')">🖼️ 갤러리에서 선택</button>
       </div>
 
       <!-- 미리보기 -->
@@ -1610,11 +1628,27 @@ function savePrereport(){
 var _selectedPhotoBase64 = null;
 var _selectedPhotoName   = null;
 
+// 인증샷 영역 클릭 → 카메라/갤러리 선택 버튼 토글
+function togglePhotoPicker() {
+  var btns = document.getElementById('photoPickerBtns');
+  if (!btns) return;
+  btns.classList.toggle('show');
+}
+
+// 카메라 또는 갤러리 input 열기
+function pickPhoto(mode) {
+  var id = (mode === 'camera') ? 'proofPhotoInput' : 'proofPhotoInputGallery';
+  var input = document.getElementById(id);
+  if (input) input.click();
+}
+
 function handlePhotoSelect(input) {
   var file = input.files && input.files[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) { showToast('⚠️ 이미지 파일만 선택 가능합니다'); return; }
   if (file.size > 10 * 1024 * 1024) { showToast('⚠️ 10MB 이하 이미지만 가능합니다'); return; }
+  var _pb = document.getElementById('photoPickerBtns');
+  if (_pb) _pb.classList.remove('show');
 
   var reader = new FileReader();
   reader.onload = function(e) {
@@ -1636,6 +1670,7 @@ function removePhoto() {
   _selectedPhotoBase64 = null;
   _selectedPhotoName   = null;
   document.getElementById('proofPhotoInput').value  = '';
+  var _pg = document.getElementById('proofPhotoInputGallery'); if(_pg) _pg.value = '';
   document.getElementById('photoPreviewImg').src    = '';
   document.getElementById('photoPreviewWrap').classList.remove('show');
   document.getElementById('photoUploadArea').classList.remove('has-photo');
