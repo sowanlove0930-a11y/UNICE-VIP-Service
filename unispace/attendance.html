@@ -39,12 +39,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 /* HEADER */
 .header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--bdr);margin-bottom:20px;}
-.back-btn{display:flex;align-items:center;gap:8px;background:var(--sur);border:1px solid var(--bdr2);border-radius:20px;padding:7px 16px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none;}
+.back-btn{display:flex;align-items:center;gap:8px;background:var(--sur);border:1px solid var(--bdr2);border-radius:20px;padding:7px 16px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none;white-space:nowrap;flex-shrink:0;}
 .back-btn:hover{background:var(--sur2);color:var(--text);}
 .header-title{display:flex;align-items:center;gap:10px;}
 .header-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--gold2),var(--gold));display:flex;align-items:center;justify-content:center;font-size:16px;}
 .header-title-text{font-family:'Syncopate',sans-serif;font-size:14px;font-weight:700;letter-spacing:.1em;background:linear-gradient(135deg,var(--gold2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.header-fp{font-size:12px;color:var(--text2);}
+.header-fp{font-size:12px;color:var(--text2);white-space:nowrap;flex-shrink:0;}
 
 /* TAB */
 .tab-nav{display:flex;gap:6px;margin-bottom:24px;background:var(--bg3);border-radius:16px;padding:5px;border:1px solid var(--bdr);}
@@ -276,6 +276,39 @@ textarea.prm-input{resize:vertical;}
   .att-summary{grid-template-columns:repeat(2,1fr);}
   .wn-grid{grid-template-columns:1fr;} .wn-full{grid-column:span 1;}
   .my-month-summary{grid-template-columns:repeat(2,1fr);}
+  /* 헤더: 세 요소(메인으로/로고/이름)가 한 줄에 안 깨지게 */
+  .header{gap:8px;padding:12px 0;}
+  .back-btn{padding:6px 12px;font-size:12px;gap:4px;}
+  .header-title{gap:6px;}
+  .header-icon{width:30px;height:30px;font-size:14px;}
+  .header-title-text{font-size:11px;letter-spacing:.05em;}
+  .header-fp{font-size:11px;}
+  /* 출석현황 표: 모바일에선 지점·사전보고 숨겨 핵심만 한눈에 */
+  .att-table .att-col-opt{display:none;}
+  .att-table th, .att-table td{padding:9px 8px;font-size:12px;}
+  /* ── 근태보고 화면 모바일 최적화 ── */
+  .pr-section{padding:16px 14px;border-radius:14px;}
+  /* 사전보고 등록 헤더: 제목과 컨트롤을 위아래로 분리 */
+  .pr-reg-head{flex-direction:column;align-items:flex-start !important;gap:10px;}
+  .pr-reg-ctrls{width:100%;flex-wrap:wrap;gap:6px !important;}
+  .pr-reg-ctrls .filter-select{flex:1 1 auto;min-width:0;}
+  .pr-reg-ctrls #prMultiToggle{flex-shrink:0;}
+  /* 달력: 칸 간격·날짜 크기 살짝 키워 터치 쉽게 */
+  .prcal-grid{gap:4px;}
+  .prcal-dow{gap:4px;}
+  .prcal-month{font-size:14px;}
+  /* 증빙 처리: 날짜선택 + 버튼 세로 배치 */
+  .proof-select-wrap{flex-direction:column;align-items:stretch !important;gap:10px !important;}
+  .proof-select-wrap .wn-select{width:100%;}
+  .proof-confirm-btn{width:100%;}
+  /* 인증샷 영역 */
+  .photo-upload-area{padding:18px 14px;}
+  .photo-upload-sub{word-break:keep-all;}
+}
+@media(max-width:380px){
+  .header-title-text{font-size:9px;}
+  .back-btn{padding:6px 10px;font-size:11px;}
+  .header-icon{width:26px;height:26px;}
 }
 </style>
 </head>
@@ -346,7 +379,7 @@ textarea.prm-input{resize:vertical;}
     <div class="att-table-wrap">
       <table class="att-table">
         <thead><tr id="statusTableHead">
-          <th></th><th>이름</th><th>지점</th><th>정상</th><th>지각</th><th>미출결</th><th>사전보고</th><th>디메리트</th>
+          <th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트</th>
         </tr></thead>
         <tbody id="statusTableBody"></tbody>
       </table>
@@ -364,9 +397,9 @@ textarea.prm-input{resize:vertical;}
 
     <!-- 사전보고 등록 -->
     <div class="pr-section" id="prFormSection">
-      <div class="pr-section-title" style="display:flex;align-items:center;justify-content:space-between">
+      <div class="pr-section-title pr-reg-head" style="display:flex;align-items:center;justify-content:space-between">
         <span>📝 사전보고 등록</span>
-        <span style="display:flex;align-items:center;gap:8px">
+        <span class="pr-reg-ctrls" style="display:flex;align-items:center;gap:8px">
           <select class="filter-select" id="prBranchFilter" onchange="_renderPrAdminList()" style="display:none;padding:5px 10px;font-size:12px">
             <option value="">전체 지점</option>
             <option value="알파지점">알파지점</option>
@@ -1794,9 +1827,9 @@ function renderStatus(){
   // 테이블 헤더 — 일별 모드 시 체크인 시간 컬럼 추가
   var head = document.getElementById('statusTableHead');
   if(isDayMode){
-    head.innerHTML='<th></th><th>이름</th><th>지점</th><th>출결 상태</th><th>체크인</th><th>사전보고</th>';
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>';
   } else {
-    head.innerHTML='<th></th><th>이름</th><th>지점</th><th>정상</th><th>지각</th><th>미출결</th><th>사전보고</th><th>디메리트 <span style="font-size:10px;color:var(--text3);font-weight:400">(3회 기준)</span></th>';
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(3회 기준)</span></th>';
   }
 
   // 테이블 행 — 알파지점 먼저, 브라보지점 다음, 각 지점 내 디메리트 순
@@ -1833,10 +1866,10 @@ function renderStatus(){
       return '<tr>'+
         '<td>'+brLabelHtml+'</td>'+
         '<td style="font-weight:700">'+r.fp.name+'</td>'+
-        '<td style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
+        '<td class="att-col-opt" style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
         '<td>'+statusHtml+'</td>'+
         '<td style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums">'+(r.timeStr?r.timeStr.slice(0,5):'—')+'</td>'+
-        '<td style="color:var(--orange)">'+(r.prCnt?'📋 있음':'—')+'</td>'+
+        '<td class="att-col-opt" style="color:var(--orange)">'+(r.prCnt?'📋 있음':'—')+'</td>'+
       '</tr>';
     } else {
       var demeritHtml;
@@ -1849,11 +1882,11 @@ function renderStatus(){
       return '<tr>'+
         '<td>'+brLabelHtml+'</td>'+
         '<td style="font-weight:700">'+r.fp.name+'</td>'+
-        '<td style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
+        '<td class="att-col-opt" style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
         '<td style="color:#34D399;font-weight:700">'+(r.normalCnt?r.normalCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
         '<td style="color:#FCA5A5;font-weight:700">'+(r.lateCnt?r.lateCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
         '<td style="color:#94A3B8;font-weight:600">'+(r.absentCnt?r.absentCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
-        '<td style="color:var(--orange)">'+r.prCnt+'건</td>'+
+        '<td class="att-col-opt" style="color:var(--orange)">'+r.prCnt+'건</td>'+
         '<td>'+demeritHtml+'</td>'+
       '</tr>';
     }
