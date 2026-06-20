@@ -606,7 +606,7 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 
 /* ── 실적 입력 모달 ── */
 .perf-modal-overlay {
-  position: fixed; inset: 0; z-index: 400;
+  position: fixed; inset: 0; z-index: 550;
   background: rgba(8,14,28,0.8); backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
   opacity: 0; pointer-events: none;
@@ -4266,8 +4266,11 @@ function rebuildPerfData(){
 var _perfProducts = [];
 function _perfPad(){ return _perfProducts.length ? '' : ''; }
 var _perfFpList = [];
+var _editingPerfId = null; // 수정 중인 업적 레코드 id (없으면 신규 입력)
 function openPerfModal() {
   if (!currentUser) { showToast('로그인이 필요합니다'); return; }
+  _editingPerfId = null;
+  _perfSetEditUI(false);
   // 선택 가능한 FP 목록 구성 (관리자: 전체/지점, FP: 본인)
   var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
   var list = getMergedFpList().filter(function(fp){ return fp.active; });
@@ -4289,6 +4292,55 @@ function openPerfModal() {
   _perfSetDate(getTodayStr());
   var pc=document.getElementById('perfCal'); if(pc) pc.classList.remove('open');
   _perfProducts = [{co:'', cat:'', amount:''}];
+  renderPerfProds();
+  document.getElementById('perfModalOverlay').classList.add('open');
+}
+
+// 모달 제목/버튼을 수정 모드/신규 모드로 전환
+function _perfSetEditUI(isEdit){
+  var titleEl=document.getElementById('perfModalTitle');
+  if(titleEl) titleEl.textContent = isEdit ? '✏️ 업적 수정' : '✏️ 업적 입력';
+  var okBtn=document.getElementById('perfSubmitBtn');
+  if(okBtn) okBtn.textContent = isEdit ? '수정 완료' : '입력 완료';
+}
+
+// 기존 업적을 수정 모드로 열기
+function openPerfEdit(id){
+  if (!currentUser) { showToast('로그인이 필요합니다'); return; }
+  var log=getPerfLog();
+  var rec=null;
+  for(var i=0;i<log.length;i++){ if(log[i].id===id){ rec=log[i]; break; } }
+  if(!rec){ showToast('이미 삭제된 항목입니다'); return; }
+
+  // FP 목록 구성(신규와 동일)
+  var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
+  var list = getMergedFpList().filter(function(fp){ return fp.active; });
+  if(currentUser.role==='지점장') list = list.filter(function(fp){ return fp.branch===currentUser.branch; });
+  if(!isAdmin) list = list.filter(function(fp){ return fp.id===currentUser.id; });
+  _perfFpList = list;
+
+  _editingPerfId = id;
+  _perfSetEditUI(true);
+
+  // FP 채우기
+  var search=document.getElementById('perfFpSearch');
+  var results=document.getElementById('perfFpResults');
+  if(search) search.value='';
+  if(results) results.style.display='none';
+  _perfPickFp(rec.fpId, rec.fpName, rec.branch);
+
+  // 날짜 채우기
+  _perfSetDate(rec.date || getTodayStr());
+  var pc=document.getElementById('perfCal'); if(pc) pc.classList.remove('open');
+
+  // 상품 채우기
+  if(rec.products && rec.products.length){
+    _perfProducts = rec.products.map(function(p){
+      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||'') };
+    });
+  } else {
+    _perfProducts = [{co:'', cat:'', amount:''}];
+  }
   renderPerfProds();
   document.getElementById('perfModalOverlay').classList.add('open');
 }
@@ -4413,18 +4465,19 @@ function _perfPickFp(id, name, branch){
 }
 
 function closePerfModal(e) {
-  if (!e || e.target === document.getElementById('perfModalOverlay'))
+  if (!e || e.target === document.getElementById('perfModalOverlay')){
     document.getElementById('perfModalOverlay').classList.remove('open');
+    _editingPerfId = null;
+    if(typeof _perfSetEditUI==='function') _perfSetEditUI(false);
+  }
 }
 
 function addPerfProd(){ _perfSyncProds(); _perfProducts.push({co:'',cat:'',amount:''}); renderPerfProds(); }
 function removePerfProd(i){ _perfSyncProds(); _perfProducts.splice(i,1); if(!_perfProducts.length) _perfProducts=[{co:'',cat:'',amount:''}]; renderPerfProds(); }
 function _perfSyncProds(){
   for(var i=0;i<_perfProducts.length;i++){
-    var c=document.getElementById('perfCat'+i);
     var a=document.getElementById('perfAmt'+i);
     var cu=document.getElementById('perfCoCustom'+i);
-    if(c) _perfProducts[i].cat=c.value;
     if(a) _perfProducts[i].amount=(a.value||'').replace(/[^0-9]/g,'');
     if(cu && cu.style.display!=='none' && cu.value.trim()) _perfProducts[i].co=cu.value.trim();
   }
@@ -4435,12 +4488,14 @@ function renderPerfProds(){
   var h='';
   for(var i=0;i<_perfProducts.length;i++){
     var p=_perfProducts[i];
-    var opts='<option value="">분류 선택</option>';
-    for(var k=0;k<PERF_CATS.length;k++){
-      var sel = (p.cat===PERF_CATS[k]) ? ' selected' : '';
-      opts+='<option value="'+PERF_CATS[k]+'"'+sel+'>'+PERF_CATS[k]+'</option>';
-    }
     var delBtn = _perfProducts.length>1 ? '<span onclick="removePerfProd('+i+')" style="position:absolute;top:9px;right:11px;color:#C0392B;font-size:12px;cursor:pointer">✕</span>' : '';
+    // 분류 칩 (건강상해/종신/저축/기타)
+    var catChips='';
+    for(var ki=0;ki<PERF_CATS.length;ki++){
+      var catName=PERF_CATS[ki];
+      var catOn = (p.cat===catName) ? ' perf-co-on' : '';
+      catChips+='<span class="perf-co'+catOn+'" onclick="pickPerfCat('+i+',\''+catName+'\')">'+catName+'</span>';
+    }
     // 회사 칩
     var chips='';
     for(var ci=0;ci<PERF_COMPANIES.length;ci++){
@@ -4458,10 +4513,11 @@ function renderPerfProds(){
       '<div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:5px">보험사</div>'+
       '<div class="perf-co-wrap">'+chips+'</div>'+
       customInput+
-      '<div class="perf-amt-row" style="display:flex;gap:8px;margin-top:8px">'+
-        '<input type="text" inputmode="numeric" class="perf-input perf-amt-big" id="perfAmt'+i+'" placeholder="금액 (원)" value="'+(p.amount?Number(p.amount).toLocaleString():'')+'" oninput="onPerfAmtInput('+i+')" style="flex:1">'+
-        '<select class="perf-select" id="perfCat'+i+'" onchange="_perfSyncProds();updatePerfProdSum()" style="width:118px;font-size:12px">'+opts+'</select>'+
+      '<div class="perf-amt-row" style="margin-top:8px">'+
+        '<input type="text" inputmode="numeric" class="perf-input perf-amt-big" id="perfAmt'+i+'" placeholder="금액 (원)" value="'+(p.amount?Number(p.amount).toLocaleString():'')+'" oninput="onPerfAmtInput('+i+')" style="width:100%">'+
       '</div>'+
+      '<div style="font-size:10px;font-weight:700;color:var(--text3);margin:8px 0 5px">분류</div>'+
+      '<div class="perf-co-wrap">'+catChips+'</div>'+
     '</div>';
   }
   wrap.innerHTML=h;
@@ -4471,6 +4527,13 @@ function pickPerfCo(i, name){
   _perfSyncProds();
   _perfProducts[i].co = name;
   renderPerfProds();
+}
+function pickPerfCat(i, cat){
+  _perfSyncProds();
+  // 같은 칩 다시 누르면 해제(토글)
+  _perfProducts[i].cat = (_perfProducts[i].cat === cat) ? '' : cat;
+  renderPerfProds();
+  updatePerfProdSum();
 }
 function pickPerfCoCustom(i){
   _perfSyncProds();
@@ -4520,7 +4583,8 @@ function confirmPerfInput() {
   var total=products.reduce(function(s,x){ return s+x.amount; },0);
 
   var log=getPerfLog();
-  var perfId='perf_'+Date.now()+'_'+Math.random().toString(36).substr(2,4);
+  var isEdit = !!_editingPerfId;
+  var perfId = isEdit ? _editingPerfId : ('perf_'+Date.now()+'_'+Math.random().toString(36).substr(2,4));
   var newPerf={
     id:perfId,
     date:date, fpId:fpId, fpName:fpName, branch:branch,
@@ -4528,11 +4592,22 @@ function confirmPerfInput() {
     note:'',
     createdAt:new Date().toISOString()
   };
-  log.push(newPerf);
+  if(isEdit){
+    var replaced=false;
+    for(var li=0; li<log.length; li++){
+      if(log[li].id===perfId){
+        if(log[li].createdAt) newPerf.createdAt=log[li].createdAt;
+        log[li]=newPerf; replaced=true; break;
+      }
+    }
+    if(!replaced) log.push(newPerf);
+  } else {
+    log.push(newPerf);
+  }
   savePerfLog(log);
   rebuildPerfData();
 
-  // GAS에 저장 (POST)
+  // GAS에 저장 (POST) — 같은 id면 덮어쓰기
   fetch(UNISPACE_GAS_URL, {
     method:'POST',
     headers:{ 'Content-Type':'text/plain;charset=utf-8' },
@@ -4541,6 +4616,17 @@ function confirmPerfInput() {
       products:products, total:total, note:''
     }})
   }).catch(function(){});
+
+  if(isEdit){
+    showToast('✏️ '+fpName+' '+total.toLocaleString()+'원 ('+products.length+'건) 수정 완료');
+    _editingPerfId = null;
+    _perfSetEditUI(false);
+    closePerfModal();
+    renderPerfView();
+    renderGoals();
+    renderTop10();
+    return;
+  }
 
   showToast('✅ '+fpName+' '+total.toLocaleString()+'원 ('+products.length+'건) 업적 입력 완료');
   // 모달 유지 + 다음 입력 위해 상품 내역만 초기화 (FP·날짜는 그대로)
@@ -4848,10 +4934,11 @@ function renderPerfView(){
         return '<span style="display:inline-block;white-space:nowrap">'+badge+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원</span>';
       }).join('<br>');
       var dateCol = (_pvRange!=='today') ? '<td style="white-space:nowrap;color:var(--text3)">'+(r.date?r.date.slice(5):'')+'</td>' : '';
-      var delCol = canDel ? '<td style="text-align:center;width:30px"><span onclick="deletePerfRec(\''+r.id+'\')" style="color:#C0392B;font-size:13px;cursor:pointer;padding:4px" title="삭제">🗑️</span></td>' : '';
+      var delCol = canDel ? '<td style="text-align:center;width:54px;white-space:nowrap"><span onclick="event.stopPropagation();openPerfEdit(\''+r.id+'\')" style="color:#2563EB;font-size:13px;cursor:pointer;padding:4px" title="수정">✏️</span><span onclick="event.stopPropagation();deletePerfRec(\''+r.id+'\')" style="color:#C0392B;font-size:13px;cursor:pointer;padding:4px" title="삭제">🗑️</span></td>' : '';
       var isSelfRow = currentUser && (r.fpId === currentUser.id);
       var meBadge = isSelfRow ? '<span style="font-size:9px;color:#854F0B;background:rgba(201,168,76,.15);padding:1px 5px;border-radius:4px;margin-left:4px">나</span>' : '';
-      rows+='<tr>'+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td style="color:var(--text2)">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원</td>'+delCol+'</tr>';
+      var rowClick = canDel ? ' onclick="openPerfEdit(\''+r.id+'\')" style="cursor:pointer"' : '';
+      rows+='<tr'+rowClick+'>'+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td style="color:var(--text2)">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원</td>'+delCol+'</tr>';
     });
     var dateHead = (_pvRange!=='today') ? '<th>날짜</th>' : '';
     var delHead = canDel ? '<th></th>' : '';
@@ -10352,6 +10439,9 @@ function doCheckin() { doSmartCheckin(); }
     // 닫기 우선순위 목록 (위에 뜬 것부터). check: 열려있나, close: 닫기 동작
     function _backClosers(){
       return [
+        // 활동 팝업(display 방식)
+        { check: function(){ var e=document.getElementById('actPopup'); return e && e.style.display !== 'none' && e.style.display !== ''; },
+          close: function(){ if(typeof closeActPopup==='function') closeActPopup(); else { var e=document.getElementById('actPopup'); if(e) e.style.display='none'; } } },
         // 커스텀 확인/입력 다이얼로그 (자료실)
         { check: function(){ return !!document.getElementById('docDlgOverlay'); },
           close: function(){ if(typeof _docCloseDlg==='function') _docCloseDlg(); else { var d=document.getElementById('docDlgOverlay'); if(d) d.remove(); } } },
@@ -10411,7 +10501,7 @@ function doCheckin() { doSmartCheckin(); }
 <div class="perf-modal-overlay" id="perfModalOverlay" onclick="closePerfModal(event)">
   <div class="perf-modal">
     <div class="perf-modal-handle"></div>
-    <div class="perf-modal-title">✏️ 업적 입력</div>
+    <div class="perf-modal-title" id="perfModalTitle">✏️ 업적 입력</div>
     <div class="perf-modal-sub">FP·날짜·상품을 입력하면 해당 FP 누계와 당일 현황에 반영됩니다</div>
 
     <div class="perf-form">
@@ -10454,7 +10544,7 @@ function doCheckin() { doSmartCheckin(); }
 
     <div class="perf-modal-actions">
       <button type="button" class="perf-cancel" onclick="closePerfModal()">취소</button>
-      <button type="button" class="perf-confirm" onclick="confirmPerfInput()">입력 완료</button>
+      <button type="button" class="perf-confirm" id="perfSubmitBtn" onclick="confirmPerfInput()">입력 완료</button>
     </div>
   </div>
 </div>
