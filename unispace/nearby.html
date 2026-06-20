@@ -318,17 +318,20 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   }
 
   /* ── 패널 내용 압축 ── */
-  .lhead { padding: 8px 14px; }
-  .ltitle { margin-bottom: 5px; font-size: 10px; }
-  .mcard { padding: 6px 10px; margin-bottom: 8px; }
+  .lhead { padding: 6px 12px; }
+  .ltitle { margin-bottom: 4px; font-size: 10px; }
+  .mcard { padding: 5px 9px; margin-bottom: 6px; }
   .mname { font-size: 13px; }
   .maddr { font-size: 10px; }
-  .addr-input { padding: 7px 11px; font-size: 12px; }
-  .search-btn { padding: 7px; margin-top: 4px; }
-  .rrow { margin-top: 5px; }
+  .addr-input { padding: 6px 10px; font-size: 12px; margin-bottom: 5px; }
+  .search-btn { padding: 6px; margin-top: 0; }
+  .rrow { margin-top: 4px; }
   .rchip { padding: 2px 8px; }
-  .ptab { padding: 7px 6px !important; font-size: 12px !important; }
-  .clist { padding-bottom: 6px; }
+  .panel-tabs { padding: 4px 12px 0 !important; }
+  .ptab { padding: 6px 6px !important; font-size: 12px !important; }
+  .clist { padding-bottom: 5px; }
+  #routeModeBar { padding: 6px 12px 2px !important; }
+  #routeModeBar button { padding: 6px !important; }
 
   /* ── 고객 정보 팝업: 하단 시트형 ── */
   .map-popup {
@@ -348,6 +351,16 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   }
   .map-popup .drag-bar { width: 44px; height: 4px; margin: 8px auto 8px; }
   .drag-handle { position: sticky; top: 0; background: rgba(13,22,40,.98); z-index: 2; padding-top: 2px; }
+
+  /* 시트 내부 간소화: 여백 압축 */
+  .popup-body { padding: 10px 16px 16px !important; }
+  .map-popup .divider { margin: 8px 0 !important; }
+  .map-popup .section-label { font-size: 11px !important; margin-bottom: 5px !important; }
+  .map-popup .prow { margin-bottom: 5px !important; font-size: 13px; }
+  .map-popup .popup-contracts { font-size: 12px; }
+  .map-popup .pname { font-size: 17px; }
+  .map-popup .contact-btn { padding: 11px !important; font-size: 14px; }
+  .map-popup .set-base-btn, .map-popup .detail-btn { padding: 10px !important; font-size: 13px; margin-top: 6px !important; }
 }
 </style>
 </head>
@@ -2227,6 +2240,16 @@ function getRoutePinLabel(type) {
 
 // ── 초기화 ───────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', function() {
+  // 모바일: 패널 기본 접힘으로 시작(지도 우선)
+  try {
+    if (window.innerWidth <= 768) {
+      var _lp = document.getElementById('leftPanel');
+      var _chev = document.getElementById('panelToggleChev');
+      if (_lp) _lp.classList.add('panel-collapsed');
+      if (_chev) _chev.textContent = '\u25BE';
+    }
+  } catch(e) {}
+
   // 과거에 주입된 테스트 더미 고객(ALARM_TEST*) 제거
   try {
     var _arr = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
@@ -2341,6 +2364,40 @@ window.addEventListener('DOMContentLoaded', function() {
     handle.addEventListener('touchstart',  function(e){ var t=e.touches[0]; dragStart(t.clientX, t.clientY); }, {passive:true});
     document.addEventListener('touchmove',  function(e){ if(!dragging) return; var t=e.touches[0]; dragMove(t.clientX, t.clientY); e.preventDefault(); }, {passive:false});
     document.addEventListener('touchend',   dragEnd);
+  })();
+
+  // 모바일: 하단 시트를 아래로 스와이프하면 닫기
+  (function(){
+    var popup = document.getElementById('mapPopup');
+    var handle = document.getElementById('phead');
+    if(!popup || !handle) return;
+    var sy = 0, moved = 0, active = false;
+    function isMobile(){ return window.innerWidth <= 768; }
+    handle.addEventListener('touchstart', function(e){
+      if(!isMobile()) return;
+      active = true; sy = e.touches[0].clientY; moved = 0;
+      popup.style.transition = 'none';
+    }, {passive:true});
+    handle.addEventListener('touchmove', function(e){
+      if(!active || !isMobile()) return;
+      moved = e.touches[0].clientY - sy;
+      if(moved > 0){ popup.style.transform = 'translateY(' + moved + 'px)'; }
+    }, {passive:true});
+    handle.addEventListener('touchend', function(){
+      if(!active || !isMobile()) return;
+      active = false;
+      popup.style.transition = 'transform .2s ease';
+      if(moved > 90){
+        popup.style.transform = 'translateY(100%)';
+        setTimeout(function(){
+          popup.style.transform = '';
+          popup.style.transition = '';
+          if(typeof closePopup === 'function') closePopup();
+        }, 200);
+      } else {
+        popup.style.transform = 'translateY(0)';
+      }
+    }, {passive:true});
   })();
 
   var rpFromMapSel = document.getElementById('rpFromMapSel');
