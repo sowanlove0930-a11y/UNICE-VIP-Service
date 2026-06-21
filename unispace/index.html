@@ -2035,6 +2035,45 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
 </style>
 </head>
 <body class="theme-light">
+<!-- 지문 등록 안내 배너 (로그인 직후 1회) -->
+<div id="bioRegOverlay" style="display:none;position:fixed;inset:0;z-index:99998;background:rgba(15,20,40,.5);backdrop-filter:blur(2px);align-items:flex-end;justify-content:center;padding:0">
+  <div style="width:100%;max-width:440px;background:#fff;border-radius:20px 20px 0 0;padding:24px 22px calc(24px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.2);animation:bioUp .35s ease">
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+      <span style="font-size:30px">👆</span>
+      <div>
+        <div style="font-size:15px;font-weight:800;color:#1A1F2B">지문으로 빠르게 로그인</div>
+        <div style="font-size:11px;color:#9A93A6">이 기기에서만 사용됩니다</div>
+      </div>
+    </div>
+    <div style="font-size:13px;color:#5E6678;line-height:1.55;margin-bottom:18px">다음부터 비밀번호 없이 지문으로 바로 로그인할 수 있어요. 지문 정보는 이 기기에만 안전하게 저장되며 서버로 전송되지 않습니다.</div>
+    <div style="display:flex;gap:9px">
+      <button type="button" onclick="bioRegDismiss()" style="flex:1;padding:13px;border:1px solid #DDE1E8;border-radius:12px;background:#F3F4F7;color:#5E6678;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">다음에</button>
+      <button type="button" onclick="bioRegister()" style="flex:1.5;padding:13px;border:none;border-radius:12px;background:linear-gradient(135deg,#3A2E8C,#7B3FB0);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">👆 지문 등록</button>
+    </div>
+  </div>
+</div>
+<style>
+@keyframes bioUp { from{ transform:translateY(40px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+#bioFpRing::after { content:''; position:absolute; inset:-3px; border-radius:50%; border:3px solid #E0BE5E; border-right-color:transparent; border-bottom-color:transparent; animation:bioSpin 1.2s linear infinite; opacity:0; }
+#bioFpRing.scanning::after { opacity:1; }
+@keyframes bioSpin { to{ transform:rotate(360deg); } }
+</style>
+
+<!-- 커스텀 알림 모달 (브라우저 기본 alert 대체) -->
+<div id="appAlertOverlay" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(15,20,40,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:24px">
+  <div id="appAlertBox" style="width:100%;max-width:340px;background:#fff;border-radius:20px;box-shadow:0 20px 50px rgba(20,28,46,.32);overflow:hidden;transform:scale(.94);transition:transform .18s ease">
+    <div style="height:5px;background:linear-gradient(90deg,#3A2E8C,#7B3FB0,#C04B8A)"></div>
+    <div style="padding:26px 24px 22px;text-align:center">
+      <div id="appAlertIcon" style="font-size:38px;margin-bottom:12px;line-height:1">🔔</div>
+      <div id="appAlertTitle" style="font-size:16px;font-weight:800;color:#1A1F2B;margin-bottom:8px;line-height:1.4">알림</div>
+      <div id="appAlertMsg" style="font-size:13.5px;color:#5E6678;line-height:1.6;word-break:keep-all"></div>
+    </div>
+    <div style="padding:0 20px 20px;display:flex;gap:8px">
+      <button type="button" id="appAlertCancel" style="display:none;flex:1;padding:13px;border:1px solid #DDE1E8;border-radius:12px;background:#F3F4F7;color:#5E6678;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">취소</button>
+      <button type="button" id="appAlertOk" style="flex:1;padding:13px;border:none;border-radius:12px;background:linear-gradient(135deg,#3A2E8C,#7B3FB0);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">확인</button>
+    </div>
+  </div>
+</div>
 
 <!-- 로그인 -->
 <div class="login-overlay hidden" id="loginOverlay">
@@ -2066,11 +2105,30 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <div class="login-error" id="loginError"></div>
     <button type="button" class="login-btn" id="loginBtn" onclick="doLogin()">로그인</button>
 
+    <!-- 지문 로그인 버튼 (이 기기에 등록된 경우에만 표시) -->
+    <button type="button" id="bioLoginBtn" onclick="startBioLogin()" style="display:none;width:100%;margin-top:10px;padding:13px;border:1px solid rgba(201,168,76,.4);border-radius:12px;background:rgba(201,168,76,.08);color:var(--gold2);font-size:13px;font-weight:700;cursor:pointer;align-items:center;justify-content:center;gap:8px;font-family:'Noto Sans KR',sans-serif">
+      <span style="font-size:18px">👆</span> <span id="bioLoginBtnTxt">지문으로 로그인</span>
+    </button>
+
     <div class="login-footer">
       사번 · 비밀번호 문의: <b>김태규 대표</b><br>
       한화생명금융서비스 VIP금융사업부 유니스지사
     </div>
   </div>
+</div>
+
+<!-- 지문 인증 자동 모달 (등록자 앱 시작 시) -->
+<div id="bioPromptOverlay" style="display:none;position:fixed;inset:0;z-index:100000;background:linear-gradient(170deg,#0E1424,#1A1438 55%,#2A1840);flex-direction:column;align-items:center;justify-content:center;padding:30px">
+  <div style="width:60px;height:60px;border-radius:17px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:24px;background:linear-gradient(145deg,#3A2E8C,#7B3FB0 55%,#C04B8A);box-shadow:0 8px 20px rgba(123,63,176,.4)">
+    <svg viewBox="0 0 100 100" style="width:100%;height:100%"><text x="50" y="71" font-family="Arial" font-size="56" font-weight="800" fill="#fff" text-anchor="middle">U</text><path d="M72 24 l2.6 6 6.5 .6 -5 4.3 1.5 6.4 -5.6 -3.5 -5.6 3.5 1.5 -6.4 -5 -4.3 6.5 -.6z" fill="#FFD24D"/></svg>
+  </div>
+  <div id="bioPromptName" style="font-size:13px;color:#E0BE5E;font-weight:700;margin-bottom:14px"></div>
+  <div id="bioFpRing" style="width:92px;height:92px;border-radius:50%;border:3px solid rgba(224,190,94,.4);display:flex;align-items:center;justify-content:center;margin-bottom:18px;position:relative">
+    <span style="font-size:46px">👆</span>
+  </div>
+  <div id="bioPromptTitle" style="font-size:15px;font-weight:800;color:#fff;margin-bottom:6px">지문으로 로그인</div>
+  <div id="bioPromptDesc" style="font-size:12px;color:#B8B0D0;text-align:center;line-height:1.5;margin-bottom:24px">등록된 지문으로<br>본인 확인해 주세요</div>
+  <div onclick="bioFallbackToPw()" style="font-size:12px;color:#9A93C7;text-decoration:underline;cursor:pointer">비밀번호로 로그인</div>
 </div>
 
 <div class="login-overlay hidden" id="gasPwOverlay">
@@ -2492,7 +2550,7 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
       <div class="stat-lbl" id="st1-lbl">이번 달 보장월초 및 건수</div>
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;row-gap:2px">
         <div class="stat-val" id="st1" style="white-space:nowrap">—</div>
-        <div id="st1-rate" style="flex-shrink:0;margin-left:auto;text-align:right;white-space:nowrap"></div>
+        <div id="st1-rate" style="flex-shrink:0;margin-left:auto;display:flex;align-items:baseline;gap:6px;white-space:nowrap"></div>
       </div>
       <div class="stat-unit" id="st1-unit"></div>
       <div id="st1-goal-hint" style="display:none;position:absolute;top:12px;right:14px;font-size:11px;font-weight:700;color:var(--gold2);opacity:.8">🎯 목표 설정</div>
@@ -2776,13 +2834,237 @@ function showToast(msg) {
 }
 
 // ── FP 목록 (54명 전원, 초기비번 unice2026) ──────────
+// ════════════ 지문(생체인증) 로그인 — WebAuthn ════════════
+// 지문 자격증명은 기기 보안칩에 저장. 여기선 기기에 "등록됨" 정보 + credentialId만 보관.
+var _bioPwForReg = ''; // 등록 시 비번 임시 보관(자동로그인용)
+
+function _bioSupported(){
+  return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create);
+}
+function _bioKey(uid){ return 'unispace_bio_' + uid; }
+function _b64ToBuf(b64){
+  var bin = atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
+  var buf = new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+  return buf.buffer;
+}
+function _bufToB64(buf){
+  var bytes = new Uint8Array(buf), str='';
+  for(var i=0;i<bytes.length;i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function _bioRandom(len){
+  var a = new Uint8Array(len); (window.crypto||window.msCrypto).getRandomValues(a); return a;
+}
+
+// 이 기기에 현재 사용자의 지문이 등록돼 있는지
+function _bioHasCred(uid){
+  if(!uid) return false;
+  try { return !!localStorage.getItem(_bioKey(uid)); } catch(e){ return false; }
+}
+
+// 로그인 직후 — 등록 안내 띄울지 판단
+function maybeOfferBioRegister(uid, pwVal){
+  if(!_bioSupported()) return;          // 지원 안 하는 기기/브라우저면 패스
+  if(_bioHasCred(uid)) return;          // 이미 등록됨
+  try { if(localStorage.getItem('unispace_bio_decline_'+uid)) return; } catch(e){} // 이전에 거절
+  _bioPwForReg = pwVal || '';
+  var ov = document.getElementById('bioRegOverlay');
+  if(ov) ov.style.display='flex';
+}
+function bioRegDismiss(){
+  var ov = document.getElementById('bioRegOverlay'); if(ov) ov.style.display='none';
+  try { if(currentUser) localStorage.setItem('unispace_bio_decline_'+currentUser.id, '1'); } catch(e){}
+}
+
+// 지문 등록 (WebAuthn create)
+function bioRegister(){
+  if(!_bioSupported()){ showAppAlert('이 기기는 지문 로그인을 지원하지 않습니다.', {icon:'⚠️', title:'미지원'}); return; }
+  if(!currentUser || !currentUser.id){ return; }
+  var uid = currentUser.id;
+  var uname = currentUser.name || uid;
+  var challenge = _bioRandom(32);
+  var userId = _bioRandom(16);
+  var pk = {
+    challenge: challenge,
+    rp: { name: 'UNISPACE', id: location.hostname },
+    user: { id: userId, name: uid, displayName: uname },
+    pubKeyCredParams: [ {type:'public-key', alg:-7}, {type:'public-key', alg:-257} ],
+    authenticatorSelection: { authenticatorAttachment:'platform', userVerification:'required', residentKey:'preferred' },
+    timeout: 60000,
+    attestation: 'none'
+  };
+  navigator.credentials.create({ publicKey: pk }).then(function(cred){
+    var rec = {
+      credId: _bufToB64(cred.rawId),
+      uid: uid,
+      name: uname,
+      pw: _bioPwForReg,            // 자동 로그인용(기기 로컬에만)
+      regAt: Date.now()
+    };
+    try { localStorage.setItem(_bioKey(uid), JSON.stringify(rec)); } catch(e){}
+    try { localStorage.setItem('unispace_bio_lastuid', uid); } catch(e){}
+    var ov = document.getElementById('bioRegOverlay'); if(ov) ov.style.display='none';
+    showAppAlert('이제 다음부터 지문으로 바로 로그인됩니다.', {icon:'✅', title:'지문 등록 완료'});
+  }).catch(function(err){
+    var ov = document.getElementById('bioRegOverlay'); if(ov) ov.style.display='none';
+    if(err && err.name === 'NotAllowedError'){ /* 사용자가 취소 — 조용히 */ }
+    else { showAppAlert('지문 등록에 실패했습니다. 다시 시도해 주세요.', {icon:'⚠️', title:'등록 실패'}); }
+  });
+}
+
+// 로그인 화면이 뜰 때 — 이 기기에 등록된 지문이 있으면 자동으로 지문창 표시
+function checkBioOnLoginScreen(){
+  if(!_bioSupported()) return;
+  var lastUid = '';
+  try { lastUid = localStorage.getItem('unispace_bio_lastuid') || ''; } catch(e){}
+  if(!lastUid || !_bioHasCred(lastUid)){
+    // 등록된 지문 없음 → 비번 화면 그대로
+    return;
+  }
+  var rec = null;
+  try { rec = JSON.parse(localStorage.getItem(_bioKey(lastUid))); } catch(e){}
+  if(!rec){ return; }
+  // 지문 버튼 노출 + 자동 모달
+  var btn = document.getElementById('bioLoginBtn');
+  if(btn) btn.style.display='flex';
+  var nm = document.getElementById('bioPromptName');
+  if(nm) nm.textContent = (rec.name||lastUid) + '님';
+  // 앱 켜자마자 자동 표시
+  showBioPrompt();
+}
+function showBioPrompt(){
+  var ov = document.getElementById('bioPromptOverlay'); if(ov) ov.style.display='flex';
+  // 자동으로 인증 시도
+  setTimeout(startBioLogin, 350);
+}
+function bioFallbackToPw(){
+  var ov = document.getElementById('bioPromptOverlay'); if(ov) ov.style.display='none';
+}
+
+// 지문 로그인 실행 (WebAuthn get)
+function startBioLogin(){
+  if(!_bioSupported()) return;
+  var lastUid = '';
+  try { lastUid = localStorage.getItem('unispace_bio_lastuid') || ''; } catch(e){}
+  var rec = null;
+  try { rec = JSON.parse(localStorage.getItem(_bioKey(lastUid))); } catch(e){}
+  if(!rec || !rec.credId){ bioFallbackToPw(); return; }
+
+  var ring = document.getElementById('bioFpRing');
+  if(ring) ring.classList.add('scanning');
+  var titleEl = document.getElementById('bioPromptTitle');
+  if(titleEl) titleEl.textContent = '인식 중...';
+
+  var pk = {
+    challenge: _bioRandom(32),
+    allowCredentials: [{ type:'public-key', id: _b64ToBuf(rec.credId) }],
+    userVerification: 'required',
+    timeout: 60000,
+    rpId: location.hostname
+  };
+  navigator.credentials.get({ publicKey: pk }).then(function(assertion){
+    // 인증 성공 → 저장된 자격으로 로그인 처리
+    if(ring) ring.classList.remove('scanning');
+    bioDoLoginSuccess(rec);
+  }).catch(function(err){
+    if(ring) ring.classList.remove('scanning');
+    if(titleEl) titleEl.textContent = '지문으로 로그인';
+    if(err && err.name === 'NotAllowedError'){
+      // 사용자가 취소했거나 실패 — 비번 화면 유지(모달만 닫음)
+      bioFallbackToPw();
+    } else {
+      showAppAlert('지문 인증에 실패했습니다.<br>비밀번호로 로그인해 주세요.', {icon:'⚠️', title:'인증 실패', onClose:bioFallbackToPw});
+    }
+  });
+}
+
+// 지문 인증 성공 후 실제 로그인 (저장된 비번으로 서버 재검증)
+function bioDoLoginSuccess(rec){
+  // 저장된 사번+비번으로 doLogin과 동일하게 서버 검증
+  var idEl = document.getElementById('loginId');
+  var pwEl = document.getElementById('loginPw');
+  if(idEl) idEl.value = rec.uid;
+  if(pwEl) pwEl.value = rec.pw || '';
+  bioFallbackToPw(); // 모달 닫기
+  if(rec.pw){
+    doLogin(true); // 지문 경로 표시
+  } else {
+    // 비번이 없으면(예: 등록 후 비번 변경) 비번 입력 유도
+    showAppAlert('비밀번호가 변경되어 지문 정보 갱신이 필요합니다.<br>비밀번호로 로그인 후 다시 등록해 주세요.', {icon:'🔑', title:'재등록 필요'});
+  }
+}
+
+// 지문 등록 무효화(비번 변경 시 호출용)
+function bioInvalidate(uid){
+  try { localStorage.removeItem(_bioKey(uid)); } catch(e){}
+}
+
+// 커스텀 알림 모달 (브라우저 alert 대체) — PC·모바일 공통
+function showAppAlert(msg, opts){
+  opts = opts || {};
+  var ov=document.getElementById('appAlertOverlay');
+  var box=document.getElementById('appAlertBox');
+  if(!ov){ alert(msg); if(opts.onClose) opts.onClose(); return; }
+  var ic=document.getElementById('appAlertIcon');
+  var ti=document.getElementById('appAlertTitle');
+  var ms=document.getElementById('appAlertMsg');
+  var ok=document.getElementById('appAlertOk');
+  var ca=document.getElementById('appAlertCancel');
+  if(ca) ca.style.display='none';
+  if(ic) ic.textContent = opts.icon || '🔔';
+  if(ti) ti.textContent = opts.title || '알림';
+  if(ms) ms.innerHTML = msg;
+  if(ok) ok.textContent = opts.okText || '확인';
+  ov.style.display='flex';
+  setTimeout(function(){ if(box) box.style.transform='scale(1)'; }, 10);
+  function close(){
+    if(box) box.style.transform='scale(.94)';
+    setTimeout(function(){ ov.style.display='none'; }, 150);
+    if(ok) ok.onclick=null;
+    if(opts.onClose) opts.onClose();
+  }
+  if(ok) ok.onclick=close;
+}
+
+// 커스텀 확인 모달 (브라우저 confirm 대체) — onYes 콜백 방식
+function showAppConfirm(msg, onYes, opts){
+  opts = opts || {};
+  var ov=document.getElementById('appAlertOverlay');
+  var box=document.getElementById('appAlertBox');
+  if(!ov){ if(confirm(msg)){ if(onYes) onYes(); } return; }
+  var ic=document.getElementById('appAlertIcon');
+  var ti=document.getElementById('appAlertTitle');
+  var ms=document.getElementById('appAlertMsg');
+  var ok=document.getElementById('appAlertOk');
+  var ca=document.getElementById('appAlertCancel');
+  if(ic) ic.textContent = opts.icon || '❓';
+  if(ti) ti.textContent = opts.title || '확인';
+  if(ms) ms.innerHTML = msg;
+  if(ok) ok.textContent = opts.okText || '확인';
+  if(ca){ ca.style.display='block'; ca.textContent = opts.cancelText || '취소'; }
+  ov.style.display='flex';
+  setTimeout(function(){ if(box) box.style.transform='scale(1)'; }, 10);
+  function hide(){
+    if(box) box.style.transform='scale(.94)';
+    setTimeout(function(){ ov.style.display='none'; }, 150);
+    if(ok) ok.onclick=null; if(ca) ca.onclick=null;
+  }
+  if(ok) ok.onclick=function(){ hide(); if(onYes) onYes(); };
+  if(ca) ca.onclick=function(){ hide(); if(opts.onNo) opts.onNo(); };
+}
+
 // 30분(밀리초) 미활동 시 자동 로그아웃
 var IDLE_LIMIT_MS = 30 * 60 * 1000;
 var _idleTimer = null;
 function _autoLogout() {
   try { localStorage.removeItem('unispace_user'); } catch(e) {}
-  alert('30분간 활동이 없어 자동 로그아웃되었습니다. 다시 로그인해 주세요.');
-  location.reload();
+  showAppAlert('30분간 활동이 없어 자동 로그아웃되었습니다.<br>다시 로그인해 주세요.', {
+    icon: '🔒',
+    title: '자동 로그아웃',
+    okText: '다시 로그인',
+    onClose: function(){ location.reload(); }
+  });
 }
 function resetIdleTimer() {
   if (_idleTimer) clearTimeout(_idleTimer);
@@ -3090,6 +3372,7 @@ window.addEventListener('DOMContentLoaded', function() {
   }
   var loginOv = document.getElementById('loginOverlay');
   if (loginOv) loginOv.classList.remove('hidden');
+  checkBioOnLoginScreen();
 });
 
 // ── 시계 ────────────────────────────────────────────
@@ -3112,7 +3395,7 @@ function clearLoginError() {
   document.getElementById('loginPw').classList.remove('error');
 }
 
-function doLogin() {
+function doLogin(fromBio) {
   var idVal  = document.getElementById('loginId').value.trim().toUpperCase();
   var pwVal  = document.getElementById('loginPw').value.trim();
   var errEl  = document.getElementById('loginError');
@@ -3162,6 +3445,11 @@ function doLogin() {
       openGasPw(true);
     } else {
       showDashboard();
+      // 비번으로 직접 로그인한 경우에만 지문 등록 안내 (지문 로그인 경로는 제외)
+      if (!fromBio) {
+        var _uid = currentUser.id, _pw = pwVal;
+        setTimeout(function(){ maybeOfferBioRegister(_uid, _pw); }, 800);
+      }
     }
   }).catch(function(){
     if (btn) { btn.disabled = false; btn.textContent = '로그인'; }
@@ -3361,8 +3649,8 @@ function renderBojangCard() {
   if(_showTotal){
     var e1 = document.getElementById('st1');      if(e1) e1.innerHTML = AMT_TOTAL.toLocaleString()+'<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2);margin-left:4px">· '+CNT_TOTAL+'건</span>';
     var er = document.getElementById('st1-rate'); if(er){
-      var _goalTxt = GOAL_TOTAL ? '<span style="font-size:11px;font-weight:600;color:var(--text3);margin-right:5px">목표 '+GOAL_TOTAL.toLocaleString()+'만</span>' : '';
-      er.innerHTML = _goalTxt + '<span style="font-size:15px;font-weight:800;color:var(--gold2)">'+RATE_TOTAL+'%</span>';
+      var _goalTxt = GOAL_TOTAL ? '<span style="font-size:11px;font-weight:600;color:var(--text3)">목표 '+GOAL_TOTAL.toLocaleString()+'만</span>' : '';
+      er.innerHTML = _goalTxt + '<span style="font-size:15px;font-weight:800;color:var(--gold2);min-width:38px;text-align:right">'+RATE_TOTAL+'%</span>';
     }
   }
   var eu = document.getElementById('st1-unit');
@@ -3373,14 +3661,14 @@ function renderBojangCard() {
       '<div class="bojang-bar-row" data-life="'+LIFE_ALPHA+'" data-non="'+NON_ALPHA+'" data-lifec="'+LIFEC_ALPHA+'" data-nonc="'+NONC_ALPHA+'" style="margin-bottom:8px;cursor:default">'+
         '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
           '<span><span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원</span>'+
-          '<span style="color:var(--text2);font-weight:700">'+RATE_ALPHA+'%</span>'+
+          '<span style="display:flex;align-items:baseline;gap:6px;color:var(--text2);font-weight:700">'+(GOAL_ALPHA?'<span style="color:var(--text3);font-weight:600;font-size:11px">목표 '+GOAL_ALPHA.toLocaleString()+'만</span>':'')+'<span style="min-width:34px;text-align:right">'+RATE_ALPHA+'%</span></span>'+
         '</div>'+
         '<div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden"><div style="width:'+_barW_a+'%;height:100%;background:var(--gold)"></div></div>'+
       '</div>'+
       '<div class="bojang-bar-row" data-life="'+LIFE_BRAVO+'" data-non="'+NON_BRAVO+'" data-lifec="'+LIFEC_BRAVO+'" data-nonc="'+NONC_BRAVO+'" style="cursor:default">'+
         '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
           '<span><span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원</span>'+
-          '<span style="color:var(--text2);font-weight:700">'+RATE_BRAVO+'%</span>'+
+          '<span style="display:flex;align-items:baseline;gap:6px;color:var(--text2);font-weight:700">'+(GOAL_BRAVO?'<span style="color:var(--text3);font-weight:600;font-size:11px">목표 '+GOAL_BRAVO.toLocaleString()+'만</span>':'')+'<span style="min-width:34px;text-align:right">'+RATE_BRAVO+'%</span></span>'+
         '</div>'+
         '<div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden"><div style="width:'+_barW_b+'%;height:100%;background:#60A5FA"></div></div>'+
       '</div>';
@@ -3408,14 +3696,14 @@ function renderBojangBarsFromSummary(res){
     '<div class="bojang-bar-row" data-life="'+(res.alLife||0)+'" data-non="'+(res.alNon||0)+'" data-lifec="'+(res.alLifeC||0)+'" data-nonc="'+(res.alNonC||0)+'" style="margin-bottom:8px;cursor:default">'+
       '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
         '<span><span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원</span>'+
-        '<span style="color:var(--text2);font-weight:700">'+RATE_ALPHA+'%</span>'+
+        '<span style="display:flex;align-items:baseline;gap:6px;color:var(--text2);font-weight:700">'+(GOAL_ALPHA?'<span style="color:var(--text3);font-weight:600;font-size:11px">목표 '+GOAL_ALPHA.toLocaleString()+'만</span>':'')+'<span style="min-width:34px;text-align:right">'+RATE_ALPHA+'%</span></span>'+
       '</div>'+
       '<div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden"><div style="width:'+_wa+'%;height:100%;background:var(--gold)"></div></div>'+
     '</div>'+
     '<div class="bojang-bar-row" data-life="'+(res.brLife||0)+'" data-non="'+(res.brNon||0)+'" data-lifec="'+(res.brLifeC||0)+'" data-nonc="'+(res.brNonC||0)+'" style="cursor:default">'+
       '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
         '<span><span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원</span>'+
-        '<span style="color:var(--text2);font-weight:700">'+RATE_BRAVO+'%</span>'+
+        '<span style="display:flex;align-items:baseline;gap:6px;color:var(--text2);font-weight:700">'+(GOAL_BRAVO?'<span style="color:var(--text3);font-weight:600;font-size:11px">목표 '+GOAL_BRAVO.toLocaleString()+'만</span>':'')+'<span style="min-width:34px;text-align:right">'+RATE_BRAVO+'%</span></span>'+
       '</div>'+
       '<div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden"><div style="width:'+_wb+'%;height:100%;background:#60A5FA"></div></div>'+
     '</div>';
@@ -3617,8 +3905,8 @@ function showDashboard() {
             var _myGoalWon = _myGoalMan * 10000;
             if(_myGoalWon > 0){
               var _myRate = Math.round((res.myAmt||0) / _myGoalWon * 100);
-              er.innerHTML = '<span style="font-size:11px;font-weight:600;color:var(--text3);margin-right:5px">목표 '+_myGoalMan.toLocaleString()+'만</span>'+
-                '<span style="font-size:15px;font-weight:800;color:var(--gold2)">'+_myRate+'%</span>';
+              er.innerHTML = '<span style="font-size:11px;font-weight:600;color:var(--text3)">목표 '+_myGoalMan.toLocaleString()+'만</span>'+
+                '<span style="font-size:15px;font-weight:800;color:var(--gold2);min-width:38px;text-align:right">'+_myRate+'%</span>';
             } else {
               er.textContent = '';
             }
@@ -5584,7 +5872,7 @@ function deleteSichaekViewImage(e){
   if(!currentUser || !currentUser.id) return;
   var total = _sichaekViewImgs.length;
   var cur = _sichaekViewIdx+1;
-  if(!confirm(cur+'번째 장표를 삭제할까요? (전체 '+total+'장 중)')) return;
+  showAppConfirm(cur+'번째 장표를 삭제할까요?<br><span style="font-size:12px;color:#9A93A6">(전체 '+total+'장 중)</span>', function(){
   var delIdx = _sichaekViewIdx;
   showToast('장표 삭제 중...');
   fetch(UNISPACE_GAS_URL, {
@@ -5608,6 +5896,7 @@ function deleteSichaekViewImage(e){
       showToast('⚠️ ' + ((res&&res.msg)||'삭제 실패'));
     }
   }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+  }, { icon:'🗑️', title:'장표 삭제', okText:'삭제', cancelText:'취소' });
 }
 function closeSichaekImg(){ document.getElementById('sichaekImgOverlay').classList.remove('open'); }
 
