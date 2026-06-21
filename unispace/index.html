@@ -2596,7 +2596,7 @@ window.UNISPACE_FCM = {
     <div class="stat s-gold" id="st1-card" onclick="onBojangCardClick()" style="cursor:pointer;position:relative">
       <div class="stat-lbl" id="st1-lbl">이번 달 보장월초 및 건수</div>
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:nowrap;white-space:nowrap">
-        <div class="stat-val" id="st1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">—</div>
+        <div class="stat-val" id="st1" style="white-space:nowrap;flex-shrink:0">—</div>
         <div id="st1-rate" style="flex-shrink:0;margin-left:auto;display:flex;align-items:baseline;gap:6px;white-space:nowrap"></div>
       </div>
       <div class="stat-unit" id="st1-unit"></div>
@@ -2910,14 +2910,28 @@ function _bioHasCred(uid){
   try { return !!localStorage.getItem(_bioKey(uid)); } catch(e){ return false; }
 }
 
+// 이 기기에 실제 지문/얼굴 인증기가 있는지(비동기) — PC(센서 없음) 제외용
+function _bioPlatformAvailable(){
+  try {
+    if(window.PublicKeyCredential && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable){
+      return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    }
+  } catch(e){}
+  return Promise.resolve(false);
+}
+
 // 로그인 직후 — 등록 안내 띄울지 판단
 function maybeOfferBioRegister(uid, pwVal){
-  if(!_bioSupported()) return;          // 지원 안 하는 기기/브라우저면 패스
+  if(!_bioSupported()) return;          // WebAuthn 자체 미지원이면 패스
   if(_bioHasCred(uid)) return;          // 이미 등록됨
   try { if(localStorage.getItem('unispace_bio_decline_'+uid)) return; } catch(e){} // 이전에 거절
-  _bioPwForReg = pwVal || '';
-  var ov = document.getElementById('bioRegOverlay');
-  if(ov) ov.style.display='flex';
+  // 실제 지문/얼굴 센서가 있는 기기에서만 안내 (PC 등 센서 없으면 패스)
+  _bioPlatformAvailable().then(function(ok){
+    if(!ok) return;
+    _bioPwForReg = pwVal || '';
+    var ov = document.getElementById('bioRegOverlay');
+    if(ov) ov.style.display='flex';
+  });
 }
 function bioRegDismiss(){
   var ov = document.getElementById('bioRegOverlay'); if(ov) ov.style.display='none';
@@ -2971,16 +2985,18 @@ function checkBioOnLoginScreen(){
     // 등록된 지문 없음 → 비번 화면 그대로
     return;
   }
-  var rec = null;
-  try { rec = JSON.parse(localStorage.getItem(_bioKey(lastUid))); } catch(e){}
-  if(!rec){ return; }
-  // 지문 버튼 노출 + 자동 모달
-  var btn = document.getElementById('bioLoginBtn');
-  if(btn) btn.style.display='flex';
-  var nm = document.getElementById('bioPromptName');
-  if(nm) nm.textContent = (rec.name||lastUid) + '님';
-  // 앱 켜자마자 자동 표시
-  showBioPrompt();
+  // 실제 지문/얼굴 센서가 있는 기기에서만 (PC 제외)
+  _bioPlatformAvailable().then(function(ok){
+    if(!ok) return;
+    var rec = null;
+    try { rec = JSON.parse(localStorage.getItem(_bioKey(lastUid))); } catch(e){}
+    if(!rec){ return; }
+    var btn = document.getElementById('bioLoginBtn');
+    if(btn) btn.style.display='flex';
+    var nm = document.getElementById('bioPromptName');
+    if(nm) nm.textContent = (rec.name||lastUid) + '님';
+    showBioPrompt();
+  });
 }
 function showBioPrompt(){
   var ov = document.getElementById('bioPromptOverlay'); if(ov) ov.style.display='flex';
