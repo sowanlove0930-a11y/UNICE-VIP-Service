@@ -2884,6 +2884,8 @@ function bioRegister(){
   if(!currentUser || !currentUser.id){ return; }
   var uid = currentUser.id;
   var uname = currentUser.name || uid;
+  // 설정 변경/재등록 대비: 기존 등록 정보 정리 후 새로 생성
+  try { localStorage.removeItem(_bioKey(uid)); } catch(e){}
   var challenge = _bioRandom(32);
   var userId = _bioRandom(16);
   var pk = {
@@ -2891,7 +2893,7 @@ function bioRegister(){
     rp: { name: 'UNISPACE', id: location.hostname },
     user: { id: userId, name: uid, displayName: uname },
     pubKeyCredParams: [ {type:'public-key', alg:-7}, {type:'public-key', alg:-257} ],
-    authenticatorSelection: { authenticatorAttachment:'platform', userVerification:'required', residentKey:'preferred' },
+    authenticatorSelection: { authenticatorAttachment:'platform', userVerification:'required', residentKey:'discouraged', requireResidentKey:false },
     timeout: 60000,
     attestation: 'none'
   };
@@ -2959,7 +2961,7 @@ function startBioLogin(){
 
   var pk = {
     challenge: _bioRandom(32),
-    allowCredentials: [{ type:'public-key', id: _b64ToBuf(rec.credId) }],
+    allowCredentials: [{ type:'public-key', id: _b64ToBuf(rec.credId), transports:['internal'] }],
     userVerification: 'required',
     timeout: 60000,
     rpId: location.hostname
