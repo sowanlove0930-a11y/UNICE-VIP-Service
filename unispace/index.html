@@ -5870,6 +5870,38 @@ function renderPerfTrend(log, now){
 }
 
 // ── FP별 실적 ────────────────────────────────────────
+// ── 2026년 법정공휴일(대체·임시공휴일 포함) ──
+var HOLIDAYS_2026 = {
+  '2026-01-01': '신정',
+  '2026-02-16': '설날 연휴',
+  '2026-02-17': '설날',
+  '2026-02-18': '설날 연휴',
+  '2026-03-01': '삼일절',
+  '2026-03-02': '대체공휴일',
+  '2026-05-05': '어린이날',
+  '2026-05-24': '부처님오신날',
+  '2026-05-25': '대체공휴일',
+  '2026-06-03': '지방선거',
+  '2026-06-06': '현충일',
+  '2026-07-17': '제헌절',
+  '2026-08-15': '광복절',
+  '2026-08-17': '대체공휴일',
+  '2026-09-24': '추석 연휴',
+  '2026-09-25': '추석',
+  '2026-09-26': '추석 연휴',
+  '2026-10-03': '개천절',
+  '2026-10-05': '대체공휴일',
+  '2026-10-09': '한글날',
+  '2026-12-25': '성탄절'
+};
+// 날짜(YYYY-MM-DD 또는 Date) → 공휴일명 ('' = 공휴일 아님)
+function getHolidayName(d){
+  var ds;
+  if(typeof d === 'string'){ ds = d; }
+  else { ds = d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  return HOLIDAYS_2026[ds] || '';
+}
+
 // 생보/손보 보험사 매핑
 var PERF_LIFE = ['한화생명','라이나','미래에셋','신한라이프','흥국생명','삼성생명','교보','동양생명','농협생명','메트라이프','DB생명'];
 var PERF_NONLIFE = ['한화손보','현대해상','DB손보','KB손보','메리츠','삼성화재','롯데손보','흥국화재','농협손보','MG손보'];
@@ -7218,7 +7250,11 @@ function renderSchedCal(){
       chips+='<div style="margin-top:3px;font-size:11px;background:'+bg+';color:'+col+';border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+escHtmlSch(label)+'</div>';
     });
     if(dayScheds.length>3){ chips+='<div style="font-size:10px;color:var(--text3);margin-top:2px">+'+(dayScheds.length-3)+'</div>'; }
-    h+='<div class="sched-cal-cell" onclick="schedDayClick(\''+ds+'\')" style="min-height:78px;border:'+(isToday?'2px solid var(--gold)':'1px solid var(--bdr)')+';border-radius:8px;padding:6px 5px;cursor:pointer;font-size:14px;font-weight:600">'+day+chips+'</div>';
+    var _hol = getHolidayName(ds);
+    var _dow = new Date(y,m,day).getDay();
+    var _dayColor = _hol ? '#C0392B' : (_dow===0?'#C0392B':_dow===6?'#2563EB':'');
+    var _holChip = _hol ? '<div style="font-size:10px;color:#C0392B;font-weight:700;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_hol+'</div>' : '';
+    h+='<div class="sched-cal-cell" onclick="schedDayClick(\''+ds+'\')" style="min-height:78px;border:'+(isToday?'2px solid var(--gold)':'1px solid var(--bdr)')+';border-radius:8px;padding:6px 5px;cursor:pointer;font-size:14px;font-weight:600'+(_dayColor?';color:'+_dayColor:'')+'">'+day+_holChip+chips+'</div>';
   }
   h+='</div>';
   var grid=document.getElementById('schedCalGrid'); if(grid) grid.innerHTML=h;
@@ -9674,8 +9710,11 @@ function renderMonthCal() {
     if (ds == selectedDayStr) cellCls += ' selected';
     var cnt = cntByDate[ds] || 0;
     var cntHtml = cnt ? '<div class="mcal-cnt"><span>'+cnt+'건</span></div>' : '';
+    var _hol = getHolidayName(ds);
+    var _numCls = _hol ? ' sun' : dowCls; // 공휴일은 빨간색
+    var _holHtml = _hol ? '<div style="font-size:9px;color:#C0392B;font-weight:700;line-height:1.2;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_hol+'</div>' : '';
     html += '<div class="'+cellCls+'" data-mcal-dt="'+ds+'">' +
-      '<span class="mcal-daynum'+dowCls+'">'+d+'</span>'+cntHtml+'</div>';
+      '<span class="mcal-daynum'+_numCls+'">'+d+'</span>'+_holHtml+cntHtml+'</div>';
   }
   var grid = document.getElementById('mcalDays');
   if (grid) {
@@ -10045,10 +10084,12 @@ function renderWeekActTable() {
   dates.forEach(function(d,i){
     var isToday = d.getTime()===today.getTime();
     var dw = d.getDay();
-    var dcolor = dw===6 ? 'color:#2563EB' : (dw===0 ? 'color:#C0392B' : '');
+    var _hol = getHolidayName(d);
+    var dcolor = _hol ? 'color:#C0392B' : (dw===6 ? 'color:#2563EB' : (dw===0 ? 'color:#C0392B' : ''));
     html += '<th'+(isToday?' class="today-head"':'')+(dcolor?' style="'+dcolor+'"':'')+'>'+
       (d.getMonth()+1)+'/'+d.getDate()+' '+days[i]+
       (isToday?' <span style="font-size:9px;color:var(--gold)">오늘</span>':'')+
+      (_hol?'<br><span style="font-size:9px;color:#C0392B;font-weight:700">'+_hol+'</span>':'')+
     '</th>';
   });
   html += '</tr></thead><tbody>';

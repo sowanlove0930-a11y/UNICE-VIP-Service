@@ -504,6 +504,10 @@ var PLAN_KEY='unispace_plan';
 var PERF_LOG_KEY='unispace_perf_log';
 var CUST_KEY='unispace_customers';
 
+// ── 2026년 법정공휴일(대체·임시공휴일 포함) ──
+var HOLIDAYS_2026={'2026-01-01':'신정','2026-02-16':'설날 연휴','2026-02-17':'설날','2026-02-18':'설날 연휴','2026-03-01':'삼일절','2026-03-02':'대체공휴일','2026-05-05':'어린이날','2026-05-24':'부처님오신날','2026-05-25':'대체공휴일','2026-06-03':'지방선거','2026-06-06':'현충일','2026-07-17':'제헌절','2026-08-15':'광복절','2026-08-17':'대체공휴일','2026-09-24':'추석 연휴','2026-09-25':'추석','2026-09-26':'추석 연휴','2026-10-03':'개천절','2026-10-05':'대체공휴일','2026-10-09':'한글날','2026-12-25':'성탄절'};
+function getHolidayName(d){ var ds; if(typeof d==='string'){ ds=d; } else { ds=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); } return HOLIDAYS_2026[ds]||''; }
+
 // GAS 연동
 var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 function planGasGet(params){
@@ -810,7 +814,11 @@ function renderWeekActCal(){
     var isT=dates[i].getTime()===today.getTime();
     var dw=dates[i].getDay();
     var wknd=(dw===0||dw===6);
-    h+='<th style="padding:2px"><div style="text-align:center;padding:5px 0;border-radius:8px;background:'+(isT?'var(--gold-d)':(wknd?'transparent':'var(--bg2)'))+'"><div style="font-size:11px;font-weight:600;color:'+(isT?'#fff':(wknd?'var(--text3)':'var(--text2)'))+'">'+dowNames[dw]+'</div><div style="font-size:15px;font-weight:'+(isT?'800':'700')+';color:'+(isT?'#fff':(wknd?'var(--text3)':'var(--text1)'))+'">'+dates[i].getDate()+'</div></div></th>';
+    var _hol=getHolidayName(dates[i]);
+    var _dowCol = isT?'#fff':(_hol?'#C0392B':(wknd?'var(--text3)':'var(--text2)'));
+    var _numCol = isT?'#fff':(_hol?'#C0392B':(wknd?'var(--text3)':'var(--text1)'));
+    var _holLine = _hol?'<div style="font-size:8px;font-weight:700;color:'+(isT?'#fff':'#C0392B')+';line-height:1;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_hol+'</div>':'';
+    h+='<th style="padding:2px"><div style="text-align:center;padding:5px 0;border-radius:8px;background:'+(isT?'var(--gold-d)':(wknd?'transparent':'var(--bg2)'))+'"><div style="font-size:11px;font-weight:600;color:'+_dowCol+'">'+dowNames[dw]+'</div><div style="font-size:15px;font-weight:'+(isT?'800':'700')+';color:'+_numCol+'">'+dates[i].getDate()+'</div>'+_holLine+'</div></th>';
   }
   h+='</tr></thead><tbody><tr>';
   for(var i=0;i<dates.length;i++){
@@ -857,13 +865,15 @@ function renderWeekActCal(){
     var vdw=dates[vi].getDay();
     var vwknd=(vdw===0||vdw===6);
     var vIsT=dates[vi].getTime()===today.getTime();
+    var _vhol=getHolidayName(dates[vi]);
     var vActs=mine.filter(function(a){ return a.date===vds; }).sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
     var headBg = vIsT ? 'var(--gold-d)' : (vwknd ? 'var(--sur)' : 'var(--bg2)');
-    var headFg = vIsT ? '#fff' : (vwknd ? 'var(--text3)' : 'var(--text1)');
+    var headFg = vIsT ? '#fff' : (_vhol ? '#C0392B' : (vwknd ? 'var(--text3)' : 'var(--text1)'));
     vh+='<div data-wkdt="'+vds+'" class="wk-vrow wk-cal-cell" style="border:1px solid var(--bdr2);border-radius:10px;overflow:hidden;cursor:pointer'+(vwknd?';opacity:.75':'')+'">';
     vh+='<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:'+headBg+';color:'+headFg+'">'+
         '<span style="font-size:13px;font-weight:800">'+dates[vi].getDate()+'일</span>'+
         '<span style="font-size:11px;font-weight:600;opacity:.85">'+dowNames[vdw]+'</span>'+
+        (_vhol?'<span style="font-size:10px;font-weight:700;color:'+(vIsT?'#fff':'#C0392B')+'">'+_vhol+'</span>':'')+
         '<span style="margin-left:auto;font-size:11px;opacity:.7">'+(vActs.length?vActs.length+'건':'+ 추가')+'</span>'+
         '</div>';
     vh+='<div style="padding:8px 10px;background:var(--bg2)">';
