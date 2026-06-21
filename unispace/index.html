@@ -4984,7 +4984,7 @@ function openPerfModal() {
   _perfSetEditUI(false);
   // 선택 가능한 FP 목록 구성 (관리자: 전체/지점, FP: 본인)
   var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
-  var list = getMergedFpList().filter(function(fp){ return fp.active; });
+  var list = getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
   if(currentUser.role==='지점장') list = list.filter(function(fp){ return fp.branch===currentUser.branch; });
   if(!isAdmin) list = list.filter(function(fp){ return fp.id===currentUser.id; });
   _perfFpList = list;
@@ -5025,7 +5025,7 @@ function openPerfEdit(id){
 
   // FP 목록 구성(신규와 동일)
   var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장'||currentUser.level==='manager'||currentUser.level==='admin'||(currentUser.title||'').indexOf('매니저')>=0;
-  var list = getMergedFpList().filter(function(fp){ return fp.active; });
+  var list = getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
   if(currentUser.role==='지점장') list = list.filter(function(fp){ return fp.branch===currentUser.branch; });
   if(!isAdmin) list = list.filter(function(fp){ return fp.id===currentUser.id; });
   _perfFpList = list;
@@ -8915,7 +8915,9 @@ function renderAttToday() {
     var FPS = [];
     roster.forEach(function(f){
       if(f.level==='admin'||f.level==='manager') return;
+      if(f.role==='대표') return; // 대표 제외
       if((f.branch||'').indexOf('교육')>=0) return;
+      if((f.branch||'').indexOf('유니스지사')>=0) return; // 지사 소속(대표) 제외
       if(!f.active) return;
       if(!_attSeeAll && _attMyBr && _attNb(f.branch) !== _attMyBr) return;
       FPS.push({ id:f.id, name:f.name, branch:(f.branch||'').replace('지점','') });
@@ -9946,9 +9948,14 @@ function renderWeekActTable() {
   var _seeAllBranch = currentUser && (currentUser.role === '대표' || currentUser.role === '지점장');
   var _myBr = (currentUser && currentUser.branch) ? _nb(currentUser.branch) : '';
 
+  // 대표 id 집합 (FP 표에서 제외용)
+  var _repIds = {};
+  getMergedFpList().forEach(function(fp){ if(fp.role==='대표') _repIds[fp.id]=true; });
+
   var fpMap = {};
   Object.values(db).forEach(function(a) {
     if(!a.fpId) return;
+    if(_repIds[a.fpId]) return; // 대표 제외
     if(weekBranchFilter !== 'all' && a.branch !== weekBranchFilter) return;
     if(!_seeAllBranch && _myBr && _nb(a.branch) !== _myBr) return;
     if(!fpMap[a.fpId]) fpMap[a.fpId] = {id:a.fpId, name:a.fpName, branch:a.branch};
@@ -9957,6 +9964,7 @@ function renderWeekActTable() {
   // FP목록에 있지만 활동 없는 FP도 포함
   var fpList = getMergedFpList().filter(function(fp){
     if(!fp.active) return false;
+    if(fp.role==='대표') return false; // 대표는 FP 표에서 제외
     if(weekBranchFilter !== 'all' && fp.branch !== weekBranchFilter) return false;
     if(!_seeAllBranch && _myBr && _nb(fp.branch) !== _myBr) return false;
     return true;
@@ -10047,13 +10055,17 @@ function renderWeekActTable() {
 
   fpActs.forEach(function(row){
     var hasAct = row.total > 0;
-    var isAlpha = row.fp.branch==='알파지점';
+    var _bch = row.fp.branch || '';
+    var isAlpha = _bch==='알파지점';
+    var isBravo = _bch==='브라보지점';
     var isMe = myId && String(row.fp.id)===myId;
+    var _chipHtml;
+    if(isAlpha){ _chipHtml='<span style="font-size:10px;font-weight:700;padding:1px 4px;border-radius:4px;margin-right:3px;background:var(--alpha-soft);color:var(--alpha-deep)">알</span>'; }
+    else if(isBravo){ _chipHtml='<span style="font-size:10px;font-weight:700;padding:1px 4px;border-radius:4px;margin-right:3px;background:var(--bravo-soft);color:var(--bravo-deep)">브</span>'; }
+    else { _chipHtml='<span style="font-size:10px;font-weight:700;padding:1px 4px;border-radius:4px;margin-right:3px;background:rgba(201,168,76,.16);color:var(--gold2)">대표</span>'; }
     html += '<tr'+(isMe?' style="background:rgba(201,168,76,.07)"':'')+'>';
     html += '<td class="fp-name-cell'+(hasAct?'':' no-act-fp')+'" data-fpid="'+row.fp.id+'"'+(isMe?' style="font-weight:700"':'')+'>'+
-      '<span style="font-size:10px;font-weight:700;padding:1px 4px;border-radius:4px;margin-right:3px;'+
-      (isAlpha?'background:var(--alpha-soft);color:var(--alpha-deep)':'background:var(--bravo-soft);color:var(--bravo-deep)')+
-      '">'+(isAlpha?'알':'브')+'</span>'+row.fp.name+
+      _chipHtml+row.fp.name+
       (isMe?'<span style="font-size:9px;color:var(--gold);margin-left:4px">나</span>':'')+'</td>';
     datestrs.forEach(function(ds,i){
       var isToday2 = dates[i].getTime()===today.getTime();

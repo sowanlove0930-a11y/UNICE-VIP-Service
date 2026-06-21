@@ -2,7 +2,7 @@
 // 목적: PWA 설치 요건 충족 + 앱 아이콘/매니페스트 캐시.
 // 데이터(고객/업적 등)는 항상 최신이어야 하므로 네트워크 우선 전략을 사용합니다.
 
-var CACHE_NAME = 'unispace-v1';
+var CACHE_NAME = 'unispace-v2';
 var PRECACHE = [
   './manifest.json',
   './unispace-192.png',
