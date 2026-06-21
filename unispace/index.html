@@ -1425,9 +1425,12 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   .stat-unit { font-size: 10px; margin-top: 4px; }
   /* 계약고객 카드 보조텍스트: 한 줄로 (두 줄 넘침 방지) */
   #st2-admin-sub { white-space: nowrap; font-size: 9.5px; overflow: hidden; text-overflow: ellipsis; }
-  /* 큰 금액(보장월초): 한 줄 강제 해제 + 살짝 축소해 빡빡함 해소 */
-  #st1 { white-space: normal !important; font-size: 15px; line-height: 1.25; }
-  #st1 span { font-size: 11px !important; }
+  /* 큰 금액(보장월초): 40%와 한 줄 유지 — 금액 유지, 건수·% 더 축소 */
+  #st1 { white-space: nowrap !important; font-size: 15px; line-height: 1.2; overflow: hidden; text-overflow: clip; flex-shrink: 0; }
+  #st1 span { font-size: 8px !important; }
+  #st1-rate { gap: 2px !important; }
+  #st1-rate span { font-size: 11px !important; }
+  #st1-lbl + div { gap: 4px !important; }
   /* 보장월초 지점 막대 줄 촘촘하게 */
   .bojang-bar-row { margin-bottom: 6px !important; font-size: 11px; }
   .bojang-bar-row .b-amt, .bojang-bar-row .b-rate { font-size: 11px; }
@@ -2549,8 +2552,8 @@ body.theme-light .qa-addr-btn{border:1px solid rgba(37,99,235,.3);background:rgb
     <!-- 1번: 보장월초 -->
     <div class="stat s-gold" id="st1-card" onclick="onBojangCardClick()" style="cursor:pointer;position:relative">
       <div class="stat-lbl" id="st1-lbl">이번 달 보장월초 및 건수</div>
-      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;row-gap:2px">
-        <div class="stat-val" id="st1" style="white-space:nowrap">—</div>
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:nowrap;white-space:nowrap">
+        <div class="stat-val" id="st1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">—</div>
         <div id="st1-rate" style="flex-shrink:0;margin-left:auto;display:flex;align-items:baseline;gap:6px;white-space:nowrap"></div>
       </div>
       <div class="stat-unit" id="st1-unit"></div>
@@ -3420,6 +3423,13 @@ function doLogin(fromBio) {
   fetch(url).then(function(r){ return r.json(); }).then(function(res){
     if (btn) { btn.disabled = false; btn.textContent = '로그인'; }
     if (!res || !res.ok) {
+      // 지문 경로로 실패 = 저장된 비번이 서버와 불일치(비번 변경됨) → 지문 정리 후 재등록 안내
+      if (fromBio) {
+        try { if(typeof bioInvalidate==='function') bioInvalidate(idVal); } catch(e){}
+        document.getElementById('loginPw').value = '';
+        showAppAlert('비밀번호가 변경되어 지문 로그인이 해제되었습니다.<br>비밀번호로 로그인 후 지문을 다시 등록해 주세요.', {icon:'👆', title:'지문 재등록 필요'});
+        return;
+      }
       document.getElementById('loginId').classList.add('error');
       document.getElementById('loginPw').classList.add('error');
       errEl.innerHTML = '⚠️ ' + ((res && res.msg) || '로그인에 실패했습니다');
@@ -3517,6 +3527,17 @@ function doGasPw() {
     document.getElementById('gasPwOverlay').classList.add('hidden');
     showDashboard();
     if (typeof showToast === 'function') showToast('✅ 비밀번호가 변경되었습니다');
+    // 비밀번호가 바뀌면 기존 지문 정보는 옛 비번을 갖고 있어 무효 → 정리 후 재등록 안내
+    if (typeof _bioHasCred === 'function' && currentUser && _bioHasCred(currentUser.id)) {
+      bioInvalidate(currentUser.id);
+      var _uid2 = currentUser.id, _pw2 = nw;
+      // 이전 "거절" 기록도 지워서 재등록 배너가 다시 뜨도록
+      try { localStorage.removeItem('unispace_bio_decline_' + _uid2); } catch(e){}
+      showAppAlert('비밀번호가 변경되어 기존 지문 등록이 해제되었습니다.<br>새 비밀번호로 지문을 다시 등록해 주세요.', {
+        icon: '👆', title: '지문 재등록 필요',
+        onClose: function(){ setTimeout(function(){ maybeOfferBioRegister(_uid2, _pw2); }, 400); }
+      });
+    }
   }).catch(function(){
     if (btn) { btn.disabled = false; btn.textContent = '비밀번호 변경하기'; }
     errEl.innerHTML = '⚠️ 네트워크 오류입니다. 잠시 후 다시 시도해 주세요';
@@ -3652,8 +3673,7 @@ function renderBojangCard() {
   if(_showTotal){
     var e1 = document.getElementById('st1');      if(e1) e1.innerHTML = AMT_TOTAL.toLocaleString()+'<span style="font-size:13px;font-weight:700;color:var(--text2)">원</span> <span style="font-size:14px;font-weight:700;color:var(--text2);margin-left:4px">· '+CNT_TOTAL+'건</span>';
     var er = document.getElementById('st1-rate'); if(er){
-      var _goalTxt = GOAL_TOTAL ? '<span style="font-size:11px;font-weight:600;color:var(--text3)">목표 '+GOAL_TOTAL.toLocaleString()+'만</span>' : '';
-      er.innerHTML = _goalTxt + '<span style="font-size:15px;font-weight:800;color:var(--gold2);min-width:38px;text-align:right">'+RATE_TOTAL+'%</span>';
+      er.innerHTML = '<span style="font-size:13px;font-weight:800;color:var(--gold2)">'+RATE_TOTAL+'%</span>';
     }
   }
   var eu = document.getElementById('st1-unit');
@@ -3662,16 +3682,16 @@ function renderBojangCard() {
     var _barW_b = RATE_BRAVO > 100 ? 100 : RATE_BRAVO;
     eu.innerHTML =
       '<div class="bojang-bar-row" data-life="'+LIFE_ALPHA+'" data-non="'+NON_ALPHA+'" data-lifec="'+LIFEC_ALPHA+'" data-nonc="'+NONC_ALPHA+'" style="margin-bottom:8px;cursor:default">'+
-        '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
-          '<span><span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원</span>'+
-          '<span style="display:flex;align-items:baseline;gap:6px;color:var(--text2);font-weight:700">'+(GOAL_ALPHA?'<span style="color:var(--text3);font-weight:600;font-size:11px">목표 '+GOAL_ALPHA.toLocaleString()+'만</span>':'')+'<span style="min-width:34px;text-align:right">'+RATE_ALPHA+'%</span></span>'+
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px;margin-bottom:3px;white-space:nowrap;gap:8px">'+
+          '<span style="overflow:hidden;text-overflow:ellipsis;min-width:0"><span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원</span>'+
+          '<span style="display:flex;align-items:baseline;gap:6px;font-weight:700;flex-shrink:0">'+'<span style="color:var(--text2);min-width:30px;text-align:right">'+RATE_ALPHA+'%</span></span>'+
         '</div>'+
         '<div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden"><div style="width:'+_barW_a+'%;height:100%;background:var(--gold)"></div></div>'+
       '</div>'+
       '<div class="bojang-bar-row" data-life="'+LIFE_BRAVO+'" data-non="'+NON_BRAVO+'" data-lifec="'+LIFEC_BRAVO+'" data-nonc="'+NONC_BRAVO+'" style="cursor:default">'+
-        '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
-          '<span><span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원</span>'+
-          '<span style="display:flex;align-items:baseline;gap:6px;color:var(--text2);font-weight:700">'+(GOAL_BRAVO?'<span style="color:var(--text3);font-weight:600;font-size:11px">목표 '+GOAL_BRAVO.toLocaleString()+'만</span>':'')+'<span style="min-width:34px;text-align:right">'+RATE_BRAVO+'%</span></span>'+
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px;margin-bottom:3px;white-space:nowrap;gap:8px">'+
+          '<span style="overflow:hidden;text-overflow:ellipsis;min-width:0"><span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원</span>'+
+          '<span style="display:flex;align-items:baseline;gap:6px;font-weight:700;flex-shrink:0">'+'<span style="color:var(--text2);min-width:30px;text-align:right">'+RATE_BRAVO+'%</span></span>'+
         '</div>'+
         '<div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden"><div style="width:'+_barW_b+'%;height:100%;background:#60A5FA"></div></div>'+
       '</div>';
@@ -3697,16 +3717,16 @@ function renderBojangBarsFromSummary(res){
   var _wb = RATE_BRAVO > 100 ? 100 : RATE_BRAVO;
   eu.innerHTML =
     '<div class="bojang-bar-row" data-life="'+(res.alLife||0)+'" data-non="'+(res.alNon||0)+'" data-lifec="'+(res.alLifeC||0)+'" data-nonc="'+(res.alNonC||0)+'" style="margin-bottom:8px;cursor:default">'+
-      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
-        '<span><span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원</span>'+
-        '<span style="display:flex;align-items:baseline;gap:6px;color:var(--text2);font-weight:700">'+(GOAL_ALPHA?'<span style="color:var(--text3);font-weight:600;font-size:11px">목표 '+GOAL_ALPHA.toLocaleString()+'만</span>':'')+'<span style="min-width:34px;text-align:right">'+RATE_ALPHA+'%</span></span>'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px;margin-bottom:3px;white-space:nowrap;gap:8px">'+
+        '<span style="overflow:hidden;text-overflow:ellipsis;min-width:0"><span style="color:var(--gold2);font-weight:700">알파</span> '+AMT_ALPHA.toLocaleString()+'원</span>'+
+        '<span style="display:flex;align-items:baseline;gap:6px;font-weight:700;flex-shrink:0">'+'<span style="color:var(--text2);min-width:30px;text-align:right">'+RATE_ALPHA+'%</span></span>'+
       '</div>'+
       '<div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden"><div style="width:'+_wa+'%;height:100%;background:var(--gold)"></div></div>'+
     '</div>'+
     '<div class="bojang-bar-row" data-life="'+(res.brLife||0)+'" data-non="'+(res.brNon||0)+'" data-lifec="'+(res.brLifeC||0)+'" data-nonc="'+(res.brNonC||0)+'" style="cursor:default">'+
-      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
-        '<span><span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원</span>'+
-        '<span style="display:flex;align-items:baseline;gap:6px;color:var(--text2);font-weight:700">'+(GOAL_BRAVO?'<span style="color:var(--text3);font-weight:600;font-size:11px">목표 '+GOAL_BRAVO.toLocaleString()+'만</span>':'')+'<span style="min-width:34px;text-align:right">'+RATE_BRAVO+'%</span></span>'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px;margin-bottom:3px;white-space:nowrap;gap:8px">'+
+        '<span style="overflow:hidden;text-overflow:ellipsis;min-width:0"><span style="color:#60A5FA;font-weight:700">브라보</span> '+AMT_BRAVO.toLocaleString()+'원</span>'+
+        '<span style="display:flex;align-items:baseline;gap:6px;font-weight:700;flex-shrink:0">'+'<span style="color:var(--text2);min-width:30px;text-align:right">'+RATE_BRAVO+'%</span></span>'+
       '</div>'+
       '<div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden"><div style="width:'+_wb+'%;height:100%;background:#60A5FA"></div></div>'+
     '</div>';
@@ -3908,8 +3928,7 @@ function showDashboard() {
             var _myGoalWon = _myGoalMan * 10000;
             if(_myGoalWon > 0){
               var _myRate = Math.round((res.myAmt||0) / _myGoalWon * 100);
-              er.innerHTML = '<span style="font-size:11px;font-weight:600;color:var(--text3)">목표 '+_myGoalMan.toLocaleString()+'만</span>'+
-                '<span style="font-size:15px;font-weight:800;color:var(--gold2);min-width:38px;text-align:right">'+_myRate+'%</span>';
+              er.innerHTML = '<span style="font-size:13px;font-weight:800;color:var(--gold2)">'+_myRate+'%</span>';
             } else {
               er.textContent = '';
             }
