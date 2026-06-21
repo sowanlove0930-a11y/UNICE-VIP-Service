@@ -5620,7 +5620,7 @@ function selectPvFp(id,name){
 // 보기 모드 전환 (FP별 / 회사별)
 function setPvMode(m, el){
   _pvMode=m;
-  if(m==='co'){ _pvCo=''; } // 회사별 진입 시 회사 미선택부터
+  if(m==='co'){ _pvCo=''; _pvFp=''; } // 회사별 진입 시 회사·FP 선택 초기화 (FP+회사 조합 기능 제거)
   document.getElementById('pvModeFp').classList.toggle('on', m==='fp');
   document.getElementById('pvModeCo').classList.toggle('on', m==='co');
   document.getElementById('pvFpFilterWrap').style.display = (m==='fp') ? '' : 'none';
@@ -6067,14 +6067,12 @@ function _pvCoCandidates(){
   // 회사 목록은 전체 기간 기준 (날짜 무관하게 항상 표시). 지점필터는 유지.
   var log=_pvScopedLog();
   if(_pvBranch!=='all') log=log.filter(function(r){ return _pvBranchKey(r.branch)===_pvBranch; });
-  if(_pvFp) log=log.filter(function(r){ return r.fpId===_pvFp; });
   return _pvCoAggr(log);
 }
 // 회사별 랭킹 표용: 선택 기간 기준 집계
 function _pvCoCandidatesRanged(){
   var log=_pvApplyRange(_pvScopedLog());
   if(_pvBranch!=='all') log=log.filter(function(r){ return _pvBranchKey(r.branch)===_pvBranch; });
-  if(_pvFp) log=log.filter(function(r){ return r.fpId===_pvFp; });
   return _pvCoAggr(log);
 }
 // 공통 집계 (회사별)
@@ -6186,20 +6184,7 @@ function _pvCoItems(coName){
 }
 
 // 특정 FP × 특정 회사: 건별 상품 리스트 [{date, co, kind, amount}]
-function _pvFpCoItems(fpId, coName){
-  var log=_pvApplyRange(_pvScopedLog());
-  var ck=_pvCoKey(coName);
-  var items=[];
-  log.forEach(function(r){
-    if(r.fpId!==fpId) return;
-    (r.products||[]).forEach(function(p){
-      if(_pvCoKey(p.co)!==ck) return;
-      items.push({ date:r.date||'', co:String(p.co||''), kind:_perfClassify(p.co), amount:parseInt(p.amount)||0, cat:p.cat||'' });
-    });
-  });
-  items.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
-  return items;
-}
+function _pvFpCoItems_removed(){ return []; }
 
 // 회사별 보기 메인 렌더 (3가지 상태)
 function _renderPvCompanyView(){
@@ -12340,10 +12325,25 @@ function doCheckin() { doSmartCheckin(); }
     </div>
 
     <!-- 지점 필터 (작게) -->
-    <div id="pvBranchFilterWrap" style="display:flex;gap:5px;margin-bottom:10px">
-      <button type="button" class="pv-bf on" id="pvBfAll" onclick="setPerfBranch('all',this)">전체</button>
-      <button type="button" class="pv-bf" id="pvBfAlpha" onclick="setPerfBranch('al',this)">알파</button>
-      <button type="button" class="pv-bf" id="pvBfBravo" onclick="setPerfBranch('br',this)">브라보</button>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:nowrap">
+      <div id="pvBranchFilterWrap" style="display:flex;gap:5px;flex-shrink:0">
+        <button type="button" class="pv-bf on" id="pvBfAll" onclick="setPerfBranch('all',this)">전체</button>
+        <button type="button" class="pv-bf" id="pvBfAlpha" onclick="setPerfBranch('al',this)">알파</button>
+        <button type="button" class="pv-bf" id="pvBfBravo" onclick="setPerfBranch('br',this)">브라보</button>
+      </div>
+      <div id="pvRangeNav" style="display:none;align-items:center;justify-content:flex-end;gap:5px;flex:1;min-width:0;flex-wrap:nowrap">
+        <div class="range-trig" onclick="openPvRangePicker('start')" style="display:flex;align-items:center;gap:4px;padding:6px 9px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);cursor:pointer;min-width:0">
+          <span style="font-size:12px;color:var(--gold2);flex-shrink:0">📅</span>
+          <span id="pvRangeStartDisp" class="pk-ph" style="font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">시작일</span>
+        </div>
+        <input type="hidden" id="pvRangeStart">
+        <span style="color:var(--text2);font-size:12px;flex-shrink:0">~</span>
+        <div class="range-trig" onclick="openPvRangePicker('end')" style="display:flex;align-items:center;gap:4px;padding:6px 9px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);cursor:pointer;min-width:0">
+          <span style="font-size:12px;color:var(--gold2);flex-shrink:0">📅</span>
+          <span id="pvRangeEndDisp" class="pk-ph" style="font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">종료일</span>
+        </div>
+        <input type="hidden" id="pvRangeEnd">
+      </div>
     </div>
 
     <!-- 보기 모드 탭: FP별 / 회사별 -->
@@ -12402,19 +12402,6 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="pv-dnav" onclick="movePerfMonth(-1)">‹</button>
       <span class="pv-dlabel" id="pvMonthLabel"></span>
       <button type="button" class="pv-dnav" onclick="movePerfMonth(1)">›</button>
-    </div>
-    <div id="pvRangeNav" style="display:none;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <div class="range-trig" onclick="openPvRangePicker('start')" style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);cursor:pointer">
-        <span style="font-size:14px;color:var(--gold2)">📅</span>
-        <span id="pvRangeStartDisp" class="pk-ph" style="font-size:13px;color:var(--text3)">시작일</span>
-      </div>
-      <input type="hidden" id="pvRangeStart">
-      <span style="color:var(--text2);font-size:13px">~</span>
-      <div class="range-trig" onclick="openPvRangePicker('end')" style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);cursor:pointer">
-        <span style="font-size:14px;color:var(--gold2)">📅</span>
-        <span id="pvRangeEndDisp" class="pk-ph" style="font-size:13px;color:var(--text3)">종료일</span>
-      </div>
-      <input type="hidden" id="pvRangeEnd">
     </div>
     <div id="pvList"></div>
 
