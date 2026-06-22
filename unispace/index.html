@@ -3006,6 +3006,7 @@ window.UNISPACE_FCM = {
               <button type="button" class="wv-toggle-btn" id="wvMonthBtn" onclick="event.stopPropagation();setActViewMode('month')">월간</button>
             </div>
             <button type="button" id="weekendToggleBtn" class="weekend-toggle" onclick="event.stopPropagation();toggleWeekend()"><span id="weekendToggleIcon">▢</span> 주말</button>
+            <button type="button" id="actRefreshBtn" onclick="event.stopPropagation();refreshActivity()" style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer"><span id="actRefreshIcon" style="display:inline-block">🔄</span> <span id="actRefreshTxt">새로고침</span></button>
             <span class="accordion-chevron" id="chev2">▼</span>
           </div>
         </div>
@@ -3740,6 +3741,37 @@ function loadActivitiesFromGas(cb){
     }
     if(cb) cb();
   }).catch(function(){ if(cb) cb(); });
+}
+
+// 활동현황 새로고침: GAS에서 활동기록 다시 불러와 재렌더
+function refreshActivity(){
+  var btn=document.getElementById('actRefreshBtn');
+  var icon=document.getElementById('actRefreshIcon');
+  var txt=document.getElementById('actRefreshTxt');
+  if(btn) btn.disabled=true;
+  if(icon) icon.classList.add('uni-spinning');
+  if(txt) txt.textContent='새로고침 중';
+  function done(){
+    if(typeof renderActView==='function') renderActView();
+    if(icon){ icon.classList.remove('uni-spinning'); icon.textContent='✓'; }
+    if(txt) txt.textContent='완료';
+    setTimeout(function(){
+      if(icon) icon.textContent='🔄';
+      if(txt) txt.textContent='새로고침';
+      if(btn) btn.disabled=false;
+    }, 1200);
+  }
+  // 플래그 리셋 후 plan + activity 모두 GAS에서 다시 로드
+  _actLoadedFromGas=false;
+  _loadedPlanKeys={};
+  var _called=false;
+  function fin(){ if(_called) return; _called=true; done(); }
+  try{
+    loadPlansFromGas(null, function(){
+      loadActivitiesFromGas(function(){ fin(); });
+    });
+  }catch(e){ fin(); }
+  setTimeout(function(){ fin(); }, 3000);
 }
 
 // ── FP 추가/삭제 (GAS 연동) ──
