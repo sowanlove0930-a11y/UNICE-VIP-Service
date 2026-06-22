@@ -3697,6 +3697,51 @@ function saveFpOverride(id, key, val) {
   localStorage.setItem('unispace_fp_overrides', JSON.stringify(overrides));
 }
 
+// ── 활동기록 GAS 동기화 ──
+// 단일 활동을 GAS에 저장 (localStorage 저장 후 호출)
+function syncActivityToGas(act){
+  if(typeof UNISPACE_GAS_URL==='undefined' || !act || !act.id) return;
+  try{
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'saveActivity', data: JSON.stringify(act) })
+    }).catch(function(){});
+  }catch(e){}
+}
+// id로 localStorage에서 활동 찾아 GAS 저장
+function syncActIdToGas(actId){
+  try{
+    var db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');
+    if(db[actId]) syncActivityToGas(db[actId]);
+  }catch(e){}
+}
+// GAS에서 활동 삭제
+function deleteActFromGas(actId){
+  if(typeof UNISPACE_GAS_URL==='undefined' || !actId) return;
+  try{
+    fetch(UNISPACE_GAS_URL+'?action=deleteActivity&id='+encodeURIComponent(actId)).catch(function(){});
+  }catch(e){}
+}
+// GAS에서 활동 불러와 localStorage 병합 (plan 기반 활동은 보존)
+var _actLoadedFromGas = false;
+function loadActivitiesFromGas(cb){
+  if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ if(cb) cb(); return; }
+  var url = UNISPACE_GAS_URL + '?action=getActivities&fp=' + encodeURIComponent(currentUser.id);
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.activities){
+      var db={};
+      try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+      res.activities.forEach(function(a){
+        if(a && a.id) db[a.id]=a;   // GAS 데이터로 갱신/추가
+      });
+      localStorage.setItem('unispace_activities', JSON.stringify(db));
+      _actLoadedFromGas = true;
+    }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
+
 // ── FP 추가/삭제 (GAS 연동) ──
 function openFpAddForm(){
   ['fpAddId','fpAddName','fpAddPhone','fpAddEmail'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
@@ -9867,7 +9912,7 @@ var monthOffset = 0;
 var selectedDayStr = '';
 
 function initBranchCal() { renderActView(); }
-function moveWeek(dir) { weekOffset += dir; renderWeekActTable(); }
+function moveWeek(dir) { weekOffset += dir; renderActView(); }
 function setWeekBranch(val, el) {
   weekBranchFilter = val;
   document.querySelectorAll('.week-branch-chip').forEach(function(c){ c.classList.remove('active'); });
@@ -9902,9 +9947,11 @@ function _doRenderActView() {
 
 // ensure all GAS plans loaded once, then render (table/cal filter by date themselves)
 function renderActView() {
-  if (_loadedPlanKeys['__ALL__']) { _doRenderActView(); return; }
+  if (_loadedPlanKeys['__ALL__'] && _actLoadedFromGas) { _doRenderActView(); return; }
   _doRenderActView(); // show local data first to avoid blank
-  loadPlansFromGas(null, function(){ _doRenderActView(); });
+  loadPlansFromGas(null, function(){
+    loadActivitiesFromGas(function(){ _doRenderActView(); });
+  });
 }
 
 function actFilterMatch(a) {
@@ -10779,6 +10826,8 @@ function saveActEdit(){
       }
     }
     localStorage.setItem('unispace_activities', JSON.stringify(db));
+    syncActivityToGas(db[_currentActId]);
+    if(db[_currentActId] && db[_currentActId].parentId && db[db[_currentActId].parentId]) syncActivityToGas(db[db[_currentActId].parentId]);
     closeActPopup(); renderActView(); if(actViewMode=="month"&&selectedDayStr) renderDayPanel(selectedDayStr);
     showToast('✅ 활동이 수정되었습니다');
   }
@@ -10817,6 +10866,7 @@ function deleteActFromPopup(){
     var db2={};try{db2=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
     delete db2[_delId];
     localStorage.setItem('unispace_activities',JSON.stringify(db2));
+    deleteActFromGas(_delId);   // GAS 활동기록에서도 삭제
     // also delete from GAS plan so it does not come back on refresh
     if(_delAct.planKey && _delAct.fpId){
       var qs='action=deletePlanCustomer'+
@@ -11324,6 +11374,15 @@ function saveActResult(){
 }
 function _finishSaveResult(db, createdMsg){
   localStorage.setItem('unispace_activities',JSON.stringify(db));
+  // GAS 동기화: 현재 활동 + 부모 + 다음차수(자식)
+  try{
+    if(db[_currentActId]){
+      syncActivityToGas(db[_currentActId]);
+      var _a=db[_currentActId];
+      if(_a.parentId && db[_a.parentId]) syncActivityToGas(db[_a.parentId]);
+      if(_a.nextActCreated && db[_a.nextActCreated]) syncActivityToGas(db[_a.nextActCreated]);
+    }
+  }catch(e){}
   closeActPopup();
   renderActView();
   if(actViewMode=='month' && selectedDayStr) renderDayPanel(selectedDayStr);
@@ -11934,6 +11993,7 @@ function saveQuickAdd() {
       createdAt: new Date().toISOString()
     };
     localStorage.setItem('unispace_activities', JSON.stringify(db));
+    syncActivityToGas(db[id]);
     closeQuickAdd();
     if(_qaMode==='visited'){
       _currentActId = id;
