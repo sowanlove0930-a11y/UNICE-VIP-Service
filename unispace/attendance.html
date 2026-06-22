@@ -319,6 +319,12 @@ textarea.prm-input{resize:vertical;}
   /* 인증샷 영역 */
   .photo-upload-area{padding:18px 14px;}
   .photo-upload-sub{word-break:keep-all;}
+  /* 이 날 보고한 FP 행: 좁으면 줄바꿈해 관리 버튼이 카드 밖으로 안 나가게 */
+  .prcal-person{flex-wrap:wrap;row-gap:6px;}
+  .prcal-person > div[style*="flex:1"]{flex:1 1 100%;min-width:0;}
+  .prcal-person .pr-type{margin-left:0;}
+  .prcal-person .pr-badge{margin-left:0;}
+  .prcal-person .pr-admin-actions{margin-left:auto;}
 }
 @media(max-width:380px){
   .header-title-text{font-size:9px;}
@@ -537,11 +543,11 @@ textarea.prm-input{resize:vertical;}
     <div class="prm-field">
       <label class="prm-label">유형</label>
       <select class="prm-input" id="prmType">
-        <option value="지각예정">지각예정</option>
-        <option value="미출석예정">미출석예정</option>
-        <option value="휴가">휴가</option>
-        <option value="반차">반차</option>
-        <option value="활동">활동</option>
+        <option value="지각예정">⚠️ 지각 예정</option>
+        <option value="미출석예정">❌ 미출석 예정</option>
+        <option value="활동">📌 활동</option>
+        <option value="리프레쉬">🌿 리프레쉬</option>
+        <option value="기타사유">📝 기타 사유</option>
       </select>
     </div>
     <div class="prm-field">
@@ -1261,6 +1267,11 @@ function openPrManage(date, fpCode){
   document.getElementById('prmNote').value = r.note||'';
   _prmRenderProof();
   document.getElementById('prmOverlay').classList.add('show');
+  // 안드로이드 뒤로가기 시 모달만 닫히도록 history 상태 추가
+  if(!_prmHistoryPushed){
+    history.pushState({prm:true}, '');
+    _prmHistoryPushed = true;
+  }
 }
 function _prmRenderProof(){
   var btn=document.getElementById('prmProofBtn');
@@ -1285,7 +1296,25 @@ function prmViewPhoto(){
 function closePrManage(){
   document.getElementById('prmOverlay').classList.remove('show');
   _prmCtx=null;
+  // X/저장 등으로 닫을 때, 쌓아둔 history 상태를 정리
+  if(_prmHistoryPushed){
+    _prmHistoryPushed = false;
+    _prmSkipPop = true;
+    history.back();
+  }
 }
+var _prmHistoryPushed = false;
+var _prmSkipPop = false;
+window.addEventListener('popstate', function(){
+  if(_prmSkipPop){ _prmSkipPop = false; return; }
+  var ov = document.getElementById('prmOverlay');
+  if(ov && ov.classList.contains('show')){
+    // 뒤로가기로 모달만 닫기 (history는 이미 소비됨)
+    _prmHistoryPushed = false;
+    document.getElementById('prmOverlay').classList.remove('show');
+    _prmCtx = null;
+  }
+});
 function prmSave(){
   if(!_prmCtx) return;
   var date=_prmCtx.date, fpCode=_prmCtx.fpCode;
