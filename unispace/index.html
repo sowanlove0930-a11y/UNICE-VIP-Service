@@ -1956,7 +1956,10 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .rc2-sec-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .rc2-sec-title { font-size:13px; font-weight:700; color:var(--text); }
 .rc2-addbtn { font-size:12px; font-weight:700; color:#fff; background:linear-gradient(135deg,#A78BFA,var(--purple)); border:none; border-radius:9px; padding:7px 12px; cursor:pointer; font-family:'Noto Sans KR',sans-serif; }
-.rc2-card { background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:11px 13px; margin-bottom:7px; cursor:pointer; transition:all .15s; }
+.rc2-card { background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:11px 13px; margin-bottom:7px; cursor:pointer; transition:all .15s; border-left-width:4px; }
+.rc2-card.rc2-card-go { border-left-color:#BA7517; }
+.rc2-card.rc2-card-ok { border-left-color:#1D9E75; }
+.rc2-card.rc2-card-mg { border-left-color:#888; }
 .rc2-card:active { transform:scale(.99); }
 .rc2-card-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
 .rc2-card-name { font-size:14px; font-weight:700; color:var(--text); }
@@ -2414,7 +2417,7 @@ window.UNISPACE_FCM = {
 
       <!-- 요약 4칸 (입과확보·추진후보자·소비자패널·지점장인터뷰) -->
       <div class="rc2-summary">
-        <div class="rc2-sum-card"><div class="rc2-sum-lbl">입과 확보</div><div class="rc2-sum-val" id="rc2SumJoin" style="color:var(--alpha)">0<small>명</small></div></div>
+        <div class="rc2-sum-card" style="background:rgba(29,158,117,.08);border-color:#1D9E75"><div class="rc2-sum-lbl">입과 확보</div><div class="rc2-sum-val" id="rc2SumJoin" style="color:#0F6E56;font-size:22px">0<small>명</small></div></div>
         <div class="rc2-sum-card"><div class="rc2-sum-lbl">추진 후보자</div><div class="rc2-sum-val" id="rc2SumCand">0<small id="rc2SumGoal"> / 목표 0</small></div></div>
         <div class="rc2-sum-card"><div class="rc2-sum-lbl">소비자패널</div><div class="rc2-sum-val" id="rc2SumPanel">0<small>명</small></div></div>
         <div class="rc2-sum-card"><div class="rc2-sum-lbl">지점장 인터뷰</div><div class="rc2-sum-val" id="rc2SumItv">0<small>명</small></div></div>
@@ -9724,10 +9727,21 @@ function rc2RenderSummary(d) {
 
 function rc2DtLabel(dt) {
   if(!dt) return '';
-  var parts = dt.split(' ');
-  var dp = parts[0].split('-');
-  var label = parseInt(dp[1],10) + '월 ' + parseInt(dp[2],10) + '일';
-  if(parts[1]){ label += ' ' + rc2TimeKor(parts[1]); }
+  var s0 = String(dt).trim();
+  var y, mo, d, hh, mm;
+  var mm1 = s0.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if(mm1){ y=+mm1[1]; mo=+mm1[2]; d=+mm1[3]; if(mm1[4]){ hh=mm1[4]; mm=mm1[5]; } }
+  else {
+    var mm2 = s0.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})(?:[ ]+(\d{1,2}):(\d{2}))?/);
+    if(mm2){ y=+mm2[1]; mo=+mm2[2]; d=+mm2[3]; if(mm2[4]){ hh=mm2[4]; mm=mm2[5]; } }
+    else {
+      var dd = new Date(s0);
+      if(!isNaN(dd.getTime())){ y=dd.getFullYear(); mo=dd.getMonth()+1; d=dd.getDate(); var H=dd.getHours(),N=dd.getMinutes(); if(H||N){ hh=(H<10?'0':'')+H; mm=(N<10?'0':'')+N; } }
+    }
+  }
+  if(!mo || !d) return '';
+  var label = mo + '월 ' + d + '일';
+  if(hh!==undefined && mm!==undefined){ label += ' ' + rc2TimeKor(hh+':'+mm); }
   return label;
 }
 function rc2TimeKor(hhmm){
@@ -9753,7 +9767,8 @@ function rc2CardHtml(it) {
   }
   if(it.join) meta.push(it.join + '입과');
   var note = it.note ? ('<div style="font-size:11px;color:var(--text3);margin-top:2px">비고: ' + rc2Esc(it.note) + '</div>') : '';
-  return '<div class="rc2-card" data-id="' + it.id + '">' +
+  var _stCls = it.status==='입과확보' ? 'rc2-card-ok' : (it.status==='관리' ? 'rc2-card-mg' : 'rc2-card-go');
+  return '<div class="rc2-card ' + _stCls + '" data-id="' + it.id + '">' +
     '<div class="rc2-card-top"><div class="rc2-card-name">' + rc2Esc(it.name) + '</div>' + badge + '</div>' +
     '<div class="rc2-card-meta">' + meta.join(' · ') + '</div>' + note + '</div>';
 }
@@ -10193,6 +10208,17 @@ function rc2OpenRes(candId, evtId) {
   rc2res = { candId:candId, evtId:evtId, outcome:(ev.cancelled?'불참':(ev.done?'완료':'')), nextTypes:[], nextDt:'', status:(it.status||'추진중'), _pk:null };
   var dl = ev.dt ? rc2DtLabel(ev.dt) : '';
   document.getElementById('rc2ResSub').textContent = it.name + ' · ' + (ev.types||[]).join('·') + (dl?(' · '+dl):'');
+  // 결과가 이미 입력된 경우만 '결과입력 취소' 버튼 노출
+  var _planBtn = document.getElementById('rc2ResPlan');
+  if(_planBtn){
+    var _hasResult = !!(ev.done || ev.cancelled);
+    if(_hasResult){
+      _planBtn.style.display='';
+      _planBtn.textContent='↩ 결과입력 취소';
+    } else {
+      _planBtn.style.display='none';
+    }
+  }
   rc2ResRefreshOutcome();
   rc2ResRefreshStatus();
   rc2ResRenderTypeChips();
@@ -10201,8 +10227,14 @@ function rc2OpenRes(candId, evtId) {
 }
 function rc2CloseRes(){ document.getElementById('rc2ResOverlay').classList.remove('open'); }
 function rc2SetResOutcome(o){
-  if(o==='예정') rc2res.outcome=''; // 결과 지우고 예정으로 되돌림
-  else rc2res.outcome = (rc2res.outcome===o)?'':o;
+  if(o==='예정'){
+    // '결과입력 취소' → 즉시 예정으로 되돌리고 저장
+    rc2res.outcome='';
+    rc2ResRefreshOutcome();
+    rc2SaveRes();
+    return;
+  }
+  rc2res.outcome = (rc2res.outcome===o)?'':o;
   rc2ResRefreshOutcome();
 }
 function rc2ResRefreshOutcome(){
@@ -10423,15 +10455,17 @@ function rc2RenderCal() {
       var _tyTx = _tys.length ? ('·'+_tys.join('·')) : '';
       var _tlabel = E.time ? E.time+' ' : '';
       var _lbTx = _brLb;
-      if(E.done) _lbTx = _brLb+'✓'; // 완료는 지점 라벨에 체크 통합 (이름 공간 확보)
+      var _lbPad = '0 2px';
+      var _doneCheck = '';
+      if(E.done){ _lbPad='1px 6px 1px 3px'; _doneCheck = '<span style="position:absolute;top:0;right:0;background:#1F7A4D;color:#fff;font-size:6px;font-weight:800;width:7px;height:7px;line-height:7px;text-align:center;border-radius:0 3px 0 3px">✓</span>'; }
       if(E.cancelled){
-        _brBg='rgba(226,75,74,.13)'; _brTx='#C0392B'; _brBd='#C0392B'; _lbTx='✕';
+        _brBg='rgba(226,75,74,.13)'; _brTx='#C0392B'; _brBd='#C0392B'; _lbTx='✕'; _lbPad='0 3px'; _doneCheck='';
       }
       var _cancelSty = E.cancelled ? 'text-decoration:line-through;opacity:.85;' : '';
       var _refTx = E.ref ? ' <span style="opacity:.6;font-size:9.5px">'+rc2Esc(E.ref)+'</span>' : '';
       var _timeHtml = E.time ? '<span style="font-weight:700;flex-shrink:0">'+E.time+'</span> ' : '';
-      evHtml += '<div class="rc2-cal-ev" style="background:'+_brBg+';color:'+_brTx+';display:flex;align-items:center;gap:2px;'+_cancelSty+'">'+
-        '<span style="background:'+_brBd+';color:#fff;font-size:8px;font-weight:700;padding:0 2px;border-radius:3px;flex-shrink:0">'+_lbTx+'</span>'+
+      evHtml += '<div class="rc2-cal-ev" style="background:'+_brBg+';color:'+_brTx+';display:flex;align-items:center;gap:3px;'+_cancelSty+'">'+
+        '<span style="position:relative;background:'+_brBd+';color:#fff;font-size:8px;font-weight:700;padding:'+_lbPad+';border-radius:3px;flex-shrink:0">'+_lbTx+_doneCheck+'</span>'+
         _timeHtml+
         '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+rc2Esc(E.name)+_refTx+'</span>'+
       '</div>';
