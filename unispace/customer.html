@@ -1013,7 +1013,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <input type="hidden" id="r_lat">
           <input type="hidden" id="r_lng">
         </div>
-        <div class="form-group full">
+        <div class="form-group full" style="display:none">
           <div class="form-label">계약 구분</div>
           <div style="display:flex;gap:10px">
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
@@ -2214,10 +2214,12 @@ function renderContracts() {
   var _preserve = {};
   tempContracts.forEach(function(pid){
     var rec = {};
-    ['insurer','product','premium','payday','paymethod','date_y','date_m','date_d'].forEach(function(f){
+    ['insurer','product','premium','payday','paymethod','date_y','date_m','date_d','ins_name','ins_relation','ins_by','ins_bm','ins_bd','ins_gender','ins_phone','ins_address'].forEach(function(f){
       var pe = document.getElementById('c'+pid+'_'+f);
       if(pe) rec[f] = pe.value;
     });
+    var diffEl = document.getElementById('c'+pid+'_pt_diff');
+    rec._isDiff = diffEl ? diffEl.checked : false;
     _preserve[pid] = rec;
   });
   el.innerHTML = tempContracts.map(function(id, i) {
@@ -2251,6 +2253,37 @@ function renderContracts() {
         '<div class="form-group"><div class="form-label">납입방법</div>' +
           '<select class="form-select" id="c'+id+'_paymethod"><option value="">선택</option><option>자동이체</option><option>카드</option><option>기타</option></select>' +
         '</div>' +
+        '<div class="form-group full" style="margin-top:4px">' +
+          '<div class="form-label">계약 구분</div>' +
+          '<div style="display:flex;gap:10px">' +
+            '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">' +
+              '<input type="radio" name="cpType'+id+'" id="c'+id+'_pt_same" value="계피동일" checked onchange="toggleContractInsured('+id+')" style="accent-color:var(--gold);width:16px;height:16px">계피동일</label>' +
+            '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">' +
+              '<input type="radio" name="cpType'+id+'" id="c'+id+'_pt_diff" value="계피상이" onchange="toggleContractInsured('+id+')" style="accent-color:var(--gold);width:16px;height:16px">계피상이</label>' +
+          '</div>' +
+        '</div>' +
+        '<div class="form-group full" id="c'+id+'_insuredSec" style="display:none">' +
+          '<div style="background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.2);border-radius:14px;padding:16px 18px">' +
+            '<div style="font-size:12px;font-weight:700;color:var(--gold2);margin-bottom:14px;letter-spacing:.04em">👤 피보험자 정보</div>' +
+            '<div class="form-grid" style="gap:12px">' +
+              '<div class="form-group"><div class="form-label">피보험자명 <span class="req">필수</span></div><input class="form-input" id="c'+id+'_ins_name" placeholder="피보험자 이름"></div>' +
+              '<div class="form-group"><div class="form-label">관계</div><select class="form-select" id="c'+id+'_ins_relation"><option value="">선택</option><option>배우자</option><option>자녀</option><option>부모</option><option>형제/자매</option><option>기타</option></select></div>' +
+              '<div class="form-group"><div class="form-label">생년월일</div><div class="birth-wrap">' +
+                '<select class="form-select" id="c'+id+'_ins_by"><option value="">년도</option></select>' +
+                '<span class="birth-sep">.</span>' +
+                '<select class="form-select" id="c'+id+'_ins_bm"><option value="">월</option>' + Array.from({length:12},function(_,k){return '<option value="'+(k+1<10?'0'+(k+1):(k+1))+'">'+(k+1)+'월</option>';}).join('') + '</select>' +
+                '<span class="birth-sep">.</span>' +
+                '<select class="form-select" id="c'+id+'_ins_bd"><option value="">일</option>' + Array.from({length:31},function(_,k){return '<option value="'+(k+1<10?'0'+(k+1):(k+1))+'">'+(k+1)+'일</option>';}).join('') + '</select>' +
+              '</div></div>' +
+              '<div class="form-group"><div class="form-label">성별</div><select class="form-select" id="c'+id+'_ins_gender"><option value="">선택</option><option>여</option><option>남</option></select></div>' +
+            '</div>' +
+            '<div class="form-grid" style="gap:12px;margin-top:12px">' +
+              '<div class="form-group full"><div class="form-label" style="display:flex;align-items:center;justify-content:space-between"><span>연락처</span><button type="button" class="insured-copy-btn" onclick="copyContractInsured('+id+',\'phone\')">📋 계약자와 동일</button></div><input class="form-input" id="c'+id+'_ins_phone" placeholder="010-0000-0000" type="tel" oninput="_fmtPhoneInput(this)"></div>' +
+              '<div class="form-group full"><div class="form-label" style="display:flex;align-items:center;justify-content:space-between"><span>주소</span><button type="button" class="insured-copy-btn" onclick="copyContractInsured('+id+',\'address\')">📋 계약자와 동일</button></div><input class="form-input" id="c'+id+'_ins_address" placeholder="예) 부산 해운대구 좌동 1400"></div>' +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--text3);margin-top:10px">💡 저장하면 피보험자가 별도 고객으로 자동 등록되고, 계약자와 가족으로 연결됩니다.</div>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2271,10 +2304,20 @@ function renderContracts() {
   tempContracts.forEach(function(rid){
     var rec = _preserve[rid];
     if(!rec) return;
-    ['insurer','product','premium','payday','paymethod','date_y','date_m','date_d'].forEach(function(f){
+    // 피보험자 생년 년도 셀렉트 채우기 (복원 전)
+    var iby = document.getElementById('c'+rid+'_ins_by');
+    if(iby && iby.options.length <= 1){
+      for(var yy=curY; yy>=1940; yy--){ var oo=document.createElement('option'); oo.value=yy; oo.textContent=yy+'년'; iby.appendChild(oo); }
+    }
+    ['insurer','product','premium','payday','paymethod','date_y','date_m','date_d','ins_name','ins_relation','ins_by','ins_bm','ins_bd','ins_gender','ins_phone','ins_address'].forEach(function(f){
       var re = document.getElementById('c'+rid+'_'+f);
       if(re && rec[f] !== undefined) re.value = rec[f];
     });
+    // 계피 라디오 + 피보험자 섹션 표시 복원
+    if(rec._isDiff){
+      var diffEl = document.getElementById('c'+rid+'_pt_diff');
+      if(diffEl){ diffEl.checked = true; toggleContractInsured(rid); }
+    }
     // 보험사 커스텀 드롭다운 라벨 복원
     var iv = document.getElementById('insVal'+rid);
     if(iv && rec.insurer) iv.textContent = rec.insurer;
@@ -2408,6 +2451,23 @@ function saveCustomer() {
 
   // 계약 수집
   var contracts = tempContracts.map(function(id){
+    var _ptDiff = document.getElementById('c'+id+'_pt_diff') && document.getElementById('c'+id+'_pt_diff').checked;
+    var _ins = null;
+    if(_ptDiff){
+      var _inm = document.getElementById('c'+id+'_ins_name') ? document.getElementById('c'+id+'_ins_name').value.trim() : '';
+      _ins = {
+        name:     _inm,
+        relation: document.getElementById('c'+id+'_ins_relation') ? document.getElementById('c'+id+'_ins_relation').value : '',
+        birth:    [
+                    document.getElementById('c'+id+'_ins_by') ? document.getElementById('c'+id+'_ins_by').value : '',
+                    document.getElementById('c'+id+'_ins_bm') ? document.getElementById('c'+id+'_ins_bm').value : '',
+                    document.getElementById('c'+id+'_ins_bd') ? document.getElementById('c'+id+'_ins_bd').value : ''
+                  ].filter(Boolean).join('-'),
+        gender:   document.getElementById('c'+id+'_ins_gender') ? document.getElementById('c'+id+'_ins_gender').value : '',
+        phone:    document.getElementById('c'+id+'_ins_phone') ? _normalizePhone(document.getElementById('c'+id+'_ins_phone').value.trim()) : '',
+        address:  document.getElementById('c'+id+'_ins_address') ? document.getElementById('c'+id+'_ins_address').value.trim() : ''
+      };
+    }
     return {
       insurer:   document.getElementById('c'+id+'_insurer') ? document.getElementById('c'+id+'_insurer').value : '',
       product:   document.getElementById('c'+id+'_product') ? document.getElementById('c'+id+'_product').value : '',
@@ -2420,6 +2480,8 @@ function saveCustomer() {
       premium:   document.getElementById('c'+id+'_premium') ? document.getElementById('c'+id+'_premium').value : '',
       payday:    document.getElementById('c'+id+'_payday') ? document.getElementById('c'+id+'_payday').value : '',
       paymethod: document.getElementById('c'+id+'_paymethod') ? document.getElementById('c'+id+'_paymethod').value : '',
+      policyType: _ptDiff ? '계피상이' : '계피동일',
+      insured:    _ins
     };
   }).filter(function(c){ return c.insurer || c.product; });
 
@@ -2486,15 +2548,8 @@ function saveCustomer() {
     lastContact: _prevC ? (_prevC.lastContact || '') : '',
     contactLog:  (_prevC && Array.isArray(_prevC.contactLog)) ? _prevC.contactLog : [],
     registered:  _prevC && _prevC.registered ? _prevC.registered : new Date().toISOString().split('T')[0],
-    policyType:  document.querySelector('input[name="policyType"]:checked') ? document.querySelector('input[name="policyType"]:checked').value : '계피동일',
-    insured: document.getElementById('policyTypeDiff').checked ? {
-      name:     document.getElementById('r_insured_name').value.trim(),
-      relation: document.getElementById('r_insured_relation').value,
-      birth:    [document.getElementById('r_insured_birth_y').value, document.getElementById('r_insured_birth_m').value, document.getElementById('r_insured_birth_d').value].filter(Boolean).join('-'),
-      gender:   document.getElementById('r_insured_gender').value,
-      phone:    document.getElementById('r_insured_phone') ? _normalizePhone(document.getElementById('r_insured_phone').value.trim()) : '',
-      address:  document.getElementById('r_insured_address') ? document.getElementById('r_insured_address').value.trim() : '',
-    } : null,
+    policyType:  '계피동일',
+    insured: null,
     address: document.getElementById('r_address').value.trim(),
     lat:     document.getElementById('r_lat').value,
     lng:     document.getElementById('r_lng').value,
@@ -2511,62 +2566,64 @@ function saveCustomer() {
     DB.push(customer);
   }
 
-  // method A: auto-register insured as a customer and link as family (different policyholder)
-  var _insuredCust = null;
-  if (customer.policyType === '계피상이' && customer.insured && customer.insured.name) {
-    var ins = customer.insured;
-    var insId = customer.id + '_ins';
-    var relFwd = ins.relation || '가족';
-    var relRev = _reverseRelation(relFwd);
-    // find existing insured customer (re-save safe)
-    var insIdx = DB.findIndex(function(c){ return c.id === insId; });
-    var prevIns = insIdx>=0 ? DB[insIdx] : null;
-    _insuredCust = {
-      id: insId,
-      name: ins.name,
-      phone: ins.phone || '',
-      birth: ins.birth || '',
-      gender: ins.gender || '',
-      grade: prevIns ? (prevIns.grade||'일반') : '일반',
-      channel: prevIns ? (prevIns.channel||'') : (customer.channel||''),
-      referrer: '',
-      etcNote: prevIns ? (prevIns.etcNote||'') : '',
-      memo: prevIns ? (prevIns.memo||'') : (customer.name+' 고객의 피보험자(계피상이)'),
-      fp: customer.fp || '',
-      branch: customer.branch || '',
-      fpCode: customer.fpCode || _myFpCode(),
-      customerType: prevIns ? (prevIns.customerType||'관리') : '관리',
-      contracts: prevIns ? (prevIns.contracts||[]) : [],
-      family: prevIns && Array.isArray(prevIns.family) ? prevIns.family.slice() : [],
-      events: prevIns ? (prevIns.events||[]) : [],
-      lastContact: prevIns ? (prevIns.lastContact||'') : '',
-      contactLog: prevIns && Array.isArray(prevIns.contactLog) ? prevIns.contactLog : [],
-      registered: prevIns && prevIns.registered ? prevIns.registered : new Date().toISOString().split('T')[0],
-      policyType: '계피동일',
-      insured: null,
-      address: ins.address || '',
-      lat: prevIns ? (prevIns.lat||'') : '',
-      lng: prevIns ? (prevIns.lng||'') : '',
-      isInsuredOf: customer.id
-    };
-    // link family both ways
-    if(!Array.isArray(customer.family)) customer.family=[];
-    if(!customer.family.some(function(f){ return f.id===insId; })){
-      customer.family.push({ id: insId, name: ins.name, rel: relFwd });
-    }
-    if(!_insuredCust.family.some(function(f){ return f.id===customer.id; })){
-      _insuredCust.family.push({ id: customer.id, name: customer.name, rel: relRev });
-    }
-    if(insIdx>=0) DB[insIdx]=_insuredCust; else DB.push(_insuredCust);
-    // re-sync contractor record in DB (family was mutated after push)
+  // method A: 계약별 계피상이 피보험자를 각각 고객 자동등록 + 가족연결
+  var _insuredCustList = [];
+  if (Array.isArray(customer.contracts)) {
+    customer.contracts.forEach(function(ct, ci){
+      if (!(ct.policyType === '계피상이' && ct.insured && ct.insured.name)) return;
+      var ins = ct.insured;
+      var insId = customer.id + '_ins' + ci;
+      var relFwd = ins.relation || '가족';
+      var relRev = _reverseRelation(relFwd);
+      var insIdx = DB.findIndex(function(c){ return c.id === insId; });
+      var prevIns = insIdx>=0 ? DB[insIdx] : null;
+      var _insuredCust = {
+        id: insId,
+        name: ins.name,
+        phone: ins.phone || '',
+        birth: ins.birth || '',
+        gender: ins.gender || '',
+        grade: prevIns ? (prevIns.grade||'일반') : '일반',
+        channel: prevIns ? (prevIns.channel||'') : (customer.channel||''),
+        referrer: '',
+        etcNote: prevIns ? (prevIns.etcNote||'') : '',
+        memo: prevIns ? (prevIns.memo||'') : (customer.name+' 고객의 피보험자(계피상이·계약'+(ci+1)+')'),
+        fp: customer.fp || '',
+        branch: customer.branch || '',
+        fpCode: customer.fpCode || _myFpCode(),
+        customerType: prevIns ? (prevIns.customerType||'관리') : '관리',
+        contracts: prevIns ? (prevIns.contracts||[]) : [],
+        family: prevIns && Array.isArray(prevIns.family) ? prevIns.family.slice() : [],
+        events: prevIns ? (prevIns.events||[]) : [],
+        lastContact: prevIns ? (prevIns.lastContact||'') : '',
+        contactLog: prevIns && Array.isArray(prevIns.contactLog) ? prevIns.contactLog : [],
+        registered: prevIns && prevIns.registered ? prevIns.registered : new Date().toISOString().split('T')[0],
+        policyType: '계피동일',
+        insured: null,
+        address: ins.address || '',
+        lat: prevIns ? (prevIns.lat||'') : '',
+        lng: prevIns ? (prevIns.lng||'') : '',
+        isInsuredOf: customer.id
+      };
+      if(!Array.isArray(customer.family)) customer.family=[];
+      if(!customer.family.some(function(f){ return f.id===insId; })){
+        customer.family.push({ id: insId, name: ins.name, rel: relFwd });
+      }
+      if(!_insuredCust.family.some(function(f){ return f.id===customer.id; })){
+        _insuredCust.family.push({ id: customer.id, name: customer.name, rel: relRev });
+      }
+      if(insIdx>=0) DB[insIdx]=_insuredCust; else DB.push(_insuredCust);
+      _insuredCustList.push(_insuredCust);
+    });
+    // re-sync contractor record (family mutated)
     var cIdx2=DB.findIndex(function(c){ return c.id===customer.id; });
     if(cIdx2>=0) DB[cIdx2]=customer;
   }
 
   localStorage.setItem('unispace_customers', JSON.stringify(DB));
   gasSaveCustomer(customer);
-  if(_insuredCust && typeof gasSaveCustomer==='function') gasSaveCustomer(_insuredCust);
-  showToast('✅ ' + name + ' 고객님 등록 완료!' + (_insuredCust ? ' (피보험자 '+_insuredCust.name+' 자동 등록·가족 연결)' : ''));
+  _insuredCustList.forEach(function(_ic){ if(typeof gasSaveCustomer==='function') gasSaveCustomer(_ic); });
+  showToast('✅ ' + name + ' 고객님 등록 완료!' + (_insuredCustList.length ? ' (피보험자 '+_insuredCustList.length+'명 자동 등록·가족 연결)' : ''));
   updateCustomerStats();
   resetForm();
   updateHeaderCount();
@@ -2994,7 +3051,21 @@ function openDetail(id) {
       [['계약일',ct.date],['월보험료',ct.premium?Number(ct.premium).toLocaleString()+'원':'—'],['수금일',ct.payday],['납입방법',ct.paymethod]].forEach(function(r){
         body += '<div class="contract-detail-item"><div class="contract-detail-item-label">'+r[0]+'</div><div class="contract-detail-item-value">'+(r[1]||'—')+'</div></div>';
       });
-      body += '</div></div>';
+      body += '</div>';
+      if (ct.policyType === '계피상이' && ct.insured && ct.insured.name) {
+        var _in = ct.insured;
+        body += '<div style="margin-top:10px;padding:10px 12px;background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.2);border-radius:10px">';
+        body += '<div style="font-size:11px;font-weight:700;color:var(--gold2);margin-bottom:6px">👤 피보험자 (계피상이)</div>';
+        body += '<div style="font-size:13px;font-weight:600">'+_in.name+(_in.relation?' <span style="font-size:11px;color:var(--text2)">· '+_in.relation+'</span>':'')+'</div>';
+        var _det = [];
+        if(_in.birth) _det.push(_in.birth);
+        if(_in.gender) _det.push(_in.gender);
+        if(_in.phone) _det.push(_in.phone);
+        if(_det.length) body += '<div style="font-size:11px;color:var(--text2);margin-top:3px">'+_det.join(' · ')+'</div>';
+        if(_in.address) body += '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+_in.address+'</div>';
+        body += '</div>';
+      }
+      body += '</div>';
     });
     body += '</div>';
   }
@@ -3494,6 +3565,22 @@ function editCustomer() {
       // 보험사 커스텀 드롭다운 라벨 복원
       var insV = document.getElementById('insVal'+id);
       if (insV) insV.textContent = ct.insurer || '선택';
+      // 계피 구분 + 피보험자 복원
+      if (ct.policyType === '계피상이') {
+        var dEl = document.getElementById('c'+id+'_pt_diff');
+        if (dEl) { dEl.checked = true; toggleContractInsured(id); }
+        if (ct.insured) {
+          var inm = document.getElementById('c'+id+'_ins_name'); if(inm) inm.value = ct.insured.name || '';
+          var irl = document.getElementById('c'+id+'_ins_relation'); if(irl) irl.value = ct.insured.relation || '';
+          var ign = document.getElementById('c'+id+'_ins_gender'); if(ign) ign.value = ct.insured.gender || '';
+          var iph = document.getElementById('c'+id+'_ins_phone'); if(iph) iph.value = ct.insured.phone || '';
+          var iad = document.getElementById('c'+id+'_ins_address'); if(iad) iad.value = ct.insured.address || '';
+          var ibp = (ct.insured.birth||'').split('-');
+          var iby = document.getElementById('c'+id+'_ins_by'); if(iby) iby.value = ibp[0]||'';
+          var ibm = document.getElementById('c'+id+'_ins_bm'); if(ibm) ibm.value = ibp[1]||'';
+          var ibd = document.getElementById('c'+id+'_ins_bd'); if(ibd) ibd.value = ibp[2]||'';
+        }
+      }
       // 계약일 복원
       var dp = (ct.date||'').split('-');
       setTimeout(function(){
@@ -3765,6 +3852,35 @@ function toggleInsured() {
   if(sec) {
     sec.style.display = isDiff ? '' : 'none';
     sec.style.animation = isDiff ? 'fadeUp .3s ease both' : '';
+  }
+}
+
+// ── 계약 카드별 피보험자 토글/복사 ──
+function toggleContractInsured(id) {
+  var diffEl = document.getElementById('c'+id+'_pt_diff');
+  var sec = document.getElementById('c'+id+'_insuredSec');
+  if(!diffEl || !sec) return;
+  var isDiff = diffEl.checked;
+  sec.style.display = isDiff ? '' : 'none';
+  sec.style.animation = isDiff ? 'fadeUp .3s ease both' : '';
+}
+function copyContractInsured(id, field) {
+  if (field === 'phone') {
+    var src = document.getElementById('r_phone');
+    var dst = document.getElementById('c'+id+'_ins_phone');
+    if (src && dst) {
+      if (!src.value.trim()) { showToast('계약자 연락처를 먼저 입력해 주세요'); return; }
+      dst.value = src.value;
+      showToast('계약자 연락처를 가져왔어요');
+    }
+  } else if (field === 'address') {
+    var srcA = document.getElementById('r_address');
+    var dstA = document.getElementById('c'+id+'_ins_address');
+    if (srcA && dstA) {
+      if (!srcA.value.trim()) { showToast('계약자 주소를 먼저 입력해 주세요'); return; }
+      dstA.value = srcA.value;
+      showToast('계약자 주소를 가져왔어요');
+    }
   }
 }
 
