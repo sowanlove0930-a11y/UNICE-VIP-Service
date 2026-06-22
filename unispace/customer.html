@@ -993,6 +993,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
             </div>
           </div>
         </div>
+        <!-- 담당FP 지정 (대표·지점장 전용) -->
+        <div class="form-group full" id="assignFpGroup" style="display:none">
+          <div class="form-label">담당FP <span style="font-size:10px;color:var(--text3);font-weight:400">(미선택 시 본인)</span></div>
+          <select class="form-select" id="r_assignFp">
+            <option value="">— 본인(로그인 계정) —</option>
+          </select>
+        </div>
         <!-- 계피 구분 -->
         <div class="form-group full">
           <div class="form-label" style="display:flex;align-items:center;justify-content:space-between">
@@ -2061,7 +2068,37 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   document.getElementById('pageRegister').style.display = name === 'register' ? '' : 'none';
   document.getElementById('pageList').style.display     = name === 'list'     ? '' : 'none';
+  if (name === 'register') _setupAssignFp();
   if (name === 'list') renderCustomerList();
+}
+
+// 담당FP 지정 드롭다운: 대표·지점장 권한자에게만 표시, 명단으로 채움
+function _setupAssignFp(){
+  var grp=document.getElementById('assignFpGroup');
+  var sel=document.getElementById('r_assignFp');
+  if(!grp||!sel) return;
+  if(!_custIsAdmin()){ grp.style.display='none'; return; }
+  grp.style.display='';
+  if(!_fpDirectory || !_fpDirectory.length){
+    if(typeof loadFpDirectory==='function'){ loadFpDirectory(function(){ _setupAssignFp(); }); }
+  }
+  var scope=_custScope(); // 'all' | '알파' | '브라보'
+  var keep=sel.value;
+  var opts='<option value="">— 본인(로그인 계정) —</option>';
+  var list=(_fpDirectory||[]).slice();
+  list.sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||''),'ko'); });
+  for(var i=0;i<list.length;i++){
+    var f=list[i];
+    if(f.active===false) continue;
+    var bk=_custBranchKey(f.branch||'');
+    if(scope!=='all' && bk!==scope) continue; // 지점장은 본인 지점 FP만
+    var nm=String(f.name||'').trim(); if(!nm) continue;
+    var code=String(f.id||'').trim();
+    var brTag=bk?(' ('+bk+')'):'';
+    opts+='<option value="'+code+'" data-nm="'+nm.replace(/"/g,'&quot;')+'" data-br="'+(f.branch||'').replace(/"/g,'&quot;')+'">'+nm+brTag+'</option>';
+  }
+  sel.innerHTML=opts;
+  if(keep) sel.value=keep;
 }
 
 // ══ 계약 추가/삭제 ══════════════════════════════════
@@ -2408,6 +2445,25 @@ function saveCustomer() {
   var _prevC = null;
   if (editingId) { var _pi = DB.findIndex(function(c){ return c.id === editingId; }); if (_pi >= 0) _prevC = DB[_pi]; }
 
+  // 담당FP 최종 결정 (대표·지점장이 드롭다운에서 지정했으면 그 FP, 아니면 기존/본인)
+  var _assignSel = document.getElementById('r_assignFp');
+  var _pickedCode = (_custIsAdmin() && _assignSel) ? (_assignSel.value || '').trim() : '';
+  var _fpNameFinal, _fpCodeFinal, _branchFinal;
+  if (_pickedCode) {
+    // 선택된 FP 정보 (option의 data-nm / data-br, 없으면 디렉토리 역조회)
+    var _opt = _assignSel.options[_assignSel.selectedIndex];
+    var _pn = _opt ? (_opt.getAttribute('data-nm') || '') : '';
+    var _pb = _opt ? (_opt.getAttribute('data-br') || '') : '';
+    if (!_pn) _pn = _fpNameFromCode(_pickedCode);
+    _fpNameFinal = _pn;
+    _fpCodeFinal = _pickedCode.toUpperCase();
+    _branchFinal = _pb || (_prevC && _prevC.branch ? _prevC.branch : (fp.branch || ''));
+  } else {
+    _fpNameFinal = (_prevC && (_prevC.fpName || _prevC.fp)) ? (_prevC.fpName || _prevC.fp) : _myName;
+    _fpCodeFinal = (_prevC && _prevC.fpCode) ? _prevC.fpCode : _myFpCode();
+    _branchFinal = (_prevC && _prevC.branch) ? _prevC.branch : (fp.branch || '');
+  }
+
   var customer = {
     id:          editingId || ('C' + Date.now()),
     name:        name,
@@ -2419,10 +2475,10 @@ function saveCustomer() {
     referrer:    document.getElementById('r_referrer').value,
     etcNote:     document.getElementById('r_etc').value,
     memo:        document.getElementById('r_memo').value,
-    fp:          (_prevC && _prevC.fp) ? _prevC.fp : _myName,
-    fpName:      (_prevC && (_prevC.fpName||_prevC.fp)) ? (_prevC.fpName||_prevC.fp) : _myName,
-    branch:      (_prevC && _prevC.branch) ? _prevC.branch : (fp.branch || ''),
-    fpCode:      (_prevC && _prevC.fpCode) ? _prevC.fpCode : _myFpCode(),
+    fp:          _fpNameFinal,
+    fpName:      _fpNameFinal,
+    branch:      _branchFinal,
+    fpCode:      _fpCodeFinal,
     customerType: selectedCustomerType,
     contracts:   contracts,
     family:      tempFamily,
@@ -3477,6 +3533,18 @@ function editCustomer() {
   // 등록 탭으로 이동
   var regBtn = document.getElementById('regTabBtn');
   switchTab('register', regBtn);
+  // 권한자: 기존 담당FP를 드롭다운에 미리 선택
+  var _afSel = document.getElementById('r_assignFp');
+  if (_afSel && _custIsAdmin()) {
+    var _curCode = String(c.fpCode || '').trim().toUpperCase();
+    if (_curCode) {
+      var _found = false;
+      for (var _k = 0; _k < _afSel.options.length; _k++) {
+        if (String(_afSel.options[_k].value || '').toUpperCase() === _curCode) { _afSel.selectedIndex = _k; _found = true; break; }
+      }
+      if (!_found) { _afSel.value = ''; }
+    } else { _afSel.value = ''; }
+  }
   // 수정 모드 UI 변경
   document.getElementById('submitBtn').innerHTML = '✏️ &nbsp;고객 정보 수정 완료';
   var regTab = document.getElementById('regTabBtn');
