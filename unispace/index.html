@@ -2423,10 +2423,10 @@ window.UNISPACE_FCM = {
         <button type="button" class="rc2-cal-nav" onclick="rc2CalMove(1)">›</button>
       </div>
       <div class="rc2-cal-legend" style="display:flex;align-items:center;gap:10px">
-        <span class="lg"><span style="display:inline-block;background:#1E7A50;color:#fff;font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;margin-right:3px">알</span>알파</span>
-        <span class="lg"><span style="display:inline-block;background:#5A3FB0;color:#fff;font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;margin-right:3px">브</span>브라보</span>
+        <span class="lg"><span class="rc2-cal-dot" style="background:#7B52D0"></span>패널</span>
+        <span class="lg"><span class="rc2-cal-dot" style="background:#378ADD"></span>인터뷰</span>
         <span class="lg"><span class="rc2-cal-dot" style="background:var(--alpha)"></span>입과</span>
-        <button type="button" id="rc2JoinEvtBtn" onclick="rc2OpenJoinEvt()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:var(--alpha);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
+        <button type="button" onclick="rc2OpenJoinEvt()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:var(--alpha);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
       </div>
       <div class="rc2-cal-dow">
         <div style="color:#D85A30">일</div><div style="color:var(--text3)">월</div><div style="color:var(--text3)">화</div><div style="color:var(--text3)">수</div><div style="color:var(--text3)">목</div><div style="color:var(--text3)">금</div><div style="color:#378ADD">토</div>
@@ -3006,18 +3006,17 @@ window.UNISPACE_FCM = {
               <button type="button" class="wv-toggle-btn" id="wvMonthBtn" onclick="event.stopPropagation();setActViewMode('month')">월간</button>
             </div>
             <button type="button" id="weekendToggleBtn" class="weekend-toggle" onclick="event.stopPropagation();toggleWeekend()"><span id="weekendToggleIcon">▢</span> 주말</button>
-            <button type="button" id="actRefreshBtn" onclick="event.stopPropagation();refreshActivity()" style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer"><span id="actRefreshIcon" style="display:inline-block">🔄</span> <span id="actRefreshTxt">새로고침</span></button>
             <span class="accordion-chevron" id="chev2">▼</span>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--bdr)" id="weekFilterRow">
-          <span style="font-size:10px;color:var(--text3);font-weight:700">지점</span>
-          <div style="display:flex;gap:6px" id="weekBranchFilter">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;padding-top:8px;border-top:1px solid var(--bdr)" id="weekFilterRow">
+          <span style="font-size:10px;color:var(--text3);font-weight:700;flex-shrink:0">지점</span>
+          <div style="display:flex;gap:6px;flex-shrink:0" id="weekBranchFilter">
             <span class="week-branch-chip active" onclick="event.stopPropagation();setWeekBranch('all',this)">전체</span>
             <span class="week-branch-chip" onclick="event.stopPropagation();setWeekBranch('알파지점',this)">알파</span>
             <span class="week-branch-chip" onclick="event.stopPropagation();setWeekBranch('브라보지점',this)">브라보</span>
           </div>
-          <div style="margin-left:auto;display:flex;gap:6px">
+          <div style="margin-left:auto;display:flex;gap:6px;flex-shrink:0">
             <button type="button" class="week-nav-btn" onclick="event.stopPropagation();moveActPeriod(-1)">‹</button>
             <button type="button" class="week-nav-btn" onclick="event.stopPropagation();moveActPeriod(1)">›</button>
           </div>
@@ -3741,37 +3740,6 @@ function loadActivitiesFromGas(cb){
     }
     if(cb) cb();
   }).catch(function(){ if(cb) cb(); });
-}
-
-// 활동현황 새로고침: GAS에서 활동기록 다시 불러와 재렌더
-function refreshActivity(){
-  var btn=document.getElementById('actRefreshBtn');
-  var icon=document.getElementById('actRefreshIcon');
-  var txt=document.getElementById('actRefreshTxt');
-  if(btn) btn.disabled=true;
-  if(icon) icon.classList.add('uni-spinning');
-  if(txt) txt.textContent='새로고침 중';
-  function done(){
-    if(typeof renderActView==='function') renderActView();
-    if(icon){ icon.classList.remove('uni-spinning'); icon.textContent='✓'; }
-    if(txt) txt.textContent='완료';
-    setTimeout(function(){
-      if(icon) icon.textContent='🔄';
-      if(txt) txt.textContent='새로고침';
-      if(btn) btn.disabled=false;
-    }, 1200);
-  }
-  // 플래그 리셋 후 plan + activity 모두 GAS에서 다시 로드
-  _actLoadedFromGas=false;
-  _loadedPlanKeys={};
-  var _called=false;
-  function fin(){ if(_called) return; _called=true; done(); }
-  try{
-    loadPlansFromGas(null, function(){
-      loadActivitiesFromGas(function(){ fin(); });
-    });
-  }catch(e){ fin(); }
-  setTimeout(function(){ fin(); }, 3000);
 }
 
 // ── FP 추가/삭제 (GAS 연동) ──
@@ -6490,15 +6458,6 @@ function _schedIsAdmin(){
   var r=currentUser.role||'', tt=currentUser.title||'';
   return r==='대표'||r==='지점장'||tt==='지점장'||tt==='교육지점장';
 }
-// 입과일정 추가/수정 권한: 대표·지점장·교육지점장만 (매니저·FP·센터장 제외)
-function _canEditJoinEvt(){
-  if(!currentUser) return false;
-  var r=currentUser.role||'', tt=currentUser.title||'', id=currentUser.id||'', br=currentUser.branch||'';
-  if(r==='대표'||r==='지점장') return true;
-  if(tt==='지점장'||tt==='교육지점장') return true;
-  if(id==='H2503162'||br.indexOf('교육')>=0) return true;
-  return false;
-}
 function _schedYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 // ── 시책 조회/등록 ─────────────────────────────────
 var _sichaekTab = 'active';
@@ -9142,13 +9101,6 @@ function refreshAttendance() {
     }, 1200);
   }, 700);
 }
-// 출결 전체 지점 조회 권한: 대표·지점장·교육지점장·매니저 = 전체 / FP·센터장 = 본인 지점
-function _attCanSeeAll(){
-  var u = currentUser; if(!u) return false;
-  return u.role==='대표' || u.role==='지점장' || u.role==='교육지점장'
-      || u.level==='manager' || u.level==='admin'
-      || (u.title||'').indexOf('매니저')>=0;
-}
 function renderAttToday() {
   var today = getTodayStr();
   var n = new Date(), days = ['일','월','화','수','목','금','토'];
@@ -9168,8 +9120,8 @@ function renderAttToday() {
       } catch(e) {}
     }
     var roster = (attRes && attRes.ok && attRes.roster) ? attRes.roster : [];
-    // admin/branch-head/교육지점장/매니저 = 전체 / FP·센터장 = 본인 지점
-    var _attSeeAll = _attCanSeeAll();
+    // admin/branch-head = all branches, others = own branch only
+    var _attSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
     var _attNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
     var _attMyBr = (currentUser && currentUser.branch) ? _attNb(currentUser.branch) : '';
     var FPS = [];
@@ -9237,7 +9189,7 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
   if(st3s) st3s.textContent = '알파 ' + na + '명 · 브라보 ' + nb + '명';
 
   // 사전보고 칸: 오늘 사전보고한 사람 전원 (증빙 상태 포함)
-  var _prSeeAll = _attCanSeeAll();
+  var _prSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
   var _prNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
   var _prMyBr = (currentUser && currentUser.branch) ? _prNb(currentUser.branch) : '';
   var preList = [];
@@ -9547,7 +9499,6 @@ function rc2Esc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;'
 
 // ── 입과일정(달력 커스텀 일정) ──
 function rc2OpenJoinEvt(id){
-  if(!_canEditJoinEvt()){ return; }
   document.getElementById('rc2JoinEvtId').value = id || '';
   document.getElementById('rc2JoinEvtDelBtn').style.display = id ? '' : 'none';
   document.getElementById('rc2JoinEvtTitle').textContent = id ? '입과일정 수정' : '입과일정 추가';
@@ -9819,9 +9770,6 @@ function rc2DeleteCand() {
 // ===== 통합 달력 =====
 function rc2CalMove(dir){ rc2.calOffset += dir; rc2.calSel=''; rc2RenderCal(); }
 function rc2RenderCal() {
-  // 입과일정 버튼: 대표·지점장·교육지점장만 (매니저·FP·센터장 숨김)
-  var _jb=document.getElementById('rc2JoinEvtBtn');
-  if(_jb){ _jb.style.display = _canEditJoinEvt() ? '' : 'none'; }
   var base = new Date();
   base.setDate(1);
   base.setMonth(base.getMonth()+rc2.calOffset);
@@ -9878,17 +9826,9 @@ function rc2RenderCal() {
     var evHtml='';
     for(var ev=0; ev<evs.length && ev<3; ev++){
       var E=evs[ev];
-      var _isAl = (E.branch==='alpha' || String(E.branch||'').indexOf('알파')>=0);
-      var _brBg = _isAl ? 'rgba(46,158,107,.15)' : 'rgba(123,82,208,.15)';
-      var _brTx = _isAl ? '#1E7A50' : '#5A3FB0';
-      var _brBd = _isAl ? '#1E7A50' : '#5A3FB0';
-      var _brLb = _isAl ? '알' : '브';
-      var _tyTx = E.type==='패널' ? '·패널' : '·인터뷰';
-      var _tlabel = E.time ? E.time+' ' : '';
-      evHtml += '<div class="rc2-cal-ev" style="background:'+_brBg+';color:'+_brTx+';display:flex;align-items:center;gap:3px">'+
-        '<span style="background:'+_brBd+';color:#fff;font-size:8px;font-weight:700;padding:0 3px;border-radius:3px;flex-shrink:0">'+_brLb+'</span>'+
-        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_tlabel+rc2Esc(E.name)+' <span style="opacity:.75">'+_tyTx+'</span></span>'+
-      '</div>';
+      var bg = E.type==='패널' ? 'background:rgba(123,82,208,.18);color:var(--bravo-deep)' : 'background:rgba(55,138,221,.18);color:#378ADD';
+      var tlabel = E.time ? E.time+' ' : '';
+      evHtml += '<div class="rc2-cal-ev" style="'+bg+'">'+tlabel+rc2Esc(E.name)+'</div>';
     }
     // 입과일정(관리자 지정): 해당 날짜에 초록색으로 표기
     var joinHtml='';
@@ -10001,13 +9941,6 @@ function moveActPeriod(dir) {
 }
 
 function _doRenderActView() {
-  // 지점 필터 칩: 전체 조회 권한자(대표·지점장·교육지점장·매니저)에게만 노출
-  var _wfr=document.getElementById('weekFilterRow');
-  if(_wfr){
-    var _seeAll=(typeof _attCanSeeAll==='function') ? _attCanSeeAll()
-      : (currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'));
-    _wfr.style.display = _seeAll ? '' : 'none';
-  }
   if (actViewMode == 'month') renderMonthCal();
   else renderWeekActTable();
 }
@@ -10023,9 +9956,8 @@ function renderActView() {
 
 function actFilterMatch(a) {
   if (weekBranchFilter !== 'all' && a.branch !== weekBranchFilter) return false;
-  // 대표·지점장·교육지점장·매니저 = 전체 / FP·센터장 = 자기 지점만
-  var seeAll = (typeof _attCanSeeAll==='function') ? _attCanSeeAll()
-    : (currentUser && (currentUser.role === '대표' || currentUser.role === '지점장'));
+  // 대표/지점장 = 전체, 그 외 = 자기 지점만 (지점명 정규화 비교)
+  var seeAll = currentUser && (currentUser.role === '대표' || currentUser.role === '지점장');
   if (!seeAll && currentUser && currentUser.branch) {
     var nb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
     if (nb(a.branch) !== nb(currentUser.branch)) return false;
@@ -10044,13 +9976,14 @@ function renderMonthCal() {
   try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
   var cntByDate = {};
   var monPrefix = y+'-'+('0'+(m+1)).slice(-2);
-  var monPt = 0, monCk = 0;
+  var monPt = 0, monCk = 0, monProg = 0, monDone = 0;
   Object.values(db).forEach(function(a){
     if (!a.date || !actFilterMatch(a)) return;
     cntByDate[a.date] = (cntByDate[a.date]||0) + 1;
     if (a.date.indexOf(monPrefix) === 0) {
       monPt += actPtAmount(a);
       monCk += actCkAmount(a);
+      if(a.status==='완료') monDone++; else monProg++;
     }
   });
 
@@ -10085,12 +10018,13 @@ function renderMonthCal() {
   if (sumEl) {
     var label = weekBranchFilter==='알파지점'?'알파':weekBranchFilter==='브라보지점'?'브라보':(currentUser&&currentUser.role==='FP'?'내':'전체');
     var s = '';
+    s += '<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(55,138,221,.1);color:#2563EB;font-weight:700">● 진행 '+monProg+'</span>';
+    s += '<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(31,146,104,.1);color:#1F9268;font-weight:700">● 완료 '+monDone+'</span>';
     if (monPt) s += '<span class="wk-top-pt">'+label+' PT '+monPt.toLocaleString()+'원</span>';
     if (monCk) s += '<span class="wk-top-ck">'+label+' 청약 '+monCk.toLocaleString()+'원</span>';
     if (monPt||monCk) s += '<span style="font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--bdr);color:var(--text2);font-weight:700">합계 '+(monPt+monCk).toLocaleString()+'원</span>';
     sumEl.innerHTML = s;
-    if (s) { sumEl.style.paddingTop='10px'; sumEl.style.borderTop='1px solid var(--bdr)'; }
-    else { sumEl.style.paddingTop='0'; sumEl.style.borderTop='none'; }
+    sumEl.style.paddingTop='10px'; sumEl.style.borderTop='1px solid var(--bdr)';
   }
   if (selectedDayStr && selectedDayStr.indexOf(y+'-'+('0'+(m+1)).slice(-2)) === 0) renderDayPanel(selectedDayStr);
   else { var p=document.getElementById('mcalDayPanel'); if(p) p.innerHTML=''; }
@@ -10174,10 +10108,6 @@ function toggleWeekend(){
   renderActView();
 }
 
-function _wonFmt(v){
-  var n=parseInt(String(v||'').replace(/[^0-9]/g,''))||0;
-  return n.toLocaleString();
-}
 function _sumProducts(arr){
   var t=0;
   if(Array.isArray(arr)) arr.forEach(function(p){ t+=parseInt((p.amount||'').replace(/[^0-9]/g,''))||0; });
@@ -10187,14 +10117,14 @@ function _prodListText(arr){
   if(!Array.isArray(arr)||!arr.length) return '';
   var parts=arr.map(function(p){
     var c=(p.company||'').trim(), a=(p.amount||'').trim();
-    if(c&&a) return c+' '+_wonFmt(a)+'원';
+    if(c&&a) return c+' '+a+'만';
     if(c) return c;
-    if(a) return _wonFmt(a)+'원';
+    if(a) return a+'만';
     return '';
   }).filter(Boolean);
   if(!parts.length) return '';
   var txt=parts.join(' · ');
-  if(parts.length>1) txt += ' (합 '+_sumProducts(arr).toLocaleString()+'원)';
+  if(parts.length>1) txt += ' (합 '+_sumProducts(arr)+'만)';
   return txt;
 }
 function _apChips(tags){
@@ -10283,7 +10213,7 @@ function nextPlanText(a) {
     var ntags = Array.isArray(a.nextTags)?a.nextTags:[];
     if (ntags.length) t += ' ('+ntags.map(function(x){return x.replace('예정','');}).join('·')+')';
     var nsum = (Array.isArray(a.nextProducts)&&a.nextProducts.length) ? _sumProducts(a.nextProducts) : (parseInt((a.nextAmount||'').replace(/[^0-9]/g,''))||0);
-    if (nsum) t += ' '+nsum.toLocaleString()+'원';
+    if (nsum) t += ' '+nsum+'만';
     if (a.nextDate) t += ' '+a.nextDate.slice(5).replace('-','/');
   }
   if (!t) return '';
@@ -10503,18 +10433,9 @@ function renderWeekActTable() {
           } else if(a.helper) {
             supportTag = ' <span style="opacity:.8">(헬퍼 '+a.helper+')</span>';
           }
-          var _pt=actPtAmount(a), _ck=actCkAmount(a);
-          var amtLine='';
-          if(_pt||_ck){
-            var _badges='';
-            if(_pt) _badges+='<span style="display:inline-block;background:rgba(201,168,76,.18);color:#9A7B1E;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:8px;margin-right:3px">PT '+_pt.toLocaleString()+'원</span>';
-            if(_ck) _badges+='<span style="display:inline-block;background:rgba(22,163,74,.16);color:#15803D;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:8px">청약 '+_ck.toLocaleString()+'원</span>';
-            amtLine='<div style="margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_badges+'</div>';
-          }
           html += '<div class="week-act-chip '+cls+(_isNewToday(a)?' is-new-today':'')+'" data-aid="'+a.id+'">' +
             '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+icon+' '+a.customerName+' <span style="opacity:.65;font-size:9px">'+typeLabel+'</span>'+supportTag+resultBadgeHtml(a)+newBadgeHtml(a)+'</div>'+
             subLine+
-            amtLine+
             nextPlanText(a)+
           '</div>';
         });
@@ -10552,45 +10473,23 @@ function renderWeekActTable() {
   html += '</tr></tfoot>';
 
   // 주간 합산 뱃지
-  var weekPt=0, weekCk=0;
+  var weekPt=0, weekCk=0, weekProg=0, weekDone=0;
   allActs.forEach(function(a){
     weekPt+=actPtAmount(a);
     weekCk+=actCkAmount(a);
+    if(a.status==='완료') weekDone++; else weekProg++;
   });
   var sumEl = document.getElementById('weekSumBadges');
   if(sumEl){
     var s='';
-    // ── 지점별 진행중/완료 건수 (status 기준) ──
-    var _stNb=function(b){ var x=String(b||''); if(x.indexOf('알파')>=0) return '알파'; if(x.indexOf('브라보')>=0) return '브라보'; return ''; };
-    var _cnt={ '알파':{ing:0,done:0}, '브라보':{ing:0,done:0}};
-    allActs.forEach(function(a){
-      if(a._isSupport) return;
-      var bk=_stNb(a.branch); if(!bk||!_cnt[bk]) return;
-      if(a.status==='완료') _cnt[bk].done++; else _cnt[bk].ing++;
-    });
-    function _brStat(name, c, hex, soft){
-      if(!c.ing && !c.done) return '';
-      return '<span style="font-size:13px;display:inline-flex;align-items:center;gap:6px">'+
-        '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:'+soft+';color:'+hex+'">'+name+'</span>'+
-        '<span style="color:var(--text)">진행 '+c.ing+' · 완료 '+c.done+'</span></span>';
-    }
-    var _statParts=[];
-    var _showAl=(sumBranch==='all'||sumBranch==='알파지점');
-    var _showBr=(sumBranch==='all'||sumBranch==='브라보지점');
-    if(_showAl){ var _a=_brStat('알파', _cnt['알파'], '#1E7A50', 'rgba(46,158,107,.13)'); if(_a) _statParts.push(_a); }
-    if(_showBr){ var _b=_brStat('브라보', _cnt['브라보'], '#5A3FB0', 'rgba(123,82,208,.14)'); if(_b) _statParts.push(_b); }
-    var _statRow='';
-    if(_statParts.length){
-      _statRow='<div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:8px 12px;background:var(--bg2);border-radius:10px;width:100%;box-sizing:border-box">'+
-        _statParts.join('<span style="width:1px;height:13px;background:var(--bdr2)"></span>')+'</div>';
-    }
     var label=sumBranch==='알파지점'?'알파':sumBranch==='브라보지점'?'브라보':(currentUser&&currentUser.role==='FP'?'내':'전체');
+    s+='<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(55,138,221,.1);color:#2563EB;font-weight:700">● 진행 '+weekProg+'</span>';
+    s+='<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(31,146,104,.1);color:#1F9268;font-weight:700">● 완료 '+weekDone+'</span>';
     if(weekPt) s+='<span class="wk-top-pt">'+label+' PT '+weekPt.toLocaleString()+'원</span>';
     if(weekCk) s+='<span class="wk-top-ck">'+label+' 청약 '+weekCk.toLocaleString()+'원</span>';
     if(weekPt||weekCk) s+='<span style="font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--bdr);color:var(--text2);font-weight:700">합계 '+(weekPt+weekCk).toLocaleString()+'원</span>';
-    sumEl.innerHTML=_statRow+s;
-    if(_statRow||s){ sumEl.style.paddingTop='10px'; sumEl.style.borderTop='1px solid var(--bdr)'; }
-    else { sumEl.style.paddingTop='0'; sumEl.style.borderTop='none'; }
+    sumEl.innerHTML=s;
+    sumEl.style.paddingTop='10px'; sumEl.style.borderTop='1px solid var(--bdr)';
   }
 
   html += '</tbody>';
@@ -10776,7 +10675,7 @@ function renderEditProds(){
     var delBtn = i===0 ? '<span style="width:18px"></span>' : '<span onclick="removeEditProd('+i+')" style="width:18px;text-align:center;color:#E24B4A;cursor:pointer;font-size:14px;flex-shrink:0">x</span>';
     h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">'+
       '<input type="text" placeholder="보험사/상품" value="'+(p.company||'').replace(/"/g,'&quot;')+'" oninput="updateEditProd('+i+',\'company\',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
-      '<input type="text" placeholder="금액(원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateEditProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
+      '<input type="text" placeholder="금액(만원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateEditProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
       delBtn+
     '</div>';
   });
@@ -10794,7 +10693,7 @@ function updateEditProdSum(){
   var isPt=_editTags.indexOf('PT')>=0, isCk=_editTags.indexOf('청약')>=0;
   if(cnt>0 && (isPt||isCk)){
     var lbl=(isPt&&isCk)?'PT+청약':(isPt?'PT':'청약');
-    el.textContent='합계: '+lbl+' '+total.toLocaleString()+'원 ('+cnt+'건)';
+    el.textContent='합계: '+lbl+' '+total+'만 ('+cnt+'건)';
     el.style.display='';
   } else { el.style.display='none'; }
 }
@@ -11127,7 +11026,7 @@ function renderResNextProds(){
     var delBtn = i===0 ? '<span style="width:18px"></span>' : '<span onclick="removeResNextProd('+i+')" style="width:18px;text-align:center;color:#E24B4A;cursor:pointer;font-size:14px;flex-shrink:0">x</span>';
     h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">'+
       '<input type="text" placeholder="보험사/상품" value="'+(p.company||'').replace(/"/g,'&quot;')+'" oninput="updateResNextProd('+i+',\'company\',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
-      '<input type="text" placeholder="금액(원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateResNextProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
+      '<input type="text" placeholder="금액(만원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateResNextProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
       delBtn+
     '</div>';
   });
@@ -11145,7 +11044,7 @@ function updateResNextProdSum(){
   var isPt = _resNextTags.indexOf('PT예정')>=0, isCk = _resNextTags.indexOf('청약예정')>=0;
   if(cnt>0 && (isPt||isCk)){
     var lbl = (isPt&&isCk)?'PT+청약':(isPt?'PT':'청약');
-    el.textContent='합계: '+lbl+' '+total.toLocaleString()+'원 ('+cnt+'건)';
+    el.textContent='합계: '+lbl+' '+total+'만 ('+cnt+'건)';
     el.style.display='';
   } else { el.style.display='none'; }
 }
@@ -11158,7 +11057,7 @@ function renderResProds(){
     var delBtn = i===0 ? '<span style="width:18px"></span>' : '<span onclick="removeResProd('+i+')" style="width:18px;text-align:center;color:#E24B4A;cursor:pointer;font-size:14px;flex-shrink:0">x</span>';
     h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">'+
       '<input type="text" placeholder="보험사/상품" value="'+(p.company||'').replace(/"/g,'&quot;')+'" oninput="updateResProd('+i+',\'company\',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
-      '<input type="text" placeholder="금액(원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateResProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
+      '<input type="text" placeholder="금액(만원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateResProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
       delBtn+
     '</div>';
   });
@@ -11188,7 +11087,7 @@ function updateResProdSum(){
   var isPt = _resTags.indexOf('PT진행')>=0, isCk = _resTags.indexOf('청약진행')>=0;
   if(cnt>0 && (isPt||isCk)){
     var lbl = (isPt&&isCk)?'PT+청약':(isPt?'PT':'청약');
-    el.textContent='합계: '+lbl+' '+total.toLocaleString()+'원 ('+cnt+'건)';
+    el.textContent='합계: '+lbl+' '+total+'만 ('+cnt+'건)';
     el.style.display='';
   } else { el.style.display='none'; }
 }
@@ -11634,7 +11533,7 @@ function renderQaProds(){
     var delBtn = i===0 ? '<span style="width:18px"></span>' : '<span onclick="removeQaProd('+i+')" style="width:18px;text-align:center;color:#E24B4A;cursor:pointer;font-size:14px;flex-shrink:0">x</span>';
     h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">'+
       '<input type="text" class="quick-input" placeholder="보험사" value="'+(p.company||'').replace(/"/g,'&quot;')+'" oninput="updateQaProd('+i+',\'company\',this.value)" style="flex:1;min-width:0">'+
-      '<input type="text" class="quick-input" placeholder="금액(원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateQaProd('+i+',\'amount\',this.value)" style="width:90px;flex-shrink:0">'+
+      '<input type="text" class="quick-input" placeholder="금액(만원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateQaProd('+i+',\'amount\',this.value)" style="width:90px;flex-shrink:0">'+
       delBtn+
     '</div>';
   });
@@ -11652,7 +11551,7 @@ function updateQaProdSum(){
   var isPt=_qaTags.indexOf('PT')>=0, isCk=_qaTags.indexOf('청약')>=0;
   if(cnt>0 && (isPt||isCk)){
     var lbl=(isPt&&isCk)?'PT+청약':(isPt?'PT':'청약');
-    el.textContent='합계: '+lbl+' '+total.toLocaleString()+'원 ('+cnt+'건)';
+    el.textContent='합계: '+lbl+' '+total+'만 ('+cnt+'건)';
     el.style.display='';
   } else { el.style.display='none'; }
 }
@@ -12370,9 +12269,8 @@ function _bojangShowsTotal(u) {
   if (!u) return false;
   if (u.id === 'ktk01') return true; // 대표
   if (u.role === '대표' || u.role === '지점장') return true;
-  if (u.level === 'admin' || u.level === 'manager') return true; // 관리자·매니저
+  if (u.level === 'admin') return true;
   if ((u.title || '') === '지점장') return true; // 지점장(교육지점장 포함)
-  if ((u.title || '').indexOf('매니저') >= 0) return true; // 매니저
   if (u.id === 'H2503162') return true; // 교육지점장 최성경 failsafe
   if (u.branch && u.branch.indexOf('교육') >= 0) return true; // 교육 소속
   return false;
