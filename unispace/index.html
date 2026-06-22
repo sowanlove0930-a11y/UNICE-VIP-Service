@@ -2378,12 +2378,12 @@ window.UNISPACE_FCM = {
 
     <!-- 명단 / 추진일정 전환 -->
     <div class="rc2-viewtab-bar">
-      <button type="button" class="rc2-viewtab active" id="rc2VtList" onclick="rc2SwitchView('list',this)">📋 명단</button>
+      <button type="button" class="rc2-viewtab active" id="rc2VtList" onclick="rc2SwitchView('list',this)">📋 추진후보자</button>
       <button type="button" class="rc2-viewtab" id="rc2VtCal" onclick="rc2SwitchView('cal',this)">📅 추진일정</button>
     </div>
 
     <!-- 목표 설정 (명단/추진일정 바로 아래, 공통) -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:10px">
+    <div id="rc2GoalRow" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:10px">
       <span style="font-size:12px;color:var(--text2);flex:1" id="rc2GoalBranchLbl">알파지점 목표</span>
       <input type="number" class="rc2-text" id="rc2GoalInput" min="0" max="99" style="width:64px;text-align:center;padding:6px" oninput="rc2OnGoalInput()">
       <span style="font-size:12px;color:var(--text2)">명</span>
@@ -2913,7 +2913,13 @@ window.UNISPACE_FCM = {
       <div class="stat-unit">명</div>
     </div>
 
-    <!-- 3번: 출결현황 (대표/지점장) / 내 출결 (FP) -->
+    <!-- 3번: 오늘 챙길 고객 (공통) -->
+    <div class="stat s-green" id="stat3-alarm" style="display:none;cursor:pointer" onclick="location.href='today_alarm.html'">
+      <div class="stat-lbl">오늘 챙길 고객</div>
+      <div class="stat-val" id="st3-alarm">—</div>
+      <div class="stat-unit">명</div>
+    </div>
+    <!-- (구) 출결 카드 - 미사용, 숨김 유지 -->
     <div class="stat s-green" id="stat3-admin" style="display:none">
       <div class="stat-lbl">오늘 출결 현황</div>
       <div class="stat-val" id="st3-total">—</div>
@@ -2925,12 +2931,13 @@ window.UNISPACE_FCM = {
       <div class="stat-unit" id="st3-fp-sub">지각 0 · 미출석 0</div>
     </div>
 
-    <!-- 4번: 리크루팅 (대표/지점장) / 오늘 챙길 고객 (FP) -->
+    <!-- 4번: 리크루팅 (공통) -->
     <div class="stat s-purple" id="stat4-recruit" style="display:none;cursor:pointer" onclick="openRecruitModal()">
-      <div class="stat-lbl"><span id="st4-recruit-lbl">이번달 리크루팅</span> <span style="font-size:10px;color:var(--text3)">✏️ 클릭 입력</span></div>
+      <div class="stat-lbl"><span id="st4-recruit-lbl">이번달 리크루팅</span></div>
       <div class="stat-val" id="st4-recruit">—</div>
       <div class="stat-unit" id="st4-recruit-sub">입과확보 / 목표</div>
     </div>
+    <!-- (구) 오늘챙길 카드 - 미사용, 숨김 유지 -->
     <div class="stat s-purple" id="stat4-alarm" style="display:none">
       <div class="stat-lbl">오늘 챙길 고객</div>
       <div class="stat-val" id="st4">—</div>
@@ -3009,6 +3016,7 @@ window.UNISPACE_FCM = {
               <button type="button" class="wv-toggle-btn" id="wvMonthBtn" onclick="event.stopPropagation();setActViewMode('month')">월간</button>
             </div>
             <button type="button" id="weekendToggleBtn" class="weekend-toggle" onclick="event.stopPropagation();toggleWeekend()"><span id="weekendToggleIcon">▢</span> 주말</button>
+            <button type="button" id="actRefreshBtn" onclick="event.stopPropagation();refreshActivity()" style="background:rgba(255,255,255,.05);border:1px solid var(--bdr);border-radius:8px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer"><span id="actRefreshIcon" style="display:inline-block">🔄</span> <span id="actRefreshTxt">새로고침</span></button>
             <span class="accordion-chevron" id="chev2">▼</span>
           </div>
         </div>
@@ -3760,6 +3768,36 @@ function loadActivitiesFromGas(cb){
   }).catch(function(){ if(cb) cb(); });
 }
 
+// 활동현황 새로고침: GAS에서 활동기록·계획 다시 불러와 재렌더
+function refreshActivity(){
+  var btn=document.getElementById('actRefreshBtn');
+  var icon=document.getElementById('actRefreshIcon');
+  var txt=document.getElementById('actRefreshTxt');
+  if(btn) btn.disabled=true;
+  if(icon) icon.classList.add('uni-spinning');
+  if(txt) txt.textContent='새로고침 중';
+  function done(){
+    if(typeof renderActView==='function') renderActView();
+    if(icon){ icon.classList.remove('uni-spinning'); icon.textContent='✓'; }
+    if(txt) txt.textContent='완료';
+    setTimeout(function(){
+      if(icon) icon.textContent='🔄';
+      if(txt) txt.textContent='새로고침';
+      if(btn) btn.disabled=false;
+    }, 1200);
+  }
+  _actLoadedFromGas=false;
+  _loadedPlanKeys={};
+  var _called=false;
+  function fin(){ if(_called) return; _called=true; done(); }
+  try{
+    loadPlansFromGas(null, function(){
+      loadActivitiesFromGas(function(){ fin(); });
+    });
+  }catch(e){ fin(); }
+  setTimeout(function(){ fin(); }, 3000);
+}
+
 // ── FP 추가/삭제 (GAS 연동) ──
 function openFpAddForm(){
   ['fpAddId','fpAddName','fpAddPhone','fpAddEmail'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
@@ -4349,12 +4387,16 @@ function showDashboard() {
   if(s2a) s2a.style.display = isAdmin ? '' : 'none';
   if(s2f) s2f.style.display = isAdmin ? 'none' : '';
 
-  // 3번 (출결): 매니저도 전체 출결현황으로
-  var _attAdmin = isAdmin || _isMgrTitleUser(currentUser);
+  // 3번: 오늘 챙길 고객 (FP·매니저·지점장 공통)
+  var s3alarm = document.getElementById('stat3-alarm');
   var s3a = document.getElementById('stat3-admin');
   var s3f = document.getElementById('stat3-fp');
-  if(s3a) s3a.style.display = _attAdmin ? '' : 'none';
-  if(s3f) s3f.style.display = _attAdmin ? 'none' : '';
+  if(s3alarm) s3alarm.style.display = '';
+  if(s3a) s3a.style.display = 'none';
+  if(s3f) s3f.style.display = 'none';
+  // 오늘 챙길 고객 수 채우기 (역할 무관)
+  var _s3cnt = document.getElementById('st3-alarm');
+  if(_s3cnt && typeof calcTodayCount==='function') _s3cnt.textContent = calcTodayCount();
 
   // load real stats from GAS
   setTimeout(function() {
@@ -4481,6 +4523,8 @@ function showDashboard() {
           if(st2) st2.textContent = _countMyCust(res.customers);
           var st4ref = document.getElementById('st4');
           if(st4ref && typeof calcTodayCount==='function') st4ref.textContent = calcTodayCount();
+          var st3ref = document.getElementById('st3-alarm');
+          if(st3ref && typeof calcTodayCount==='function') st3ref.textContent = calcTodayCount();
         }
       }).catch(function(){});
 
@@ -9400,39 +9444,75 @@ function rc2SaveGoalToGas(branch, goal) {
 
 // 대시보드 리크루팅 카드 (입과확보 집계)
 function renderRecruitStat() {
-  var isAdmin = _isManagerUser(currentUser);
   var stat4r = document.getElementById('stat4-recruit');
   var stat4a = document.getElementById('stat4-alarm');
   if (!stat4r || !stat4a) return;
-  if (isAdmin) {
-    stat4r.style.display = ''; stat4a.style.display = 'none';
-    var d = rc2GetMonthData(getCurrentYM());
-    var a=0, b=0;
-    for (var i=0;i<d.list.length;i++){ var it=d.list[i]; if(it.status==='입과확보'){ if(it.branch==='alpha')a++; else b++; } }
-    if(typeof skOff==='function') skOff(['st4-recruit']);
-    document.getElementById('st4-recruit').textContent = (a+b) + '명';
-    document.getElementById('st4-recruit-sub').textContent = '입과확보 · 알파 ' + a + ' · 브라보 ' + b;
-  } else {
-    stat4r.style.display = 'none'; stat4a.style.display = '';
-  }
+  // 리크루팅 카드 (FP·매니저·지점장 공통)
+  stat4r.style.display = ''; stat4a.style.display = 'none';
+  var d = rc2GetMonthData(getCurrentYM());
+  var a=0, b=0;
+  for (var i=0;i<d.list.length;i++){ var it=d.list[i]; if(it.status==='입과확보'){ if(it.branch==='alpha')a++; else b++; } }
+  if(typeof skOff==='function') skOff(['st4-recruit']);
+  document.getElementById('st4-recruit').textContent = (a+b) + '명';
+  document.getElementById('st4-recruit-sub').textContent = '입과확보 · 알파 ' + a + ' · 브라보 ' + b;
 }
 
 function openRecruitModal() {
   var tabBar = document.getElementById('recruitTabBar');
-  if(tabBar) tabBar.style.display = '';
-  rc2.branch = 'alpha';
-  rc2SwitchBranch('alpha', document.getElementById('rTab-alpha'));
+  // 권한: 추진후보자(명단) 탭은 대표·지점장·교육지점장만. FP·매니저는 추진일정만.
+  var _listAccess = _canSeeRecruitList();
+  // 지점 탭: 전체 조회권자(대표·지점장·교육지점장)만 표시. FP·매니저는 본인 지점 자동 고정.
+  var _myBranch = _recruitMyBranch();
+  if(_listAccess){
+    if(tabBar) tabBar.style.display = '';
+    rc2.branch = 'alpha';
+    rc2SwitchBranch('alpha', document.getElementById('rTab-alpha'));
+  } else {
+    if(tabBar) tabBar.style.display = 'none';
+    rc2.branch = _myBranch;
+    rc2SwitchBranch(_myBranch, document.getElementById(_myBranch==='bravo'?'rTab-bravo':'rTab-alpha'));
+  }
   var mn = rc2CurMonthNum();
   var t = document.getElementById('recruitModalTitle'); if(t) t.textContent = mn + '월 리크루팅 추진 현황';
-  rc2.view = 'list'; rc2.calOffset = 0; rc2.calSel = '';
-  rc2SwitchView('list', document.getElementById('rc2VtList'));
-  rc2RenderList(); // 캐시로 즉시 표시
+  var _vtList = document.getElementById('rc2VtList');
+  if(_vtList) _vtList.style.display = _listAccess ? '' : 'none';
+  // 월평균 입과목표: 대표·지점장·교육지점장만 수정 가능. FP·매니저는 읽기전용
+  var _goalIn = document.getElementById('rc2GoalInput');
+  if(_goalIn){
+    if(_listAccess){ _goalIn.readOnly=false; _goalIn.style.opacity=''; _goalIn.style.cursor=''; }
+    else { _goalIn.readOnly=true; _goalIn.style.opacity='.6'; _goalIn.style.cursor='not-allowed'; }
+  }
+  rc2.calOffset = 0; rc2.calSel = '';
   document.getElementById('recruitOverlay').classList.add('open');
+  if(_listAccess){
+    rc2.view = 'list';
+    rc2SwitchView('list', document.getElementById('rc2VtList'));
+    rc2RenderList();
+  } else {
+    rc2.view = 'cal';
+    rc2SwitchView('cal', document.getElementById('rc2VtCal'));
+  }
   // GAS에서 최신 데이터 로드 후 다시 렌더
   rc2LoadFromGas(getCurrentYM(), function(ok){
-    if(ok){ rc2RenderList(); if(rc2.view==='cal') rc2RenderCal(); renderRecruitStat(); }
+    if(ok){ if(_listAccess) rc2RenderList(); if(rc2.view==='cal') rc2RenderCal(); renderRecruitStat(); }
   });
   rc2LoadJoinEvtsFromGas(function(){ if(rc2.view==='cal') rc2RenderCal(); });
+}
+
+// 추진후보자(명단) 탭 접근 권한: 대표·지점장·교육지점장
+function _canSeeRecruitList(){
+  var u = currentUser; if(!u) return false;
+  var r=u.role||'', tt=u.title||'', id=u.id||'', br=u.branch||'';
+  if(r==='대표'||r==='지점장') return true;
+  if(tt==='지점장'||tt==='교육지점장') return true;
+  if(id==='H2503162'||br.indexOf('교육')>=0) return true;
+  return false;
+}
+
+// FP·매니저 본인 지점 ('alpha'|'bravo')
+function _recruitMyBranch(){
+  var b = (currentUser && currentUser.branch) ? String(currentUser.branch) : '';
+  return b.indexOf('브라보')>=0 ? 'bravo' : 'alpha';
 }
 function closeRecruitModal() { document.getElementById('recruitOverlay').classList.remove('open'); }
 
@@ -9456,6 +9536,7 @@ function rc2SwitchBranch(branch, el) {
 
 var _rc2GoalTimer = null;
 function rc2OnGoalInput() {
+  if(typeof _canSeeRecruitList==='function' && !_canSeeRecruitList()) return; // 목표 수정은 대표·지점장·교육지점장만
   var d = rc2GetMonthData(getCurrentYM());
   var v = parseInt(document.getElementById('rc2GoalInput').value) || 0;
   d.goal[rc2.branch] = v;
@@ -9910,11 +9991,14 @@ function rc2RenderCal() {
     html += '<div class="'+cellCls+'" style="'+cellStyle+'" data-calday="'+dayKey+'"><div class="dn" style="'+dnColor+'">'+dn+'</div>'+holHtml+evHtml+joinHtml+'</div>';
   }
   document.getElementById('rc2CalGrid').innerHTML = html;
+  rc2._evByDayCache = evByDay; // 상세 팝업 렌더용 캐시
 
   var cells = document.querySelectorAll('#rc2CalGrid .rc2-cal-cell[data-calday]');
   for(var c=0;c<cells.length;c++) cells[c].addEventListener('click', function(){
     var dk=this.getAttribute('data-calday');
-    rc2.calSel=dk; rc2RenderCalDetail(evByDay, dk); rc2OpenCalDetail();
+    rc2.calSel=dk;
+    rc2RenderCalDetail(rc2._evByDayCache||{}, dk);
+    rc2OpenCalDetail();
   });
 
   // 입과일정 칩 클릭 → 수정 (셀 클릭보다 우선)
@@ -9924,7 +10008,14 @@ function rc2RenderCal() {
     jeChips[jc].addEventListener('click', function(ev){ ev.stopPropagation(); rc2OpenJoinEvt(this.getAttribute('data-jeid')); });
   }
 
-  document.getElementById('rc2CalDetail').innerHTML='';
+  // 팝업이 열려 있으면 비우지 말고 선택 날짜 내용 재렌더 (GAS 콜백 재렌더 시 빈 박스 방지)
+  var _pop = document.getElementById('rc2CalDetailPop');
+  var _popOpen = _pop && _pop.style.display !== 'none';
+  if(_popOpen && rc2.calSel){
+    rc2RenderCalDetail(rc2._evByDayCache||{}, rc2.calSel);
+  } else {
+    document.getElementById('rc2CalDetail').innerHTML='';
+  }
 }
 function rc2RenderCalDetail(evByDay, dayKey) {
   var evs = evByDay[dayKey]||[];
@@ -10530,13 +10621,19 @@ function renderWeekActTable() {
     html += '</tr>';
   });
   // ── 일별 합산 tfoot (테이블 안, sticky bottom) ────
+  var _sumSeeAll = currentUser && (currentUser.role === '대표' || currentUser.role === '지점장'
+    || (typeof _isManagerUser==='function' && _isManagerUser(currentUser))
+    || (typeof _isMgrTitleUser==='function' && _isMgrTitleUser(currentUser)));
+  var _nbSum = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
   var sumBranch = weekBranchFilter !== 'all' ? weekBranchFilter
     : (currentUser && currentUser.role === '지점장') ? currentUser.branch : 'all';
 
   var allActs = Object.values(db).filter(function(a){
     if(!datestrs.includes(a.date)) return false;
     if(sumBranch !== 'all' && a.branch !== sumBranch) return false;
-    if(currentUser && currentUser.role === 'FP' && a.fpId !== currentUser.id) return false;
+    // 전체 조회 권한 없는 사람만 본인 활동으로 제한 (매니저·지점장 등은 전체 집계)
+    if(!_sumSeeAll && currentUser && currentUser.branch && _nbSum(a.branch) !== _nbSum(currentUser.branch)) return false;
+    if(!_sumSeeAll && currentUser && a.fpId !== currentUser.id) return false;
     return true;
   });
 
