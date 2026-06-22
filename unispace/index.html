@@ -9980,6 +9980,13 @@ function moveActPeriod(dir) {
 }
 
 function _doRenderActView() {
+  // 지점 필터 칩: 전체 조회 권한자(대표·지점장·교육지점장·매니저)에게만 노출
+  var _wfr=document.getElementById('weekFilterRow');
+  if(_wfr){
+    var _seeAll=(typeof _attCanSeeAll==='function') ? _attCanSeeAll()
+      : (currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'));
+    _wfr.style.display = _seeAll ? '' : 'none';
+  }
   if (actViewMode == 'month') renderMonthCal();
   else renderWeekActTable();
 }
@@ -9995,8 +10002,9 @@ function renderActView() {
 
 function actFilterMatch(a) {
   if (weekBranchFilter !== 'all' && a.branch !== weekBranchFilter) return false;
-  // 대표/지점장 = 전체, 그 외 = 자기 지점만 (지점명 정규화 비교)
-  var seeAll = currentUser && (currentUser.role === '대표' || currentUser.role === '지점장');
+  // 대표·지점장·교육지점장·매니저 = 전체 / FP·센터장 = 자기 지점만
+  var seeAll = (typeof _attCanSeeAll==='function') ? _attCanSeeAll()
+    : (currentUser && (currentUser.role === '대표' || currentUser.role === '지점장'));
   if (!seeAll && currentUser && currentUser.branch) {
     var nb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
     if (nb(a.branch) !== nb(currentUser.branch)) return false;
@@ -10531,12 +10539,36 @@ function renderWeekActTable() {
   var sumEl = document.getElementById('weekSumBadges');
   if(sumEl){
     var s='';
+    // ── 지점별 진행중/완료 건수 (status 기준) ──
+    var _stNb=function(b){ var x=String(b||''); if(x.indexOf('알파')>=0) return '알파'; if(x.indexOf('브라보')>=0) return '브라보'; return ''; };
+    var _cnt={ '알파':{ing:0,done:0}, '브라보':{ing:0,done:0}};
+    allActs.forEach(function(a){
+      if(a._isSupport) return;
+      var bk=_stNb(a.branch); if(!bk||!_cnt[bk]) return;
+      if(a.status==='완료') _cnt[bk].done++; else _cnt[bk].ing++;
+    });
+    function _brStat(name, c, hex, soft){
+      if(!c.ing && !c.done) return '';
+      return '<span style="font-size:13px;display:inline-flex;align-items:center;gap:6px">'+
+        '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:'+soft+';color:'+hex+'">'+name+'</span>'+
+        '<span style="color:var(--text)">진행 '+c.ing+' · 완료 '+c.done+'</span></span>';
+    }
+    var _statParts=[];
+    var _showAl=(sumBranch==='all'||sumBranch==='알파지점');
+    var _showBr=(sumBranch==='all'||sumBranch==='브라보지점');
+    if(_showAl){ var _a=_brStat('알파', _cnt['알파'], '#1E7A50', 'rgba(46,158,107,.13)'); if(_a) _statParts.push(_a); }
+    if(_showBr){ var _b=_brStat('브라보', _cnt['브라보'], '#5A3FB0', 'rgba(123,82,208,.14)'); if(_b) _statParts.push(_b); }
+    var _statRow='';
+    if(_statParts.length){
+      _statRow='<div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:8px 12px;background:var(--bg2);border-radius:10px;width:100%;box-sizing:border-box">'+
+        _statParts.join('<span style="width:1px;height:13px;background:var(--bdr2)"></span>')+'</div>';
+    }
     var label=sumBranch==='알파지점'?'알파':sumBranch==='브라보지점'?'브라보':(currentUser&&currentUser.role==='FP'?'내':'전체');
     if(weekPt) s+='<span class="wk-top-pt">'+label+' PT '+weekPt.toLocaleString()+'원</span>';
     if(weekCk) s+='<span class="wk-top-ck">'+label+' 청약 '+weekCk.toLocaleString()+'원</span>';
     if(weekPt||weekCk) s+='<span style="font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--bdr);color:var(--text2);font-weight:700">합계 '+(weekPt+weekCk).toLocaleString()+'원</span>';
-    sumEl.innerHTML=s;
-    if(s){ sumEl.style.paddingTop='10px'; sumEl.style.borderTop='1px solid var(--bdr)'; }
+    sumEl.innerHTML=_statRow+s;
+    if(_statRow||s){ sumEl.style.paddingTop='10px'; sumEl.style.borderTop='1px solid var(--bdr)'; }
     else { sumEl.style.paddingTop='0'; sumEl.style.borderTop='none'; }
   }
 
