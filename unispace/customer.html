@@ -2400,6 +2400,9 @@ function saveCustomer() {
   }).filter(function(e){ return e.name; });
 
   var fp = JSON.parse(localStorage.getItem('unispace_user') || '{}');
+  // 담당FP명 결정: user.name 우선, 비면 사번으로 명단 역조회 (매니저 등 name 누락 대비)
+  var _myName = (fp.name || '').trim();
+  if (!_myName) { _myName = _fpNameFromCode(_myFpCode()); }
 
   // preserve existing contact history when editing
   var _prevC = null;
@@ -2416,7 +2419,8 @@ function saveCustomer() {
     referrer:    document.getElementById('r_referrer').value,
     etcNote:     document.getElementById('r_etc').value,
     memo:        document.getElementById('r_memo').value,
-    fp:          (_prevC && _prevC.fp) ? _prevC.fp : (fp.name || ''),
+    fp:          (_prevC && _prevC.fp) ? _prevC.fp : _myName,
+    fpName:      (_prevC && (_prevC.fpName||_prevC.fp)) ? (_prevC.fpName||_prevC.fp) : _myName,
     branch:      (_prevC && _prevC.branch) ? _prevC.branch : (fp.branch || ''),
     fpCode:      (_prevC && _prevC.fpCode) ? _prevC.fpCode : _myFpCode(),
     customerType: selectedCustomerType,
@@ -2601,6 +2605,15 @@ function _fpCodeFromName(nm){
   if(!want) return '';
   for(var i=0;i<_fpDirectory.length;i++){
     if(String(_fpDirectory[i].name||'').trim()===want) return String(_fpDirectory[i].id||'').trim();
+  }
+  return '';
+}
+// resolve 사번 -> FP명 (directory 역조회). 매니저 등 user.name이 비었을 때 보강용
+function _fpNameFromCode(code){
+  var want = String(code||'').trim().toUpperCase();
+  if(!want) return '';
+  for(var i=0;i<_fpDirectory.length;i++){
+    if(String(_fpDirectory[i].id||'').trim().toUpperCase()===want) return String(_fpDirectory[i].name||'').trim();
   }
   return '';
 }
