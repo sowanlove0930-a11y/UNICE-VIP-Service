@@ -5230,12 +5230,18 @@ function loadPerfFromGas(cb, force){
         return { id:p.id, date:p.date, fpId:p.fpCode, fpName:p.fpName, branch:p.branch,
                  products:p.products, total:p.total, note:p.note||'', createdAt:p.createdAt||'' };
       });
+      // 방금 삭제한 항목이 서버 지연으로 다시 실려오면 제외 (부활 방지)
+      if(_recentDeletedPerf && Object.keys(_recentDeletedPerf).length){
+        arr = arr.filter(function(r){ return !_recentDeletedPerf[r.id]; });
+      }
       savePerfLog(arr);
       rebuildPerfData();
     }
     if(cb) cb();
   }).catch(function(){ if(cb) cb(); });
 }
+// 최근 삭제한 업적 id (서버 반영 지연 동안 재로드 시 부활 방지)
+var _recentDeletedPerf = {};
 function savePerfLog(arr){ localStorage.setItem(PERF_LOG_KEY, JSON.stringify(arr)); }
 // 로그에서 FP별 누계 재계산 → 기존 perfData 형식으로 동기화 (TOP10 등 호환)
 function rebuildPerfData(){
@@ -6041,6 +6047,7 @@ function deletePerfRec(id){
     okLabel:'삭제', okCls:'red'
   }).then(function(ok){
     if(!ok) return;
+    _recentDeletedPerf[id] = Date.now(); // 재로드 부활 방지용 등록
     var _before = getPerfLog();
     var arr=_before.filter(function(r){ return r.id!==id; });
     savePerfLog(arr);
@@ -6053,8 +6060,11 @@ function deletePerfRec(id){
     fetch(_delUrl).then(function(r){ return r.json(); }).then(function(res){
       if(res && res.ok){
         showToast('🗑️ 삭제되었습니다 — 누계 반영 완료');
+        // 서버 반영 안정화 후 추적 해제 (그 전 재로드는 부활 차단됨)
+        setTimeout(function(){ delete _recentDeletedPerf[id]; }, 300000);
       } else {
-        // 서버 삭제 실패 → 롤백 (부활 방지)
+        // 서버 삭제 실패 → 롤백 (부활 방지 해제)
+        delete _recentDeletedPerf[id];
         savePerfLog(_before);
         rebuildPerfData();
         renderPerfView();
@@ -6063,6 +6073,7 @@ function deletePerfRec(id){
         showToast('⚠️ 삭제 실패 — 다시 시도해 주세요');
       }
     }).catch(function(){
+      delete _recentDeletedPerf[id];
       savePerfLog(_before);
       rebuildPerfData();
       renderPerfView();
