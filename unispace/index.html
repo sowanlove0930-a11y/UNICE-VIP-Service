@@ -9395,7 +9395,29 @@ function rc2CardHtml(it) {
     '<div class="rc2-card-top"><div class="rc2-card-name">' + rc2Esc(it.name) + '</div>' + badge + '</div>' +
     '<div class="rc2-card-meta">' + meta.join(' · ') + '</div>' + note + '</div>';
 }
-function rc2DtShort(dt){ if(!dt) return ''; var p=dt.split(' '); var dp=p[0].split('-'); var s=parseInt(dp[1],10)+'/'+parseInt(dp[2],10); if(p[1]) s+=' '+p[1]; return s; }
+function rc2DtShort(dt){
+  if(!dt) return '';
+  var s0 = String(dt).trim();
+  // 1) 'YYYY-MM-DD HH:MM' 또는 'YYYY-MM-DD' (하이픈) 형식
+  var m = s0.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if(m){
+    var s = parseInt(m[2],10)+'/'+parseInt(m[3],10);
+    if(m[4]) s += ' ' + parseInt(m[4],10) + ':' + m[5];
+    return s;
+  }
+  // 2) 'YYYY. M. D' (구글시트 한국 날짜) 형식
+  var m2 = s0.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+  if(m2){ return parseInt(m2[2],10)+'/'+parseInt(m2[3],10); }
+  // 3) 그 외(영문 날짜 등) → Date 파싱 시도
+  var d = new Date(s0);
+  if(!isNaN(d.getTime())){
+    var hh = d.getHours(), mm = d.getMinutes();
+    var s3 = (d.getMonth()+1)+'/'+d.getDate();
+    if(hh || mm) s3 += ' ' + hh + ':' + ('0'+mm).slice(-2);
+    return s3;
+  }
+  return ''; // 파싱 불가 → 빈 값(NaN 방지)
+}
 function rc2Esc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function rc2RenderList() {
