@@ -2075,7 +2075,7 @@ function removeContract(id) {
   tempContracts = tempContracts.filter(function(c){ return c !== id; });
   renderContracts();
 }
-var INSURER_LIFE = ['한화생명','삼성생명','교보생명','신한라이프','메트라이프','AIA생명','DB생명','흥국생명','ABL생명','DGB생명','하나생명','iM라이프','동양생명','NH농협생명','미래에셋생명','KB라이프','KDB생명'];
+var INSURER_LIFE = ['한화생명','삼성생명','교보생명','신한라이프','라이나생명','메트라이프','AIA생명','DB생명','흥국생명','ABL생명','DGB생명','하나생명','iM라이프','동양생명','NH농협생명','미래에셋생명','KB라이프','KDB생명'];
 var INSURER_NON = ['삼성화재','현대해상','DB손보','KB손보','메리츠화재','한화손보','롯데손보','예별손해보험','흥국화재','농협손보','카카오손보','캐롯손보','하나손보','라이나손보'];
 
 function _insurerDdHtml(id){
@@ -2884,6 +2884,19 @@ function renderCustomerList() {
 }
 
 // ══ 고객 상세 ══════════════════════════════════════
+// 날짜를 'YYYY년 M월 D일'로 간소 표기 (ISO 'T...Z' 포함 처리, 날짜 부분만 사용해 UTC 오차 없음)
+function _fmtKDate(v){
+  var s = String(v || '').trim();
+  if(!s) return '—';
+  // ISO 또는 YYYY-MM-DD 형태에서 날짜 부분만 추출
+  var m = s.match(/(\d{4})[-.\/]\s*(\d{1,2})[-.\/]\s*(\d{1,2})/);
+  if(m){ return m[1]+'년 '+parseInt(m[2],10)+'월 '+parseInt(m[3],10)+'일'; }
+  // 'T' 앞 날짜만 있는 경우 등 fallback
+  var t = s.split('T')[0];
+  var p = t.split(/[-.\/]/);
+  if(p.length>=3){ return p[0]+'년 '+parseInt(p[1],10)+'월 '+parseInt(p[2],10)+'일'; }
+  return s;
+}
 function openDetail(id) {
   selectedCustomer = DB.find(function(c){ return c.id === id; });
   if (!selectedCustomer) return;
@@ -2897,7 +2910,7 @@ function openDetail(id) {
   body += '<div class="detail-section">';
   body += '<div class="detail-section-title">기본 정보</div>';
   body += '<div class="detail-grid">';
-  var basics = [['연락처',c.phone],['생년월일',c.birth||'—'],['성별',c.gender||'—'],['등급',c.grade||'—'],['고객속성',c.channel+(c.referrer?' ('+c.referrer+')':(c.etcNote?' ('+c.etcNote+')':''))],['담당FP',c.fpName||c.fp||'—'],['등록일',c.registered]];
+  var basics = [['연락처',c.phone],['생년월일',c.birth?_fmtKDate(c.birth):'—'],['성별',c.gender||'—'],['등급',c.grade||'—'],['고객속성',c.channel+(c.referrer?' ('+c.referrer+')':(c.etcNote?' ('+c.etcNote+')':''))],['담당FP',c.fpName||c.fp||'—'],['등록일',_fmtKDate(c.registered)]];
   if(c.address) basics.splice(1,0,['주소', c.address + (c.lat&&c.lng ? ' <span style="font-size:10px;color:#1F9268;font-weight:700">📍 좌표등록</span>' : ' <span style="font-size:10px;color:var(--text3)">좌표미등록</span>')]);
   basics.forEach(function(r){ body += '<div class="detail-row"><div class="detail-row-label">'+r[0]+'</div><div class="detail-row-value">'+(r[1]||'—')+'</div></div>'; });
   body += '</div>';
