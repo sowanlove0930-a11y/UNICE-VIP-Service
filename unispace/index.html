@@ -9942,11 +9942,20 @@ function rc2RenderEvtList() {
 // 피커용: 지정 연·월의 날짜별 기존 일정 집계 ('2026-06-19' -> {al:n, br:n, items:[{br:'al',time:'11:00'}]})
 function rc2DayLoadMap(py, pm){
   var map = {};
-  // 피커가 보는 그 달의 ym 데이터를 직접 읽음 (현재월 외 다른 달도 대응)
+  // 견고한 날짜 파싱 (메인 달력과 동일: 하이픈/점/Date 형식 모두 대응)
+  function _parse(dt){
+    var s0=String(dt||'').trim(); if(!s0) return null;
+    var mm=s0.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if(mm){ var hh=mm[4]?((mm[4].length<2?'0':'')+mm[4]+':'+mm[5]):''; return {y:+mm[1],m:+mm[2],d:+mm[3],time:hh}; }
+    var m2=s0.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})(?:[ ]+(\d{1,2}):(\d{2}))?/);
+    if(m2){ var h2=m2[4]?((m2[4].length<2?'0':'')+m2[4]+':'+m2[5]):''; return {y:+m2[1],m:+m2[2],d:+m2[3],time:h2}; }
+    var dd=new Date(s0);
+    if(!isNaN(dd.getTime())){ var H=dd.getHours(),N=dd.getMinutes(); return {y:dd.getFullYear(),m:dd.getMonth()+1,d:dd.getDate(),time:(H||N)?((H<10?'0':'')+H+':'+('0'+N).slice(-2)):''}; }
+    return null;
+  }
   var ymStr = py + '-' + ((pm+1)<10?'0':'') + (pm+1);
   var d = rc2GetMonthData(ymStr);
   var list = (d && d.list) ? d.list : [];
-  // 현재월 데이터도 합침 (다른 달에 저장된 일정이 이 달 날짜를 가리킬 수 있으므로)
   var curYm = getCurrentYM();
   if(curYm !== ymStr){
     var dc = rc2GetMonthData(curYm);
@@ -9957,16 +9966,13 @@ function rc2DayLoadMap(py, pm){
     var evs=rc2NormEvents(it);
     for(var e=0;e<evs.length;e++){
       var ev=evs[e]; if(!ev.dt || ev.cancelled) continue;
-      var parts=String(ev.dt).split(' ');
-      var sp=parts[0].split('-');
-      if(sp.length<3) continue;
-      if(parseInt(sp[0],10)!==py || parseInt(sp[1],10)!==(pm+1)) continue;
-      var key=sp[0]+'-'+sp[1]+'-'+sp[2];
+      var pd=_parse(ev.dt); if(!pd) continue;
+      if(pd.y!==py || pd.m!==(pm+1)) continue;
+      var key=pd.y+'-'+(pd.m<10?'0':'')+pd.m+'-'+(pd.d<10?'0':'')+pd.d;
       if(!map[key]) map[key]={al:0,br:0,items:[]};
       var isAl=(it.branch==='alpha'||String(it.branch||'').indexOf('알파')>=0);
       if(isAl) map[key].al++; else map[key].br++;
-      var tm = parts[1] ? parts[1].slice(0,5) : '';
-      map[key].items.push({ br:(isAl?'al':'br'), time:tm });
+      map[key].items.push({ br:(isAl?'al':'br'), time:(pd.time||'') });
     }
   }
   return map;
