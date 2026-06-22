@@ -9133,6 +9133,13 @@ function refreshAttendance() {
     }, 1200);
   }, 700);
 }
+// 출결 전체 지점 조회 권한: 대표·지점장·교육지점장·매니저 = 전체 / FP·센터장 = 본인 지점
+function _attCanSeeAll(){
+  var u = currentUser; if(!u) return false;
+  return u.role==='대표' || u.role==='지점장' || u.role==='교육지점장'
+      || u.level==='manager' || u.level==='admin'
+      || (u.title||'').indexOf('매니저')>=0;
+}
 function renderAttToday() {
   var today = getTodayStr();
   var n = new Date(), days = ['일','월','화','수','목','금','토'];
@@ -9152,8 +9159,8 @@ function renderAttToday() {
       } catch(e) {}
     }
     var roster = (attRes && attRes.ok && attRes.roster) ? attRes.roster : [];
-    // admin/branch-head = all branches, others = own branch only
-    var _attSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
+    // admin/branch-head/교육지점장/매니저 = 전체 / FP·센터장 = 본인 지점
+    var _attSeeAll = _attCanSeeAll();
     var _attNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
     var _attMyBr = (currentUser && currentUser.branch) ? _attNb(currentUser.branch) : '';
     var FPS = [];
@@ -9221,7 +9228,7 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
   if(st3s) st3s.textContent = '알파 ' + na + '명 · 브라보 ' + nb + '명';
 
   // 사전보고 칸: 오늘 사전보고한 사람 전원 (증빙 상태 포함)
-  var _prSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
+  var _prSeeAll = _attCanSeeAll();
   var _prNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
   var _prMyBr = (currentUser && currentUser.branch) ? _prNb(currentUser.branch) : '';
   var preList = [];
