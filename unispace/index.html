@@ -10318,14 +10318,16 @@ function _prodListText(arr){
   if(!Array.isArray(arr)||!arr.length) return '';
   var parts=arr.map(function(p){
     var c=(p.company||'').trim(), a=(p.amount||'').trim();
-    if(c&&a) return c+' '+a+'만';
+    var aNum = a.replace(/[^0-9]/g,'');
+    var aTxt = aNum ? (Number(aNum).toLocaleString()+'원') : (a || ''); // 숫자면 원 단위, 아니면(미정 등) 그대로
+    if(c&&aTxt) return c+' '+aTxt;
     if(c) return c;
-    if(a) return a+'만';
+    if(aTxt) return aTxt;
     return '';
   }).filter(Boolean);
   if(!parts.length) return '';
   var txt=parts.join(' · ');
-  if(parts.length>1) txt += ' (합 '+_sumProducts(arr)+'만)';
+  if(parts.length>1) txt += ' (합 '+_sumProducts(arr).toLocaleString()+'원)';
   return txt;
 }
 function _apChips(tags){
@@ -10343,12 +10345,21 @@ function _apChips(tags){
 }
 function _apProdLine(txt, sumColor){
   if(!txt) return '';
-  var m = txt.match(/\(합 ([0-9]+)만\)/);
+  var m = txt.match(/\(합 ([0-9,]+)원\)/);
   if(m){
-    var head = txt.replace(/\s*\(합 [0-9]+만\)/,'');
-    return head+'<b style="color:'+sumColor+';font-weight:800;margin-left:5px">합 '+m[1]+'만</b>';
+    var head = txt.replace(/\s*\(합 [0-9,]+원\)/,'');
+    return head+'<b style="color:'+sumColor+';font-weight:800;margin-left:5px">합 '+m[1]+'원</b>';
   }
   return txt;
+}
+// 칩에 PT/청약 금액 뱃지 (원 단위)
+function _chipSaleBadges(a){
+  var pt = actPtAmount(a);
+  var ck = actCkAmount(a);
+  var h = '';
+  if(pt) h += '<span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;margin:1px 2px 0 0;background:#FAEEDA;color:#854F0B">PT '+pt.toLocaleString()+'원</span>';
+  if(ck) h += '<span style="display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;margin:1px 2px 0 0;background:#DCF0E4;color:#1F7A4D">청약 '+ck.toLocaleString()+'원</span>';
+  return h ? '<div style="margin-top:1px">'+h+'</div>' : '';
 }
 function actPtAmount(a) {
   if (!a) return 0;
@@ -10639,6 +10650,7 @@ function renderWeekActTable() {
           html += '<div class="week-act-chip '+cls+(_isNewToday(a)?' is-new-today':'')+'" data-aid="'+a.id+'">' +
             '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+icon+' '+a.customerName+' <span style="opacity:.65;font-size:9px">'+typeLabel+'</span>'+supportTag+resultBadgeHtml(a)+newBadgeHtml(a)+'</div>'+
             subLine+
+            _chipSaleBadges(a)+
             nextPlanText(a)+
           '</div>';
         });
@@ -10884,7 +10896,7 @@ function renderEditProds(){
     var delBtn = i===0 ? '<span style="width:18px"></span>' : '<span onclick="removeEditProd('+i+')" style="width:18px;text-align:center;color:#E24B4A;cursor:pointer;font-size:14px;flex-shrink:0">x</span>';
     h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">'+
       '<input type="text" placeholder="보험사/상품" value="'+(p.company||'').replace(/"/g,'&quot;')+'" oninput="updateEditProd('+i+',\'company\',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
-      '<input type="text" placeholder="금액(만원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateEditProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
+      '<input type="text" placeholder="금액(원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateEditProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
       delBtn+
     '</div>';
   });
@@ -11235,7 +11247,7 @@ function renderResNextProds(){
     var delBtn = i===0 ? '<span style="width:18px"></span>' : '<span onclick="removeResNextProd('+i+')" style="width:18px;text-align:center;color:#E24B4A;cursor:pointer;font-size:14px;flex-shrink:0">x</span>';
     h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">'+
       '<input type="text" placeholder="보험사/상품" value="'+(p.company||'').replace(/"/g,'&quot;')+'" oninput="updateResNextProd('+i+',\'company\',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
-      '<input type="text" placeholder="금액(만원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateResNextProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
+      '<input type="text" placeholder="금액(원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateResNextProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
       delBtn+
     '</div>';
   });
@@ -11266,7 +11278,7 @@ function renderResProds(){
     var delBtn = i===0 ? '<span style="width:18px"></span>' : '<span onclick="removeResProd('+i+')" style="width:18px;text-align:center;color:#E24B4A;cursor:pointer;font-size:14px;flex-shrink:0">x</span>';
     h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">'+
       '<input type="text" placeholder="보험사/상품" value="'+(p.company||'').replace(/"/g,'&quot;')+'" oninput="updateResProd('+i+',\'company\',this.value)" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
-      '<input type="text" placeholder="금액(만원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateResProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
+      '<input type="text" placeholder="금액(원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateResProd('+i+',\'amount\',this.value)" style="width:78px;flex-shrink:0;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
       delBtn+
     '</div>';
   });
@@ -11742,7 +11754,7 @@ function renderQaProds(){
     var delBtn = i===0 ? '<span style="width:18px"></span>' : '<span onclick="removeQaProd('+i+')" style="width:18px;text-align:center;color:#E24B4A;cursor:pointer;font-size:14px;flex-shrink:0">x</span>';
     h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">'+
       '<input type="text" class="quick-input" placeholder="보험사" value="'+(p.company||'').replace(/"/g,'&quot;')+'" oninput="updateQaProd('+i+',\'company\',this.value)" style="flex:1;min-width:0">'+
-      '<input type="text" class="quick-input" placeholder="금액(만원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateQaProd('+i+',\'amount\',this.value)" style="width:90px;flex-shrink:0">'+
+      '<input type="text" class="quick-input" placeholder="금액(원)" value="'+(p.amount||'').replace(/"/g,'&quot;')+'" oninput="updateQaProd('+i+',\'amount\',this.value)" style="width:90px;flex-shrink:0">'+
       delBtn+
     '</div>';
   });
