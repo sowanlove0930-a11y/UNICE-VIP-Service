@@ -6041,18 +6041,35 @@ function deletePerfRec(id){
     okLabel:'삭제', okCls:'red'
   }).then(function(ok){
     if(!ok) return;
-    var arr=getPerfLog().filter(function(r){ return r.id!==id; });
+    var _before = getPerfLog();
+    var arr=_before.filter(function(r){ return r.id!==id; });
     savePerfLog(arr);
     rebuildPerfData();
-    fetch(UNISPACE_GAS_URL, {
-      method:'POST',
-      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action:'deletePerf', data:{ id:id } })
-    }).catch(function(){});
     renderPerfView();
     renderGoals();
     renderTop10();
-    showToast('🗑️ 삭제되었습니다 — 누계 반영 완료');
+    // GAS 서버에서도 삭제 (GET — POST 302 리다이렉트 회피). 결과 확인 후 실패 시 롤백
+    var _delUrl = UNISPACE_GAS_URL + '?action=deletePerf&id=' + encodeURIComponent(id);
+    fetch(_delUrl).then(function(r){ return r.json(); }).then(function(res){
+      if(res && res.ok){
+        showToast('🗑️ 삭제되었습니다 — 누계 반영 완료');
+      } else {
+        // 서버 삭제 실패 → 롤백 (부활 방지)
+        savePerfLog(_before);
+        rebuildPerfData();
+        renderPerfView();
+        renderGoals();
+        renderTop10();
+        showToast('⚠️ 삭제 실패 — 다시 시도해 주세요');
+      }
+    }).catch(function(){
+      savePerfLog(_before);
+      rebuildPerfData();
+      renderPerfView();
+      renderGoals();
+      renderTop10();
+      showToast('⚠️ 네트워크 오류 — 삭제 취소됨');
+    });
   });
 }
 function renderPerfTrend(log, now){
