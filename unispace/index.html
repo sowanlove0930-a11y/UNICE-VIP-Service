@@ -2423,10 +2423,10 @@ window.UNISPACE_FCM = {
         <button type="button" class="rc2-cal-nav" onclick="rc2CalMove(1)">›</button>
       </div>
       <div class="rc2-cal-legend" style="display:flex;align-items:center;gap:10px">
-        <span class="lg"><span class="rc2-cal-dot" style="background:#7B52D0"></span>패널</span>
-        <span class="lg"><span class="rc2-cal-dot" style="background:#378ADD"></span>인터뷰</span>
+        <span class="lg"><span style="display:inline-block;background:#1E7A50;color:#fff;font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;margin-right:3px">알</span>알파</span>
+        <span class="lg"><span style="display:inline-block;background:#5A3FB0;color:#fff;font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;margin-right:3px">브</span>브라보</span>
         <span class="lg"><span class="rc2-cal-dot" style="background:var(--alpha)"></span>입과</span>
-        <button type="button" onclick="rc2OpenJoinEvt()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:var(--alpha);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
+        <button type="button" id="rc2JoinEvtBtn" onclick="rc2OpenJoinEvt()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:var(--alpha);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
       </div>
       <div class="rc2-cal-dow">
         <div style="color:#D85A30">일</div><div style="color:var(--text3)">월</div><div style="color:var(--text3)">화</div><div style="color:var(--text3)">수</div><div style="color:var(--text3)">목</div><div style="color:var(--text3)">금</div><div style="color:#378ADD">토</div>
@@ -6490,6 +6490,15 @@ function _schedIsAdmin(){
   var r=currentUser.role||'', tt=currentUser.title||'';
   return r==='대표'||r==='지점장'||tt==='지점장'||tt==='교육지점장';
 }
+// 입과일정 추가/수정 권한: 대표·지점장·교육지점장만 (매니저·FP·센터장 제외)
+function _canEditJoinEvt(){
+  if(!currentUser) return false;
+  var r=currentUser.role||'', tt=currentUser.title||'', id=currentUser.id||'', br=currentUser.branch||'';
+  if(r==='대표'||r==='지점장') return true;
+  if(tt==='지점장'||tt==='교육지점장') return true;
+  if(id==='H2503162'||br.indexOf('교육')>=0) return true;
+  return false;
+}
 function _schedYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 // ── 시책 조회/등록 ─────────────────────────────────
 var _sichaekTab = 'active';
@@ -9538,6 +9547,7 @@ function rc2Esc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;'
 
 // ── 입과일정(달력 커스텀 일정) ──
 function rc2OpenJoinEvt(id){
+  if(!_canEditJoinEvt()){ return; }
   document.getElementById('rc2JoinEvtId').value = id || '';
   document.getElementById('rc2JoinEvtDelBtn').style.display = id ? '' : 'none';
   document.getElementById('rc2JoinEvtTitle').textContent = id ? '입과일정 수정' : '입과일정 추가';
@@ -9809,6 +9819,9 @@ function rc2DeleteCand() {
 // ===== 통합 달력 =====
 function rc2CalMove(dir){ rc2.calOffset += dir; rc2.calSel=''; rc2RenderCal(); }
 function rc2RenderCal() {
+  // 입과일정 버튼: 대표·지점장·교육지점장만 (매니저·FP·센터장 숨김)
+  var _jb=document.getElementById('rc2JoinEvtBtn');
+  if(_jb){ _jb.style.display = _canEditJoinEvt() ? '' : 'none'; }
   var base = new Date();
   base.setDate(1);
   base.setMonth(base.getMonth()+rc2.calOffset);
@@ -9865,9 +9878,17 @@ function rc2RenderCal() {
     var evHtml='';
     for(var ev=0; ev<evs.length && ev<3; ev++){
       var E=evs[ev];
-      var bg = E.type==='패널' ? 'background:rgba(123,82,208,.18);color:var(--bravo-deep)' : 'background:rgba(55,138,221,.18);color:#378ADD';
-      var tlabel = E.time ? E.time+' ' : '';
-      evHtml += '<div class="rc2-cal-ev" style="'+bg+'">'+tlabel+rc2Esc(E.name)+'</div>';
+      var _isAl = (E.branch==='alpha' || String(E.branch||'').indexOf('알파')>=0);
+      var _brBg = _isAl ? 'rgba(46,158,107,.15)' : 'rgba(123,82,208,.15)';
+      var _brTx = _isAl ? '#1E7A50' : '#5A3FB0';
+      var _brBd = _isAl ? '#1E7A50' : '#5A3FB0';
+      var _brLb = _isAl ? '알' : '브';
+      var _tyTx = E.type==='패널' ? '·패널' : '·인터뷰';
+      var _tlabel = E.time ? E.time+' ' : '';
+      evHtml += '<div class="rc2-cal-ev" style="background:'+_brBg+';color:'+_brTx+';display:flex;align-items:center;gap:3px">'+
+        '<span style="background:'+_brBd+';color:#fff;font-size:8px;font-weight:700;padding:0 3px;border-radius:3px;flex-shrink:0">'+_brLb+'</span>'+
+        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_tlabel+rc2Esc(E.name)+' <span style="opacity:.75">'+_tyTx+'</span></span>'+
+      '</div>';
     }
     // 입과일정(관리자 지정): 해당 날짜에 초록색으로 표기
     var joinHtml='';
@@ -12349,8 +12370,9 @@ function _bojangShowsTotal(u) {
   if (!u) return false;
   if (u.id === 'ktk01') return true; // 대표
   if (u.role === '대표' || u.role === '지점장') return true;
-  if (u.level === 'admin') return true;
+  if (u.level === 'admin' || u.level === 'manager') return true; // 관리자·매니저
   if ((u.title || '') === '지점장') return true; // 지점장(교육지점장 포함)
+  if ((u.title || '').indexOf('매니저') >= 0) return true; // 매니저
   if (u.id === 'H2503162') return true; // 교육지점장 최성경 failsafe
   if (u.branch && u.branch.indexOf('교육') >= 0) return true; // 교육 소속
   return false;
