@@ -9978,18 +9978,60 @@ function rc2DayLoadMap(py, pm){
   return map;
 }
 // 피커 날짜 칸에 표시할 기존 일정 라벨 HTML (알 11:00 형식, 최대 2개)
-function rc2DayLoadHtml(lm){
+function rc2DayLoadHtml(lm, isSel, dayKey){
   if(!lm || !lm.items || !lm.items.length) return '';
   var its = lm.items.slice(0,2);
   var h='';
   for(var i=0;i<its.length;i++){
     var x=its[i];
-    var c = x.br==='al' ? '#1E7A50' : '#5A3FB0';
+    var c = isSel ? '#fff' : (x.br==='al' ? '#1E7A50' : '#5A3FB0');
     var lb = x.br==='al' ? '알' : '브';
-    h += '<div style="font-size:8px;line-height:1.25;color:'+c+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+lb+' '+(x.time||'')+'</div>';
+    h += '<div style="font-size:8px;line-height:1.25;color:'+c+';font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+lb+' '+(x.time||'')+'</div>';
   }
-  if(lm.items.length>2) h += '<div style="font-size:8px;line-height:1.1;color:#999">+'+(lm.items.length-2)+'</div>';
+  if(lm.items.length>2){
+    var moreC = isSel ? '#fff' : '#888';
+    h += '<div class="rc2-pk-more" data-moreday="'+(dayKey||'')+'" style="font-size:8px;line-height:1.2;color:'+moreC+';font-weight:700;text-decoration:underline">+'+(lm.items.length-2)+' 더보기</div>';
+  }
   return '<div style="margin-top:1px">'+h+'</div>';
+}
+// '+N 더보기' 클릭 → 그 날 일정 전체를 작은 팝업으로
+function rc2ShowDayInfo(dayKey){
+  if(!dayKey) return;
+  var sp=dayKey.split('-');
+  var py=parseInt(sp[0],10), pm=parseInt(sp[1],10)-1;
+  var lm=rc2DayLoadMap(py,pm)[dayKey];
+  if(!lm || !lm.items.length) return;
+  var title=parseInt(sp[1],10)+'월 '+parseInt(sp[2],10)+'일 일정';
+  var rows='';
+  for(var i=0;i<lm.items.length;i++){
+    var x=lm.items[i];
+    var c=x.br==='al'?'#1E7A50':'#5A3FB0';
+    var lb=x.br==='al'?'알파':'브라보';
+    rows+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'+
+      '<span style="background:'+c+';color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px">'+lb+'</span>'+
+      '<span style="font-weight:700">'+(x.time||'시간미정')+'</span></div>';
+  }
+  var pop=document.getElementById('rc2DayInfoPop');
+  if(!pop){
+    pop=document.createElement('div');
+    pop.id='rc2DayInfoPop';
+    pop.style.cssText='position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9999;width:min(86%,300px);background:var(--bg2);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.4);padding:16px';
+    document.body.appendChild(pop);
+    var mask=document.createElement('div');
+    mask.id='rc2DayInfoMask';
+    mask.style.cssText='position:fixed;inset:0;z-index:9998;background:rgba(8,14,28,.45)';
+    mask.addEventListener('click', rc2CloseDayInfo);
+    document.body.appendChild(mask);
+  } else {
+    document.getElementById('rc2DayInfoMask').style.display='';
+    pop.style.display='';
+  }
+  pop.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-weight:800;font-size:14px">'+title+'</div><button type="button" onclick="rc2CloseDayInfo()" style="width:26px;height:26px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text2);font-size:14px;cursor:pointer;line-height:1">✕</button></div>'+rows;
+}
+function rc2CloseDayInfo(){
+  var pop=document.getElementById('rc2DayInfoPop'), mask=document.getElementById('rc2DayInfoMask');
+  if(pop) pop.style.display='none';
+  if(mask) mask.style.display='none';
 }
 // 단일 날짜·시간 피커 (신규 이벤트용)
 function rc2RenderEvtPicker() {
@@ -10027,7 +10069,7 @@ function rc2RenderEvtPicker() {
     if(rc2IsHoliday(dayKey)) cls+=' hol';
     if(selDay===dnum) cls+=' sel';
     var _lm=_loadMap[dayKey];
-    var _loadHtml = rc2DayLoadHtml(_lm);
+    var _loadHtml = rc2DayLoadHtml(_lm, (selDay===dnum), dayKey);
     html += '<div class="'+cls+'" data-pkday="'+dnum+'">'+dnum+_loadHtml+'</div>';
   }
   html += '</div>';
@@ -10045,6 +10087,8 @@ function rc2RenderEvtPicker() {
   for(var n=0;n<navs.length;n++) navs[n].addEventListener('click', function(){ var dir=parseInt(this.getAttribute('data-pkmove'),10); rc2._pk.m+=dir; if(rc2._pk.m<0){rc2._pk.m=11;rc2._pk.y--;} else if(rc2._pk.m>11){rc2._pk.m=0;rc2._pk.y++;} rc2RenderEvtPicker(); });
   var days = pickEl.querySelectorAll('[data-pkday]');
   for(var dd=0;dd<days.length;dd++) days[dd].addEventListener('click', function(){ rc2EvtPickDay(parseInt(this.getAttribute('data-pkday'),10)); });
+  var mores = pickEl.querySelectorAll('.rc2-pk-more[data-moreday]');
+  for(var mo=0;mo<mores.length;mo++) mores[mo].addEventListener('click', function(ev){ ev.stopPropagation(); rc2ShowDayInfo(this.getAttribute('data-moreday')); });
   var sels = pickEl.querySelectorAll('.rc2-pk-tsel');
   for(var s=0;s<sels.length;s++) sels[s].addEventListener('change', function(){ rc2EvtPickTime(); });
 }
@@ -10164,7 +10208,7 @@ function rc2ResRenderPicker(){
     var dow=(startDow+dnum-1)%7; var dda=(dnum<10?'0':'')+dnum; var dayKey=pk.y+'-'+pkMs+'-'+dda;
     var cls='rc2-pk-day'; if(dow===0)cls+=' sun'; else if(dow===6)cls+=' sat'; if(rc2IsHoliday(dayKey))cls+=' hol'; if(selDay===dnum)cls+=' sel';
     var _lm=_loadMap[dayKey];
-    var _loadHtml = rc2DayLoadHtml(_lm);
+    var _loadHtml = rc2DayLoadHtml(_lm, (selDay===dnum), dayKey);
     html+='<div class="'+cls+'" data-rpkday="'+dnum+'">'+dnum+_loadHtml+'</div>';
   }
   html+='</div>';
@@ -10180,6 +10224,8 @@ function rc2ResRenderPicker(){
   for(var n=0;n<navs.length;n++) navs[n].addEventListener('click', function(){ var dir=parseInt(this.getAttribute('data-rpkmove'),10); rc2res._pk.m+=dir; if(rc2res._pk.m<0){rc2res._pk.m=11;rc2res._pk.y--;} else if(rc2res._pk.m>11){rc2res._pk.m=0;rc2res._pk.y++;} rc2ResRenderPicker(); });
   var days=pickEl.querySelectorAll('[data-rpkday]');
   for(var dd=0;dd<days.length;dd++) days[dd].addEventListener('click', function(){ var dnum2=parseInt(this.getAttribute('data-rpkday'),10); var pk2=rc2res._pk; var mo=(pk2.m+1<10?'0':'')+(pk2.m+1); var da=(dnum2<10?'0':'')+dnum2; var tp=(rc2res.nextDt && rc2res.nextDt.split(' ')[1])?rc2res.nextDt.split(' ')[1]:'10:00'; rc2res.nextDt=pk2.y+'-'+mo+'-'+da+' '+tp; rc2ResRenderPicker(); });
+  var rmores=pickEl.querySelectorAll('.rc2-pk-more[data-moreday]');
+  for(var rmo=0;rmo<rmores.length;rmo++) rmores[rmo].addEventListener('click', function(ev){ ev.stopPropagation(); rc2ShowDayInfo(this.getAttribute('data-moreday')); });
   var sels=pickEl.querySelectorAll('.rc2-pk-tsel');
   for(var s=0;s<sels.length;s++) sels[s].addEventListener('change', function(){
     var ap2=pickEl.querySelector('[data-rpkap]').value; var hh2=parseInt(pickEl.querySelector('[data-rpkhh]').value,10); var mm2=pickEl.querySelector('[data-rpkmm]').value;
