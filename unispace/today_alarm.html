@@ -993,10 +993,36 @@ function renderSection(listId, labelId, items, emptyMsg) {
   } catch(e) {}
 })();
 
+// ── GAS에서 고객 직접 로드 (customer.html과 동일 방식) ──
+var ALARM_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
+function _alMyFpCode(){
+  try {
+    var u = JSON.parse(localStorage.getItem('unispace_user') || '{}');
+    var id = u.id || '';
+    if (/^h\d+$/i.test(String(id).trim())) return String(id).trim().toUpperCase();
+    return id;
+  } catch(e){ return ''; }
+}
+function _alLoadFromGas(){
+  var fp = _alMyFpCode();
+  if(!fp) return;
+  var url = ALARM_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(fp);
+  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ok && res.customers){
+      DB = res.customers;
+      try { localStorage.setItem('unispace_customers', JSON.stringify(DB)); } catch(e){}
+      _alLoadFpDir();
+      render();
+    }
+  }).catch(function(){});
+}
+
+// 1) localStorage로 즉시 첫 화면 (빠름) → 2) GAS로 최신 갱신
 DB = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
 _alLoadFpDir();
 var d = new Date();
 render();
+_alLoadFromGas();
 </script>
 
 <!-- 카톡 버전 선택 모달 -->
