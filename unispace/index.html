@@ -2421,10 +2421,11 @@ window.UNISPACE_FCM = {
         <div class="rc2-cal-title" id="rc2CalTitle">6월 추진일정</div>
         <button type="button" class="rc2-cal-nav" onclick="rc2CalMove(1)">›</button>
       </div>
-      <div class="rc2-cal-legend">
+      <div class="rc2-cal-legend" style="display:flex;align-items:center;gap:10px">
         <span class="lg"><span class="rc2-cal-dot" style="background:#7B52D0"></span>패널</span>
         <span class="lg"><span class="rc2-cal-dot" style="background:#378ADD"></span>인터뷰</span>
         <span class="lg"><span class="rc2-cal-dot" style="background:var(--alpha)"></span>입과</span>
+        <button type="button" onclick="rc2OpenJoinEvt()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:var(--alpha);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
       </div>
       <div class="rc2-cal-dow">
         <div style="color:#D85A30">일</div><div style="color:var(--text3)">월</div><div style="color:var(--text3)">화</div><div style="color:var(--text3)">수</div><div style="color:var(--text3)">목</div><div style="color:var(--text3)">금</div><div style="color:#378ADD">토</div>
@@ -2516,6 +2517,35 @@ window.UNISPACE_FCM = {
       <button type="button" class="mgmt-btn mgmt-btn-cancel" id="rc2DelBtn" onclick="rc2DeleteCand()" style="display:none;color:#D85A30">삭제</button>
       <button type="button" class="mgmt-btn mgmt-btn-cancel" onclick="rc2CloseAdd()">취소</button>
       <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="rc2SaveCand()">저장하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 입과일정 추가/수정 모달 ── -->
+<div class="mgmt-overlay" id="rc2JoinEvtOverlay">
+  <div class="mgmt-box" style="max-width:400px;width:90vw;padding:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="mgmt-title" id="rc2JoinEvtTitle">입과일정 추가</div>
+      <button type="button" class="modal-close-x" onclick="rc2CloseJoinEvt()" aria-label="닫기">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--text2);display:block;margin-bottom:5px">일정명</label>
+        <input type="text" id="rc2JoinEvtLabel" placeholder="예: 입과시작 / 라이프디자인 시작" style="width:100%;padding:11px 13px;border:1px solid var(--bdr2);border-radius:9px;background:var(--bg2);color:var(--text1);font-size:14px;font-family:inherit">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--text2);display:block;margin-bottom:5px">날짜</label>
+        <div class="pk-trigger" onclick="_openDatePickerFor('rc2JoinEvtDate','rc2JoinEvtDateDisp')" style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border:1px solid var(--bdr2);border-radius:9px;background:var(--bg2);cursor:pointer">
+          <span id="rc2JoinEvtDateDisp" class="pk-ph" style="font-size:14px;color:var(--text3)">날짜 선택</span>
+          <span style="font-size:15px">📅</span>
+        </div>
+        <input type="hidden" id="rc2JoinEvtDate">
+        <input type="hidden" id="rc2JoinEvtId">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button type="button" id="rc2JoinEvtDelBtn" onclick="rc2DeleteJoinEvt()" style="display:none;padding:13px 18px;border:1px solid rgba(192,57,49,.3);border-radius:11px;background:rgba(192,57,49,.06);color:#C0392B;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>
+        <button type="button" onclick="rc2SaveJoinEvt()" style="flex:1;padding:13px;border:none;border-radius:11px;background:var(--alpha);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">저장</button>
+      </div>
     </div>
   </div>
 </div>
@@ -9178,7 +9208,7 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
 
 // ── 리크루팅 현황 v2 (명단/달력) ────────────────────────
 var RECRUIT_KEY = 'unispace_recruit_v2'; // { ym: { goal:{alpha,bravo}, list:[ {id,branch,name,ref,panelState,panelDt,itvState,itvDt,join,status,note} ] } }
-var rc2 = { branch:'alpha', view:'list', editId:null, panelState:'', panelDt:'', itvState:'', itvDt:'', status:'추진중', pk:{panel:null,itv:null}, calOffset:0, calSel:'' };
+var rc2 = { branch:'alpha', view:'list', editId:null, panelState:'', panelDt:'', itvState:'', itvDt:'', status:'추진중', pk:{panel:null,itv:null}, calOffset:0, calSel:'', joinEvents:[] };
 
 function getRecruitDB() {
   try { return JSON.parse(localStorage.getItem(RECRUIT_KEY) || '{}'); } catch(e) { return {}; }
@@ -9305,6 +9335,7 @@ function openRecruitModal() {
   rc2LoadFromGas(getCurrentYM(), function(ok){
     if(ok){ rc2RenderList(); if(rc2.view==='cal') rc2RenderCal(); renderRecruitStat(); }
   });
+  rc2LoadJoinEvtsFromGas(function(){ if(rc2.view==='cal') rc2RenderCal(); });
 }
 function closeRecruitModal() { document.getElementById('recruitOverlay').classList.remove('open'); }
 
@@ -9315,7 +9346,7 @@ function rc2SwitchView(v, el) {
   if(el) el.classList.add('active');
   document.getElementById('rc2ViewList').classList.toggle('active', v==='list');
   document.getElementById('rc2ViewCal').classList.toggle('active', v==='cal');
-  if (v==='cal') rc2RenderCal();
+  if (v==='cal'){ rc2RenderCal(); rc2LoadJoinEvtsFromGas(function(){ rc2RenderCal(); }); }
 }
 
 function rc2SwitchBranch(branch, el) {
@@ -9419,6 +9450,68 @@ function rc2DtShort(dt){
   return ''; // 파싱 불가 → 빈 값(NaN 방지)
 }
 function rc2Esc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── 입과일정(달력 커스텀 일정) ──
+function rc2OpenJoinEvt(id){
+  document.getElementById('rc2JoinEvtId').value = id || '';
+  document.getElementById('rc2JoinEvtDelBtn').style.display = id ? '' : 'none';
+  document.getElementById('rc2JoinEvtTitle').textContent = id ? '입과일정 수정' : '입과일정 추가';
+  var lbl='', dt='';
+  if(id && rc2.joinEvents){
+    for(var i=0;i<rc2.joinEvents.length;i++){ if(rc2.joinEvents[i].id===id){ lbl=rc2.joinEvents[i].label; dt=rc2.joinEvents[i].date; break; } }
+  }
+  document.getElementById('rc2JoinEvtLabel').value = lbl;
+  document.getElementById('rc2JoinEvtDate').value = dt;
+  var disp=document.getElementById('rc2JoinEvtDateDisp');
+  if(dt){ var p=dt.split('-'); disp.textContent=parseInt(p[1],10)+'월 '+parseInt(p[2],10)+'일'; disp.classList.remove('pk-ph'); }
+  else { disp.textContent='날짜 선택'; disp.classList.add('pk-ph'); }
+  document.getElementById('rc2JoinEvtOverlay').classList.add('open');
+}
+function rc2CloseJoinEvt(){ document.getElementById('rc2JoinEvtOverlay').classList.remove('open'); }
+function rc2SaveJoinEvt(){
+  var id=document.getElementById('rc2JoinEvtId').value;
+  var label=(document.getElementById('rc2JoinEvtLabel').value||'').trim();
+  var date=document.getElementById('rc2JoinEvtDate').value;
+  if(!label){ showToast('⚠️ 일정명을 입력해 주세요'); return; }
+  if(!date){ showToast('⚠️ 날짜를 선택해 주세요'); return; }
+  if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ showToast('⚠️ 로그인 정보 없음'); return; }
+  var url=UNISPACE_GAS_URL+'?action=saveJoinEvent&fp='+encodeURIComponent(currentUser.id)+
+    '&id='+encodeURIComponent(id)+
+    '&date='+encodeURIComponent(date)+
+    '&label='+encodeURIComponent(label)+
+    '&branch='+encodeURIComponent(rc2.branch||'');
+  showToast('저장 중...');
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok){
+      showToast('✅ 입과일정 저장 완료');
+      rc2CloseJoinEvt();
+      rc2LoadJoinEvtsFromGas(function(){ if(rc2.view==='cal') rc2RenderCal(); });
+    } else { showToast('⚠️ '+((res&&res.msg)||'저장 실패')); }
+  }).catch(function(){ showToast('⚠️ 서버 연결 실패'); });
+}
+function rc2DeleteJoinEvt(){
+  var id=document.getElementById('rc2JoinEvtId').value;
+  if(!id) return;
+  showConfirm({icon:'🗑️',iconCls:'confirm-icon-danger',title:'입과일정 삭제',msg:'이 입과일정을 삭제할까요?',okLabel:'삭제',okCls:'red'}).then(function(ok){
+    if(!ok) return;
+    var url=UNISPACE_GAS_URL+'?action=deleteJoinEvent&fp='+encodeURIComponent(currentUser.id)+'&id='+encodeURIComponent(id);
+    fetch(url).then(function(r){return r.json();}).then(function(res){
+      if(res && res.ok){
+        showToast('✅ 삭제되었습니다');
+        rc2CloseJoinEvt();
+        rc2LoadJoinEvtsFromGas(function(){ if(rc2.view==='cal') rc2RenderCal(); });
+      } else { showToast('⚠️ '+((res&&res.msg)||'삭제 실패')); }
+    }).catch(function(){ showToast('⚠️ 서버 연결 실패'); });
+  });
+}
+function rc2LoadJoinEvtsFromGas(cb){
+  if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ if(cb) cb(); return; }
+  var url=UNISPACE_GAS_URL+'?action=getJoinEvents&fp='+encodeURIComponent(currentUser.id)+'&ym='+encodeURIComponent(getCurrentYM());
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.list){ rc2.joinEvents = res.list; }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
 
 function rc2RenderList() {
   var d = rc2GetMonthData(getCurrentYM());
@@ -9691,18 +9784,33 @@ function rc2RenderCal() {
       var tlabel = E.time ? E.time+' ' : '';
       evHtml += '<div class="rc2-cal-ev" style="'+bg+'">'+tlabel+rc2Esc(E.name)+'</div>';
     }
-    // 입과: 말일에 표기
+    // 입과일정(관리자 지정): 해당 날짜에 초록색으로 표기
     var joinHtml='';
-    if(dn===daysIn && joinCount>0){ joinHtml='<div class="rc2-cal-ev" style="background:var(--alpha);color:#fff">입과 '+joinCount+'명</div>'; cellCls+=''; }
+    var hasJoinEvt=false;
+    if(rc2.joinEvents && rc2.joinEvents.length){
+      for(var je=0; je<rc2.joinEvents.length; je++){
+        if(rc2.joinEvents[je].date===dayKey){
+          joinHtml += '<div class="rc2-cal-ev rc2-joinevt" data-jeid="'+rc2.joinEvents[je].id+'" style="background:var(--alpha);color:#fff">'+rc2Esc(rc2.joinEvents[je].label)+'</div>';
+          hasJoinEvt=true;
+        }
+      }
+    }
     var holHtml='';
     if(rc2IsHoliday(dayKey)){ holHtml='<div class="rc2-cal-ev" style="color:#E24B4A;padding:0 1px">'+RC2_HOLIDAYS[dayKey]+'</div>'; }
-    var cellStyle = (dn===daysIn && joinCount>0) ? 'background:var(--alpha-soft)' : '';
+    var cellStyle = hasJoinEvt ? 'background:var(--alpha-soft)' : '';
     html += '<div class="'+cellCls+'" style="'+cellStyle+'" data-calday="'+dayKey+'"><div class="dn" style="'+dnColor+'">'+dn+'</div>'+holHtml+evHtml+joinHtml+'</div>';
   }
   document.getElementById('rc2CalGrid').innerHTML = html;
 
   var cells = document.querySelectorAll('#rc2CalGrid .rc2-cal-cell[data-calday]');
   for(var c=0;c<cells.length;c++) cells[c].addEventListener('click', function(){ rc2.calSel=this.getAttribute('data-calday'); rc2RenderCalDetail(evByDay, rc2.calSel); rc2RenderCal(); });
+
+  // 입과일정 칩 클릭 → 수정 (셀 클릭보다 우선)
+  var jeChips = document.querySelectorAll('#rc2CalGrid .rc2-joinevt[data-jeid]');
+  for(var jc=0; jc<jeChips.length; jc++){
+    jeChips[jc].style.cursor='pointer';
+    jeChips[jc].addEventListener('click', function(ev){ ev.stopPropagation(); rc2OpenJoinEvt(this.getAttribute('data-jeid')); });
+  }
 
   if(rc2.calSel) rc2RenderCalDetail(evByDay, rc2.calSel); else document.getElementById('rc2CalDetail').innerHTML='';
 }
