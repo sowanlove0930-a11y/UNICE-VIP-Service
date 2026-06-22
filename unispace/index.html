@@ -1966,7 +1966,7 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .rc2-mng-body.open { display:block; }
 
 /* 후보자 추가/수정 모달 */
-.rc2-addbox { max-width:380px; max-height:86vh; overflow-y:auto; }
+.rc2-addbox { max-width:520px; width:90vw; max-height:88vh; overflow-y:auto; padding:24px 26px; }
 .rc2-group { background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; }
 .rc2-group-title { font-size:11px; font-weight:800; letter-spacing:.04em; color:var(--text2); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
 .rc2-group-title::before { content:''; width:3px; height:12px; background:var(--gold); border-radius:2px; display:inline-block; }
@@ -2041,7 +2041,7 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
   .rc2-sum-val { font-size:17px; }
   .rc2-cal-cell { min-height:46px; }
   .rc2-cal-title { font-size:14px; }
-  .rc2-addbox { max-width:96vw; }
+  .rc2-addbox { max-width:96vw; width:96vw; padding:18px 16px; }
 }
 
 /* ── 이관 완료 성공 모달 ── */
@@ -9642,11 +9642,23 @@ function rc2RenderCal() {
   var d = rc2GetMonthData(ym);
   // 날짜별 이벤트 수집 (알파+브라보 통합)
   var evByDay = {}; // '2026-06-10' -> [ {time,name,ref,type,branch,id} ]
+  // 날짜 문자열을 {y,m,d,key,time}로 정규화 (어떤 형식이든 대응)
+  function _rcParseDt(dt){
+    var s0=String(dt||'').trim(); if(!s0) return null;
+    var mm=s0.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if(mm){ var hh=mm[4]?(parseInt(mm[4],10)+':'+mm[5]):''; return {y:+mm[1],m:+mm[2],d:+mm[3],time:hh}; }
+    var m2=s0.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+    if(m2){ return {y:+m2[1],m:+m2[2],d:+m2[3],time:''}; }
+    var dd=new Date(s0);
+    if(!isNaN(dd.getTime())){ var h2=dd.getHours(),n2=dd.getMinutes(); return {y:dd.getFullYear(),m:dd.getMonth()+1,d:dd.getDate(),time:(h2||n2)?(h2+':'+('0'+n2).slice(-2)):''}; }
+    return null;
+  }
   function pushEv(dt, name, ref, type, branch, id){
-    if(!dt) return; var dp=dt.split(' '); var day=dp[0]; var time=dp[1]||'';
-    var dparts=day.split('-'); if(parseInt(dparts[0],10)!==y || parseInt(dparts[1],10)-1!==m) return;
+    var pd=_rcParseDt(dt); if(!pd) return;
+    if(pd.y!==y || pd.m-1!==m) return;
+    var day=pd.y+'-'+(pd.m<10?'0':'')+pd.m+'-'+(pd.d<10?'0':'')+pd.d;
     if(!evByDay[day]) evByDay[day]=[];
-    evByDay[day].push({ time:time, name:name, ref:ref, type:type, branch:branch, id:id });
+    evByDay[day].push({ time:pd.time, name:name, ref:ref, type:type, branch:branch, id:id });
   }
   var joinByDay = 0; // 입과는 '월' 단위 → 말일에 표기
   var joinCount = 0;
