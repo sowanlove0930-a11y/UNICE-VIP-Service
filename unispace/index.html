@@ -3228,6 +3228,9 @@ window.UNISPACE_FCM = {
             <div id="actTopList" style="display:flex;flex-direction:column;gap:0"></div>
           </div>
         </div>
+        <div style="padding:0 12px 16px">
+          <div id="stdFpSection"></div>
+        </div>
       </div>
     </div>
 
@@ -4586,6 +4589,7 @@ function showDashboard() {
       renderBojangCard();
       if(typeof renderGoals==='function') renderGoals();
       if(typeof renderTop10==='function') renderTop10();
+      if(typeof _stdLoadConfirmsFromGas==='function') _stdLoadConfirmsFromGas(function(){ if(typeof renderStdFp==='function') renderStdFp(); });
     });
 
     // 지점 목표(goal_adjust)를 GAS에서 로드 후 보장월초 카드 갱신 (전체 공유)
@@ -5258,6 +5262,7 @@ function renderTop10() {
 
   renderActTop4();
   renderRecruitTop4();
+  if(typeof renderStdFp==='function') renderStdFp();
 }
 
 function renderActTop4() {
@@ -5430,6 +5435,294 @@ var PERF_LOG_KEY = 'unispace_perf_log';
 var PERF_CATS = ['건강상해','종신','저축','기타'];
 var PERF_COMPANIES = ['한화생명','라이나','미래에셋','신한라이프','흥국생명','한화손보','현대해상','DB손보','KB손보','메리츠'];
 function getPerfLog(){ try{ return JSON.parse(localStorage.getItem(PERF_LOG_KEY)||'[]'); }catch(e){ return []; } }
+
+// 스탠다드FP: FP별 4개 조건 판정
+// (1)10일까지 가동: 6월은 전원 인정, 이후 월은 1~10일 perf 존재
+// (2)히든고객(한화생명) 5만+  (3)손보 누계 10만+  (4)총보장월초 50만+
+var STD_CONFIRM_KEY = 'unispace_std_confirm';
+function _stdGetConfirms(){ try{ return JSON.parse(localStorage.getItem(STD_CONFIRM_KEY)||'{}'); }catch(e){ return {}; } }
+function _stdSaveConfirms(o){ localStorage.setItem(STD_CONFIRM_KEY, JSON.stringify(o)); }
+function _stdCurrentYm(){
+  var now = new Date();
+  var v = new Date(now.getFullYear(), now.getMonth() + (typeof monthOffset!=='undefined'?monthOffset:0), 1);
+  return v.getFullYear()+'-'+('0'+(v.getMonth()+1)).slice(-2);
+}
+function _stdStreakLabel(name, ym){
+  var conf = _stdGetConfirms();
+  var months = Object.keys(conf).filter(function(k){ return k<=ym && Array.isArray(conf[k]) && conf[k].indexOf(name)>=0; }).sort();
+  if(!months.length) return null;
+  function prevYm(y){ var p=y.split('-'); var d=new Date(parseInt(p[0]),parseInt(p[1])-1,1); d.setMonth(d.getMonth()-1); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); }
+  var streak=0, cur=ym;
+  while(months.indexOf(cur)>=0){ streak++; cur=prevYm(cur); }
+  if(streak>=2) return { type:'streak', n:streak };
+  if(months.length>=2){
+    var mlabel = months.map(function(m){ return parseInt(m.slice(5,7))+'\uC6D4'; }).join('\u00B7');
+    return { type:'multi', n:months.length, label:mlabel };
+  }
+  return { type:'first' };
+}
+function _stdFpCompute(){
+  var log = getPerfLog();
+  var now = new Date(); now.setHours(0,0,0,0);
+  var viewM = new Date(now.getFullYear(), now.getMonth() + (typeof monthOffset!=='undefined'?monthOffset:0), 1);
+  var ymPrefix = viewM.getFullYear()+'-'+('0'+(viewM.getMonth()+1)).slice(-2);
+  var isJune2026 = (ymPrefix === '2026-06');
+  var seeAll = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'||(typeof _isManagerUser==='function'&&_isManagerUser(currentUser))||(typeof _isMgrTitleUser==='function'&&_isMgrTitleUser(currentUser)));
+  var nb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
+  var brFilter = (typeof weekBranchFilter!=='undefined' && weekBranchFilter!=='all') ? weekBranchFilter : (currentUser&&currentUser.role==='지점장'?currentUser.branch:'all');
+
+  var agg = {}; // fpId -> {name, branch, hanwha, son, total, hasEarly}
+  log.forEach(function(r){
+    if(!r.date || r.date.indexOf(ymPrefix)!==0) return;
+    if(brFilter!=='all' && nb(r.branch)!==nb(brFilter)) return;
+    if(!seeAll && currentUser){ if(currentUser.branch && nb(r.branch)!==nb(currentUser.branch)) return; if(r.fpId&&currentUser.id&&r.fpId!==currentUser.id) return; }
+    var key = r.fpId || r.fpName;
+    if(!agg[key]) agg[key] = { name:r.fpName, branch:r.branch, hanwha:0, son:0, total:0, hasEarly:false };
+    agg[key].total += (parseInt(r.total)||0);
+    var dd = parseInt((r.date||'').slice(8,10))||0;
+    if(dd>=1 && dd<=10) agg[key].hasEarly = true;
+    (r.products||[]).forEach(function(p){
+      var amt = parseInt(p.amount)||0;
+      var co = (p.co||'');
+      var cat = (p.cat||'');
+      if(co.indexOf('\uD55C\uD654\uC0DD\uBA85')>=0) agg[key].hanwha += amt;
+      // 손보 판정: cat이 손보 계열이거나, 회사명이 손보 목록에 있으면
+      var isSon = (cat.indexOf('\uC190')>=0) || (typeof PERF_NONLIFE!=='undefined' && PERF_NONLIFE.some(function(n){ return co.indexOf(n)>=0; })) || (co.indexOf('\uC190\uBCF4')>=0) || (co.indexOf('\uD654\uC7AC')>=0) || (co.indexOf('\uD574\uC0C1')>=0);
+      if(isSon) agg[key].son += amt;
+    });
+  });
+
+  var rows = [];
+  Object.keys(agg).forEach(function(k){
+    var a = agg[k];
+    var c1 = isJune2026 ? true : a.hasEarly;      // 가동
+    var c2 = a.hanwha >= 50000;                    // 히든고객(한화생명 5만+)
+    var c3 = a.son >= 100000;                       // 손보 누계 10만+
+    var c4 = a.total >= 500000;                     // 총보장월초 50만+
+    var cnt = (c1?1:0)+(c2?1:0)+(c3?1:0)+(c4?1:0);
+    rows.push({ name:a.name, branch:a.branch, c1:c1, c2:c2, c3:c3, c4:c4, cnt:cnt });
+  });
+  return rows;
+}
+
+var _stdRosterData = {}; // 조건키 -> rows (호버/모달용)
+function renderStdFp(){
+  var host = document.getElementById('stdFpSection');
+  if(!host) return;
+  var rows = _stdFpCompute();
+  var selected = rows.filter(function(r){ return r.cnt===4; }).sort(function(a,b){ return (a.name>b.name)?1:-1; });
+  var n1=0,n2=0,n3=0,n4=0;
+  rows.forEach(function(r){ if(r.c1)n1++; if(r.c2)n2++; if(r.c3)n3++; if(r.c4)n4++; });
+  var total = rows.length || 1;
+  // 각 조건별 후보(4개 미달성자 중 그 조건 달성자), 달성수 내림차순
+  function rosterFor(key){
+    var f = rows.filter(function(r){ return r.cnt<4 && r[key]; });
+    f.sort(function(a,b){ if(b.cnt!==a.cnt) return b.cnt-a.cnt; return (a.name>b.name)?1:-1; });
+    return f;
+  }
+  _stdRosterData = { c2:rosterFor('c2'), c3:rosterFor('c3'), c4:rosterFor('c4') };
+
+  function bar(key, label, cnt, bg, fill, txt, bd, hoverable){
+    var pct = Math.round(cnt/total*100);
+    var right = hoverable ? '<span style="position:absolute;right:9px;top:7px;font-size:9px;color:'+txt+';font-weight:700;background:rgba(255,255,255,.65);padding:2px 7px;border-radius:5px">명단 보기</span>' : '<span style="position:absolute;left:11px;top:7px;font-size:12px;font-weight:700;color:'+txt+'">\uC804\uC6D0 \uC778\uC815</span>';
+    var inner = hoverable
+      ? '<div style="position:absolute;left:0;top:0;bottom:0;width:'+pct+'%;background:'+fill+'"></div><span style="position:absolute;left:11px;top:7px;font-size:12px;font-weight:700;color:'+txt+'">'+cnt+'\uBA85</span>'+right
+      : '<div style="position:absolute;left:0;top:0;bottom:0;width:100%;background:'+fill+'"></div>'+right;
+    var barAttr = hoverable ? ' data-stdkey="'+key+'" style="flex:1;background:#fff;border-radius:7px;height:30px;position:relative;overflow:hidden;border:1px solid '+bd+';cursor:pointer"' : ' style="flex:1;background:#fff;border-radius:7px;height:30px;position:relative;overflow:hidden;border:1px solid '+bd+'"';
+    return '<div style="display:flex;align-items:center;gap:10px;position:relative">'+
+      '<div style="width:150px;font-size:13px;font-weight:700;color:var(--text);flex-shrink:0">'+label+'</div>'+
+      '<div class="std-bar"'+barAttr+'>'+inner+'</div></div>';
+  }
+
+  var h = '<div style="background:var(--bg3);border-radius:14px;padding:18px 20px">';
+  h += '<div style="font-size:16px;font-weight:700;color:var(--text);text-align:center;margin-bottom:14px">\uD83C\uDF96\uFE0F \uC2A4\uD0E0\uB2E4\uB4DCFP \uD604\uD669</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px">';
+  h += bar('c1','\uD83C\uDFC3 10\uC77C\uAE4C\uC9C0 \uAC00\uB3D9', n1, '#ECEAE3','#ECEAE3','#5F5E5A','#D3D1C7', false);
+  h += bar('c2','\uD83D\uDC8E \uD788\uB4E0\uACE0\uAC1D \uB2EC\uC131', n2, '#FAEEDA','#FAEEDA','#854F0B','#E0C98A', true);
+  h += bar('c3','\uD83D\uDEE1\uFE0F \uC190\uBCF4 \uB204\uACC4 10\uB9CC \uB2EC\uC131', n3, '#DCF0E4','#DCF0E4','#1F7A4D','#9FD9BC', true);
+  h += bar('c4','\uD83D\uDCB0 \uCD1D\uBCF4\uC7A5\uC6D4\uCD08 50\uB9CC \uB2EC\uC131', n4, '#EFE9FA','#EFE9FA','#5A2FA0','#CDBCEC', true);
+  h += '</div>';
+  // 선발 박스
+  var ym = _stdCurrentYm();
+  var conf = _stdGetConfirms();
+  var isConfirmed = Array.isArray(conf[ym]) && conf[ym].length>0;
+  var isRep = currentUser && currentUser.role==='\uB300\uD45C';
+  h += '<div style="background:#fff;border:1.5px solid #2E9E6B;border-radius:11px;padding:13px 15px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:'+(selected.length?'10px':'0')+'">';
+  h += '<span style="font-size:13px;font-weight:700;color:#1F7A4D">\uD83C\uDFC5 \uC2A4\uD0E0\uB2E4\uB4DCFP \uC120\uBC1C (4\uAC1C \uB2EC\uC131)</span>';
+  h += '<span style="font-size:14px;font-weight:800;color:#1F7A4D">'+selected.length+'\uBA85</span></div>';
+  if(selected.length){
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    selected.forEach(function(r){
+      var isAl = String(r.branch||'').indexOf('\uC54C\uD30C')>=0;
+      var dot = isAl ? '#1D9E75' : '#7B52D0';
+      var sl = _stdStreakLabel(r.name, ym);
+      var badge='';
+      if(sl){
+        if(sl.type==='streak') badge=' <span style="font-size:8px;font-weight:800;color:#fff;background:#D85A30;padding:1px 6px;border-radius:999px;margin-left:2px">\uD83D\uDD25'+sl.n+'\uD68C</span>';
+        else if(sl.type==='multi') badge=' <span style="font-size:8px;font-weight:800;color:#fff;background:#BA7517;padding:1px 6px;border-radius:999px;margin-left:2px">'+sl.n+'\uD68C</span>';
+      }
+      h += '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 11px;border-radius:999px;background:#DCF0E4;color:#1F7A4D">'+
+        '<span style="width:6px;height:6px;border-radius:50%;background:'+dot+'"></span>'+rc2Esc(r.name)+badge+'</span>';
+    });
+    h += '</div>';
+  } else {
+    h += '<div style="font-size:11px;color:var(--text3);margin-top:6px">\uC544\uC9C1 4\uAC1C \uC870\uAC74\uC744 \uBAA8\uB450 \uB2EC\uC131\uD55C FP\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4</div>';
+  }
+  // 대표 전용 확정/취소 버튼
+  if(isRep){
+    var mLbl = parseInt(ym.slice(5,7))+'\uC6D4';
+    if(isConfirmed){
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:10px;border-top:0.5px solid var(--bdr)">'+
+        '<span style="font-size:10px;color:#1F7A4D;font-weight:700">\u2713 '+mLbl+' \uD655\uC815\ub428</span>'+
+        '<button onclick="_stdUnconfirm()" style="font-size:10px;font-weight:700;padding:4px 11px;border-radius:7px;border:1px solid var(--bdr);background:var(--sur);color:var(--text2);cursor:pointer">\uD655\uC815 \uCDE8\uC18C</button></div>';
+    } else if(selected.length){
+      h += '<div style="margin-top:11px;padding-top:10px;border-top:0.5px solid var(--bdr);text-align:right">'+
+        '<button onclick="_stdConfirm()" style="font-size:10px;font-weight:800;padding:5px 14px;border-radius:7px;border:none;background:#2E9E6B;color:#fff;cursor:pointer">\uD83D\uDCCC '+mLbl+' \uC120\uBC1C \uD655\uC815</button></div>';
+    }
+  }
+  h += '</div></div>';
+  host.innerHTML = h;
+
+  // 클릭 시 모달 (PC·모바일 공통)
+  var bars = host.querySelectorAll('.std-bar[data-stdkey]');
+  for(var i=0;i<bars.length;i++){
+    (function(el){
+      var key = el.getAttribute('data-stdkey');
+      el.addEventListener('click', function(ev){ ev.stopPropagation(); _stdTogglePop(el, key); });
+    })(bars[i]);
+  }
+}
+
+function _stdConfirm(){
+  if(!(currentUser && currentUser.role==='\uB300\uD45C')) return;
+  var ym = _stdCurrentYm();
+  var rows = _stdFpCompute();
+  var names = rows.filter(function(r){ return r.cnt===4; }).map(function(r){ return r.name; });
+  if(!names.length){ showToast('\uC120\uBC1C\ud560 FP\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'); return; }
+  var conf = _stdGetConfirms();
+  conf[ym] = names;
+  _stdSaveConfirms(conf);
+  _stdSaveConfirmToGas(ym, names);
+  showToast('\u2705 '+parseInt(ym.slice(5,7))+'\uC6D4 \uC2A4\uD0E0\uB2E4\uB4DCFP \uD655\uC815 ('+names.length+'\uBA85)');
+  renderStdFp();
+}
+function _stdUnconfirm(){
+  if(!(currentUser && currentUser.role==='\uB300\uD45C')) return;
+  var ym = _stdCurrentYm();
+  if(!confirm(parseInt(ym.slice(5,7))+'\uC6D4 \uD655\uC815\uC744 \uCDE8\uC18C\ud560\uAE4C\uC694?')) return;
+  var conf = _stdGetConfirms();
+  delete conf[ym];
+  _stdSaveConfirms(conf);
+  _stdSaveConfirmToGas(ym, []);
+  showToast('\uD655\uC815\uC774 \uCDE8\uC18C\ub418\uC5C8\uC2B5\uB2C8\uB2E4');
+  renderStdFp();
+}
+function _stdSaveConfirmToGas(ym, names){
+  try {
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'saveStdConfirm', ym:ym, names:names, fp:(currentUser?currentUser.id:'') })
+    }).catch(function(){});
+  } catch(e){}
+}
+function _stdLoadConfirmsFromGas(cb){
+  try {
+    fetch(UNISPACE_GAS_URL + '?action=getStdConfirm&_=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if(res && res.ok && res.confirms){ _stdSaveConfirms(res.confirms); }
+        if(cb) cb();
+      }).catch(function(){ if(cb) cb(); });
+  } catch(e){ if(cb) cb(); }
+}
+function _stdCondLabel(key){ return key==='c2'?'\uD83D\uDC8E \uD788\uB4E0\uACE0\uAC1D':key==='c3'?'\uD83D\uDEE1\uFE0F \uC190\uBCF4 10\uB9CC':'\uD83D\uDCB0 \uCD1D\uBCF4\uC7A5\uC6D4\uCD08 50\uB9CC'; }
+function _stdRowHtml(r){
+  var cntBg = r.cnt===3?'#7B52D0':r.cnt===2?'#BA7517':'#888';
+  var nb = String(r.branch||'');
+  var isAl = nb.indexOf('\uC54C\uD30C')>=0;
+  var isBr = nb.indexOf('\uBE0C\uB77C\uBCF4')>=0;
+  var dot = isAl ? '#1D9E75' : isBr ? '#7B52D0' : '#B4B0A4';
+  var nmColor = isAl ? '#0F6E56' : isBr ? '#5A2FA0' : 'var(--text)';
+  var icons='';
+  if(r.c1) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#ECEAE3;color:#5F5E5A">\uAC00\uB3D9</span>';
+  if(r.c2) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#FAEEDA;color:#854F0B">\uD788\uB4E0</span>';
+  if(r.c3) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#E1F5EE;color:#0F6E56">\uC190\uBCF4</span>';
+  if(r.c4) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#FBEAF0;color:#993556">50\uB9CC</span>';
+  return '<div style="display:flex;align-items:center;gap:7px;padding:2px 0">'+
+    '<span style="width:7px;height:7px;border-radius:50%;background:'+dot+';flex-shrink:0"></span>'+
+    '<span style="font-size:12px;font-weight:700;color:'+nmColor+';width:50px;flex-shrink:0">'+rc2Esc(r.name)+'</span>'+
+    '<span style="font-size:9px;font-weight:800;color:#fff;background:'+cntBg+';padding:1px 6px;border-radius:5px;flex-shrink:0">'+r.cnt+'\uAC1C</span>'+
+    '<span style="display:flex;gap:3px;flex-wrap:wrap">'+icons+'</span></div>';
+}
+var _stdPopBranch = 'all';
+function _stdRosterInner(key){
+  var all = _stdRosterData[key]||[];
+  var nb = function(b){ var s=String(b||''); if(s.indexOf('\uC54C\uD30C')>=0) return '\uC54C\uD30C'; if(s.indexOf('\uBE0C\uB77C\uBCF4')>=0) return '\uBE0C\uB77C\uBCF4'; return ''; };
+  var rows = (_stdPopBranch==='all') ? all : all.filter(function(r){ return nb(r.branch)===_stdPopBranch; });
+  var nAll=all.length, nAl=all.filter(function(r){return nb(r.branch)==='\uC54C\uD30C';}).length, nBr=all.filter(function(r){return nb(r.branch)==='\uBE0C\uB77C\uBCF4';}).length;
+  var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;padding-bottom:7px;border-bottom:0.5px solid var(--bdr)">'+
+    '<span style="font-size:12px;font-weight:700;color:#1F7A4D">'+_stdCondLabel(key)+' \uB2EC\uC131 \u00B7 '+rows.length+'\uBA85</span></div>';
+  // 지점 버튼
+  function btn(val,label,cnt,onCls){
+    var on = (_stdPopBranch===val);
+    var st = on
+      ? (val==='\uC54C\uD30C'?'background:#DCF0E4;color:#0F6E56;border-color:#1D9E75':val==='\uBE0C\uB77C\uBCF4'?'background:#EFE9FA;color:#5A2FA0;border-color:#7B52D0':'background:#FAEEDA;color:#854F0B;border-color:#E0C98A')
+      : 'background:var(--sur);color:var(--text2);border-color:var(--bdr)';
+    return '<span data-stdbr="'+val+'" data-stdkey="'+key+'" style="font-size:10px;font-weight:700;padding:3px 11px;border-radius:999px;border:1px solid;cursor:pointer;'+st+'">'+label+' '+cnt+'</span>';
+  }
+  h += '<div style="display:flex;gap:5px;margin-bottom:10px">'+btn('all','\uC804\uCCB4',nAll)+btn('\uC54C\uD30C','\uC54C\uD30C',nAl)+btn('\uBE0C\uB77C\uBCF4','\uBE0C\uB77C\uBCF4',nBr)+'</div>';
+  if(!rows.length){ h += '<div style="font-size:11px;color:var(--text3)">\uD574\uB2F9 \uD6C4\uBCF4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4</div>'; return h; }
+  h += '<div style="display:flex;flex-direction:column;gap:5px">';
+  rows.forEach(function(r){ h += _stdRowHtml(r); });
+  h += '</div>';
+  return h;
+}
+function _stdRebindPopBtns(){
+  if(!_stdPopEl) return;
+  var btns = _stdPopEl.querySelectorAll('[data-stdbr]');
+  for(var i=0;i<btns.length;i++){
+    (function(el){
+      el.addEventListener('click', function(e){
+        e.stopPropagation();
+        _stdPopBranch = el.getAttribute('data-stdbr');
+        _stdPopEl.innerHTML = _stdRosterInner(el.getAttribute('data-stdkey'));
+        _stdRebindPopBtns();
+      });
+    })(btns[i]);
+  }
+}
+var _stdPopEl = null, _stdPopKey = null;
+function _stdHidePop(){ if(_stdPopEl){ _stdPopEl.remove(); _stdPopEl=null; _stdPopKey=null; document.removeEventListener('click', _stdOutside, true); } }
+function _stdOutside(e){ if(_stdPopEl && !_stdPopEl.contains(e.target)) _stdHidePop(); }
+function _stdTogglePop(barEl, key){
+  if(_stdPopEl && _stdPopKey===key){ _stdHidePop(); return; }
+  _stdHidePop();
+  var pop = document.createElement('div');
+  pop.id='_stdPop';
+  pop.style.cssText='position:absolute;z-index:9000;background:var(--bg2);border:1px solid var(--bdr);border-radius:11px;padding:12px 14px;box-shadow:0 10px 32px rgba(0,0,0,.32);width:280px;max-height:340px;overflow-y:auto';
+  pop.addEventListener('click', function(e){ e.stopPropagation(); });
+  _stdPopBranch = 'all';
+  pop.innerHTML = _stdRosterInner(key);
+  document.body.appendChild(pop);
+  _stdPopEl = pop; _stdPopKey = key;
+  _stdRebindPopBtns();
+  var rect = barEl.getBoundingClientRect();
+  var popW = 280;
+  var vw = document.documentElement.clientWidth;
+  var vh = document.documentElement.clientHeight;
+  var left, top = rect.top;
+  if(rect.right + 8 + popW <= vw){ left = rect.right + 8; }
+  else if(rect.left - 8 - popW >= 0){ left = rect.left - popW - 8; }
+  else { left = Math.max(8, vw - popW - 8); top = rect.bottom + 6; }
+  // 세로: 팝업 실제 높이 측정 후 화면 밖으로 안 넘치게
+  var popH = pop.offsetHeight;
+  if(top + popH > vh - 8){ top = Math.max(8, vh - popH - 8); }
+  pop.style.left = (window.pageXOffset + left) + 'px';
+  pop.style.top = (window.pageYOffset + top) + 'px';
+  setTimeout(function(){ document.addEventListener('click', _stdOutside, true); }, 0);
+}
 
 // GAS에서 업적 로드 -> localStorage 반영 -> 집계 갱신
 function loadPerfFromGas(cb, force){
@@ -10806,6 +11099,7 @@ function setWeekBranch(val, el) {
   else if(val==='브라보지점') el.classList.add('active','active-br');
   else el.classList.add('active');
   renderActView();
+  if(typeof renderStdFp==='function') renderStdFp();
 }
 
 function setActViewMode(mode) {
