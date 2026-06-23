@@ -437,6 +437,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .list-addr-cell > span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .list-cell.val { color: var(--text); font-weight: 500; }
 .list-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; text-align: center; }
+.cust-new-badge { display:inline-block; font-size:9px; font-weight:800; color:#fff; background:#E24B4A; padding:2px 6px; border-radius:5px; margin-left:6px; vertical-align:middle; letter-spacing:.04em; box-shadow:0 1px 4px rgba(226,75,74,.4); }
 .type-contract { background: rgba(201,168,76,.12); color: var(--gold2); border: 1px solid rgba(201,168,76,.2); }
 .type-manage   { background: rgba(59,130,246,.1); color: #2563EB; border: 1px solid rgba(59,130,246,.2); }
 
@@ -1682,6 +1683,17 @@ function _dateDiff(d) {
   var t = new Date(d); t.setHours(0,0,0,0);
   return Math.round((t - _TODAY) / 86400000);
 }
+function _custTodayStr(){
+  var n=new Date();
+  return n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2)+'-'+('0'+n.getDate()).slice(-2);
+}
+function _isNewCustomer(c){
+  if(!c || !c.registered) return false;
+  return String(c.registered).slice(0,10) === _custTodayStr();
+}
+function _newBadgeHtml(c){
+  return _isNewCustomer(c) ? '<span class="cust-new-badge">NEW</span>' : '';
+}
 function getTodayAlerts(c) {
   var alerts = [];
   // 생일
@@ -2877,8 +2889,11 @@ function renderCustomerList() {
     return matchType && matchBranch && matchFp && matchQ;
   });
 
-  /* 가나다순 기본 정렬 */
+  /* NEW(오늘 등록) 우선, 그 안에서 가나다순 → 이후 일반 가나다순 */
   list.sort(function(a, b) {
+    var an = _isNewCustomer(a) ? 0 : 1;
+    var bn = _isNewCustomer(b) ? 0 : 1;
+    if (an !== bn) return an - bn;
     return a.name.localeCompare(b.name, 'ko');
   });
 
@@ -2922,7 +2937,7 @@ function renderCustomerList() {
             '<span class="grade-badge '+gbg+'">'+c.grade+'</span>'+tBadge+
           '</div>'+
         '</div>'+
-        '<div class="card-name">'+c.name+insBadge+'</div>'+
+        '<div class="card-name">'+c.name+_newBadgeHtml(c)+insBadge+'</div>'+
         _fpBadge(c)+
         '<div class="card-phone">'+c.phone+'</div>'+
         todayBadges+
@@ -2979,7 +2994,7 @@ function renderCustomerList() {
         else _stripe='transparent';
         return '<div class="list-row '+gradeRowCls+' '+typeRowCls+'" data-id="'+c.id+'" onclick="openDetail(this.dataset.id)" style="border-left:3px solid '+_stripe+'">'+
           '<div class="list-avatar '+av+'">'+c.name[0]+'</div>'+
-          '<div><div class="list-name-wrap">'+alertDot+'<span class="list-name">'+c.name+'</span>'+insBadgeL+_fpBadge(c)+'</div>'+alertBadges+'</div>'+
+          '<div><div class="list-name-wrap">'+alertDot+'<span class="list-name">'+c.name+'</span>'+_newBadgeHtml(c)+insBadgeL+_fpBadge(c)+'</div>'+alertBadges+'</div>'+
           '<div class="list-cell val">'+c.phone+'</div>'+
           '<div class="list-cell list-addr-cell">'+(c.address ? '<span title="'+c.address.replace(/"/g,'&quot;')+'">📍 '+c.address+'</span>' : '<span style="color:var(--text3)">미등록</span>')+'</div>'+
           '<div><span class="grade-badge '+gbg+'" style="font-size:10px">'+c.grade+'</span></div>'+

@@ -2981,7 +2981,7 @@ window.UNISPACE_FCM = {
     <div class="stat s-blue" id="stat2-admin" style="display:none">
       <div class="stat-lbl">유니스 계약고객</div>
       <div class="stat-val" id="st2-admin">—</div>
-      <div class="stat-unit" id="st2-admin-sub"><span id="st2-month">이번달</span> 신규 · 알파 0 · 브라보 0</div>
+      <div class="stat-unit" id="st2-admin-sub">오늘 신규 · 알파 0 · 브라보 0</div>
     </div>
     <div class="stat s-blue" id="stat2-fp" style="display:none">
       <div class="stat-lbl">내 고객 수</div>
@@ -4229,7 +4229,6 @@ function renderBojangCard() {
   var _showTotal = (typeof _bojangShowsTotal==='function' && _bojangShowsTotal(currentUser));
   var _l1=document.getElementById('st1-lbl'); if(_l1) _l1.textContent=_curMon+'월 '+(_showTotal?'':'내 ')+'보장월초 및 건수';
   var _l4=document.getElementById('st4-recruit-lbl'); if(_l4) _l4.textContent=_curMon+'월 리크루팅';
-  var _l2=document.getElementById('st2-month'); if(_l2) _l2.textContent=_curMon+'월';
   var _l3=document.getElementById('st3-fp-lbl'); if(_l3) _l3.textContent=_curMon+'월 출결현황';
   // 보장월초 카드: 목표는 GAS 연동 goal_adjust 기준 (전체 공유), 만원 단위
   var _bgoals = getBranchMonthGoals();
@@ -4564,13 +4563,13 @@ function showDashboard() {
       fetch(st2Url).then(function(r){return r.json();}).then(function(res){
         var list = (res && res.ok && res.customers) ? res.customers : [];
         var now2 = new Date();
-        var ym2 = now2.getFullYear() + '-' + (now2.getMonth()+1<10?'0':'') + (now2.getMonth()+1);
+        var today2 = now2.getFullYear() + '-' + (now2.getMonth()+1<10?'0':'') + (now2.getMonth()+1) + '-' + (now2.getDate()<10?'0':'') + now2.getDate();
         var totalContract = 0, alphaNew = 0, bravoNew = 0;
         list.forEach(function(c){
           if((c.customerType||'계약') !== '계약') return;
           totalContract++;
-          var reg = c.registered || '';
-          if(reg.indexOf(ym2) === 0){
+          var reg = (c.registered || '').slice(0,10);
+          if(reg === today2){
             var br = (c.branch||'');
             if(br.indexOf('알파')>=0) alphaNew++;
             else if(br.indexOf('브라보')>=0) bravoNew++;
@@ -4579,7 +4578,7 @@ function showDashboard() {
         var el2 = document.getElementById('st2-admin');
         if(el2){ skOff(['st2-admin']); el2.textContent = totalContract + '명'; }
         var sub2 = document.getElementById('st2-admin-sub');
-        if(sub2){ var _mLbl=(new Date().getMonth()+1)+'월'; sub2.textContent = _mLbl+' 신규 · 알파 '+alphaNew+' · 브라보 '+bravoNew; }
+        if(sub2){ sub2.textContent = '오늘 신규 · 알파 '+alphaNew+' · 브라보 '+bravoNew; }
       }).catch(function(){});
 
       // 3번 (대표/지점장): 출결현황 — localStorage 실계산
@@ -7877,10 +7876,10 @@ function _gaRenderBranchGoal(){
     return '<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:12px;margin-bottom:8px">'+
       '<div style="font-size:13px;font-weight:700;margin-bottom:8px">'+label+' 지점 목표</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 생보</div><input type="text" id="gab_'+bk+'_life" value="'+_gaInpVal(v.life)+'" placeholder="0" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 손보</div><input type="text" id="gab_'+bk+'_non" value="'+_gaInpVal(v.non)+'" placeholder="0" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 생보</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaInpVal(v.wLife)+'" placeholder="0" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 손보</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaInpVal(v.wNon)+'" placeholder="0" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 생보</div><input type="text" id="gab_'+bk+'_life" value="'+_gaInpVal(v.life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 손보</div><input type="text" id="gab_'+bk+'_non" value="'+_gaInpVal(v.non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 생보</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaInpVal(v.wLife)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 손보</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaInpVal(v.wNon)+'" class="ga-inp"></div>'+
       '</div>'+
     '</div>';
   }
@@ -7928,10 +7927,10 @@ function _gaRenderFpList(){
         '<div style="font-size:10px;color:'+(hasOrig?'var(--gold2)':'var(--text3)')+'">'+origTxt+'</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 생보</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaInpVal(life)+'" placeholder="0" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 손보</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaInpVal(non)+'" placeholder="0" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 생보</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaInpVal(wlife)+'" placeholder="0" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 손보</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaInpVal(wnon)+'" placeholder="0" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 생보</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaInpVal(life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 손보</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaInpVal(non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 생보</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaInpVal(wlife)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 손보</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaInpVal(wnon)+'" class="ga-inp"></div>'+
       '</div>'+
     '</div>';
   });
