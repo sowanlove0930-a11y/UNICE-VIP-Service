@@ -10872,8 +10872,15 @@ function rc2DeleteEvt(){
   var it=null,idx=-1; for(var i=0;i<d.list.length;i++) if(d.list[i].id===rc2res.candId){ it=d.list[i]; idx=i; break; }
   if(!it){ showToast('후보자를 찾을 수 없습니다'); return; }
   var evs=rc2NormEvents(it).slice();
-  var nl=[]; for(var e=0;e<evs.length;e++) if(evs[e].id!==rc2res.evtId) nl.push(evs[e]);
+  var removed=false;
+  var nl=[]; for(var e=0;e<evs.length;e++){ if(evs[e].id!==rc2res.evtId) nl.push(evs[e]); else removed=true; }
   it.events=nl;
+  // 구버전 itv/panel 필드로 재구성된 이벤트였다면 원본 상태 필드도 비워 부활 방지
+  if(removed){
+    var _rid=String(rc2res.evtId||'');
+    if(_rid.indexOf('_itv')>=0){ it.itvState=''; it.itvDt=''; }
+    if(_rid.indexOf('_pnl')>=0){ it.panelState=''; it.panelDt=''; }
+  }
   d.list[idx]=it;
   rc2SetMonthData(getCurrentYM(), d);
   rc2SaveToGas(it, getCurrentYM());
