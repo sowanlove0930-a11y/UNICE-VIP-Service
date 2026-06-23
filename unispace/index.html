@@ -11340,6 +11340,13 @@ function renderWeekActTable() {
 
   html += '<tfoot><tr>';
   html += '<td>합산</td>';
+  // 일별 당일월초 색상 (위쪽 주간보장월초와 동일: 알파=초록, 브라보=보라, 전체=골드)
+  var _isLight = document.body.classList.contains('theme-light');
+  var _dwBg, _dwBd, _dwTx;
+  if(sumBranch==='알파지점'){ _dwBg='rgba(29,158,117,.22)'; _dwBd='rgba(29,158,117,.7)'; _dwTx=_isLight?'#0F6E56':'#5DCAA5'; }
+  else if(sumBranch==='브라보지점'){ _dwBg='rgba(123,82,208,.22)'; _dwBd='rgba(123,82,208,.7)'; _dwTx=_isLight?'#5A3FB0':'#AFA9EC'; }
+  else { _dwBg='rgba(186,117,23,.22)'; _dwBd='rgba(186,117,23,.7)'; _dwTx=_isLight?'#854F0B':'#FAC775'; }
+  var _pLogDaily = (typeof getPerfLog==='function') ? getPerfLog() : [];
   datestrs.forEach(function(ds){
     var dayActs = allActs.filter(function(a){ return a.date===ds; });
     var ptAmt=0, ckAmt=0;
@@ -11347,9 +11354,27 @@ function renderWeekActTable() {
       ptAmt+=actPtAmount(a);
       ckAmt+=actCkAmount(a);
     });
+    // 당일월초 = 그날 perf 로그 합 (지점/권한 필터)
+    var dayPerf=0;
+    _pLogDaily.forEach(function(r){
+      if(r.date!==ds) return;
+      if(sumBranch!=='all' && _nbSum(r.branch)!==_nbSum(sumBranch)) return;
+      if(!_sumSeeAll && currentUser){
+        if(currentUser.branch && _nbSum(r.branch)!==_nbSum(currentUser.branch)) return;
+        if(r.fpId && currentUser.id && r.fpId!==currentUser.id) return;
+      }
+      dayPerf += (parseInt(r.total)||0);
+    });
     var tags='';
-    if(ptAmt) tags+='<div class="wk-sum-pt">PT '+ptAmt.toLocaleString()+'원</div>';
-    if(ckAmt) tags+='<div class="wk-sum-ck">청약 '+ckAmt.toLocaleString()+'원</div>';
+    if(ptAmt||ckAmt){
+      tags+='<div style="display:inline-block;padding:4px 7px;border-radius:7px;background:var(--sur);border:1px solid var(--bdr);text-align:left;margin-bottom:4px">';
+      if(ptAmt) tags+='<div style="font-size:10px;color:var(--text2)">PT예정 '+ptAmt.toLocaleString()+'</div>';
+      if(ckAmt) tags+='<div style="font-size:10px;color:#9A7012;margin-top:1px">청약예정 '+ckAmt.toLocaleString()+'</div>';
+      tags+='</div>';
+    }
+    if(dayPerf>0){
+      tags+='<div style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:7px;background:'+_dwBg+';border:1px solid '+_dwBd+';color:'+_dwTx+'">📊 당일월초 '+dayPerf.toLocaleString()+'</div>';
+    }
     html += '<td>'+(tags||'<span style="font-size:10px;color:var(--text3)">—</span>')+'</td>';
   });
   html += '</tr></tfoot>';
@@ -11381,10 +11406,11 @@ function renderWeekActTable() {
     var s='';
     var label=sumBranch==='알파지점'?'알파':sumBranch==='브라보지점'?'브라보':(currentUser&&currentUser.role==='FP'?'내':'전체');
     // 지점색 (알파=초록, 브라보=보라, 전체=골드)
+    var _isLightWk = document.body.classList.contains('theme-light');
     var _wkBg, _wkBd, _wkTx;
-    if(sumBranch==='알파지점'){ _wkBg='rgba(29,158,117,.12)'; _wkBd='rgba(29,158,117,.4)'; _wkTx='#1D9E75'; }
-    else if(sumBranch==='브라보지점'){ _wkBg='rgba(123,82,208,.12)'; _wkBd='rgba(123,82,208,.4)'; _wkTx='#9B7AE0'; }
-    else { _wkBg='rgba(186,117,23,.12)'; _wkBd='rgba(186,117,23,.4)'; _wkTx='#D9A441'; }
+    if(sumBranch==='알파지점'){ _wkBg='rgba(29,158,117,.22)'; _wkBd='rgba(29,158,117,.7)'; _wkTx=_isLightWk?'#0F6E56':'#5DCAA5'; }
+    else if(sumBranch==='브라보지점'){ _wkBg='rgba(123,82,208,.22)'; _wkBd='rgba(123,82,208,.7)'; _wkTx=_isLightWk?'#5A3FB0':'#AFA9EC'; }
+    else { _wkBg='rgba(186,117,23,.22)'; _wkBd='rgba(186,117,23,.7)'; _wkTx=_isLightWk?'#854F0B':'#FAC775'; }
 
     s+='<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(55,138,221,.1);color:#2563EB;font-weight:700">● 진행 '+weekProg+'</span>';
     s+='<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(31,146,104,.1);color:#1F9268;font-weight:700">● 완료 '+weekDone+'</span>';
@@ -11392,9 +11418,9 @@ function renderWeekActTable() {
     // 활동 통계 그룹 (PT · 청약 · 합계)
     if(weekPt||weekCk){
       var g='<span style="display:inline-flex;align-items:center;gap:9px;padding:6px 14px;border-radius:10px;background:var(--sur);border:1px solid var(--bdr);font-size:12px;font-weight:700">';
-      g+='<span style="color:var(--text2)">'+label+' PT '+weekPt.toLocaleString()+'</span>';
+      g+='<span style="color:var(--text2)">'+label+' PT예정 '+weekPt.toLocaleString()+'</span>';
       g+='<span style="color:var(--bdr2)">·</span>';
-      g+='<span style="color:#9A7012">청약 '+weekCk.toLocaleString()+'</span>';
+      g+='<span style="color:#9A7012">청약예정 '+weekCk.toLocaleString()+'</span>';
       g+='<span style="color:var(--bdr2)">·</span>';
       g+='<span style="color:var(--text2)">합계 '+(weekPt+weekCk).toLocaleString()+'</span>';
       g+='</span>';
