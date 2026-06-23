@@ -11361,15 +11361,52 @@ function renderWeekActTable() {
     weekCk+=actCkAmount(a);
     if(a.status==='완료') weekDone++; else weekProg++;
   });
+
+  // 주간 보장월초 = 업적조회(perf 로그)의 이번 주 + 지점 실적 합계 (만원 단위 → 원)
+  var weekPerf=0;
+  try {
+    var _plog = (typeof getPerfLog==='function') ? getPerfLog() : [];
+    _plog.forEach(function(r){
+      if(!datestrs.includes(r.date)) return;
+      if(sumBranch!=='all' && _nbSum(r.branch)!==_nbSum(sumBranch)) return;
+      if(!_sumSeeAll && currentUser){
+        if(currentUser.branch && _nbSum(r.branch)!==_nbSum(currentUser.branch)) return;
+        if(r.fpId && currentUser.id && r.fpId!==currentUser.id) return;
+      }
+      weekPerf += (parseInt(r.total)||0);
+    });
+  } catch(e){ weekPerf=0; }
   var sumEl = document.getElementById('weekSumBadges');
   if(sumEl){
     var s='';
     var label=sumBranch==='알파지점'?'알파':sumBranch==='브라보지점'?'브라보':(currentUser&&currentUser.role==='FP'?'내':'전체');
+    // 지점색 (알파=초록, 브라보=보라, 전체=골드)
+    var _wkBg, _wkBd, _wkTx;
+    if(sumBranch==='알파지점'){ _wkBg='rgba(29,158,117,.12)'; _wkBd='rgba(29,158,117,.4)'; _wkTx='#1D9E75'; }
+    else if(sumBranch==='브라보지점'){ _wkBg='rgba(123,82,208,.12)'; _wkBd='rgba(123,82,208,.4)'; _wkTx='#9B7AE0'; }
+    else { _wkBg='rgba(186,117,23,.12)'; _wkBd='rgba(186,117,23,.4)'; _wkTx='#D9A441'; }
+
     s+='<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(55,138,221,.1);color:#2563EB;font-weight:700">● 진행 '+weekProg+'</span>';
     s+='<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(31,146,104,.1);color:#1F9268;font-weight:700">● 완료 '+weekDone+'</span>';
-    if(weekPt) s+='<span class="wk-top-pt">'+label+' PT '+weekPt.toLocaleString()+'원</span>';
-    if(weekCk) s+='<span class="wk-top-ck">'+label+' 청약 '+weekCk.toLocaleString()+'원</span>';
-    if(weekPt||weekCk) s+='<span style="font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--bdr);color:var(--text2);font-weight:700">합계 '+(weekPt+weekCk).toLocaleString()+'원</span>';
+
+    // 활동 통계 그룹 (PT · 청약 · 합계)
+    if(weekPt||weekCk){
+      var g='<span style="display:inline-flex;align-items:center;gap:9px;padding:6px 14px;border-radius:10px;background:var(--sur);border:1px solid var(--bdr);font-size:12px;font-weight:700">';
+      g+='<span style="color:var(--text2)">'+label+' PT '+weekPt.toLocaleString()+'</span>';
+      g+='<span style="color:var(--bdr2)">·</span>';
+      g+='<span style="color:#9A7012">청약 '+weekCk.toLocaleString()+'</span>';
+      g+='<span style="color:var(--bdr2)">·</span>';
+      g+='<span style="color:var(--text2)">합계 '+(weekPt+weekCk).toLocaleString()+'</span>';
+      g+='</span>';
+      s+=g;
+    }
+
+    // 주간 보장월초 (실제 업적 = 업적조회 perf 로그 합) — 지점색 강조 박스
+    s+='<span style="display:inline-flex;align-items:center;gap:7px;padding:6px 14px;border-radius:10px;background:'+_wkBg+';border:1px solid '+_wkBd+'">'+
+       '<span style="font-size:11px;font-weight:700;color:'+_wkTx+'">📊 주간 보장월초</span>'+
+       '<b style="font-size:15px;color:'+_wkTx+'">'+weekPerf.toLocaleString()+'원</b>'+
+       '</span>';
+
     sumEl.innerHTML=s;
     sumEl.style.paddingTop='10px'; sumEl.style.borderTop='1px solid var(--bdr)';
   }
