@@ -430,6 +430,21 @@ input:focus,select,textarea:focus{border-color:var(--gold)}
   </div>
 </div>
 
+<div class="pk-overlay" id="timePk">
+  <div class="pk-box">
+    <h4>🕐 시간 선택</h4>
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+      <select id="tpHour" class="form-select" style="flex:1;font-size:15px;text-align:center"></select>
+      <span style="font-size:18px;font-weight:800;color:var(--text2)">:</span>
+      <select id="tpMin" class="form-select" style="flex:1;font-size:15px;text-align:center"></select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="pk-close" id="timeClear" style="margin-top:0;flex:1">시간 비우기</button>
+      <button class="pk-close" id="timeOk" style="margin-top:0;flex:1;background:var(--gold);color:#fff;border-color:var(--gold);font-weight:800">확인</button>
+    </div>
+  </div>
+</div>
+
 <div class="pk-overlay" id="periodSettingPk">
   <div class="pk-box" style="max-width:440px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
@@ -1650,25 +1665,26 @@ function openTimePicker(field){
   if(!editing) return;
   var tgt=field||'time';
   _tpTarget=tgt;
-  var grid=document.getElementById('tpGrid');
-  var h='';
-  for(var hh=8;hh<=21;hh++){
-    for(var mm=0;mm<60;mm+=30){
-      var t=_pad2(hh)+':'+_pad2(mm);
-      h+='<div class="tp-slot" data-t="'+t+'">'+t+'</div>';
-    }
-  }
-  grid.innerHTML=h;
-  var slots=grid.querySelectorAll('[data-t]');
-  for(var i=0;i<slots.length;i++){
-    (function(el){
-      el.addEventListener('click', function(){
-        if(editing) editing[tgt]=el.getAttribute('data-t');
-        document.getElementById('timePk').classList.remove('on');
-        renderEditor();
-      });
-    })(slots[i]);
-  }
+
+  var hourSel=document.getElementById('tpHour');
+  var minSel=document.getElementById('tpMin');
+  if(!hourSel || !minSel) return;
+
+  // 현재 값 파싱 (없으면 기본 10:00)
+  var cur = (editing[tgt]||'').split(':');
+  var curH = (cur[0]!==undefined && cur[0]!=='') ? parseInt(cur[0],10) : 10;
+  var curM = (cur[1]!==undefined && cur[1]!=='') ? parseInt(cur[1],10) : 0;
+  if(isNaN(curH)) curH=10;
+  if(isNaN(curM)) curM=0;
+
+  var hh='';
+  for(var h=8;h<=21;h++){ hh+='<option value="'+_pad2(h)+'"'+(h===curH?' selected':'')+'>'+_pad2(h)+'시</option>'; }
+  hourSel.innerHTML=hh;
+
+  var mm='';
+  for(var m=0;m<60;m+=10){ mm+='<option value="'+_pad2(m)+'"'+(m===curM?' selected':'')+'>'+_pad2(m)+'분</option>'; }
+  minSel.innerHTML=mm;
+
   document.getElementById('timePk').classList.add('on');
 }
 
@@ -2583,7 +2599,13 @@ function init(){
   _on('importCancel', 'click', function(){ document.getElementById('importPk').classList.remove('on'); });
   _on('importApply', 'click', applyImport);
   _on('importPk', 'click', function(e){ if(e.target===this) this.classList.remove('on'); });
-  _on('timePkClose', 'click', function(){ document.getElementById('timePk').classList.remove('on'); });
+  _on('timeOk', 'click', function(){
+    var hs=document.getElementById('tpHour'), ms=document.getElementById('tpMin');
+    if(editing && hs && ms){ editing[_tpTarget]=hs.value+':'+ms.value; }
+    document.getElementById('timePk').classList.remove('on');
+    renderEditor();
+  });
+  var _tpk=document.getElementById('timePk'); if(_tpk) _tpk.addEventListener('click', function(e){ if(e.target===this) this.classList.remove('on'); });
   _on('calPrev', 'click', function(){ _calM--; if(_calM<0){ _calM=11; _calY--; } renderCal(); });
   _on('calNext', 'click', function(){ _calM++; if(_calM>11){ _calM=0; _calY++; } renderCal(); });
   _on('datePk', 'click', function(e){ if(e.target===this) this.classList.remove('on'); });
