@@ -726,6 +726,12 @@ window.addEventListener('DOMContentLoaded',function(){
   } else {
     currentUser = DEV_USER;
   }
+  // 지점장 사번 안전망: GAS role 매핑이 어긋나도 강제 보정
+  var _MGR_IDS = { 'H2502969':'알파지점', 'H2502965':'브라보지점' };
+  if (currentUser && currentUser.id && _MGR_IDS[String(currentUser.id).toUpperCase()]) {
+    currentUser.role = '지점장';
+    if (!currentUser.branch) currentUser.branch = _MGR_IDS[String(currentUser.id).toUpperCase()];
+  }
   localStorage.setItem('unispace_user', JSON.stringify(currentUser));
   // ──────────────────────────────────────────────────
 
@@ -1542,21 +1548,51 @@ function renderPrereportTab(){
   var ym=getYMStr(now);
 
   // 증빙 처리 드롭다운 — 이번달 사전보고 중 미증빙 건
+  var _isAdminPR = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장';
+  var _myBranch = currentUser.branch||'';
   var proofSel=document.getElementById('proofTargetDate');
   proofSel.innerHTML='<option value="">사전보고 날짜 선택</option>';
-  Object.keys(db).filter(function(d){return d.startsWith(ym);}).sort().forEach(function(date){
-    var rec=db[date][currentUser.id];
-    if(rec&&!rec.proof){
-      proofSel.innerHTML+='<option value="'+date+'">'+date+' ('+rec.type+')</option>';
-    }
-  });
+  if(_isAdminPR){
+    // 대표=전체 / 지점장=본인 지점, 모든 FP의 미증빙 건을 직권 증빙 가능
+    Object.keys(db).filter(function(d){return d.startsWith(ym);}).sort().forEach(function(date){
+      var recs=db[date]||{};
+      var fpIds=Object.keys(recs);
+      for(var _pi=0;_pi<fpIds.length;_pi++){
+        var _fid=fpIds[_pi];
+        var _r=recs[_fid];
+        if(!_r||_r.proof) continue;
+        if(currentUser.role==='지점장' && (_r.branch||'')!==_myBranch) continue;
+        proofSel.innerHTML+='<option value="'+date+'|'+_fid+'">'+date+' · '+(_r.name||'')+' ('+_r.type+')</option>';
+      }
+    });
+  } else {
+    Object.keys(db).filter(function(d){return d.startsWith(ym);}).sort().forEach(function(date){
+      var rec=db[date][currentUser.id];
+      if(rec&&!rec.proof){
+        proofSel.innerHTML+='<option value="'+date+'">'+date+' ('+rec.type+')</option>';
+      }
+    });
+  }
 
   // 이번달 내역
   var items=[];
-  Object.keys(db).filter(function(d){return d.startsWith(ym);}).sort().reverse().forEach(function(date){
-    var rec=db[date]&&db[date][currentUser.id];
-    if(rec) items.push({date:date,rec:rec});
-  });
+  if(_isAdminPR){
+    Object.keys(db).filter(function(d){return d.startsWith(ym);}).sort().reverse().forEach(function(date){
+      var recs=db[date]||{};
+      var fpIds=Object.keys(recs);
+      for(var _ii=0;_ii<fpIds.length;_ii++){
+        var _rr=recs[fpIds[_ii]];
+        if(!_rr) continue;
+        if(currentUser.role==='지점장' && (_rr.branch||'')!==_myBranch) continue;
+        items.push({date:date,rec:_rr,fp:fpIds[_ii]});
+      }
+    });
+  } else {
+    Object.keys(db).filter(function(d){return d.startsWith(ym);}).sort().reverse().forEach(function(date){
+      var rec=db[date]&&db[date][currentUser.id];
+      if(rec) items.push({date:date,rec:rec,fp:currentUser.id});
+    });
+  }
 
   var listEl=document.getElementById('prereportList');
   if(!items.length){listEl.innerHTML='<div class="pr-empty">이번 달 사전보고 내역이 없습니다</div>';return;}
@@ -1575,10 +1611,15 @@ function renderPrereportTab(){
     // delete allowed: admin always; FP only if report date is still in the future (before that day)
     var _isAdmin = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장';
     var _canDel = _isAdmin || (item.date > getTodayStr());
+    var _tfp = item.fp || currentUser.id;
     var delBtn = _canDel
-      ? '<button type="button" class="pr-delete" onclick="deletePrereport(\''+item.date+'\')">삭제</button>'
+      ? '<button type="button" class="pr-delete" onclick="deletePrereport(\''+item.date+'\',\''+_tfp+'\')">삭제</button>'
       : '<span class="pr-delete" style="opacity:.4;cursor:not-allowed" title="해당일이 되어 삭제할 수 없습니다 (지점장·대표 문의)">삭제</span>';
+    var _whoHtml = _isAdminPR
+      ? '<div class="pr-item-who" style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:2px">'+(item.rec.name||'')+' · '+((item.rec.branch||'').replace('지점',''))+'</div>'
+      : '';
     return '<div class="pr-item">'+
+      _whoHtml+
       '<div class="pr-item-date">'+item.date+'</div>'+
       '<span class="pr-item-type '+cls+'">'+emo+' '+item.rec.type+'</span>'+
       '<div class="pr-item-note">'+item.rec.note+'</div>'+
@@ -1712,8 +1753,13 @@ function removePhoto() {
 
 // ── 증빙 완료 처리 ───────────────────────────────────
 function confirmProof(){
-  var date=document.getElementById('proofTargetDate').value;
-  if(!date){showToast('증빙 처리할 날짜를 선택해 주세요');return;}
+  var raw=document.getElementById('proofTargetDate').value;
+  if(!raw){showToast('증빙 처리할 날짜를 선택해 주세요');return;}
+
+  // value 형식: "날짜" (본인) 또는 "날짜|FP사번" (관리자 직권)
+  var date=raw, targetFp=currentUser.id;
+  var _bar=raw.indexOf('|');
+  if(_bar>=0){ date=raw.substring(0,_bar); targetFp=raw.substring(_bar+1); }
 
   // 사진 필수
   if(!_selectedPhotoBase64){
@@ -1722,10 +1768,11 @@ function confirmProof(){
   }
 
   var db=getPrDB();
-  if(!(db[date]&&db[date][currentUser.id])){
-    showToast('해당 날짜의 사전보고를 찾을 수 없습니다');
+  if(!(db[date]&&db[date][targetFp])){
+    showToast('해당 사전보고를 찾을 수 없습니다');
     return;
   }
+  var _tName=(db[date][targetFp].name)||'';
 
   var btn=document.getElementById('proofConfirmBtn');
   if(btn){ btn.disabled=true; btn.textContent='업로드 중...'; }
@@ -1734,17 +1781,17 @@ function confirmProof(){
   var mime = 'image/jpeg';
   if(_selectedPhotoBase64.indexOf('image/png')>=0) mime='image/png';
   attGasPost({ action:'uploadProof', data:{
-    date:date, fpCode:currentUser.id, name:currentUser.name,
+    date:date, fpCode:targetFp, name:_tName,
     photoBase64:_selectedPhotoBase64, mimeType:mime
   }}).then(function(res){
     if(btn){ btn.disabled=false; btn.textContent='✅ 증빙 완료 처리'; }
     if(res && res.ok){
-      db[date][currentUser.id].proof   = true;
-      db[date][currentUser.id].proofAt = new Date().toISOString();
-      db[date][currentUser.id].hasPhoto = true;
-      db[date][currentUser.id].proofUrl = res.url || '';
+      db[date][targetFp].proof   = true;
+      db[date][targetFp].proofAt = new Date().toISOString();
+      db[date][targetFp].hasPhoto = true;
+      db[date][targetFp].proofUrl = res.url || '';
       savePrDB(db);
-      showToast('✅ ' + date + ' 인증샷 포함 출결 인정 처리되었습니다');
+      showToast('✅ ' + (_tName?_tName+' · ':'') + date + ' 인증샷 포함 출결 인정 처리되었습니다');
       removePhoto();
       renderPrereportTab();
       renderCheckinTab();
@@ -1758,7 +1805,8 @@ function confirmProof(){
 }
 
 // ── 사전보고 삭제 ─────────────────────────────────────
-function deletePrereport(date){
+function deletePrereport(date, fp){
+  var targetFp = fp || currentUser.id;
   // guard: FP can delete only future-dated reports; admin always
   var _isAdmin = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장';
   if(!_isAdmin && !(date > getTodayStr())){
@@ -1766,10 +1814,10 @@ function deletePrereport(date){
     return;
   }
   var db=getPrDB();
-  if(db[date]&&db[date][currentUser.id]){
-    delete db[date][currentUser.id];
+  if(db[date]&&db[date][targetFp]){
+    delete db[date][targetFp];
     savePrDB(db);
-    attGasGet({ action:'deletePrereport', date:date, fp:currentUser.id }).catch(function(){});
+    attGasGet({ action:'deletePrereport', date:date, fp:targetFp }).catch(function(){});
     showToast('삭제되었습니다');
     renderPrereportTab();
   }
