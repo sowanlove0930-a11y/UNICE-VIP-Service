@@ -1792,6 +1792,35 @@ body.theme-light .wv-toggle-btn.on { color: #fff; }
 .mcal-daynum.sun { color: #C0392B; }
 .mcal-daynum.sat { color: var(--blue); }
 .mcal-cnt { margin-top: 3px; }
+.mcal-amt { margin-top: 3px; display: flex; flex-direction: column; gap: 2px; }
+.mcal-amt > div { font-size: 8.5px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1px 5px; border-radius: 4px; }
+.mcal-amt-pt { color: #854F0B; background: rgba(186,117,23,.14); }
+.mcal-amt-ck { color: #1F7A4D; background: rgba(31,122,77,.14); }
+.mcal-amt-pf { color: #5A2FA0; background: rgba(123,82,208,.16); font-weight: 800; }
+body.theme-light .mcal-amt-pt { color: #854F0B; background: #FAEEDA; }
+body.theme-light .mcal-amt-ck { color: #1F7A4D; background: #DCF0E4; }
+body.theme-light .mcal-amt-pf { color: #5A2FA0; background: #EFE9FA; }
+.mcal-dots { display: none; margin-top: 3px; gap: 4px; justify-content: center; }
+.mcal-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 1px rgba(255,255,255,.5); }
+.dsum-short { display: none; }
+.dsum-full { display: inline; }
+@media (max-width:600px){
+  .mcal-amt { display: none !important; }
+  .mcal-dots { display: flex !important; margin-top: 2px; }
+  .mcal-dot { width: 6px; height: 6px; }
+  .mcal-cell { aspect-ratio: auto; min-height: 60px; }
+  .dsum-full { display: none !important; }
+  .dsum-short { display: inline !important; }
+  #weekSumBadges { flex-wrap: wrap !important; gap: 5px !important; align-items: center; }
+  #weekSumBadges > span { flex-shrink: 0; }
+  .sum-rowbreak { display: block !important; flex-basis: 100% !important; height: 0 !important; width: 0 !important; }
+  .sum-grp { padding: 5px 9px !important; gap: 5px !important; font-size: 11px !important; }
+  .sum-grp > span { white-space: nowrap; }
+  .sum-perf { padding: 5px 9px !important; gap: 4px !important; }
+  .sum-perf > span { font-size: 10px !important; }
+  .sum-perf > b { font-size: 13px !important; }
+}
+.sum-rowbreak { display: none; }
 .mcal-cnt span { font-size: 9px; font-weight: 700; background: rgba(59,130,246,.12); color: #1D4FB8; padding: 1px 5px; border-radius: 5px; }
 .mcal-day-panel { margin-top: 14px; background: var(--bg2); border: 1px solid var(--bdr2); border-radius: 12px; overflow: hidden; }
 .mcal-day-head { padding: 10px 14px; background: var(--bg3); border-bottom: 1px solid var(--bdr2); font-size: 13px; font-weight: 800; color: var(--text); }
@@ -10830,18 +10859,49 @@ function renderMonthCal() {
 
   var db = {};
   try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
-  var cntByDate = {};
+  var cntByDate = {}, ptByDate = {}, ckByDate = {}, perfByDate = {};
   var monPrefix = y+'-'+('0'+(m+1)).slice(-2);
   var monPt = 0, monCk = 0, monProg = 0, monDone = 0;
   Object.values(db).forEach(function(a){
     if (!a.date || !actFilterMatch(a)) return;
     cntByDate[a.date] = (cntByDate[a.date]||0) + 1;
+    ptByDate[a.date] = (ptByDate[a.date]||0) + actPtAmount(a);
+    ckByDate[a.date] = (ckByDate[a.date]||0) + actCkAmount(a);
     if (a.date.indexOf(monPrefix) === 0) {
       monPt += actPtAmount(a);
       monCk += actCkAmount(a);
       if(a.status==='완료') monDone++; else monProg++;
     }
   });
+  // 당일월초 (perf 로그) 날짜별 집계
+  try {
+    var _mLog = (typeof getPerfLog==='function') ? getPerfLog() : [];
+    var _mSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장'
+      || (typeof _isManagerUser==='function' && _isManagerUser(currentUser))
+      || (typeof _isMgrTitleUser==='function' && _isMgrTitleUser(currentUser)));
+    var _nbM = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
+    var _mBranch = (typeof weekBranchFilter!=='undefined' && weekBranchFilter!=='all') ? weekBranchFilter
+      : (currentUser && currentUser.role==='지점장') ? currentUser.branch : 'all';
+    _mLog.forEach(function(r){
+      if(!r.date) return;
+      if(_mBranch!=='all' && _nbM(r.branch)!==_nbM(_mBranch)) return;
+      if(!_mSeeAll && currentUser){
+        if(currentUser.branch && _nbM(r.branch)!==_nbM(currentUser.branch)) return;
+        if(r.fpId && currentUser.id && r.fpId!==currentUser.id) return;
+      }
+      perfByDate[r.date] = (perfByDate[r.date]||0) + (parseInt(r.total)||0);
+    });
+  } catch(e){}
+  // 당일월초 지점 시그니처 색 (전체=골드, 알파=초록, 브라보=보라)
+  var _mcIsLight = document.body.classList.contains('theme-light');
+  var _mcPfBg, _mcPfTx;
+  (function(){
+    var _mb = (typeof weekBranchFilter!=='undefined' && weekBranchFilter!=='all') ? weekBranchFilter
+      : (currentUser && currentUser.role==='지점장') ? currentUser.branch : 'all';
+    if(_mb==='알파지점'){ _mcPfBg=_mcIsLight?'#DCF0E4':'rgba(29,158,117,.2)'; _mcPfTx=_mcIsLight?'#0F6E56':'#5DCAA5'; }
+    else if(_mb==='브라보지점'){ _mcPfBg=_mcIsLight?'#EFE9FA':'rgba(123,82,208,.2)'; _mcPfTx=_mcIsLight?'#5A2FA0':'#AFA9EC'; }
+    else { _mcPfBg=_mcIsLight?'#FAEEDA':'rgba(186,117,23,.2)'; _mcPfTx=_mcIsLight?'#854F0B':'#FAC775'; }
+  })();
 
   var firstDow = new Date(y, m, 1).getDay();
   var daysInMonth = new Date(y, m+1, 0).getDate();
@@ -10857,11 +10917,28 @@ function renderMonthCal() {
     if (ds == selectedDayStr) cellCls += ' selected';
     var cnt = cntByDate[ds] || 0;
     var cntHtml = cnt ? '<div class="mcal-cnt"><span>'+cnt+'건</span></div>' : '';
+    // 일별 금액 압축 (만원 단위 축약)
+    var _man = function(v){ if(!v) return ''; var mn=Math.round(v/10000); return mn>=1 ? mn.toLocaleString()+'만' : (v.toLocaleString()); };
+    var _dpt = ptByDate[ds]||0, _dck = ckByDate[ds]||0, _dpf = perfByDate[ds]||0;
+    var amtHtml = '';
+    if(_dpt||_dck||_dpf){
+      amtHtml = '<div class="mcal-amt">';
+      if(_dpt) amtHtml += '<div class="mcal-amt-pt">PT예정 '+_man(_dpt)+'</div>';
+      if(_dck) amtHtml += '<div class="mcal-amt-ck">청약예정 '+_man(_dck)+'</div>';
+      if(_dpf) amtHtml += '<div style="font-size:8.5px;font-weight:800;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 5px;border-radius:4px;background:'+_mcPfBg+';color:'+_mcPfTx+'">당일월초 '+_man(_dpf)+'</div>';
+      amtHtml += '</div>';
+      // 모바일용 색 점 (PT=골드, 청약=초록, 월초=지점색)
+      amtHtml += '<div class="mcal-dots">';
+      if(_dpt) amtHtml += '<span class="mcal-dot" style="background:#BA7517"></span>';
+      if(_dck) amtHtml += '<span class="mcal-dot" style="background:#1F7A4D"></span>';
+      if(_dpf) amtHtml += '<span class="mcal-dot" style="background:'+_mcPfTx+'"></span>';
+      amtHtml += '</div>';
+    }
     var _hol = getHolidayName(ds);
     var _numCls = _hol ? ' sun' : dowCls; // 공휴일은 빨간색
     var _holHtml = _hol ? '<div style="font-size:9px;color:#C0392B;font-weight:700;line-height:1.2;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_hol+'</div>' : '';
     html += '<div class="'+cellCls+'" data-mcal-dt="'+ds+'">' +
-      '<span class="mcal-daynum'+_numCls+'">'+d+'</span>'+_holHtml+cntHtml+'</div>';
+      '<span class="mcal-daynum'+_numCls+'">'+d+'</span>'+_holHtml+cntHtml+amtHtml+'</div>';
   }
   var grid = document.getElementById('mcalDays');
   if (grid) {
@@ -10873,12 +10950,42 @@ function renderMonthCal() {
   var sumEl = document.getElementById('weekSumBadges');
   if (sumEl) {
     var label = weekBranchFilter==='알파지점'?'알파':weekBranchFilter==='브라보지점'?'브라보':(currentUser&&currentUser.role==='FP'?'내':'전체');
+    // 월간 보장월초 누계 = 이번 달 perf 합
+    var monPerf = 0;
+    Object.keys(perfByDate).forEach(function(dk){ if(dk.indexOf(monPrefix)===0) monPerf += perfByDate[dk]; });
+    // 지점 시그니처 색 (전체=골드, 알파=초록, 브라보=보라)
+    var _isLightM = document.body.classList.contains('theme-light');
+    var _mBr = (weekBranchFilter && weekBranchFilter!=='all') ? weekBranchFilter
+      : (currentUser && currentUser.role==='지점장') ? currentUser.branch : 'all';
+    var _wkBg, _wkBd, _wkTx;
+    if(_mBr==='알파지점'){ _wkBg='rgba(29,158,117,.22)'; _wkBd='rgba(29,158,117,.7)'; _wkTx=_isLightM?'#0F6E56':'#5DCAA5'; }
+    else if(_mBr==='브라보지점'){ _wkBg='rgba(123,82,208,.22)'; _wkBd='rgba(123,82,208,.7)'; _wkTx=_isLightM?'#5A3FB0':'#AFA9EC'; }
+    else { _wkBg='rgba(186,117,23,.22)'; _wkBd='rgba(186,117,23,.7)'; _wkTx=_isLightM?'#854F0B':'#FAC775'; }
+
     var s = '';
     s += '<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(55,138,221,.1);color:#2563EB;font-weight:700">● 진행 '+monProg+'</span>';
     s += '<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(31,146,104,.1);color:#1F9268;font-weight:700">● 완료 '+monDone+'</span>';
-    if (monPt) s += '<span class="wk-top-pt">'+label+' PT '+monPt.toLocaleString()+'원</span>';
-    if (monCk) s += '<span class="wk-top-ck">'+label+' 청약 '+monCk.toLocaleString()+'원</span>';
-    if (monPt||monCk) s += '<span style="font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--bdr);color:var(--text2);font-weight:700">합계 '+(monPt+monCk).toLocaleString()+'원</span>';
+    s += '<span class="sum-rowbreak"></span>';
+
+    // 활동 통계 그룹 (PT예정 · 청약예정 · 합계)
+    if(monPt||monCk){
+      var _mManF = function(v){ var mn=Math.round(v/10000); return mn>=1?mn.toLocaleString()+'만':v.toLocaleString(); };
+      var g='<span class="sum-grp" style="display:inline-flex;align-items:center;gap:9px;padding:6px 14px;border-radius:10px;background:var(--sur);border:1px solid var(--bdr);font-size:12px;font-weight:700">';
+      g+='<span style="color:var(--text2)"><span class="dsum-full">'+label+' PT예정 '+monPt.toLocaleString()+'</span><span class="dsum-short">PT '+_mManF(monPt)+'</span></span>';
+      g+='<span style="color:var(--bdr2)">·</span>';
+      g+='<span style="color:#1F7A4D"><span class="dsum-full">청약예정 '+monCk.toLocaleString()+'</span><span class="dsum-short">청약 '+_mManF(monCk)+'</span></span>';
+      g+='<span style="color:var(--bdr2)">·</span>';
+      g+='<span style="color:var(--text2)"><span class="dsum-full">합계 '+(monPt+monCk).toLocaleString()+'</span><span class="dsum-short">합 '+_mManF(monPt+monCk)+'</span></span>';
+      g+='</span>';
+      s+=g;
+    }
+
+    // 월간 보장월초 (이번 달 누계) — 지점색 강조 박스
+    s+='<span class="sum-perf" style="display:inline-flex;align-items:center;gap:7px;padding:6px 14px;border-radius:10px;background:'+_wkBg+';border:1px solid '+_wkBd+'">'+
+       '<span style="font-size:11px;font-weight:700;color:'+_wkTx+'">📊 월간보장</span>'+
+       '<b style="font-size:15px;color:'+_wkTx+'"><span class="dsum-full">'+monPerf.toLocaleString()+'원</span><span class="dsum-short">'+_mManF(monPerf)+'</span></b>'+
+       '</span>';
+
     sumEl.innerHTML = s;
     sumEl.style.paddingTop='10px'; sumEl.style.borderTop='1px solid var(--bdr)';
   }
@@ -10911,6 +11018,32 @@ function renderDayPanel(ds) {
   var dowK = ['일','월','화','수','목','금','토'][dObj.getDay()];
   var html = '<div class="mcal-day-head">'+(parseInt(parts[1]))+'/'+(parseInt(parts[2]))+' ('+dowK+') 활동 <span>'+dayActs.length+'건</span></div>';
 
+  // 그날 PT예정·청약예정·당일월초 요약
+  var _sPt=0, _sCk=0;
+  dayActs.forEach(function(a){ _sPt+=actPtAmount(a); _sCk+=actCkAmount(a); });
+  var _sPf=0;
+  try {
+    var _dpLog = (typeof getPerfLog==='function') ? getPerfLog() : [];
+    var _dnb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
+    var _dSeeAll = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'||(typeof _isManagerUser==='function'&&_isManagerUser(currentUser))||(typeof _isMgrTitleUser==='function'&&_isMgrTitleUser(currentUser)));
+    var _dBr = (typeof weekBranchFilter!=='undefined'&&weekBranchFilter!=='all')?weekBranchFilter:(currentUser&&currentUser.role==='지점장')?currentUser.branch:'all';
+    _dpLog.forEach(function(r){
+      if(r.date!==ds) return;
+      if(_dBr!=='all' && _dnb(r.branch)!==_dnb(_dBr)) return;
+      if(!_dSeeAll && currentUser){ if(currentUser.branch&&_dnb(r.branch)!==_dnb(currentUser.branch)) return; if(r.fpId&&currentUser.id&&r.fpId!==currentUser.id) return; }
+      _sPf += (parseInt(r.total)||0);
+    });
+  } catch(e){}
+  if(_sPt||_sCk||_sPf){
+    var _il = document.body.classList.contains('theme-light');
+    var _pfTx = _il?'#5A2FA0':'#AFA9EC';
+    html += '<div style="display:flex;flex-wrap:nowrap;gap:6px;padding:8px 2px 4px;overflow-x:auto">';
+    if(_sPt) html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;background:#FAEEDA;color:#854F0B;white-space:nowrap;flex-shrink:0">PT예정 '+_sPt.toLocaleString()+'</span>';
+    if(_sCk) html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;background:#DCF0E4;color:#1F7A4D;white-space:nowrap;flex-shrink:0">청약예정 '+_sCk.toLocaleString()+'</span>';
+    if(_sPf) html += '<span style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:7px;background:#EFE9FA;color:'+_pfTx+';white-space:nowrap;flex-shrink:0">📊 당일 '+_sPf.toLocaleString()+'</span>';
+    html += '</div>';
+  }
+
   var fpIds = Object.keys(byFp);
   if (!fpIds.length) {
     html += '<div style="padding:18px;text-align:center;color:var(--text3);font-size:12px">이 날의 활동이 없습니다</div>';
@@ -10924,7 +11057,11 @@ function renderDayPanel(ds) {
         var icon = a.status==='완료' ? '✅' : (a.type==='1차'?'①':a.type==='2차'?'②':a.type==='3차'?'③':'●');
         var typeLabel = _typeLabel(a.type);
         var sub = a.time ? ' <span style="font-size:9px;color:var(--text2)">'+a.time.slice(0,5)+(a.place?' · '+shortAddr(a.place):'')+'</span>' : '';
-        chips += '<span class="week-act-chip '+cls+''+'" style="display:inline-block;width:auto;margin:0" data-aid="'+a.id+'">'+icon+' '+a.customerName+' <span style="opacity:.65;font-size:9px">'+typeLabel+'</span>'+sub+resultBadgeHtml(a)+newBadgeHtml(a)+'</span>';
+        var _aPt = actPtAmount(a), _aCk = actCkAmount(a);
+        var amtSub = '';
+        if(_aPt) amtSub += ' <span style="font-size:9px;font-weight:700;color:#854F0B;background:#FAEEDA;padding:0 4px;border-radius:4px">PT '+_aPt.toLocaleString()+'</span>';
+        if(_aCk) amtSub += ' <span style="font-size:9px;font-weight:700;color:#1F7A4D;background:#DCF0E4;padding:0 4px;border-radius:4px">청약 '+_aCk.toLocaleString()+'</span>';
+        chips += '<span class="week-act-chip '+cls+''+'" style="display:inline-block;width:auto;margin:0" data-aid="'+a.id+'">'+icon+' '+a.customerName+' <span style="opacity:.65;font-size:9px">'+typeLabel+'</span>'+sub+amtSub+resultBadgeHtml(a)+newBadgeHtml(a)+'</span>';
       });
       html += '<div class="mcal-day-row">' +
         '<div class="mcal-day-fp"><span style="font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px;margin-right:3px;'+
@@ -11347,6 +11484,7 @@ function renderWeekActTable() {
   else if(sumBranch==='브라보지점'){ _dwBg='rgba(123,82,208,.22)'; _dwBd='rgba(123,82,208,.7)'; _dwTx=_isLight?'#5A3FB0':'#AFA9EC'; }
   else { _dwBg='rgba(186,117,23,.22)'; _dwBd='rgba(186,117,23,.7)'; _dwTx=_isLight?'#854F0B':'#FAC775'; }
   var _pLogDaily = (typeof getPerfLog==='function') ? getPerfLog() : [];
+  var _dman = function(v){ if(!v) return '0'; var mn=Math.round(v/10000); return mn>=1 ? mn.toLocaleString()+'만' : v.toLocaleString(); };
   datestrs.forEach(function(ds){
     var dayActs = allActs.filter(function(a){ return a.date===ds; });
     var ptAmt=0, ckAmt=0;
@@ -11368,12 +11506,12 @@ function renderWeekActTable() {
     var tags='';
     if(ptAmt||ckAmt){
       tags+='<div style="display:inline-block;padding:4px 7px;border-radius:7px;background:var(--sur);border:1px solid var(--bdr);text-align:left;margin-bottom:4px">';
-      if(ptAmt) tags+='<div style="font-size:10px;color:var(--text2)">PT예정 '+ptAmt.toLocaleString()+'</div>';
-      if(ckAmt) tags+='<div style="font-size:10px;color:#9A7012;margin-top:1px">청약예정 '+ckAmt.toLocaleString()+'</div>';
+      if(ptAmt) tags+='<div style="font-size:10px;color:var(--text2)"><span class="dsum-full">PT예정 '+ptAmt.toLocaleString()+'</span><span class="dsum-short">PT '+_dman(ptAmt)+'</span></div>';
+      if(ckAmt) tags+='<div style="font-size:10px;color:#1F7A4D;margin-top:1px"><span class="dsum-full">청약예정 '+ckAmt.toLocaleString()+'</span><span class="dsum-short">청약 '+_dman(ckAmt)+'</span></div>';
       tags+='</div>';
     }
     if(dayPerf>0){
-      tags+='<div style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:7px;background:'+_dwBg+';border:1px solid '+_dwBd+';color:'+_dwTx+'">📊 당일월초 '+dayPerf.toLocaleString()+'</div>';
+      tags+='<div style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:7px;background:'+_dwBg+';border:1px solid '+_dwBd+';color:'+_dwTx+'"><span class="dsum-full">📊 당일월초 '+dayPerf.toLocaleString()+'</span><span class="dsum-short">📊 '+_dman(dayPerf)+'</span></div>';
     }
     html += '<td>'+(tags||'<span style="font-size:10px;color:var(--text3)">—</span>')+'</td>';
   });
@@ -11414,23 +11552,25 @@ function renderWeekActTable() {
 
     s+='<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(55,138,221,.1);color:#2563EB;font-weight:700">● 진행 '+weekProg+'</span>';
     s+='<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(31,146,104,.1);color:#1F9268;font-weight:700">● 완료 '+weekDone+'</span>';
+    s+='<span class="sum-rowbreak"></span>';
 
     // 활동 통계 그룹 (PT · 청약 · 합계)
     if(weekPt||weekCk){
-      var g='<span style="display:inline-flex;align-items:center;gap:9px;padding:6px 14px;border-radius:10px;background:var(--sur);border:1px solid var(--bdr);font-size:12px;font-weight:700">';
-      g+='<span style="color:var(--text2)">'+label+' PT예정 '+weekPt.toLocaleString()+'</span>';
+      var _wManF = function(v){ var mn=Math.round(v/10000); return mn>=1?mn.toLocaleString()+'만':v.toLocaleString(); };
+      var g='<span class="sum-grp" style="display:inline-flex;align-items:center;gap:9px;padding:6px 14px;border-radius:10px;background:var(--sur);border:1px solid var(--bdr);font-size:12px;font-weight:700">';
+      g+='<span style="color:var(--text2)"><span class="dsum-full">'+label+' PT예정 '+weekPt.toLocaleString()+'</span><span class="dsum-short">PT '+_wManF(weekPt)+'</span></span>';
       g+='<span style="color:var(--bdr2)">·</span>';
-      g+='<span style="color:#9A7012">청약예정 '+weekCk.toLocaleString()+'</span>';
+      g+='<span style="color:#1F7A4D"><span class="dsum-full">청약예정 '+weekCk.toLocaleString()+'</span><span class="dsum-short">청약 '+_wManF(weekCk)+'</span></span>';
       g+='<span style="color:var(--bdr2)">·</span>';
-      g+='<span style="color:var(--text2)">합계 '+(weekPt+weekCk).toLocaleString()+'</span>';
+      g+='<span style="color:var(--text2)"><span class="dsum-full">합계 '+(weekPt+weekCk).toLocaleString()+'</span><span class="dsum-short">합 '+_wManF(weekPt+weekCk)+'</span></span>';
       g+='</span>';
       s+=g;
     }
 
     // 주간 보장월초 (실제 업적 = 업적조회 perf 로그 합) — 지점색 강조 박스
-    s+='<span style="display:inline-flex;align-items:center;gap:7px;padding:6px 14px;border-radius:10px;background:'+_wkBg+';border:1px solid '+_wkBd+'">'+
-       '<span style="font-size:11px;font-weight:700;color:'+_wkTx+'">📊 주간 보장월초</span>'+
-       '<b style="font-size:15px;color:'+_wkTx+'">'+weekPerf.toLocaleString()+'원</b>'+
+    s+='<span class="sum-perf" style="display:inline-flex;align-items:center;gap:7px;padding:6px 14px;border-radius:10px;background:'+_wkBg+';border:1px solid '+_wkBd+'">'+
+       '<span style="font-size:11px;font-weight:700;color:'+_wkTx+'">📊 주간보장</span>'+
+       '<b style="font-size:15px;color:'+_wkTx+'"><span class="dsum-full">'+weekPerf.toLocaleString()+'원</span><span class="dsum-short">'+_wManF(weekPerf)+'</span></b>'+
        '</span>';
 
     sumEl.innerHTML=s;
