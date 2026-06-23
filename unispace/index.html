@@ -2090,6 +2090,8 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
   .rc2-tbadge { font-size:8.5px !important; padding:1px 4px !important; margin-left:3px !important; border-radius:4px !important; white-space:nowrap; flex-shrink:0; }
   .rc2-tb-full { display:none; }
   .rc2-tb-short { display:inline; }
+  .rc2-typechip { font-size:10.5px !important; padding:6px 9px !important; }
+  #rc2TypeChips { flex-wrap:nowrap !important; }
   .rc2-sum-card { padding:8px 10px; }
   .rc2-sum-val { font-size:17px; }
   .rc2-cal-cell { min-height:66px; padding:4px; font-size:10.5px; }
@@ -10069,7 +10071,7 @@ function rc2RenderTypeChips() {
     var st = on
       ? 'background:'+t.bg+';color:#fff;border:1px solid '+t.bg
       : 'background:'+t.soft+';color:'+t.deep+';border:1px solid '+t.bd;
-    html += '<span class="rc2-typechip" data-tkey="'+t.key+'" style="font-size:11px;font-weight:700;padding:7px 11px;border-radius:8px;cursor:pointer;'+st+'">'+t.icon+' '+t.key+(on?' ✓':'')+'</span>';
+    html += '<span class="rc2-typechip" data-tkey="'+t.key+'" style="font-size:11px;font-weight:700;padding:7px 11px;border-radius:8px;cursor:pointer;'+st+'">'+t.icon+' <span class="rc2-tb-full">'+t.key+'</span><span class="rc2-tb-short">'+(t.short||t.key)+'</span>'+(on?' ✓':'')+'</span>';
   }
   wrap.innerHTML = html;
   var chips = wrap.querySelectorAll('.rc2-typechip[data-tkey]');
@@ -10488,8 +10490,24 @@ function rc2SaveRes(){
       break;
     }
   }
-  if(rc2res.nextTypes.length && rc2res.nextDt){
-    evs.push({ id:'e'+Date.now()+'_'+Math.floor(Math.random()*1000), types:rc2res.nextTypes.slice(), dt:rc2res.nextDt, done:false });
+  if(rc2res.nextTypes.length){
+    if(rc2res.nextDt){
+      // 날짜가 있으면 한 일정으로 묶어 추가
+      evs.push({ id:'e'+Date.now()+'_'+Math.floor(Math.random()*1000), types:rc2res.nextTypes.slice(), dt:rc2res.nextDt, done:false });
+    } else {
+      // 날짜 없으면 각 타입을 날짜 없는 활동으로 추가 (이미 있는 타입은 제외)
+      for(var nt=0; nt<rc2res.nextTypes.length; nt++){
+        var _k=rc2res.nextTypes[nt];
+        var _exists=false;
+        for(var ee=0; ee<evs.length; ee++){
+          var _et=evs[ee].types||[];
+          if(_et.indexOf(_k)>=0){ _exists=true; break; }
+        }
+        if(!_exists){
+          evs.push({ id:'e'+Date.now()+'_'+nt+'_'+Math.floor(Math.random()*1000), types:[_k], dt:'', done:false });
+        }
+      }
+    }
   }
   it.events = evs;
   it.status = rc2res.status;
@@ -11432,7 +11450,10 @@ function showActPopup(e, actId) {
   var apPlanCard=document.getElementById('apPlanCard');
   if(apPlanCard){
     var pTags = Array.isArray(act.planTags) ? act.planTags : [];
-    if(!act.hasResult && (pTags.length || act.planCompany || act.planAmount)){
+    var _isNaegeunAct = (act.type==='\\uB0B4\\uADFC') || (pTags.length===1 && pTags[0]==='\\uB0B4\\uADFC');
+    if(_isNaegeunAct){
+      apPlanCard.style.display='none';
+    } else if(!act.hasResult && (pTags.length || act.planCompany || act.planAmount)){
       document.getElementById('apPlanTags').innerHTML=_apChips(pTags.length?pTags:['\uC0C1\uB2F4']);
       var plist=_prodListText(act.planProducts);
       if(!plist && (act.planCompany||act.planAmount)) plist=(act.planCompany||'')+(act.planAmount?' '+_actAmtTxt(act.planAmount):'');
@@ -11571,6 +11592,13 @@ function selectEditChasu(el){
   if(v==='N'){ if(nEl){ nEl.style.display=''; _editChasu=nEl.value||''; } }
   else { if(nEl) nEl.style.display='none'; _editChasu=v; }
 }
+function _applyEditNaegeunMode(){
+  var on = _editTags.indexOf('\\uB0B4\\uADFC')>=0;
+  var chasu=document.getElementById('editChasuField');
+  var place=document.getElementById('editPlaceField');
+  if(chasu) chasu.style.display = on ? 'none' : '';
+  if(place) place.style.display = on ? 'none' : '';
+}
 function toggleEditTag(el){
   var tag=el.getAttribute('data-etag');
   var idx=_editTags.indexOf(tag);
@@ -11581,6 +11609,7 @@ function toggleEditTag(el){
   if(area) area.style.display = showAmt ? '' : 'none';
   if(showAmt) renderEditProds();
   else updateEditProdSum();
+  _applyEditNaegeunMode();
   _repositionActPopup();
 }
 function switchActEdit(){
@@ -11621,6 +11650,7 @@ function switchActEdit(){
   }
   _pkSetTimeDisp('editReqStartDisp','editReqStart', act.supportReqTime||'', '시작');
   _pkSetTimeDisp('editReqEndDisp','editReqEnd', act.supportReqEndTime||'', '종료(선택)');
+  _applyEditNaegeunMode();
   document.getElementById('actPopupView').style.display='none';
   document.getElementById('actPopupEdit').style.display='';
   var rEl=document.getElementById('actPopupResult'); if(rEl) rEl.style.display='none';
@@ -14093,7 +14123,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="pk-trigger" id="editActDateTrig" onclick="openEditDatePicker()"><span id="editActDateDisp" class="pk-ph">날짜 선택</span><span class="pk-ico">📅</span></div>
       <input type="hidden" id="editActDate">
     </div>
-    <div style="margin-bottom:8px">
+    <div style="margin-bottom:8px" id="editChasuField">
       <div style="font-size:10px;color:var(--text3);margin-bottom:3px">차수 <span style="font-size:9px;color:var(--text3)">(선택)</span></div>
       <div id="editChasuWrap" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
         <button type="button" class="res-chasu" data-echasu="1" onclick="selectEditChasu(this)">1차</button>
@@ -14125,7 +14155,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="pk-trigger" id="editActTimeTrig"><span id="editActTimeDisp" class="pk-ph">시간 선택</span><span class="pk-ico">🕐</span></div>
       <input type="hidden" id="editActTime">
     </div>
-    <div style="margin-bottom:8px">
+    <div style="margin-bottom:8px" id="editPlaceField">
       <div style="font-size:10px;color:var(--text3);margin-bottom:3px">미팅 장소 <span style="font-size:9px;color:var(--text3);font-weight:400">(주소 입력 시 동선 지도에 표기)</span></div>
       <div style="display:flex;gap:5px;align-items:stretch">
         <input type="text" id="editActPlace" placeholder="예) 부산 해운대구 우동 1407 또는 해운대 스벅" style="flex:1;padding:6px 8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px">
