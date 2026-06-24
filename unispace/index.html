@@ -5622,21 +5622,37 @@ function _stdStreakLabel(name, ym){
 var _stdServerRows = null; // getStdFpStats 결과 (전 직원 전체 집계)
 function _stdLoadStatsFromGas(cb){
   var ym = _stdCurrentYm();
-  var url = UNISPACE_GAS_URL + '?action=getStdFpStats&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
-  fetch(url).then(function(r){return r.json();}).then(function(res){
-    if(res && res.ok && res.rows){
-      _stdServerRows = res.rows.map(function(r){
-        var cnt=(r.c1?1:0)+(r.c2?1:0)+(r.c3?1:0)+(r.c4?1:0);
-        return { name:r.name, branch:r.branch, c1:!!r.c1, c2:!!r.c2, c3:!!r.c3, c4:!!r.c4, cnt:cnt };
-      });
-    }
-    if(cb) cb();
-  }).catch(function(){ if(cb) cb(); });
+  function _try(attempt){
+    var url = UNISPACE_GAS_URL + '?action=getStdFpStats&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
+    fetch(url).then(function(r){return r.json();}).then(function(res){
+      if(res && res.ok && res.rows){
+        _stdServerRows = res.rows.map(function(r){
+          var cnt=(r.c1?1:0)+(r.c2?1:0)+(r.c3?1:0)+(r.c4?1:0);
+          return { name:r.name, branch:r.branch, c1:!!r.c1, c2:!!r.c2, c3:!!r.c3, c4:!!r.c4, cnt:cnt };
+        });
+        if(cb) cb();
+      } else if(attempt < 3){
+        setTimeout(function(){ _try(attempt+1); }, 1200);
+      } else { if(cb) cb(); }
+    }).catch(function(){
+      if(attempt < 3){ setTimeout(function(){ _try(attempt+1); }, 1200); }
+      else { if(cb) cb(); }
+    });
+  }
+  _try(1);
 }
 function _stdFpCompute(){
-  // 스탠다드FP 현황은 지점 필터와 무관하게 항상 전 직원 전체 (지점장 포함 모두 전체 조회)
+  // 스탠다드FP 현황은 전 직원 전체. 서버 집계가 아직 없으면 지점-only 로컬로 그리지 말고 로딩 상태.
   if(_stdServerRows){
     return _stdServerRows.slice();
+  }
+  // 대표/전체 권한자는 로컬 perf에 전체가 있으므로 fallback 사용 가능
+  var _seeAllNow = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01');
+  if(!_seeAllNow){
+    // 매니저/FP는 로컬에 본인 지점만 있어 전체를 못 만든다 -> 로딩 신호
+    var _empty = [];
+    _empty._loading = true;
+    return _empty;
   }
   var log = getPerfLog();
   var now = new Date(); now.setHours(0,0,0,0);
@@ -5686,6 +5702,12 @@ function renderStdFp(){
   var host = document.getElementById('stdFpSection');
   if(!host) return;
   var rows = _stdFpCompute();
+  if(rows && rows._loading){
+    host.innerHTML = '<div style="background:var(--bg3);border-radius:14px;padding:18px 20px">'+
+      '<div style="font-size:16px;font-weight:700;color:var(--text);text-align:center;margin-bottom:14px">\\uD83C\\uDF96\\uFE0F \\uC2A4\\uD0E0\\uB2E4\\uB4DCFP \\uD604\\uD669</div>'+
+      '<div style="text-align:center;color:var(--text2);font-size:13px;padding:16px">\\uC804\\uCCB4 \\uC9D1\\uACC4\\uB97C \\uBD88\\uB7EC\\uC624\\uB294 \\uC911...</div></div>';
+    return;
+  }
   var selected = rows.filter(function(r){ return r.cnt===4; }).sort(function(a,b){ return (a.name>b.name)?1:-1; });
   var n1=0,n2=0,n3=0,n4=0;
   rows.forEach(function(r){ if(r.c1)n1++; if(r.c2)n2++; if(r.c3)n3++; if(r.c4)n4++; });
