@@ -865,8 +865,8 @@ function renderWeekActCal(){
         var newHtml = (isMine && _wkIsNew(a)) ? ' <span style="font-size:8px;font-weight:700;color:#fff;background:#F59E0B;border-radius:3px;padding:0 3px">NEW</span>' : '';
         var sub=[]; if(a.time) sub.push(String(a.time).slice(0,5));
         var subLine=sub.length?'<div style="font-size:9px;color:'+fg+';opacity:.75;margin-left:3px">'+sub.join(' · ')+'</div>':'';
-        var chipAttr = isMine ? ' class="wk-chip" data-chip-idx="'+ci+'"' : '';
-        h+='<div'+chipAttr+' style="background:'+bg+';border-left:3px solid '+bar+';border-radius:4px;padding:3px 5px;margin-bottom:4px'+(isMine?';cursor:pointer':'')+'">'+
+        var chipAttr = isMine ? ' class="wk-chip" data-chip-idx="'+ci+'"' : (a.id ? ' class="wk-chip" data-act-id="'+a.id+'"' : '');
+        h+='<div'+chipAttr+' style="background:'+bg+';border-left:3px solid '+bar+';border-radius:4px;padding:3px 5px;margin-bottom:4px'+((isMine||a.id)?';cursor:pointer':'')+'">'+
           '<div style="font-size:11px;font-weight:500;color:'+fg+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_wkActIcon(a)+' '+(a.customerName||'')+lblHtml+newHtml+'</div>'+subLine+'</div>';
       });
       if(dayActs.length>3) h+='<div style="font-size:10px;color:#60A5FA;font-weight:700;margin-left:3px">+'+(dayActs.length-3)+'건</div>';
@@ -910,8 +910,8 @@ function renderWeekActCal(){
         var newHtml2 = (isMine2 && _wkIsNew(a)) ? ' <span style="font-size:9px;font-weight:700;color:#fff;background:#F59E0B;border-radius:3px;padding:0 3px">NEW</span>' : '';
         var sub2=[]; if(a.time) sub2.push(String(a.time).slice(0,5));
         var subLine2=sub2.length?'<span style="font-size:10px;color:'+fg2+';opacity:.75;margin-left:6px">'+sub2.join(' · ')+'</span>':'';
-        var chipAttr2 = isMine2 ? ' class="wk-chip" data-chip-idx="'+ci2+'"' : '';
-        vh+='<div'+chipAttr2+' style="background:'+bg2+';border-left:3px solid '+bar2+';border-radius:5px;padding:6px 9px;margin-bottom:5px'+(isMine2?';cursor:pointer':'')+'">'+
+        var chipAttr2 = isMine2 ? ' class="wk-chip" data-chip-idx="'+ci2+'"' : (a.id ? ' class="wk-chip" data-act-id="'+a.id+'"' : '');
+        vh+='<div'+chipAttr2+' style="background:'+bg2+';border-left:3px solid '+bar2+';border-radius:5px;padding:6px 9px;margin-bottom:5px'+((isMine2||a.id)?';cursor:pointer':'')+'">'+
           '<span style="font-size:13px;font-weight:500;color:'+fg2+'">'+_wkActIcon(a)+' '+(a.customerName||'')+lblHtml2+newHtml2+'</span>'+subLine2+'</div>';
       });
     }
@@ -940,7 +940,9 @@ function renderWeekActCal(){
     chip.addEventListener('click', function(e){
       e.stopPropagation();
       var ci=parseInt(chip.getAttribute('data-chip-idx'));
-      if(!isNaN(ci) && ci>=0 && ci<custs.length) startEdit(ci);
+      if(!isNaN(ci) && ci>=0 && ci<custs.length){ startEdit(ci); return; }
+      var aid=chip.getAttribute('data-act-id');
+      if(aid) startEditFromActId(aid);
     });
   });
 }
@@ -1257,6 +1259,26 @@ function startNew(){
   editing=newCust();
   renderCusts();
   openCustModal('');
+}
+
+// edit an activity that came from 활동현황 (not yet in this plan's custs)
+function startEditFromActId(actId){
+  if(!actId) return;
+  var db={};
+  try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  var a=db[actId];
+  if(!a){ showToast('\uD65C\uB3D9\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'); return; }
+  // already in custs? edit that
+  for(var i=0;i<custs.length;i++){
+    if(custs[i] && custs[i]._fromActId===actId){ startEdit(i); return; }
+  }
+  _commitEditing();
+  var cust=_actToCust(a);
+  custs.push(cust);
+  editIdx=custs.length-1;
+  editing=JSON.parse(JSON.stringify(cust));
+  renderCusts();
+  openCustModal(editing.date||'');
 }
 
 function cancelEdit(){
