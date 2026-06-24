@@ -4679,11 +4679,11 @@ function showDashboard() {
       renderBojangCard();
       if(typeof renderGoals==='function') renderGoals();
       if(typeof renderTop10==='function') renderTop10();
-      // std-fp stats are heavy (10s+) and live below the fold; defer so core cards load first
+      // TOP 4종(보장월초·업적·리크루팅·스탠다드)을 한 번의 GAS 호출로 묶어서 로드 (동시 호출 폭주 방지)
       setTimeout(function(){
+        if(typeof loadDashboardBundle==='function') loadDashboardBundle();
         if(typeof _stdLoadConfirmsFromGas==='function') _stdLoadConfirmsFromGas(function(){ if(typeof renderStdFp==='function') renderStdFp(); });
-        if(typeof _stdLoadStatsFromGas==='function') _stdLoadStatsFromGas(function(){ if(typeof renderStdFp==='function') renderStdFp(); });
-      }, 2500);
+      }, 1500);
     });
 
     // 지점 목표(goal_adjust)를 GAS에서 로드 후 보장월초 카드 갱신 (전체 공유)
@@ -5385,6 +5385,29 @@ var DUMMY_ACT_TOP4 = [];
 
 var DUMMY_PANEL_TOP4 = [];
 
+// 대시보드 TOP 묶음 — 한 번의 GAS 호출로 4개 집계를 받아 전역 저장 후 렌더
+var _dashBundle = null;
+function loadDashboardBundle(cb){
+  if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ if(cb) cb(); return; }
+  var ym = (typeof getCurrentYM==='function') ? getCurrentYM() : '';
+  function _try(attempt){
+    var url = UNISPACE_GAS_URL + '?action=getDashboardBundle&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
+    fetch(url).then(function(r){return r.json();}).then(function(res){
+      if(res && res.ok){
+        _dashBundle = res;
+        if(typeof renderTop10==='function') renderTop10();
+        if(typeof renderStdFp==='function') renderStdFp();
+        if(cb) cb();
+      } else if(attempt < 3){ setTimeout(function(){ _try(attempt+1); }, 1500); }
+      else { if(cb) cb(); }
+    }).catch(function(){
+      if(attempt < 3){ setTimeout(function(){ _try(attempt+1); }, 1500); }
+      else { if(cb) cb(); }
+    });
+  }
+  _try(1);
+}
+
 function renderTop10() {
   var el = document.getElementById('topList');
   var _mn = (new Date()).getMonth()+1;
@@ -5414,15 +5437,19 @@ function renderTop10() {
           '</div>';
         }).join('');
   }
-  // 1) local data first (avoid blank)
-  _renderBojangRows(combined);
-  // 2) org-wide top5 from GAS (all FPs, not just current user)
-  if (typeof UNISPACE_GAS_URL !== 'undefined' && currentUser && currentUser.id) {
-    var _btYm = getCurrentYM();
-    var _btUrl = UNISPACE_GAS_URL + '?action=getBojangTop&ym=' + encodeURIComponent(_btYm) + '&limit=5';
-    fetch(_btUrl).then(function(r){return r.json();}).then(function(res){
-      if(res && res.ok && res.rows){ _renderBojangRows(res.rows); }
-    }).catch(function(){});
+  // 1) bundle data if available (single GAS call for all TOPs)
+  if(_dashBundle && _dashBundle.bojangTop){
+    _renderBojangRows(_dashBundle.bojangTop);
+  } else {
+    // local first (avoid blank), then individual GAS call as fallback
+    _renderBojangRows(combined);
+    if (typeof UNISPACE_GAS_URL !== 'undefined' && currentUser && currentUser.id) {
+      var _btYm = getCurrentYM();
+      var _btUrl = UNISPACE_GAS_URL + '?action=getBojangTop&ym=' + encodeURIComponent(_btYm) + '&limit=5';
+      fetch(_btUrl).then(function(r){return r.json();}).then(function(res){
+        if(res && res.ok && res.rows){ _renderBojangRows(res.rows); }
+      }).catch(function(){});
+    }
   }
 
   renderActTop4();
@@ -5470,7 +5497,8 @@ function renderActTop4() {
   var _seeAllTop = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장' || currentUser.level==='admin' || (typeof _isMgrTitleUser==='function'&&_isMgrTitleUser(currentUser)));
   if(_seeAllTop){ _renderActRows(localRanked); }
   else { el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">전체 집계를 불러오는 중...</div>'; }
-  // 2) org-wide from GAS
+  // 2) org-wide from GAS (bundle preferred)
+  if(_dashBundle && _dashBundle.actTop){ _renderActRows(_dashBundle.actTop); return; }
   if (typeof UNISPACE_GAS_URL !== 'undefined' && currentUser && currentUser.id) {
     var _ym = (typeof getCurrentYM==='function') ? getCurrentYM() : '';
     var _u = UNISPACE_GAS_URL + '?action=getActTop&ym=' + encodeURIComponent(_ym) + '&limit=5';
@@ -5549,6 +5577,7 @@ function renderRecruitTop4() {
   if(_seeAllRec){ _renderRecRows(localRanked); }
   else { el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">전체 집계를 불러오는 중...</div>'; }
 
+  if(_dashBundle && _dashBundle.recruitTop){ _renderRecRows(_dashBundle.recruitTop); return; }
   if (typeof UNISPACE_GAS_URL !== 'undefined' && currentUser && currentUser.id) {
     var _u = UNISPACE_GAS_URL + '?action=getRecruitTop&ym=' + encodeURIComponent(ym) + '&limit=5';
     fetch(_u).then(function(r){return r.json();}).then(function(res){
@@ -5671,8 +5700,15 @@ function _stdLoadStatsFromGas(cb){
   _try(1);
 }
 function _stdFpCompute(){
-  // 스탠다드FP 현황은 전 직원 전체. 서버 집계가 아직 없으면 지점-only 로컬로 그리지 말고 로딩 상태.
+  // 스탠다드FP 현황은 전 직원 전체. 묶음/서버 집계 우선.
   if(_stdServerRows){
+    return _stdServerRows.slice();
+  }
+  if(_dashBundle && _dashBundle.stdFp){
+    _stdServerRows = _dashBundle.stdFp.map(function(r){
+      var cnt=(r.c1?1:0)+(r.c2?1:0)+(r.c3?1:0)+(r.c4?1:0);
+      return { name:r.name, branch:r.branch, c1:!!r.c1, c2:!!r.c2, c3:!!r.c3, c4:!!r.c4, cnt:cnt };
+    });
     return _stdServerRows.slice();
   }
   // 대표/전체 권한자는 로컬 perf에 전체가 있으므로 fallback 사용 가능
