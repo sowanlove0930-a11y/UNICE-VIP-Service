@@ -723,6 +723,7 @@ var SALE_TAGS=['PT','청약'];
 var currentUser=null;
 var custs=[];
 var editing=null;   // 편집 중인 고객 객체 (없으면 null)
+var _custModalPopping=false;   // true while closing modal via back button
 var editIdx=-1;     // 편집 대상 index (-1=신규)
 
 function showToast(msg){
@@ -930,7 +931,8 @@ function renderWeekActCal(){
       td.addEventListener('mouseenter', function(){ emp.style.opacity=1; });
       td.addEventListener('mouseleave', function(){ emp.style.opacity=0.3; });
     }
-    td.addEventListener('click', function(){
+    td.addEventListener('click', function(e){
+      if(e.target && e.target.closest && e.target.closest('.wk-chip')) return;
       var ds=td.getAttribute('data-wkdt');
       if(ds) startNewOnDate(ds);
     });
@@ -995,6 +997,7 @@ function _findPlanIdx(a){
 function openCustModal(titleDate){
   var ov=document.getElementById('custModalOverlay');
   if(ov) ov.classList.add('open');
+  try{ if(!history.state || !history.state.custModal){ history.pushState({custModal:true}, ''); } }catch(e){}
   var t=document.getElementById('custModalTitle');
   if(t){
     if(titleDate){
@@ -1015,6 +1018,8 @@ function closeCustModal(){
   if(ov) ov.classList.remove('open');
   editing=null; editIdx=-1;
   renderCusts();
+  // if closed by button (not by back), pop the history entry we pushed
+  try{ if(!_custModalPopping && history.state && history.state.custModal){ history.back(); } }catch(e){}
 }
 
 // 달력 날짜 클릭 -> 그 날짜로 새 고객 입력 모달
@@ -1285,6 +1290,7 @@ function cancelEdit(){
   editing=null; editIdx=-1;
   renderCusts();
   var _ov=document.getElementById('custModalOverlay'); if(_ov) _ov.classList.remove('open');
+  try{ if(!_custModalPopping && history.state && history.state.custModal){ history.back(); } }catch(e){}
 }
 
 function saveEditing(){
@@ -1299,6 +1305,7 @@ function saveEditing(){
   showToast(n>0 ? '저장 · 활동현황 반영됨' : '고객이 저장되었습니다');
   if(typeof renderWeekActCal==='function') renderWeekActCal();
   var _ov=document.getElementById('custModalOverlay'); if(_ov) _ov.classList.remove('open');
+  try{ if(!_custModalPopping && history.state && history.state.custModal){ history.back(); } }catch(e){}
 }
 
 function saveAndNew(){
@@ -1473,6 +1480,7 @@ function bindEditorEvents(){
     var nm=(custs[idx] && custs[idx].name) || '고객';
     // 입력 모달을 먼저 닫아 확인창과 겹치지 않게
     var _ov=document.getElementById('custModalOverlay'); if(_ov) _ov.classList.remove('open');
+    try{ if(!_custModalPopping && history.state && history.state.custModal){ history.back(); } }catch(e){}
     askConfirm('고객 삭제', nm+' 활동을 삭제할까요? 활동현황에서도 제거됩니다.', function(){
       custs.splice(idx,1);
       editing=null; editIdx=-1;
@@ -2641,6 +2649,11 @@ function init(){
   var _cmx=document.getElementById('custModalX'); if(_cmx) _cmx.addEventListener('click', closeCustModal);
   var _cmo=document.getElementById('custModalOverlay');
   if(_cmo) _cmo.addEventListener('click', function(e){ if(e.target===_cmo) closeCustModal(); });
+  // mobile back button: if modal is open, just close it instead of leaving the page
+  window.addEventListener('popstate', function(){
+    var ov=document.getElementById('custModalOverlay');
+    if(ov && ov.classList.contains('open')){ _custModalPopping=true; closeCustModal(); _custModalPopping=false; }
+  });
   _on('excelBtn', 'click', function(){ commitEditingIfAny(); saveDraft(false); buildExcel(); });
   _on('submitBtn', 'click', function(){
     commitEditingIfAny();
