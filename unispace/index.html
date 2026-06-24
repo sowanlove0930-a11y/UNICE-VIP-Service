@@ -4731,6 +4731,22 @@ function showDashboard() {
       }
       var st2 = document.getElementById('st2');
       if(st2) st2.textContent = _countMyCust(DB2);
+      // light count first (number only) with one retry, so st2 never stuck at cache value
+      (function(){
+        var cntUrl = UNISPACE_GAS_URL + '?action=getCustomerCount&fp=' + encodeURIComponent(currentUser.id);
+        function _tryCount(attempt){
+          fetch(cntUrl).then(function(r){return r.json();}).then(function(cr){
+            if(cr && cr.ok && typeof cr.count === 'number'){
+              if(st2) st2.textContent = cr.count;
+            } else if(attempt < 2){
+              setTimeout(function(){ _tryCount(attempt+1); }, 1200);
+            }
+          }).catch(function(){
+            if(attempt < 2) setTimeout(function(){ _tryCount(attempt+1); }, 1200);
+          });
+        }
+        _tryCount(1);
+      })();
       var custUrl = UNISPACE_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(currentUser.id);
       fetch(custUrl).then(function(r){return r.json();}).then(function(res){
         if(res && res.ok && res.customers){
