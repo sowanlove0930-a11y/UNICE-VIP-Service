@@ -3639,6 +3639,8 @@ var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjskl
   }
   window.fetch = function(url, opts){
     if (!_isGas(url)) return _origFetch(url, opts);
+    // login must never queue behind heavy calls; send it immediately
+    if (String(url).indexOf('action=login') >= 0) return _origFetch(url, opts);
     return new Promise(function(resolve, reject){
       queue.push({ url:url, opts:opts, resolve:resolve, reject:reject });
       _pump();
@@ -4144,7 +4146,7 @@ function doLogin(fromBio) {
   // GAS 간헐적 지연/실패 대비: 타임아웃 + 자동 재시도(최대 3회)
   function _loginFetch(attempt){
     var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
-    var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 15000);
+    var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 25000);
     fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(function(r){ clearTimeout(timer); return r.json(); }).then(function(res){
     if (btn) { btn.disabled = false; btn.textContent = '로그인'; }
     if (!res || !res.ok) {
