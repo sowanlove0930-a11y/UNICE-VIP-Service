@@ -1522,12 +1522,15 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   #acc1 .dash-card-title::before { height: 16px !important; }
   #topListTitle { font-size: 18px !important; }
   /* 출결 현황: 4칸→2칸으로 (글자 세로 쪼개짐·잘림 방지) */
-  .att-today-cols { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
-  .att-col { padding: 12px 10px; }
-  .att-col-head { gap: 5px; flex-wrap: nowrap; }
-  .att-col-label { font-size: 12px; white-space: nowrap; }
+  .att-today-card { padding: 16px 14px; }
+  .att-today-cols { grid-template-columns: repeat(2, minmax(0,1fr)) !important; gap: 8px !important; }
+  .att-col { padding: 12px 10px; min-width: 0; overflow: hidden; }
+  .att-col-head { gap: 4px; flex-wrap: nowrap; min-width: 0; }
+  .att-col-label { font-size: 12px; white-space: nowrap; flex-shrink: 0; }
   .att-col-count { font-size: 16px; }
-  .att-col-br { font-size: 9px; margin-right: 2px; }
+  .att-col-br { font-size: 9px; margin-right: 2px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 스탠다드FP 막대: 라벨 폭 축소해 막대가 좁아져 명단보기가 겹치지 않게 */
+  .std-bar-label { width: 112px !important; font-size: 11.5px !important; letter-spacing: -0.4px; }
   /* 업적 입력 모달: 화면 폭에 맞추고 가로 넘침 차단 */
   .perf-modal-overlay { padding: 12px !important; }
   .perf-modal { max-width: 100% !important; width: 100% !important; padding: 8px 16px 28px !important; box-sizing: border-box; overflow-x: hidden; }
@@ -5822,7 +5825,7 @@ function renderStdFp(){
       : '<div style="position:absolute;left:0;top:0;bottom:0;width:100%;background:'+fill+'"></div>'+right;
     var barAttr = hoverable ? ' data-stdkey="'+key+'" style="flex:1;background:#fff;border-radius:7px;height:30px;position:relative;overflow:hidden;border:1px solid '+bd+';cursor:pointer"' : ' style="flex:1;background:#fff;border-radius:7px;height:30px;position:relative;overflow:hidden;border:1px solid '+bd+'"';
     return '<div style="display:flex;align-items:center;gap:10px;position:relative">'+
-      '<div style="width:150px;font-size:13px;font-weight:700;color:var(--text);flex-shrink:0">'+label+'</div>'+
+      '<div class="std-bar-label" style="width:150px;font-size:13px;font-weight:700;color:var(--text);flex-shrink:0">'+label+'</div>'+
       '<div class="std-bar"'+barAttr+'>'+inner+'</div></div>';
   }
 
@@ -11307,6 +11310,16 @@ function rc2RenderCal() {
     if(dayKey===_todayKey) cellCls+=' today';
     var evs = evByDay[dayKey]||[];
     evs.sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
+    // branch counts (exclude cancelled)
+    var _calAl=0, _calBr=0;
+    for(var _cc=0; _cc<evs.length; _cc++){
+      if(evs[_cc] && evs[_cc].cancelled) continue;
+      var _ccAl = (evs[_cc].branch==='alpha' || String(evs[_cc].branch||'').indexOf('\uC54C\uD30C')>=0);
+      if(_ccAl) _calAl++; else _calBr++;
+    }
+    var _cntHtml='';
+    if(_calAl>0) _cntHtml+='<span style="font-size:8px;font-weight:700;color:#fff;background:#1D9E75;padding:0 4px;border-radius:3px;margin-left:2px">\uC54C'+_calAl+'</span>';
+    if(_calBr>0) _cntHtml+='<span style="font-size:8px;font-weight:700;color:#fff;background:#7B52D0;padding:0 4px;border-radius:3px;margin-left:2px">\uBE0C'+_calBr+'</span>';
     var evHtml='';
     for(var ev=0; ev<evs.length && ev<3; ev++){
       var E=evs[ev];
@@ -11349,7 +11362,7 @@ function rc2RenderCal() {
     var holHtml='';
     if(rc2IsHoliday(dayKey)){ holHtml='<div class="rc2-cal-ev" style="color:#E24B4A;padding:0 1px">'+RC2_HOLIDAYS[dayKey]+'</div>'; }
     var cellStyle = hasJoinEvt ? 'background:rgba(232,130,14,.10)' : '';
-    html += '<div class="'+cellCls+'" style="'+cellStyle+'" data-calday="'+dayKey+'"><div class="dn" style="'+dnColor+'">'+dn+'</div>'+holHtml+evHtml+joinHtml+'</div>';
+    html += '<div class="'+cellCls+'" style="'+cellStyle+'" data-calday="'+dayKey+'"><div class="dn" style="display:flex;align-items:center;justify-content:space-between;'+dnColor+'"><span>'+dn+'</span><span style="display:flex">'+_cntHtml+'</span></div>'+holHtml+evHtml+joinHtml+'</div>';
   }
   document.getElementById('rc2CalGrid').innerHTML = html;
   rc2._evByDayCache = evByDay; // 상세 팝업 렌더용 캐시
@@ -15338,6 +15351,60 @@ function _initFcmForeground(){
   } catch(e){}
 }
 if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ setTimeout(_initFcmForeground, 1500); }); }
+
+// ── mobile back button closes the open modal instead of leaving the page ──
+(function(){
+  var OVL_SEL = '.quick-add-overlay,.mgmt-overlay,.perf-modal-overlay,.confirm-overlay,.notice-modal-overlay,.consult-overlay,.pk-overlay';
+  function _anyOpenOverlay(){
+    var list = document.querySelectorAll(OVL_SEL);
+    for(var i=0;i<list.length;i++){
+      var c = list[i].classList;
+      if(c.contains('open') || c.contains('show')){ return list[i]; }
+    }
+    return null;
+  }
+  var _mdlPopping = false;
+  function _closeOverlay(ov){
+    if(!ov) return;
+    _mdlPopping = true;
+    // prefer a matching close function via the overlay id, else just drop the class
+    var id = ov.id || '';
+    if(id==='qaChoiceOverlay' && typeof closeQaChoice==='function'){ closeQaChoice(); }
+    else if(id==='quickAddOverlay' && typeof closeQuickAdd==='function'){ closeQuickAdd(); }
+    else { ov.classList.remove('open'); ov.classList.remove('show'); }
+    _mdlPopping = false;
+  }
+  // when an overlay becomes open, push a history entry so back can pop it.
+  // when it closes via button (not via back), pop the entry we pushed.
+  var _obs = new MutationObserver(function(muts){
+    for(var i=0;i<muts.length;i++){
+      var t = muts[i].target;
+      if(!t || !t.classList || !t.matches || !t.matches(OVL_SEL)) continue;
+      var isOpen = t.classList.contains('open') || t.classList.contains('show');
+      var was = t.getAttribute('data-uni-open')==='1';
+      if(isOpen && !was){
+        t.setAttribute('data-uni-open','1');
+        try{ if(!history.state || !history.state.uniModal){ history.pushState({uniModal:true}, ''); } }catch(e){}
+      } else if(!isOpen && was){
+        t.setAttribute('data-uni-open','0');
+        if(!_mdlPopping && !_anyOpenOverlay()){
+          try{ if(history.state && history.state.uniModal){ history.back(); } }catch(e){}
+        }
+      }
+    }
+  });
+  function _startObs(){
+    var list = document.querySelectorAll(OVL_SEL);
+    for(var i=0;i<list.length;i++){ _obs.observe(list[i], {attributes:true, attributeFilter:['class']}); }
+  }
+  window.addEventListener('popstate', function(){
+    var ov = _anyOpenOverlay();
+    if(ov){ _closeOverlay(ov); }
+  });
+  if(document.readyState!=='loading'){ _startObs(); }
+  else { document.addEventListener('DOMContentLoaded', _startObs); }
+})();
+
 </script>
 </body>
 </html>
