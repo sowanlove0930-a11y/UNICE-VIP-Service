@@ -5398,7 +5398,15 @@ function loadDashboardBundle(cb){
     var url = UNISPACE_GAS_URL + '?action=getDashboardBundle&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
     fetch(url).then(function(r){return r.json();}).then(function(res){
       if(res && res.ok){
-        _dashBundle = res;
+        // merge: only overwrite a TOP list when the new bundle actually has rows,
+        // so a late empty bundle never wipes already-shown data
+        var prev = _dashBundle || {};
+        var merged = { ok:true };
+        merged.bojangTop = (res.bojangTop && res.bojangTop.length) ? res.bojangTop : (prev.bojangTop || []);
+        merged.actTop = (res.actTop && res.actTop.length) ? res.actTop : (prev.actTop || []);
+        merged.recruitTop = (res.recruitTop && res.recruitTop.length) ? res.recruitTop : (prev.recruitTop || []);
+        merged.stdFp = (res.stdFp && res.stdFp.length) ? res.stdFp : (prev.stdFp || []);
+        _dashBundle = merged;
         if(typeof renderTop10==='function') renderTop10();
         if(typeof renderStdFp==='function') renderStdFp();
         if(cb) cb();
@@ -5424,9 +5432,12 @@ function renderTop10() {
 
   var medals = ['🥇','🥈','🥉'];
   function _renderBojangRows(rowsArr){
-    el.innerHTML = (!rowsArr || rowsArr.length === 0)
-      ? '<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">실적 입력 시 자동 집계됩니다</div>'
-      : rowsArr.map(function(fp, i) {
+    if(!rowsArr || rowsArr.length === 0){
+      if(el.querySelector('div[style*="flex:1"]')) return;
+      el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">실적 입력 시 자동 집계됩니다</div>';
+      return;
+    }
+    el.innerHTML = rowsArr.map(function(fp, i) {
           var isAlpha = fp.branch === '알파지점' || fp.branch === '알파';
           var badge = '<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;'+
             (isAlpha ? 'background:var(--alpha-soft);color:var(--alpha-deep)' : 'background:var(--bravo-soft);color:var(--bravo-deep)')+
@@ -5473,6 +5484,8 @@ function renderActTop4() {
   if(!el) return;
   function _renderActRows(ranked){
     if(!ranked || !ranked.length){
+      // do not wipe rows already painted with real data (race: late empty result)
+      if(el.querySelector('div[style*="flex:1"]')) return;
       el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">활동 입력 시 자동 집계됩니다</div>';
       return;
     }
@@ -5562,6 +5575,7 @@ function renderRecruitTop4() {
 
   function _renderRecRows(ranked){
     if(!ranked || !ranked.length){
+      if(el.querySelector('div[style*="flex:1"]')) return;
       el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">리크루팅 진행 시 자동 집계됩니다</div>';
       return;
     }
