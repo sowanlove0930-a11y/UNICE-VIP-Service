@@ -4608,6 +4608,7 @@ function showDashboard() {
       if(typeof renderGoals==='function') renderGoals();
       if(typeof renderTop10==='function') renderTop10();
       if(typeof _stdLoadConfirmsFromGas==='function') _stdLoadConfirmsFromGas(function(){ if(typeof renderStdFp==='function') renderStdFp(); });
+      if(typeof _stdLoadStatsFromGas==='function') _stdLoadStatsFromGas(function(){ if(typeof renderStdFp==='function') renderStdFp(); });
     });
 
     // 지점 목표(goal_adjust)를 GAS에서 로드 후 보장월초 카드 갱신 (전체 공유)
@@ -5501,7 +5502,28 @@ function _stdStreakLabel(name, ym){
   }
   return { type:'first' };
 }
+var _stdServerRows = null; // getStdFpStats 결과 (전 직원 전체 집계)
+function _stdLoadStatsFromGas(cb){
+  var ym = _stdCurrentYm();
+  var url = UNISPACE_GAS_URL + '?action=getStdFpStats&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.rows){
+      _stdServerRows = res.rows.map(function(r){
+        var cnt=(r.c1?1:0)+(r.c2?1:0)+(r.c3?1:0)+(r.c4?1:0);
+        return { name:r.name, branch:r.branch, c1:!!r.c1, c2:!!r.c2, c3:!!r.c3, c4:!!r.c4, cnt:cnt };
+      });
+    }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
 function _stdFpCompute(){
+  // 서버 전체 집계가 있으면 그것을 사용 (전 직원이 전체를 보도록)
+  if(_stdServerRows){
+    var viewM2 = new Date(); var vm = new Date(viewM2.getFullYear(), viewM2.getMonth()+(typeof monthOffset!=='undefined'?monthOffset:0),1);
+    var brF = (typeof weekBranchFilter!=='undefined' && weekBranchFilter!=='all') ? weekBranchFilter : (currentUser&&currentUser.role==='지점장'?currentUser.branch:'all');
+    var nbb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
+    return _stdServerRows.filter(function(r){ return brF==='all' || nbb(r.branch)===nbb(brF); });
+  }
   var log = getPerfLog();
   var now = new Date(); now.setHours(0,0,0,0);
   var viewM = new Date(now.getFullYear(), now.getMonth() + (typeof monthOffset!=='undefined'?monthOffset:0), 1);
