@@ -11310,16 +11310,79 @@ var actViewMode = 'week';
 var monthOffset = 0;
 var selectedDayStr = '';
 
-function initBranchCal() { renderActView(); }
+function initBranchCal() { if(typeof setupBranchTabsByRole==='function') setupBranchTabsByRole(); renderActView(); }
 function moveWeek(dir) { weekOffset += dir; renderActView(); }
 function setWeekBranch(val, el) {
   weekBranchFilter = val;
   document.querySelectorAll('.week-branch-chip').forEach(function(c){ c.classList.remove('active','active-al','active-br'); });
-  if(val==='알파지점') el.classList.add('active','active-al');
-  else if(val==='브라보지점') el.classList.add('active','active-br');
-  else el.classList.add('active');
+  if(!el){
+    // programmatic call: find the chip matching val
+    var chips = document.querySelectorAll('#weekBranchFilter .week-branch-chip');
+    for(var i=0;i<chips.length;i++){
+      var oc = chips[i].getAttribute('onclick')||'';
+      if(oc.indexOf("'"+val+"'")>=0){ el = chips[i]; break; }
+    }
+  }
+  if(el){
+    if(val==='알파지점') el.classList.add('active','active-al');
+    else if(val==='브라보지점') el.classList.add('active','active-br');
+    else el.classList.add('active');
+  }
   renderActView();
   if(typeof renderStdFp==='function') renderStdFp();
+}
+
+// 지점 필터 탭 노출/기본선택: 대표=전체·알파·브라보, 지점장=본인지점 기본활성, FP=본인지점만
+function setupBranchTabsByRole(){
+  var wrap = document.getElementById('weekBranchFilter');
+  if(!wrap) return;
+  var chips = wrap.querySelectorAll('.week-branch-chip');
+  var allChip=null, alChip=null, brChip=null;
+  for(var i=0;i<chips.length;i++){
+    var oc = chips[i].getAttribute('onclick')||'';
+    if(oc.indexOf("'all'")>=0) allChip=chips[i];
+    else if(oc.indexOf("'알파지점'")>=0) alChip=chips[i];
+    else if(oc.indexOf("'브라보지점'")>=0) brChip=chips[i];
+  }
+  var u = currentUser || {};
+  var isAdmin = (u.role==='대표' || u.level==='admin' || u.id==='ktk01');
+  var nb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return ''; };
+  var myBr = nb(u.branch);
+
+  if(isAdmin){
+    // 대표: 모든 탭, 기본 전체
+    if(allChip) allChip.style.display='';
+    if(alChip) alChip.style.display='';
+    if(brChip) brChip.style.display='';
+    setWeekBranch('all', allChip);
+    return;
+  }
+  if(u.role==='지점장'){
+    // 지점장: 전체 숨김, 알파/브라보 둘 다 노출하되 본인 지점 기본 활성
+    if(allChip) allChip.style.display='none';
+    if(alChip) alChip.style.display='';
+    if(brChip) brChip.style.display='';
+    if(myBr==='브라보') setWeekBranch('브라보지점', brChip);
+    else setWeekBranch('알파지점', alChip);
+    return;
+  }
+  // 일반 FP: 본인 지점 탭 하나만
+  if(allChip) allChip.style.display='none';
+  if(myBr==='알파'){
+    if(alChip) alChip.style.display='';
+    if(brChip) brChip.style.display='none';
+    setWeekBranch('알파지점', alChip);
+  } else if(myBr==='브라보'){
+    if(brChip) brChip.style.display='';
+    if(alChip) alChip.style.display='none';
+    setWeekBranch('브라보지점', brChip);
+  } else {
+    // 지점 불명: 전체만
+    if(allChip) allChip.style.display='';
+    if(alChip) alChip.style.display='none';
+    if(brChip) brChip.style.display='none';
+    setWeekBranch('all', allChip);
+  }
 }
 
 function setActViewMode(mode) {
@@ -12018,9 +12081,8 @@ function renderWeekActTable() {
     _pLogDaily.forEach(function(r){
       if(r.date!==ds) return;
       if(sumBranch!=='all' && _nbSum(r.branch)!==_nbSum(sumBranch)) return;
-      if(!_sumSeeAll && currentUser){
-        if(currentUser.branch && _nbSum(r.branch)!==_nbSum(currentUser.branch)) return;
-        if(r.fpId && currentUser.id && r.fpId!==currentUser.id) return;
+      if(!_sumSeeAll && currentUser && currentUser.branch){
+        if(_nbSum(r.branch)!==_nbSum(currentUser.branch)) return;
       }
       dayPerf += (parseInt(r.total)||0);
     });
@@ -12053,9 +12115,9 @@ function renderWeekActTable() {
     _plog.forEach(function(r){
       if(!datestrs.includes(r.date)) return;
       if(sumBranch!=='all' && _nbSum(r.branch)!==_nbSum(sumBranch)) return;
-      if(!_sumSeeAll && currentUser){
-        if(currentUser.branch && _nbSum(r.branch)!==_nbSum(currentUser.branch)) return;
-        if(r.fpId && currentUser.id && r.fpId!==currentUser.id) return;
+      // FP sees own-branch total (not self-only); keep branch scope only
+      if(!_sumSeeAll && currentUser && currentUser.branch){
+        if(_nbSum(r.branch)!==_nbSum(currentUser.branch)) return;
       }
       weekPerf += (parseInt(r.total)||0);
     });
