@@ -4099,7 +4099,11 @@ function doLogin(fromBio) {
   errEl.innerHTML = '';
 
   var url = UNISPACE_GAS_URL + '?action=login&fp=' + encodeURIComponent(idVal) + '&pw=' + encodeURIComponent(pwVal);
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  // GAS 간헐적 지연/실패 대비: 타임아웃 + 자동 재시도(최대 3회)
+  function _loginFetch(attempt){
+    var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+    var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 15000);
+    fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(function(r){ clearTimeout(timer); return r.json(); }).then(function(res){
     if (btn) { btn.disabled = false; btn.textContent = '로그인'; }
     if (!res || !res.ok) {
       // 지문 경로로 실패 = 저장된 비번이 서버와 불일치(비번 변경됨) → 지문 정리 후 재등록 안내
@@ -4143,10 +4147,18 @@ function doLogin(fromBio) {
         setTimeout(function(){ maybeOfferBioRegister(_uid, _pw); }, 800);
       }
     }
-  }).catch(function(){
-    if (btn) { btn.disabled = false; btn.textContent = '로그인'; }
-    errEl.innerHTML = '⚠️ 네트워크 오류입니다. 잠시 후 다시 시도해 주세요';
-  });
+    }).catch(function(){
+      clearTimeout(timer);
+      if (attempt < 3) {
+        if(errEl) errEl.innerHTML = '⏳ 연결 중... 다시 시도합니다 (' + attempt + '/2)';
+        setTimeout(function(){ _loginFetch(attempt+1); }, 1500);
+        return;
+      }
+      if (btn) { btn.disabled = false; btn.textContent = '로그인'; }
+      errEl.innerHTML = '⚠️ 네트워크 오류입니다. 잠시 후 다시 시도해 주세요';
+    });
+  }
+  _loginFetch(1);
 }
 
 var _pwReturnPw = '';
