@@ -3649,6 +3649,22 @@ var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjskl
 })();
 
 // Map GAS auth response to the role/branch shape the rest of the app expects
+function _mergeCustContactLog(gasCustomers){
+  // GAS customers have no contactLog; preserve local call history by id
+  var prevById = {};
+  try {
+    var _prev = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
+    if (Array.isArray(_prev)) _prev.forEach(function(pc){ if(pc && pc.id) prevById[pc.id] = pc; });
+  } catch(e) {}
+  return (gasCustomers||[]).map(function(c){
+    var old = c && c.id ? prevById[c.id] : null;
+    if (old) {
+      if (Array.isArray(old.contactLog) && (!Array.isArray(c.contactLog) || !c.contactLog.length)) c.contactLog = old.contactLog;
+      if (old.lastContact && !c.lastContact) c.lastContact = old.lastContact;
+    }
+    return c;
+  });
+}
 function _adaptGasUser(g) {
   var roleMap = { admin:'대표', manager:'지점장', fp:'FP' };
   var role = roleMap[g.level] || 'FP';
@@ -4732,7 +4748,7 @@ function showDashboard() {
       var _admCustUrl = UNISPACE_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(currentUser.id);
       fetch(_admCustUrl).then(function(r){return r.json();}).then(function(res){
         if(res && res.ok && res.customers){
-          try { localStorage.setItem('unispace_customers', JSON.stringify(res.customers)); } catch(e) {}
+          try { localStorage.setItem('unispace_customers', JSON.stringify(_mergeCustContactLog(res.customers))); } catch(e) {}
           var _a3 = document.getElementById('st3-alarm');
           if(_a3 && typeof calcTodayCount==='function') _a3.textContent = calcTodayCount();
         }
@@ -4800,7 +4816,7 @@ function showDashboard() {
       var custUrl = UNISPACE_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(currentUser.id);
       fetch(custUrl).then(function(r){return r.json();}).then(function(res){
         if(res && res.ok && res.customers){
-          try { localStorage.setItem('unispace_customers', JSON.stringify(res.customers)); } catch(e) {}
+          try { localStorage.setItem('unispace_customers', JSON.stringify(_mergeCustContactLog(res.customers))); } catch(e) {}
           if(st2) st2.textContent = _countMyCust(res.customers);
           var st4ref = document.getElementById('st4');
           if(st4ref && typeof calcTodayCount==='function') st4ref.textContent = calcTodayCount();

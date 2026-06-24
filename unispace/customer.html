@@ -1928,7 +1928,25 @@ function loadCustomersFromGas() {
   var url = CUST_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(fp);
   return fetch(url).then(function(r){ return r.json(); }).then(function(res){
     if (res && res.ok && res.customers) {
-      DB = res.customers;
+      // GAS has no contactLog; merge existing local call history by customer id
+      // so refreshing the list never wipes the saved 통화 이력.
+      var prevById = {};
+      try {
+        var _prev = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
+        if (Array.isArray(_prev)) {
+          _prev.forEach(function(pc){ if (pc && pc.id) prevById[pc.id] = pc; });
+        }
+      } catch(e) {}
+      DB = res.customers.map(function(c){
+        var old = c && c.id ? prevById[c.id] : null;
+        if (old) {
+          if (Array.isArray(old.contactLog) && (!Array.isArray(c.contactLog) || !c.contactLog.length)) {
+            c.contactLog = old.contactLog;
+          }
+          if (old.lastContact && !c.lastContact) c.lastContact = old.lastContact;
+        }
+        return c;
+      });
       localStorage.setItem('unispace_customers', JSON.stringify(DB));
       return true;
     }
@@ -3267,6 +3285,7 @@ function confirmContact() {
     DB[idx].lastContact = DB[idx].contactLog[0].datetime;
     selectedCustomer = DB[idx];
     localStorage.setItem('unispace_customers', JSON.stringify(DB));
+    if (typeof gasSaveCustomer === 'function') gasSaveCustomer(DB[idx]);
   }
   document.getElementById('contactModalOverlay').classList.add('open');
   showToast('✅ 연락 기록 완료! ' + datetime);
@@ -3512,6 +3531,7 @@ function deleteContactLog(custId, lid, datetime) {
     DB[idx].lastContact = DB[idx].contactLog.length ? DB[idx].contactLog[0].datetime : '';
     selectedCustomer = DB[idx];
     localStorage.setItem('unispace_customers', JSON.stringify(DB));
+    if (typeof gasSaveCustomer === 'function') gasSaveCustomer(DB[idx]);
     if (window._clogInModal) { renderContactModalLog(); renderCustomerList(); return; }
     openDetail(custId);
     renderCustomerList();
