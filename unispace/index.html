@@ -4064,8 +4064,9 @@ function startClock() {
   function tick() {
     var n = new Date();
     var days = ['일','월','화','수','목','금','토'];
-    document.getElementById('clockTime').textContent =
-      String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+    var _ch = n.getHours(); if(_ch<10) _ch='0'+_ch;
+    var _cm = n.getMinutes(); if(_cm<10) _cm='0'+_cm;
+    document.getElementById('clockTime').textContent = _ch + ':' + _cm;
     document.getElementById('clockDate').textContent =
       (n.getMonth()+1) + '월 ' + n.getDate() + '일 (' + days[n.getDay()] + ')';
   }
@@ -5491,7 +5492,7 @@ function _stdFpCompute(){
   log.forEach(function(r){
     if(!r.date || r.date.indexOf(ymPrefix)!==0) return;
     if(brFilter!=='all' && nb(r.branch)!==nb(brFilter)) return;
-    if(!seeAll && currentUser){ if(currentUser.branch && nb(r.branch)!==nb(currentUser.branch)) return; if(r.fpId&&currentUser.id&&r.fpId!==currentUser.id) return; }
+    // 스탠다드FP 현황은 전 직원이 전체를 볼 수 있게 한다 (본인 제한 없음)
     var key = r.fpId || r.fpName;
     if(!agg[key]) agg[key] = { name:r.fpName, branch:r.branch, hanwha:0, son:0, total:0, hasEarly:false };
     agg[key].total += (parseInt(r.total)||0);
@@ -9769,6 +9770,18 @@ function renderAttToday() {
 
   // GAS에서 오늘 출결 + 전체 명단 로드 후 집계 (대시보드 전용)
   var ym = today.slice(0,7);
+
+  // 1) 캐시(localStorage)로 즉시 렌더 — GAS 응답 전 0으로 보이는 것 방지
+  try {
+    var _cAtt = JSON.parse(localStorage.getItem('unispace_attendance')||'{}');
+    var _cPr = JSON.parse(localStorage.getItem('unispace_prereport')||'{}');
+    var _cRoster = JSON.parse(localStorage.getItem('unispace_att_roster')||'[]');
+    if(_cRoster && _cRoster.length){
+      _renderAttTodayCards(_cRoster, _cAtt[today]||{}, _cPr[today]||{});
+    }
+  } catch(e) {}
+
+  // 2) GAS로 최신 갱신
   var dashUrl = UNISPACE_GAS_URL + '?action=getDashboardStats&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym);
   fetch(dashUrl).then(function(r){return r.json();}).then(function(attRes){
     var todayDb = (attRes && attRes.ok && attRes.attendance && attRes.attendance[today]) || {};
@@ -9794,6 +9807,7 @@ function renderAttToday() {
       if(!_attSeeAll && _attMyBr && _attNb(f.branch) !== _attMyBr) return;
       FPS.push({ id:f.id, name:f.name, branch:(f.branch||'').replace('지점','') });
     });
+    try { localStorage.setItem('unispace_att_roster', JSON.stringify(FPS)); } catch(e) {}
     _renderAttTodayCards(FPS, todayDb, todayPr);
   }).catch(function(){});
 }
@@ -13772,7 +13786,9 @@ function _isCheckinExempt(u) {
 
 function getTodayStr() {
   var n = new Date();
-  return n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0') + '-' + String(n.getDate()).padStart(2,'0');
+  var mm = n.getMonth()+1; if(mm<10) mm='0'+mm;
+  var dd = n.getDate(); if(dd<10) dd='0'+dd;
+  return n.getFullYear() + '-' + mm + '-' + dd;
 }
 
 function renderSmartCheckinBtn() {
