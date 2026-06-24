@@ -4640,6 +4640,16 @@ function showDashboard() {
       // 2번 (관리자 4명): 전체 계약고객 + 이번달 신규 — 대시보드 전용 전체 조회
       var now0 = new Date();
       var ym0 = now0.getFullYear() + '-' + (now0.getMonth()+1<10?'0':'') + (now0.getMonth()+1);
+      // 캐시로 즉시 표시 (GAS 응답 전 빈 카드 방지)
+      try {
+        var _c2 = JSON.parse(localStorage.getItem('unispace_st2cache')||'null');
+        if(_c2){
+          var _e2c=document.getElementById('st2-admin');
+          if(_e2c){ skOff(['st2-admin']); _e2c.textContent=_c2.total+'명'; }
+          var _s2c=document.getElementById('st2-admin-sub');
+          if(_s2c) _s2c.textContent='오늘 신규 · 알파 '+_c2.al+' · 브라보 '+_c2.br;
+        }
+      } catch(e){}
       var st2Url = UNISPACE_GAS_URL + '?action=getDashboardStats&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym0);
       fetch(st2Url).then(function(r){return r.json();}).then(function(res){
         var list = (res && res.ok && res.customers) ? res.customers : [];
@@ -4660,6 +4670,7 @@ function showDashboard() {
         if(el2){ skOff(['st2-admin']); el2.textContent = totalContract + '명'; }
         var sub2 = document.getElementById('st2-admin-sub');
         if(sub2){ sub2.textContent = '오늘 신규 · 알파 '+alphaNew+' · 브라보 '+bravoNew; }
+        try { localStorage.setItem('unispace_st2cache', JSON.stringify({total:totalContract, al:alphaNew, br:bravoNew})); } catch(e){}
       }).catch(function(){});
 
       // 3번 (대표/지점장): 출결현황 — localStorage 실계산
