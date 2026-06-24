@@ -5616,12 +5616,9 @@ function _stdLoadStatsFromGas(cb){
   }).catch(function(){ if(cb) cb(); });
 }
 function _stdFpCompute(){
-  // 서버 전체 집계가 있으면 그것을 사용 (전 직원이 전체를 보도록)
+  // 스탠다드FP 현황은 지점 필터와 무관하게 항상 전 직원 전체 (지점장 포함 모두 전체 조회)
   if(_stdServerRows){
-    var viewM2 = new Date(); var vm = new Date(viewM2.getFullYear(), viewM2.getMonth()+(typeof monthOffset!=='undefined'?monthOffset:0),1);
-    var brF = (typeof weekBranchFilter!=='undefined' && weekBranchFilter!=='all') ? weekBranchFilter : (currentUser&&currentUser.role==='지점장'?currentUser.branch:'all');
-    var nbb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
-    return _stdServerRows.filter(function(r){ return brF==='all' || nbb(r.branch)===nbb(brF); });
+    return _stdServerRows.slice();
   }
   var log = getPerfLog();
   var now = new Date(); now.setHours(0,0,0,0);
@@ -5630,7 +5627,7 @@ function _stdFpCompute(){
   var isJune2026 = (ymPrefix === '2026-06');
   var seeAll = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'||(typeof _isManagerUser==='function'&&_isManagerUser(currentUser))||(typeof _isMgrTitleUser==='function'&&_isMgrTitleUser(currentUser)));
   var nb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
-  var brFilter = (typeof weekBranchFilter!=='undefined' && weekBranchFilter!=='all') ? weekBranchFilter : (currentUser&&currentUser.role==='지점장'?currentUser.branch:'all');
+  var brFilter = 'all'; // std fp: always all branches
 
   var agg = {}; // fpId -> {name, branch, hanwha, son, total, hasEarly}
   log.forEach(function(r){
@@ -11468,9 +11465,8 @@ function renderMonthCal() {
     _mLog.forEach(function(r){
       if(!r.date) return;
       if(_mBranch!=='all' && _nbM(r.branch)!==_nbM(_mBranch)) return;
-      if(!_mSeeAll && currentUser){
-        if(currentUser.branch && _nbM(r.branch)!==_nbM(currentUser.branch)) return;
-        if(r.fpId && currentUser.id && r.fpId!==currentUser.id) return;
+      if(!_mSeeAll && currentUser && currentUser.branch){
+        if(_nbM(r.branch)!==_nbM(currentUser.branch)) return;
       }
       perfByDate[r.date] = (perfByDate[r.date]||0) + (parseInt(r.total)||0);
     });
@@ -12053,9 +12049,8 @@ function renderWeekActTable() {
   var allActs = Object.values(db).filter(function(a){
     if(!datestrs.includes(a.date)) return false;
     if(sumBranch !== 'all' && a.branch !== sumBranch) return false;
-    // 전체 조회 권한 없는 사람만 본인 활동으로 제한 (매니저·지점장 등은 전체 집계)
+    // FP/지점장 모두 본인 소속 지점 전체로 집계 (본인-only 아님)
     if(!_sumSeeAll && currentUser && currentUser.branch && _nbSum(a.branch) !== _nbSum(currentUser.branch)) return false;
-    if(!_sumSeeAll && currentUser && a.fpId !== currentUser.id) return false;
     return true;
   });
 
