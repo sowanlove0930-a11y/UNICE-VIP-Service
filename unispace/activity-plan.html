@@ -848,7 +848,7 @@ function renderWeekActCal(){
       h+='<div class="wk-cal-empty" style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:20px;opacity:.3;transition:opacity .15s">+</div>';
     } else {
       dayActs.slice(0,3).forEach(function(a){
-        var ci=_findPlanIdx(a);
+        var ci=_resolvePlanIdx(a);
         var isMine=(ci>=0);
         var done=(a.status==='완료');
         var bg, fg, bar;
@@ -898,7 +898,7 @@ function renderWeekActCal(){
       vh+='<div class="wk-cal-empty" style="text-align:center;color:var(--text3);font-size:13px;opacity:.5;padding:6px 0">+ 일정 추가</div>';
     } else {
       vActs.forEach(function(a){
-        var ci2=_findPlanIdx(a);
+        var ci2=_resolvePlanIdx(a);
         var isMine2=(ci2>=0);
         var done2=(a.status==='완료');
         var bg2,fg2,bar2;
@@ -943,6 +943,36 @@ function renderWeekActCal(){
       if(!isNaN(ci) && ci>=0 && ci<custs.length) startEdit(ci);
     });
   });
+}
+
+// 활동(a)이 현재 계획(custs)의 몇 번째인지 — 저장된 planCustIdx 우선, 실패 시 이름+날짜
+function _resolvePlanIdx(a){
+  if(!a) return -1;
+  // 1) 활동에 박힌 planCustIdx + 현재 주차(planKey) 사용 (가장 정확)
+  try{
+    var wi=effectiveWeekInfo();
+    if(a.planKey===wi.key && a.planCustIdx!==undefined && a.planCustIdx!==null && a.planCustIdx!==''){
+      var pidx=parseInt(a.planCustIdx);
+      if(!isNaN(pidx) && pidx>=0 && pidx<custs.length){
+        var cc=custs[pidx];
+        // 같은 고객명이면 신뢰 (인덱스가 밀렸을 때 오매칭 방지)
+        if(cc && (cc.name||'')===(a.customerName||'')) return pidx;
+      }
+    }
+  }catch(e){}
+  // 2) id에 박힌 인덱스 (act_plan_<key>_<id>_<idx>)
+  try{
+    if(a.id && String(a.id).indexOf('act_plan_')===0){
+      var parts=String(a.id).split('_');
+      var lastIdx=parseInt(parts[parts.length-1]);
+      if(!isNaN(lastIdx) && lastIdx>=0 && lastIdx<custs.length){
+        var cc2=custs[lastIdx];
+        if(cc2 && (cc2.name||'')===(a.customerName||'')) return lastIdx;
+      }
+    }
+  }catch(e){}
+  // 3) 이름+날짜+시간 / 이름+날짜 폴백
+  return _findPlanIdx(a);
 }
 
 // 활동현황 항목(a)이 custs(plan)의 몇 번째인지 찾기 (고객명+날짜+시간 매칭)
