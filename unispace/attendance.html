@@ -643,10 +643,20 @@ function attGasGet(params){
   var qs = Object.keys(params).map(function(k){
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
   }).join('&');
-  return fetch(ATT_GAS_URL + '?' + qs).then(function(r){ return r.text(); }).then(function(txt){
-    try { return JSON.parse(txt); }
-    catch(e){ return { ok:false, msg:'파싱실패' }; }
-  });
+  var url = ATT_GAS_URL + '?' + qs;
+  function _attempt(n){
+    return fetch(url).then(function(r){ return r.text(); }).then(function(txt){
+      try { return JSON.parse(txt); }
+      catch(e){
+        if(n < 3) return new Promise(function(rs){ setTimeout(function(){ rs(_attempt(n+1)); }, 1000); });
+        return { ok:false, msg:'파싱실패' };
+      }
+    }).catch(function(){
+      if(n < 3) return new Promise(function(rs){ setTimeout(function(){ rs(_attempt(n+1)); }, 1000); });
+      return { ok:false, msg:'네트워크오류' };
+    });
+  }
+  return _attempt(1);
 }
 // 이번 달 출결+사전보고 GAS에서 로드 -> 로컬 캐시
 function loadAttFromGas(){
