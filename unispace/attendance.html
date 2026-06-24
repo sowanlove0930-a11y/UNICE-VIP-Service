@@ -665,19 +665,32 @@ function loadAttFromGas(){
   var ym = getYMStr(new Date());
   return attGasGet({ action:'getAttendance', fp:fp, ym:ym }).then(function(res){
     if(res && res.ok){
-      // GAS 데이터로 갱신하되, 로컬에 있는 오늘 내 체크인은 보존 (덮어쓰기 방지)
+      // merge self records into existing store; do NOT replace the whole map,
+      // otherwise the dashboard's branch-wide attendance gets wiped out
       var today = getTodayStr();
       var localDb = getAttDB();
+      var srcAtt = res.attendance || {};
+      Object.keys(srcAtt).forEach(function(d){
+        if(!localDb[d]) localDb[d] = {};
+        var rec = srcAtt[d][fp];
+        if(rec) localDb[d][fp] = rec;
+      });
       var myLocalToday = localDb[today] && localDb[today][fp];
-      var newAtt = res.attendance || {};
       if(myLocalToday){
-        if(!newAtt[today] || !newAtt[today][fp]){
-          if(!newAtt[today]) newAtt[today] = {};
-          newAtt[today][fp] = myLocalToday;
-        }
+        if(!localDb[today]) localDb[today] = {};
+        localDb[today][fp] = myLocalToday;
       }
-      saveAttDB(newAtt);
-      if(res.prereport)  savePrDB(res.prereport);
+      saveAttDB(localDb);
+      if(res.prereport){
+        var localPr = getPrDB();
+        var srcPr = res.prereport;
+        Object.keys(srcPr).forEach(function(d){
+          if(!localPr[d]) localPr[d] = {};
+          var prr = srcPr[d][fp];
+          if(prr) localPr[d][fp] = prr;
+        });
+        savePrDB(localPr);
+      }
       return true;
     }
     return false;

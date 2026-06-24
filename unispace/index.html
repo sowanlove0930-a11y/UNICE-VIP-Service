@@ -4810,12 +4810,32 @@ function showDashboard() {
       }).catch(function(){});
 
       // 3번 (FP): 이번달 출결현황 (정상출근 일수 + 지각/미출석)
+      // NOTE: do NOT overwrite unispace_attendance here — getDashboardStats already
+      // populated it with branch-wide data; getAttendance returns only-self and would
+      // clobber the branch data, breaking the dashboard '오늘 출결 현황' card.
       var fpAttUrl = UNISPACE_GAS_URL + '?action=getAttendance&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(getCurrentYM());
       fetch(fpAttUrl).then(function(r){return r.json();}).then(function(res){
-        if(res && res.ok){
+        // merge self records into existing store without replacing other people's data
+        if(res && res.ok && res.attendance){
           try {
-            if(res.attendance) localStorage.setItem('unispace_attendance', JSON.stringify(res.attendance));
-            if(res.prereport) localStorage.setItem('unispace_prereport', JSON.stringify(res.prereport));
+            var _exist = JSON.parse(localStorage.getItem('unispace_attendance')||'{}');
+            Object.keys(res.attendance).forEach(function(d){
+              if(!_exist[d]) _exist[d] = {};
+              var rec = res.attendance[d][currentUser.id];
+              if(rec) _exist[d][currentUser.id] = rec;
+            });
+            localStorage.setItem('unispace_attendance', JSON.stringify(_exist));
+          } catch(e) {}
+        }
+        if(res && res.ok && res.prereport){
+          try {
+            var _existP = JSON.parse(localStorage.getItem('unispace_prereport')||'{}');
+            Object.keys(res.prereport).forEach(function(d){
+              if(!_existP[d]) _existP[d] = {};
+              var prr = res.prereport[d][currentUser.id];
+              if(prr) _existP[d][currentUser.id] = prr;
+            });
+            localStorage.setItem('unispace_prereport', JSON.stringify(_existP));
           } catch(e) {}
         }
         var _myAtt = _calcMyAtt(currentUser.id);
@@ -4823,6 +4843,7 @@ function showDashboard() {
         var s3 = document.getElementById('st3-fp-sub');
         if(t3) t3.textContent = _myAtt.normal + '일';
         if(s3) s3.textContent = '지각 ' + _myAtt.late + ' · 미출석 ' + _myAtt.absent;
+        if(typeof renderAttToday==='function') renderAttToday();
       }).catch(function(){
         var _myAtt = _calcMyAtt(currentUser.id);
         var t3 = document.getElementById('st3-fp-total');
