@@ -1793,6 +1793,9 @@ function syncAllToActivities(){
   var ms=_ymd(wi.mon), ss=_ymd(wi.sun);
   var db={};
   try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  // GAS sync helpers (so deletes/edits here also reach the sheet, not just localStorage)
+  var _gasDelIds=[], _gasSaveActs=[];
+  function _gasDel(id){ if(id) _gasDelIds.push(id); }
   // 현재 계획에 있는 (고객명+날짜) 집합
   var curSet={};
   custs.forEach(function(c){ if((c.name||'').trim() && c.date){ curSet[(c.name||'')+'|'+(c.date||'')]=true; } });
@@ -1802,10 +1805,10 @@ function syncAllToActivities(){
     var a=db[k];
     if(!a) return;
     if(a.fpId!==currentUser.id) return;
-    if(a.planKey===planKey){ prevCreated[k]=a.createdAt; delete db[k]; return; }
+    if(a.planKey===planKey){ prevCreated[k]=a.createdAt; _gasDel(k); delete db[k]; return; }
     // GAS 머지분(_fromPlan)이 이번주인데 현재 계획에 없으면 유령 -> 제거
     if(a._fromPlan && a.date>=ms && a.date<=ss){
-      if(!curSet[(a.customerName||'')+'|'+(a.date||'')]) delete db[k];
+      if(!curSet[(a.customerName||'')+'|'+(a.date||'')]){ _gasDel(k); delete db[k]; }
     }
   });
   var added=0;
@@ -1823,13 +1826,27 @@ function syncAllToActivities(){
         act.resultTags=orig.resultTags; act.resultProducts=orig.resultProducts;
         act.nextPlan=orig.nextPlan; act.status=orig.status||act.status;
       }
+      _gasDel(c._fromActId);
       delete db[c._fromActId];
     }
     if(prevCreated[act.id]) act.createdAt=prevCreated[act.id];
     db[act.id]=act;
+    _gasSaveActs.push(act);
     added++;
   });
   localStorage.setItem('unispace_activities', JSON.stringify(db));
+  // push to GAS: delete removed ones, save current ones (deletes first to avoid id resurrection)
+  try{
+    var _saveIds={};
+    _gasSaveActs.forEach(function(a){ if(a && a.id) _saveIds[a.id]=true; });
+    _gasDelIds.forEach(function(id){
+      if(_saveIds[id]) return; // re-saved under same id, no need to delete
+      fetch(UNISPACE_GAS_URL+'?action=deleteActivity&id='+encodeURIComponent(id)).catch(function(){});
+    });
+    _gasSaveActs.forEach(function(a){
+      planGasPost({ action:'saveActivity', data: JSON.stringify(a) }).catch(function(){});
+    });
+  }catch(e){}
   return added;
 }
 
