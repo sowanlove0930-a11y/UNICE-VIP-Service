@@ -5350,22 +5350,34 @@ function renderTop10() {
   var combined = realData.sort(function(a,b){ return b.amt - a.amt; }).slice(0,5);
 
   var medals = ['🥇','🥈','🥉'];
-  el.innerHTML = combined.length === 0
-    ? '<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">실적 입력 시 자동 집계됩니다</div>'
-    : combined.map(function(fp, i) {
-        var isAlpha = fp.branch === '알파지점' || fp.branch === '알파';
-        var badge = '<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;'+
-          (isAlpha ? 'background:var(--alpha-soft);color:var(--alpha-deep)' : 'background:var(--bravo-soft);color:var(--bravo-deep)')+
-          '">'+( isAlpha?'알파':'브라보')+'</span>';
-        var rankEl = i < 3 ? '<span style="width:20px;text-align:center;font-size:13px">'+medals[i]+'</span>'
-          : '<span style="width:20px;text-align:center;font-size:11px;color:var(--text3);">'+(i+1)+'</span>';
-        return '<div style="display:flex;align-items:center;gap:8px;padding:0;border-bottom:1px solid rgba(255,255,255,.04)">'+
-          rankEl+
-          '<span style="font-size:13px;font-weight:600;flex:1">'+fp.name+' FP</span>'+
-          badge+
-          '<span style="font-size:13px;font-weight:700;color:var(--gold2)">'+(parseInt(fp.amt)||0).toLocaleString()+'원</span>'+
-        '</div>';
-      }).join('');
+  function _renderBojangRows(rowsArr){
+    el.innerHTML = (!rowsArr || rowsArr.length === 0)
+      ? '<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">실적 입력 시 자동 집계됩니다</div>'
+      : rowsArr.map(function(fp, i) {
+          var isAlpha = fp.branch === '알파지점' || fp.branch === '알파';
+          var badge = '<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;'+
+            (isAlpha ? 'background:var(--alpha-soft);color:var(--alpha-deep)' : 'background:var(--bravo-soft);color:var(--bravo-deep)')+
+            '">'+( isAlpha?'알파':'브라보')+'</span>';
+          var rankEl = i < 3 ? '<span style="width:20px;text-align:center;font-size:13px">'+medals[i]+'</span>'
+            : '<span style="width:20px;text-align:center;font-size:11px;color:var(--text3);">'+(i+1)+'</span>';
+          return '<div style="display:flex;align-items:center;gap:8px;padding:0;border-bottom:1px solid rgba(255,255,255,.04)">'+
+            rankEl+
+            '<span style="font-size:13px;font-weight:600;flex:1">'+fp.name+' FP</span>'+
+            badge+
+            '<span style="font-size:13px;font-weight:700;color:var(--gold2)">'+(parseInt(fp.amt)||0).toLocaleString()+'원</span>'+
+          '</div>';
+        }).join('');
+  }
+  // 1) local data first (avoid blank)
+  _renderBojangRows(combined);
+  // 2) org-wide top5 from GAS (all FPs, not just current user)
+  if (typeof UNISPACE_GAS_URL !== 'undefined' && currentUser && currentUser.id) {
+    var _btYm = getCurrentYM();
+    var _btUrl = UNISPACE_GAS_URL + '?action=getBojangTop&ym=' + encodeURIComponent(_btYm) + '&limit=5';
+    fetch(_btUrl).then(function(r){return r.json();}).then(function(res){
+      if(res && res.ok && res.rows){ _renderBojangRows(res.rows); }
+    }).catch(function(){});
+  }
 
   renderActTop4();
   renderRecruitTop4();
