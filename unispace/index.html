@@ -4652,7 +4652,12 @@ function showDashboard() {
   if(s3f) s3f.style.display = 'none';
   // 오늘 챙길 고객 수 채우기 (역할 무관)
   var _s3cnt = document.getElementById('st3-alarm');
-  if(_s3cnt && typeof calcTodayCount==='function') _s3cnt.textContent = calcTodayCount();
+  if(_s3cnt && typeof calcTodayCount==='function'){
+    var _hasCust = false;
+    try { var _cc = JSON.parse(localStorage.getItem('unispace_customers')||'[]'); _hasCust = (_cc && _cc.length>0); } catch(e) {}
+    if(_hasCust) _s3cnt.textContent = calcTodayCount();
+    else _s3cnt.textContent = '\u2014';
+  }
 
   // load real stats from GAS
   setTimeout(function() {
@@ -4984,11 +4989,12 @@ function calcTodayCount() {
         if (dateDiff(ag) === 30) d30Cnt++;
       }
     }
-    // ⑥ 장기 미연락 30일+
-    if (c.lastContact) {
-      var lc = new Date(c.lastContact.split(' ')[0]);
+    // 6. long no-contact 30days+ (today_alarm same: lastContact else registered)
+    var nocBase = c.lastContact ? c.lastContact.split(' ')[0] : (c.registered || '');
+    if (nocBase) {
+      var lc = new Date(nocBase);
       lc.setHours(0,0,0,0);
-      if (Math.round((TODAY - lc) / 86400000) >= 30) manageCnt++;
+      if (!isNaN(lc.getTime()) && Math.round((TODAY - lc) / 86400000) >= 30) manageCnt++;
     }
   });
 
