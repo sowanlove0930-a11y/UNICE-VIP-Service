@@ -2528,7 +2528,8 @@ window.UNISPACE_FCM = {
         <span class="lg"><span style="display:inline-block;background:#1E7A50;color:#fff;font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;margin-right:3px">알</span>알파</span>
         <span class="lg"><span style="display:inline-block;background:#5A3FB0;color:#fff;font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;margin-right:3px">브</span>브라보</span>
         <span class="lg"><span class="rc2-cal-dot" style="background:#E8820E"></span>입과</span>
-        <button type="button" id="rc2JoinEvtBtn" onclick="rc2OpenJoinEvt()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:#E8820E;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
+        <button type="button" id="rc2KakaoBtn" onclick="rc2CopyKakao()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:#FAE100;color:#3A1D1D;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">💬 카톡 복사</button>
+        <button type="button" id="rc2JoinEvtBtn" onclick="rc2OpenJoinEvt()" style="padding:6px 13px;border:none;border-radius:8px;background:#E8820E;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
       </div>
       <div class="rc2-cal-dow">
         <div style="color:#D85A30">일</div><div style="color:var(--text3)">월</div><div style="color:var(--text3)">화</div><div style="color:var(--text3)">수</div><div style="color:var(--text3)">목</div><div style="color:var(--text3)">금</div><div style="color:#378ADD">토</div>
@@ -2558,6 +2559,10 @@ window.UNISPACE_FCM = {
       <div class="rc2-fld">
         <label class="rc2-fld-lbl">후보자명 <span class="rc2-req">*</span></label>
         <input type="text" class="rc2-text" id="rc2fName">
+      </div>
+      <div class="rc2-fld">
+        <label class="rc2-fld-lbl">나이</label>
+        <input type="number" class="rc2-text" id="rc2fAge" inputmode="numeric" placeholder="예: 47">
       </div>
       <div class="rc2-fld" style="margin-bottom:0">
         <label class="rc2-fld-lbl">추천</label>
@@ -10188,10 +10193,11 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
 var RECRUIT_KEY = 'unispace_recruit_v2'; // { ym: { goal:{alpha,bravo}, list:[ {id,branch,name,ref,events:[...],join,status,note} ] } }
 // 리크루팅 진행 항목 정의 (복수선택) — 라벨·색상
 var RC2_TYPES = [
-  { key:'지점장인터뷰', short:'인터뷰', icon:'🤝', bg:'#6D3FB0', soft:'#F0EAFA', deep:'#5A2FA0', bd:'#D6C2EF' },
-  { key:'소비자패널',   short:'패널', icon:'🗂', bg:'#1A6FB5', soft:'#E6F1FB', deep:'#13568F', bd:'#B8D6EF' },
-  { key:'라이프디자인', short:'라디', icon:'📋', bg:'#1E7A50', soft:'#E5F5EB', deep:'#15663F', bd:'#AEDFC2' },
-  { key:'서포터즈',     short:'서포', icon:'🙌', bg:'#C2691A', soft:'#FCEEDD', deep:'#9A4F0F', bd:'#F0CDA3' }
+  { key:'지점장인터뷰', short:'인터뷰', kakao:'인터', icon:'🤝', bg:'#6D3FB0', soft:'#F0EAFA', deep:'#5A2FA0', bd:'#D6C2EF' },
+  { key:'소비자패널',   short:'패널', kakao:'패널', icon:'🗂', bg:'#1A6FB5', soft:'#E6F1FB', deep:'#13568F', bd:'#B8D6EF' },
+  { key:'라이프디자인', short:'라디', kakao:'라디', icon:'📋', bg:'#1E7A50', soft:'#E5F5EB', deep:'#15663F', bd:'#AEDFC2' },
+  { key:'서포터즈',     short:'서포', kakao:'서포', icon:'🙌', bg:'#C2691A', soft:'#FCEEDD', deep:'#9A4F0F', bd:'#F0CDA3' },
+  { key:'잡사이트',     short:'콜', kakao:'콜', icon:'📞', bg:'#4A5568', soft:'#EDF0F4', deep:'#2D3748', bd:'#CBD5E0' }
 ];
 function rc2TypeMeta(key){ for(var i=0;i<RC2_TYPES.length;i++){ if(RC2_TYPES[i].key===key) return RC2_TYPES[i]; } return { key:key, icon:'●', bg:'#888', soft:'#EEE', deep:'#555', bd:'#DDD' }; }
 // 후보자 1건의 events 배열 정규화 (구버전 panelState/itvState → events 마이그레이션)
@@ -10701,6 +10707,7 @@ function rc2OpenAdd(id) {
   if(id){ var d=rc2GetMonthData(getCurrentYM()); for(var i=0;i<d.list.length;i++) if(d.list[i].id===id){ it=d.list[i]; break; } }
 
   document.getElementById('rc2fName').value = it ? it.name : '';
+  var _ageEl = document.getElementById('rc2fAge'); if(_ageEl) _ageEl.value = it ? (it.age||'') : '';
   document.getElementById('rc2fRef').value = it ? (it.ref||'') : '';
   document.getElementById('rc2fJoin').value = it ? (it.join||'') : '';
   document.getElementById('rc2fNote').value = it ? (it.note||'') : '';
@@ -11025,6 +11032,7 @@ function rc2SaveCand() {
     id: rc2.editId || ('rc'+Date.now()),
     branch: _saveBranch,
     name: name,
+    age: (document.getElementById('rc2fAge') ? document.getElementById('rc2fAge').value.replace(/[^0-9]/g,'') : ''),
     ref: document.getElementById('rc2fRef').value.trim(),
     events: (rc2.editEvents||[]).slice(),
     join: document.getElementById('rc2fJoin').value,
@@ -11273,12 +11281,12 @@ function rc2RenderCal() {
     if(!isNaN(dd.getTime())){ var h2=dd.getHours(),n2=dd.getMinutes(); return {y:dd.getFullYear(),m:dd.getMonth()+1,d:dd.getDate(),time:(h2||n2)?(h2+':'+('0'+n2).slice(-2)):''}; }
     return null;
   }
-  function pushEv(dt, name, ref, type, branch, id, types, done, evid, cancelled){
+  function pushEv(dt, name, ref, type, branch, id, types, done, evid, cancelled, age){
     var pd=_rcParseDt(dt); if(!pd) return;
     if(pd.y!==y || pd.m-1!==m) return;
     var day=pd.y+'-'+(pd.m<10?'0':'')+pd.m+'-'+(pd.d<10?'0':'')+pd.d;
     if(!evByDay[day]) evByDay[day]=[];
-    evByDay[day].push({ time:pd.time, name:name, ref:ref, type:type, branch:branch, id:id, types:types||[], done:!!done, evid:evid||'', cancelled:!!cancelled });
+    evByDay[day].push({ time:pd.time, name:name, ref:ref, type:type, branch:branch, id:id, types:types||[], done:!!done, evid:evid||'', cancelled:!!cancelled, age:age||'' });
   }
   var joinByDay = 0; // 입과는 '월' 단위 → 말일에 표기
   var joinCount = 0;
@@ -11289,7 +11297,7 @@ function rc2RenderCal() {
       var _ev=_evs[ei];
       if(!_ev.dt) continue;
       var _t0 = (_ev.types&&_ev.types[0])||'';
-      pushEv(_ev.dt, it.name, it.ref, _t0, it.branch, it.id, _ev.types, _ev.done, _ev.id, _ev.cancelled);
+      pushEv(_ev.dt, it.name, it.ref, _t0, it.branch, it.id, _ev.types, _ev.done, _ev.id, _ev.cancelled, it.age);
     }
     if(it.status==='입과확보') joinCount++;
   }
@@ -11382,6 +11390,81 @@ function rc2RenderCal() {
   } else {
     document.getElementById('rc2CalDetail').innerHTML='';
   }
+}
+
+// ── 카톡 붙여넣기용 일정 텍스트 생성 (오늘~월말 잔여 일정) ──
+function rc2BuildKakaoText(){
+  var evByDay = rc2._evByDayCache || {};
+  // 시간 포맷: '11:00' -> '11시', '17:30' -> '5시30', '14:00' -> '2시'
+  function _fmtTime(t){
+    if(!t) return '';
+    var pt = String(t).split(':');
+    var h = parseInt(pt[0],10); if(isNaN(h)) return t;
+    var mi = parseInt(pt[1],10)||0;
+    var hh = h>12 ? (h-12) : h;
+    return hh + '시' + (mi>0 ? (mi<10?('0'+mi):String(mi)) : '');
+  }
+  // 유형 키 -> 카톡 약칭
+  function _kakaoShort(key){
+    for(var i=0;i<RC2_TYPES.length;i++){ if(RC2_TYPES[i].key===key) return RC2_TYPES[i].kakao || RC2_TYPES[i].short || key; }
+    return key;
+  }
+  function _brShort(b){ var s=String(b||''); return (s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0) ? '브' : '알'; }
+  function _brFull(b){ var s=String(b||''); return (s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0) ? '브라보' : '알파'; }
+  var WD = ['일','월','화','수','목','금','토'];
+  // 오늘 ~ 월말
+  var now = new Date(); now.setHours(0,0,0,0);
+  var viewM = new Date(now.getFullYear(), now.getMonth() + ((rc2 && typeof rc2.calOffset!=='undefined') ? rc2.calOffset : 0), 1);
+  var yy = viewM.getFullYear(), mm = viewM.getMonth();
+  var days = Object.keys(evByDay).sort();
+  var out = '✔️리크루팅 내방 일정\n';
+  var anyDay = false;
+  for(var di=0; di<days.length; di++){
+    var dk = days[di];
+    var parts = dk.split('-');
+    var dt = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+    dt.setHours(0,0,0,0);
+    if(dt < now) continue; // 지난 날짜 제외 (오늘부터)
+    var evs = (evByDay[dk]||[]).filter(function(E){ return !E.cancelled; });
+    if(!evs.length) continue;
+    evs.sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
+    // 그 날의 대표 지점 표기 (혼재 시 생략 가능하나, 일단 가장 많은 쪽)
+    var brCount = {};
+    evs.forEach(function(E){ var b=_brFull(E.branch); brCount[b]=(brCount[b]||0)+1; });
+    var dayBr = (brCount['알파']||0) >= (brCount['브라보']||0) ? '알파' : '브라보';
+    var mNum = parseInt(parts[1],10), dNum = parseInt(parts[2],10);
+    out += '\n●' + mNum + '/' + dNum + '(' + WD[dt.getDay()] + ') ' + dayBr + '\n';
+    anyDay = true;
+    for(var ei=0; ei<evs.length; ei++){
+      var E = evs[ei];
+      var tys = (E.types && E.types.length) ? E.types : (E.type?[E.type]:[]);
+      var tyTxt = tys.map(function(k){ return _kakaoShort(k); }).filter(Boolean).join('/');
+      var line = _fmtTime(E.time) + ' ' + (E.name||'');
+      line += '/' + (E.age||'');
+      line += '/' + (E.ref||'');
+      if(tyTxt) line += '/' + tyTxt;
+      line += '/' + _brShort(E.branch);
+      out += line + '\n';
+    }
+  }
+  if(!anyDay) return '';
+  return out;
+}
+function rc2CopyKakao(){
+  var txt = rc2BuildKakaoText();
+  if(!txt){ showToast('오늘 이후 일정이 없습니다'); return; }
+  function _done(){ showToast('✅ 카톡 일정 복사 완료'); }
+  function _fallback(){
+    try{
+      var ta=document.createElement('textarea');
+      ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta); _done();
+    }catch(e){ alert(txt); }
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(_done).catch(_fallback);
+  } else { _fallback(); }
 }
 function rc2RenderCalDetail(evByDay, dayKey) {
   var evs = evByDay[dayKey]||[];
