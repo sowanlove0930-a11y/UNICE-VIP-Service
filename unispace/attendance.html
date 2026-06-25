@@ -782,6 +782,15 @@ window.addEventListener('DOMContentLoaded',function(){
   renderCheckinTab();
   renderPrereportTab();
 
+  // 실제 FP 명단을 GAS에서 로드 (계정관리 삭제 반영) 후 출결현황 갱신
+  loadFpListFromGas(function(){
+    if(typeof initFilters==='function') initFilters();
+    if(typeof renderStatus==='function'){
+      var sp2=document.getElementById('pageStatus');
+      if(sp2 && sp2.classList.contains('active')) renderStatus();
+    }
+  });
+
   // GAS에서 이번 달 출결/사전보고 로드 후 재렌더 (캐시 갱신)
   loadAttFromGas().then(function(ok){
     // 데이터 도착 후 화면 무조건 갱신 (체크인 상태 반영)
@@ -846,7 +855,10 @@ function switchTab(key,el){
   el.classList.add('active');
   var pageId='page'+key.charAt(0).toUpperCase()+key.slice(1);
   document.getElementById(pageId).classList.add('active');
-  if(key==='status') renderStatus();
+  if(key==='status'){
+    if(!_fpListCache){ loadFpListFromGas(function(){ renderStatus(); }); }
+    else renderStatus();
+  }
 }
 
 // ── 체크인 탭 렌더 ───────────────────────────────────
@@ -2049,8 +2061,30 @@ function renderStatus(){
 function absentTotal(rows){
   return rows.reduce(function(acc,r){ return acc+r.absentCnt; }, 0);
 }
-// FP 목록
+// FP 목록 — GAS(getAllFps)에서 로드한 실제 명단 우선, 없으면 하드코딩 fallback
+var _fpListCache = null;
+function loadFpListFromGas(cb){
+  attGasGet({ action:'getAllFps' }).then(function(res){
+    if(res && res.ok && res.list && res.list.length){
+      _fpListCache = res.list.filter(function(fp){
+        return String(fp.active)==='true' || fp.active===true; // 활성만
+      }).map(function(fp){
+        var t=String(fp.title||''), lv=String(fp.level||'');
+        var role='FP';
+        if(t==='대표'||lv==='admin') role='대표';
+        else if(t==='지점장'||t==='교육지점장'||lv==='manager') role='지점장';
+        else if(fp.id==='ktk01') role='대표';
+        return { id:String(fp.id), active:true, name:fp.name, role:role, branch:fp.branch, title:t, level:lv };
+      });
+    }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
 function getFpList(){
+  if(_fpListCache && _fpListCache.length) return _fpListCache;
+  return _getFpListFallback();
+}
+function _getFpListFallback(){
   return [
     {id:'ktk01',active:true,name:'김태규',role:'대표',branch:'유니스지사'},
     {id:'H2502965',active:true,name:'이수아',role:'지점장',branch:'브라보지점'},
