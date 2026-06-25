@@ -11315,18 +11315,25 @@ function rc2DeleteEvt(){
 
 function rc2DeleteCand() {
   if(!rc2.editId) return;
-  if(!confirm('이 후보자를 삭제할까요?')) return;
   var delId = rc2.editId;
-  var d = rc2GetMonthData(getCurrentYM());
-  var nl=[]; for(var i=0;i<d.list.length;i++) if(d.list[i].id!==rc2.editId) nl.push(d.list[i]);
-  d.list = nl;
-  rc2SetMonthData(getCurrentYM(), d);
-  rc2DeleteFromGas(delId);
-  rc2CloseAdd();
-  rc2RenderList();
-  if(rc2.view==='cal') rc2RenderCal();
-  renderRecruitStat();
-  showToast('삭제되었습니다');
+  var _nm = '';
+  try { var _dd=rc2GetMonthData(getCurrentYM()); for(var _i=0;_i<_dd.list.length;_i++){ if(_dd.list[_i].id===delId){ _nm=_dd.list[_i].name||''; break; } } } catch(e){}
+  showConfirm({icon:'🗑️',iconCls:'confirm-icon-danger',title:(_nm?_nm+' ':'')+'후보자 삭제',
+    msg:'이 후보자를 삭제할까요?<br>관련 일정도 함께 삭제됩니다.',
+    okLabel:'후보자 삭제',okCls:'red'
+  }).then(function(ok){
+    if(!ok) return;
+    var d = rc2GetMonthData(getCurrentYM());
+    var nl=[]; for(var i=0;i<d.list.length;i++) if(d.list[i].id!==delId) nl.push(d.list[i]);
+    d.list = nl;
+    rc2SetMonthData(getCurrentYM(), d);
+    rc2DeleteFromGas(delId);
+    rc2CloseAdd();
+    rc2RenderList();
+    if(rc2.view==='cal') rc2RenderCal();
+    renderRecruitStat();
+    showToast('🗑 후보자가 삭제되었습니다');
+  });
 }
 
 // ===== 통합 달력 =====
@@ -11777,12 +11784,14 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     var brTag = E.branch==='alpha' ? '<span class="rc2-cal-tag" style="background:var(--alpha-soft);color:var(--alpha-deep)">알파</span>' : '<span class="rc2-cal-tag" style="background:var(--bravo-soft);color:var(--bravo-deep)">브라보</span>';
     var doneTag = E.cancelled ? '<span class="rc2-cal-tag" style="background:rgba(226,75,74,.16);color:#C0392B">✕불참/취소</span>' : (E.done ? '<span class="rc2-cal-tag" style="background:#E7F5EC;color:#1F7A4D">✓완료</span>' : '');
     var refTxt = E.ref ? '추천 '+rc2Esc(E.ref) : '';
+    var _hasResult = (E.done || E.cancelled);
+    var _btnEdit = '<button type="button" class="rc2-rowact-btn" data-act="edit" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" style="padding:6px 9px;border:1px solid var(--bdr2);border-radius:7px;background:var(--bg2);color:var(--text1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">수정</button>';
+    var _btnResult = '<button type="button" class="rc2-rowact-btn" data-act="result" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" data-rcevid="'+(E.evid||'')+'" style="padding:6px 9px;border:none;border-radius:7px;background:#1F9268;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+(_hasResult?'결과수정':'결과입력')+'</button>';
+    var _btnDel = '<button type="button" class="rc2-rowact-btn" data-act="del" data-rcid="'+E.id+'" data-rcevid="'+(E.evid||'')+'" data-rcname="'+rc2Esc(E.name)+'" style="padding:6px 9px;border:1px solid #E0A4A4;border-radius:7px;background:#fff;color:#A32D2D;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">삭제</button>';
+    var _btns = _hasResult ? (_btnResult + _btnDel) : (_btnEdit + _btnResult + _btnDel);
     rows += '<div class="rc2-cal-rowwrap" data-rcwrap="'+E.id+'_'+(E.evid||'')+'" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.05)">'+
       '<div class="rc2-cal-row" style="flex:1;min-width:0"><span class="t" style="'+tColor+'">'+(E.time||'-')+'</span><span class="nm">'+rc2Esc(E.name)+'</span><span class="rf">'+refTxt+'</span><span class="tags">'+typeTag+doneTag+brTag+'</span></div>'+
-      '<div style="display:flex;gap:5px;flex-shrink:0">'+
-        '<button type="button" class="rc2-rowact-btn" data-act="edit" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" style="padding:6px 9px;border:1px solid var(--bdr2);border-radius:7px;background:var(--bg2);color:var(--text1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">수정</button>'+
-        '<button type="button" class="rc2-rowact-btn" data-act="result" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" data-rcevid="'+(E.evid||'')+'" style="padding:6px 9px;border:none;border-radius:7px;background:#1F9268;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">결과입력</button>'+
-      '</div>'+
+      '<div style="display:flex;gap:5px;flex-shrink:0">'+_btns+'</div>'+
     '</div>';
   }
   document.getElementById('rc2CalDetail').innerHTML='<div class="rc2-cal-detail">'+head+rows+_ivRenderSection(dayKey, evs)+'</div>';
@@ -11809,6 +11818,13 @@ function rc2WireDetailRows() {
     if(br && br!==rc2.branch){ rc2SwitchBranch(br); }
     var cid=this.getAttribute('data-rcid');
     var actType=this.getAttribute('data-act');
+    if(actType==='del'){
+      var did=this.getAttribute('data-rcevid');
+      var dnm=this.getAttribute('data-rcname')||'후보자';
+      rc2CloseCalDetail();
+      rc2DeleteChoice(cid, did, dnm);
+      return;
+    }
     rc2CloseCalDetail();
     if(actType==='result'){
       var eid=this.getAttribute('data-rcevid');
@@ -11817,6 +11833,68 @@ function rc2WireDetailRows() {
       rc2OpenAdd(cid); // 수정: 후보자 수정 모달
     }
   });
+}
+// 리크루팅 일정 삭제: 일정만 / 후보자 통째 선택
+function rc2DeleteChoice(candId, evtId, name){
+  var ov=document.createElement('div');
+  ov.className='confirm-overlay open';
+  ov.style.zIndex='10000';
+  ov.innerHTML =
+    '<div class="confirm-box" style="max-width:340px">'+
+      '<div class="confirm-icon confirm-icon-danger">🗑️</div>'+
+      '<div class="confirm-title">'+name+' 삭제</div>'+
+      '<div class="confirm-msg">어떻게 삭제할까요?</div>'+
+      '<div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">'+
+        '<button type="button" id="_rc2DelEvt" class="confirm-ok" style="background:#E5825A;color:#fff;width:100%">이 일정만 삭제 <span style="font-weight:400;font-size:12px">(후보자는 남김)</span></button>'+
+        '<button type="button" id="_rc2DelCand" class="confirm-ok red" style="width:100%">후보자 통째 삭제</button>'+
+        '<button type="button" id="_rc2DelCancel" class="confirm-ok" style="background:var(--bg3);color:var(--text2);width:100%">취소</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(ov);
+  function _close(){ if(ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  document.getElementById('_rc2DelEvt').addEventListener('click', function(){
+    _close();
+    rc2DeleteEvtById(candId, evtId);
+  });
+  document.getElementById('_rc2DelCand').addEventListener('click', function(){
+    _close();
+    rc2DeleteCandById(candId);
+  });
+  document.getElementById('_rc2DelCancel').addEventListener('click', _close);
+}
+// 특정 후보자의 특정 일정만 삭제
+function rc2DeleteEvtById(candId, evtId){
+  var d=rc2GetMonthData(getCurrentYM());
+  var it=null,idx=-1; for(var i=0;i<d.list.length;i++) if(d.list[i].id===candId){ it=d.list[i]; idx=i; break; }
+  if(!it){ showToast('후보자를 찾을 수 없습니다'); return; }
+  var evs=rc2NormEvents(it).slice();
+  var nl=[]; var removed=false;
+  for(var e=0;e<evs.length;e++){ if(evs[e].id!==evtId) nl.push(evs[e]); else removed=true; }
+  it.events=nl;
+  if(removed){
+    var _rid=String(evtId||'');
+    if(_rid.indexOf('_itv')>=0){ it.itvState=''; it.itvDt=''; }
+    if(_rid.indexOf('_pnl')>=0){ it.panelState=''; it.panelDt=''; }
+  }
+  d.list[idx]=it;
+  rc2SetMonthData(getCurrentYM(), d);
+  rc2SaveToGas(it, getCurrentYM());
+  rc2RenderList();
+  if(rc2.view==='cal') rc2RenderCal();
+  renderRecruitStat();
+  showToast('🗑 일정이 삭제되었습니다');
+}
+// 후보자 통째 삭제
+function rc2DeleteCandById(candId){
+  var d=rc2GetMonthData(getCurrentYM());
+  var nl=[]; for(var i=0;i<d.list.length;i++){ if(d.list[i].id!==candId) nl.push(d.list[i]); }
+  d.list=nl;
+  rc2SetMonthData(getCurrentYM(), d);
+  rc2DeleteFromGas(candId);
+  rc2RenderList();
+  if(rc2.view==='cal') rc2RenderCal();
+  renderRecruitStat();
+  showToast('🗑 후보자가 삭제되었습니다');
 }
 // 달력 날짜에서 +추가: 그 지점·그 날짜로 새 후보자 (해당 날짜를 신규 일정 날짜로 기본 채움)
 function rc2OpenAddForDate(dayKey) {

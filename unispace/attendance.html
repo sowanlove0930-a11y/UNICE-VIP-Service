@@ -944,31 +944,32 @@ function doCheckin(){
   var btn=document.getElementById('checkinBtn');
   if(btn){ btn.disabled=true; btn.textContent='확인 중...'; }
 
-  var now=new Date(),h=now.getHours(),m=now.getMinutes(),s=now.getSeconds();
-  function _p2(n){ return (n<10?'0':'')+n; }
-  var timeStr=_p2(h)+':'+_p2(m)+':'+_p2(s);
-  var _lateMin=_lateMinFor(currentUser.id);
-  var isLate=(h>LATE_HOUR)||(h===LATE_HOUR&&m>=_lateMin);
-  var rec={ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch, time:timeStr, status:isLate?'지각':'정상' };
+  var now=new Date();
+  // 시간·지각 판정은 서버(GAS)가 한국시간 기준으로 결정 — PC 시계 무관
+  var rec={ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch };
 
   // GAS에 먼저 저장 시도 -> 이미 체크인됐으면 서버가 막음
-  attGasGet({ action:'checkin', date:today, fp:currentUser.id, name:currentUser.name, branch:currentUser.branch, time:timeStr, status:isLate?'지각':'정상' }).then(function(res){
+  attGasGet({ action:'checkin', date:today, fp:currentUser.id, name:currentUser.name, branch:currentUser.branch }).then(function(res){
     if(res && res.ok===false && res.msg && res.msg.indexOf('이미')>=0){
       // 서버에 이미 있음 -> 로컬도 동기화하고 차단
       if(!db[today]) db[today]={};
-      db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
+      var _t0=(res.time||'');
+      db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:_t0,status:res.status||'정상'};
       saveAttDB(db);
       renderCheckinTab();
       showToast('오늘 이미 체크인하셨습니다');
       return;
     }
     if(res && res.ok===true){
-      // 서버 저장 성공 -> 로컬 동기화 + 완료
+      // 서버 저장 성공 -> 서버가 돌려준 time/status 사용
+      var srvTime=res.time||'';
+      var srvStatus=res.status||'정상';
+      var srvLate=(srvStatus==='지각');
       if(!db[today]) db[today]={};
-      db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:timeStr,status:isLate?'지각':'정상'};
+      db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:srvTime,status:srvStatus};
       saveAttDB(db);
       renderCheckinTab();
-      showToast(isLate?'⚠️ '+timeStr.slice(0,5)+' 지각 처리되었습니다':'✅ '+timeStr.slice(0,5)+' 정상 출근 완료!');
+      showToast(srvLate?'⚠️ '+srvTime.slice(0,5)+' 지각 처리되었습니다':'✅ '+srvTime.slice(0,5)+' 정상 출근 완료!');
       return;
     }
     // 그 외 응답 -> 실패로 간주
