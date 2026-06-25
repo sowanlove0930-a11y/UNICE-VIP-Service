@@ -14760,6 +14760,12 @@ function doCheckin() { doSmartCheckin(); }
     // 닫기 우선순위 목록 (위에 뜬 것부터). check: 열려있나, close: 닫기 동작
     function _backClosers(){
       return [
+        // 리크루팅 달력 상세 팝업 (display 방식)
+        { check: function(){ var e=document.getElementById('rc2CalDetailPop'); return e && e.style.display !== 'none' && e.offsetParent !== null; },
+          close: function(){ if(typeof rc2CloseCalDetail==='function') rc2CloseCalDetail(); else { var e=document.getElementById('rc2CalDetailPop'); if(e) e.style.display='none'; } } },
+        // 동적 확인 오버레이 (삭제 3지선다 등)
+        { check: function(){ return document.querySelectorAll('.confirm-overlay.open').length>0; },
+          close: function(){ var ns=document.querySelectorAll('.confirm-overlay.open'); var last=ns[ns.length-1]; if(last && last.id==='confirmOverlay' && typeof resolveConfirm==='function'){ resolveConfirm(false); } else if(last && last.parentNode){ last.parentNode.removeChild(last); } } },
         // 상담 모드 (오버레이 + 버튼 상태까지 정리되도록 toggle 호출)
         { check: function(){ return typeof consultMode!=='undefined' && consultMode; },
           close: function(){ if(typeof toggleConsultMode==='function') toggleConsultMode(); } },
@@ -15909,7 +15915,7 @@ if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ s
   }, true);
 })();
 
-// ===== 모바일 당겨서 새로고침 (대시보드) =====
+// ===== 모바일 당겨서 새로고침 (대시보드 전용) =====
 (function(){
   if(!('ontouchstart' in window) && !(navigator.maxTouchPoints>0)) return;
   var startY=0, pulling=false, dist=0;
@@ -15917,43 +15923,49 @@ if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ s
   var ind=null;
   function _anyModalOpen(){
     if(document.body.classList.contains('modal-open')) return true;
-    if(document.querySelector('.mgmt-overlay.open,.quick-add-overlay.open,.perf-modal-overlay.open,.notice-modal-overlay.open,.consult-overlay.open,.pk-overlay.open,.detail-overlay.open,.confirm-overlay.open')) return true;
+    if(document.querySelector('.mgmt-overlay.open,.quick-add-overlay.open,.perf-modal-overlay.open,.notice-modal-overlay.open,.consult-overlay.open,.pk-overlay.open,.detail-overlay.open,.confirm-overlay.open,#recruitOverlay.open')) return true;
     var cal=document.getElementById('rc2CalDetailPop');
     if(cal && cal.style.display!=='none' && cal.offsetParent!==null) return true;
     return false;
   }
+  function _hideInd(){ if(ind) ind.style.transform='translateX(-50%) translateY(-50px)'; }
   function _mkInd(){
     if(ind) return ind;
     ind=document.createElement('div');
     ind.style.cssText='position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(-50px);z-index:99998;background:var(--bg2,#fff);border:1px solid var(--border,#ddd);border-radius:0 0 14px 14px;padding:8px 18px;font-size:13px;font-weight:700;color:var(--text2,#555);box-shadow:0 4px 14px rgba(0,0,0,.12);transition:transform .15s;pointer-events:none';
-    ind.textContent='↓ 당겨서 새로고침';
+    ind.textContent='\u2193 \uB2F9\uACA8\uC11C \uC0C8\uB85C\uACE0\uCE68';
     document.body.appendChild(ind);
     return ind;
   }
   document.addEventListener('touchstart', function(e){
-    if(_anyModalOpen()) { pulling=false; return; }
-    if(window.scrollY>0){ pulling=false; return; }
-    if(e.touches && e.touches.length===1){ startY=e.touches[0].clientY; pulling=true; dist=0; }
+    pulling=false; dist=0;
+    if(_anyModalOpen()){ _hideInd(); return; }
+    if(window.scrollY>0) return;
+    // 터치 시작 지점이 어떤 오버레이/모달 내부면 무시
+    if(e.target && e.target.closest && e.target.closest('.mgmt-overlay,.quick-add-overlay,.perf-modal-overlay,.notice-modal-overlay,.consult-overlay,.pk-overlay,.detail-overlay,.confirm-overlay,#rc2CalDetailPop')) return;
+    if(e.touches && e.touches.length===1){ startY=e.touches[0].clientY; pulling=true; }
   }, {passive:true});
   document.addEventListener('touchmove', function(e){
     if(!pulling) return;
-    if(_anyModalOpen()){ pulling=false; if(ind) ind.style.transform='translateX(-50%) translateY(-50px)'; return; }
+    if(_anyModalOpen()){ pulling=false; _hideInd(); return; }
     dist=e.touches[0].clientY-startY;
     if(dist>0 && window.scrollY<=0){
       var ip=_mkInd();
       var show=Math.min(dist,THRESHOLD+30);
       ip.style.transform='translateX(-50%) translateY('+(show-50)+'px)';
-      ip.textContent = dist>=THRESHOLD ? '↻ 놓으면 새로고침' : '↓ 당겨서 새로고침';
+      ip.textContent = dist>=THRESHOLD ? '\u21BB \uB193\uC73C\uBA74 \uC0C8\uB85C\uACE0\uCE68' : '\u2193 \uB2F9\uACA8\uC11C \uC0C8\uB85C\uACE0\uCE68';
+    } else {
+      _hideInd();
     }
   }, {passive:true});
   document.addEventListener('touchend', function(){
-    if(!pulling){ return; }
+    if(!pulling){ _hideInd(); return; }
     pulling=false;
     if(dist>=THRESHOLD && window.scrollY<=0 && !_anyModalOpen()){
-      if(ind){ ind.textContent='↻ 새로고침 중...'; ind.style.transform='translateX(-50%) translateY(8px)'; }
+      if(ind){ ind.textContent='\u21BB \uC0C8\uB85C\uACE0\uCE68 \uC911...'; ind.style.transform='translateX(-50%) translateY(8px)'; }
       setTimeout(function(){ location.reload(); }, 150);
     } else {
-      if(ind) ind.style.transform='translateX(-50%) translateY(-50px)';
+      _hideInd();
     }
     dist=0;
   }, {passive:true});
