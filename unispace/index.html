@@ -13055,6 +13055,45 @@ function saveActEdit(){
     finishEdit();
   }
 }
+function _deleteRecruitActChoice(actId, act){
+  closeActPopup();
+  var ov=document.createElement('div');
+  ov.className='confirm-overlay open';
+  ov.style.zIndex='10000';
+  var nm = (act && act.customerName) ? act.customerName : '후보자';
+  ov.innerHTML =
+    '<div class="confirm-box" style="max-width:340px">'+
+      '<div class="confirm-icon confirm-icon-danger">🗑️</div>'+
+      '<div class="confirm-title">리쿨 활동 삭제</div>'+
+      '<div class="confirm-msg"><b>'+nm+'</b> 리쿨 활동을 삭제합니다.<br>어떻게 삭제할까요?</div>'+
+      '<div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">'+
+        '<button type="button" id="_rcDelEvtOnly" class="confirm-ok" style="background:#E5825A;color:#fff;width:100%">일정만 삭제 <span style="font-weight:400;font-size:12px">(후보자는 남김)</span></button>'+
+        '<button type="button" id="_rcDelCand" class="confirm-ok red" style="width:100%">후보자 통째 삭제</button>'+
+        '<button type="button" id="_rcDelCancel" class="confirm-ok" style="background:var(--bg3);color:var(--text2);width:100%">취소</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(ov);
+  function _close(){ if(ov && ov.parentNode) ov.parentNode.removeChild(ov); }
+  function _removeActLocal(){
+    var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+    delete db[actId];
+    localStorage.setItem('unispace_activities',JSON.stringify(db));
+    deleteActFromGas(actId);
+  }
+  document.getElementById('_rcDelEvtOnly').addEventListener('click', function(){
+    _removeActLocal();
+    try{ fetch(UNISPACE_GAS_URL+'?action=removeEventByActLink&actId='+encodeURIComponent(actId)).catch(function(){}); }catch(e){}
+    _close(); renderActView(); if(actViewMode==='month'&&selectedDayStr) renderDayPanel(selectedDayStr);
+    showToast('일정이 삭제되었습니다 (후보자 유지)');
+  });
+  document.getElementById('_rcDelCand').addEventListener('click', function(){
+    _removeActLocal();
+    try{ fetch(UNISPACE_GAS_URL+'?action=deleteRecruitByActLink&actId='+encodeURIComponent(actId)).catch(function(){}); }catch(e){}
+    _close(); renderActView(); if(actViewMode==='month'&&selectedDayStr) renderDayPanel(selectedDayStr);
+    showToast('후보자가 삭제되었습니다');
+  });
+  document.getElementById('_rcDelCancel').addEventListener('click', _close);
+}
 function deleteActFromPopup(){
   if(!_currentActId) return;
   var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
@@ -13064,6 +13103,13 @@ function deleteActFromPopup(){
   var _isOwn = act.fpId===currentUser.id || act.fpName===currentUser.name;
   if(!_isOwn && !_isAdmin){
     showToast('⚠️ 본인 활동만 삭제할 수 있어요 (지점장·대표 문의)');
+    return;
+  }
+  // 활동현황에서 만든 리쿨 활동(리크루팅 연결) → 일정만/후보자 선택 삭제
+  var _aIsRecruit = (String(act.type||'')==='리쿨') || (act.planTags && act.planTags.indexOf && act.planTags.indexOf('리쿨')>=0);
+  var _aIsRcsync = String(_currentActId||'').indexOf('rcsync_')===0;
+  if(_aIsRecruit && !_aIsRcsync){
+    _deleteRecruitActChoice(_currentActId, act);
     return;
   }
   var _delId=_currentActId;
