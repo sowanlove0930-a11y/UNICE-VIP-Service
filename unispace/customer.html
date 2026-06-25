@@ -1232,6 +1232,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <div class="filter-chip chip-attr" id="attrChip-소개" onclick="toggleFilter('attr','소개',this)">소개</div>
           <div class="filter-chip chip-attr" id="attrChip-기타" onclick="toggleFilter('attr','기타',this)">기타</div>
           <div class="filter-chip chip-attr" id="attrChip-미분류" onclick="toggleFilter('attr','미분류',this)">미분류</div>
+          <div class="filter-chip chip-alarm" id="alarmChip" onclick="toggleAlarmFilter(this)" style="border-color:#E8820E;color:#BA7517">🔔 알림</div>
         </div>
       </div>
 
@@ -2721,7 +2722,7 @@ function setView(v) {
 var _filterSets = { type:{}, grade:{}, attr:{} };
 function _filterActive(cat, val){ return !!_filterSets[cat][val]; }
 function _anyFilterOn(){
-  return Object.keys(_filterSets.type).length || Object.keys(_filterSets.grade).length || Object.keys(_filterSets.attr).length;
+  return Object.keys(_filterSets.type).length || Object.keys(_filterSets.grade).length || Object.keys(_filterSets.attr).length || _alarmFilter;
 }
 function toggleFilter(cat, val, el){
   if(_filterSets[cat][val]){ delete _filterSets[cat][val]; if(el) el.classList.remove('active'); }
@@ -2729,8 +2730,20 @@ function toggleFilter(cat, val, el){
   _syncAllChip();
   renderCustomerList();
 }
+var _alarmFilter = false;
+function toggleAlarmFilter(el){
+  _alarmFilter = !_alarmFilter;
+  if(el){
+    if(_alarmFilter){ el.classList.add('active'); el.style.background='#E8820E'; el.style.color='#fff'; el.style.borderColor='#E8820E'; }
+    else { el.classList.remove('active'); el.style.background=''; el.style.color='#BA7517'; el.style.borderColor='#E8820E'; }
+  }
+  _syncAllChip();
+  renderCustomerList();
+}
 function clearAllFilters(el){
   _filterSets = { type:{}, grade:{}, attr:{} };
+  _alarmFilter = false;
+  var _ac=document.getElementById('alarmChip'); if(_ac){ _ac.classList.remove('active'); _ac.style.background=''; _ac.style.color='#BA7517'; _ac.style.borderColor='#E8820E'; }
   document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); });
   var allChip = document.querySelector('.chip-all'); if(allChip) allChip.classList.add('active');
   renderCustomerList();
@@ -2912,7 +2925,8 @@ function renderCustomerList() {
       var digitHit = qDigits && phoneDigits.indexOf(qDigits) >= 0;
       matchQ = !q || nameHit || phoneHit || digitHit;
     }
-    return matchType && matchBranch && matchFp && matchQ;
+    var matchAlarm = !_alarmFilter || (typeof getTodayAlerts==='function' && getTodayAlerts(c).length>0);
+    return matchType && matchBranch && matchFp && matchQ && matchAlarm;
   });
 
   /* NEW(오늘 등록) 우선, 그 안에서 가나다순 → 이후 일반 가나다순 */
