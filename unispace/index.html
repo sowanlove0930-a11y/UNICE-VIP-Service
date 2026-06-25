@@ -3997,10 +3997,17 @@ function loadActivitiesFromGas(cb){
   var url = UNISPACE_GAS_URL + '?action=getActivities&fp=' + encodeURIComponent(currentUser.id);
   fetch(url).then(function(r){return r.json();}).then(function(res){
     if(res && res.ok && res.activities){
+      var old={};
+      try{ old=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+      // 계획(plan) 출신 활동만 보존 — 서버 활동은 GAS 응답으로 완전 교체(삭제 반영)
       var db={};
-      try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+      for(var k in old){
+        if(old.hasOwnProperty(k) && typeof _isPlanOriginAct==='function' && _isPlanOriginAct(old[k], k)){
+          db[k]=old[k];
+        }
+      }
       res.activities.forEach(function(a){
-        if(a && a.id) db[a.id]=a;   // GAS 데이터로 갱신/추가
+        if(a && a.id) db[a.id]=a;
       });
       localStorage.setItem('unispace_activities', JSON.stringify(db));
       _actLoadedFromGas = true;
