@@ -1407,14 +1407,13 @@ function prmSave(){
   if(!proof) r.proofUrl='';
   db[date][fpCode]=r;
   savePrDB(db);
-  // GAS: 내용/유형 저장 + 증빙 상태 반영
+  // 로컬 저장 즉시 반영 (GAS는 백그라운드 동기화)
+  showToast('✅ 저장했습니다');
+  closePrManage();
+  _renderPrAdminList(); renderPrereportTab();
   attGasGet({ action:'savePrereport', date:date, fp:fpCode, name:r.name, branch:r.branch, type:type, note:note, proof:proof?'Y':'N', reportedAt:r.reportedAt||new Date().toISOString() }).then(function(){
     return attGasGet({ action:'setPrereportProof', date:date, fp:fpCode, proof:proof?'Y':'N' });
-  }).then(function(){
-    showToast('✅ 저장했습니다');
-    closePrManage();
-    _renderPrAdminList(); renderPrereportTab();
-  }).catch(function(){ showToast('⚠️ 저장 실패'); });
+  }).catch(function(){});
 }
 function prmDelete(){
   if(!_prmCtx) return;
@@ -1422,11 +1421,10 @@ function prmDelete(){
   if(!confirm(name+' · '+date+' 사전보고를 삭제할까요?')) return;
   var db=getPrDB();
   if(db[date] && db[date][fpCode]){ delete db[date][fpCode]; savePrDB(db); }
-  attGasGet({ action:'deletePrereport', date:date, fp:fpCode }).then(function(){
-    showToast('🗑️ 삭제했습니다');
-    closePrManage();
-    _renderPrAdminList(); renderPrereportTab();
-  }).catch(function(){ showToast('⚠️ 삭제 실패'); });
+  showToast('🗑️ 삭제했습니다');
+  closePrManage();
+  _renderPrAdminList(); renderPrereportTab();
+  attGasGet({ action:'deletePrereport', date:date, fp:fpCode }).catch(function(){});
 }
 
 // ── 관리자: FP 근태 직접 추가 ──────────────────────
