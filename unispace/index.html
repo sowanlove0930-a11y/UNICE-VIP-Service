@@ -9170,9 +9170,12 @@ function renderFpGoalList(){
     var g=db[fp.id]||{};
     var bk=_pvBranchKey(fp.branch);
     var chip = bk==='al'?'<span class="pv-bchip al">알</span>':'<span class="pv-bchip br">브</span>';
+    var _og=_fpOrigGoal(fp.id);
+    var _planMan=(parseInt((_og.month||{}).life)||0)+(parseInt((_og.month||{}).non)||0);
+    var _ph = _planMan>0 ? ('계획 '+_planMan) : '목표(만)';
     h+='<div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--bdr)">'+
       '<div style="flex:1;font-size:13px;font-weight:700">'+chip+fp.name+'</div>'+
-      '<input type="number" id="fpg_'+fp.id+'" placeholder="목표(만)" value="'+(g.goal||'')+'" style="width:80px;padding:6px 8px;background:var(--surface);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
+      '<input type="number" id="fpg_'+fp.id+'" placeholder="'+_ph+'" value="'+(g.goal||'')+'" style="width:80px;padding:6px 8px;background:var(--surface);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
       '<input type="text" id="fpm_'+fp.id+'" placeholder="매니저" value="'+(g.mgr||'').replace(/"/g,'&quot;')+'" style="width:90px;padding:6px 8px;background:var(--surface);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
     '</div>';
   });
@@ -9378,7 +9381,12 @@ function _loadExcelJS(cb){
 // 현재 필터 기준 FP별 집계 rows (renderFpPerf와 동일 규칙)
 function exportFpDailyReport(){
   showToast('\u{1F4CA} \uc77c\ubcf4 \uc5d1\uc140 \uc0dd\uc131 \uc911...');
-  _loadExcelJS(function(){ _buildFpExcel(); });
+  // refresh activity-plan goal cache first so plan-based goals are reflected
+  if(typeof loadPlansFromGas==='function'){
+    loadPlansFromGas(null, function(){ _loadExcelJS(function(){ _buildFpExcel(); }); });
+  } else {
+    _loadExcelJS(function(){ _buildFpExcel(); });
+  }
 }
 // \uc804\uccb4 FP \uc9d1\uacc4 (\uc9c0\uc810 \ud544\ud130 \uc5c6\uc774, \uae30\uac04\uc740 \ud604\uc7ac _fpRange)
 function _fpAllRows(){
@@ -9388,7 +9396,14 @@ function _fpAllRows(){
   var byFp={};
   fpList.forEach(function(fp){
     var g=goalDB[fp.id]||{};
-    byFp[fp.id]={ id:fp.id, name:fp.name, branch:fp.branch, title:(fp.title||''), mgr:g.mgr||'', goal:parseInt(g.goal)||0,
+    var _goalMan=parseInt(g.goal);
+    // priority: admin goal-adjust value first; fallback to FP activity-plan month goal (life+non, in 10k won)
+    if(isNaN(_goalMan)||_goalMan<=0){
+      var _og=_fpOrigGoal(fp.id);
+      var _planMan=(parseInt((_og.month||{}).life)||0)+(parseInt((_og.month||{}).non)||0);
+      _goalMan=_planMan;
+    }
+    byFp[fp.id]={ id:fp.id, name:fp.name, branch:fp.branch, title:(fp.title||''), mgr:g.mgr||'', goal:_goalMan||0,
       life:0, non:0, cnt:0, total:0 };
   });
   recs.forEach(function(r){
