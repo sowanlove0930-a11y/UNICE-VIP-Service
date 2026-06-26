@@ -2595,9 +2595,9 @@ window.UNISPACE_FCM = {
       <div class="rc2-subcard" style="margin-bottom:8px">
         <label class="rc2-fld-lbl" style="font-weight:700;color:var(--text)">📅 일정 날짜·시간</label>
         <div class="rc2-picker open" id="rc2fEvtPicker"></div>
-        <button type="button" class="rc2-addbtn" id="rc2AddEvtBtn" onclick="rc2AddEvent()" style="margin-top:8px;width:100%;padding:9px;font-size:12px">＋ 이 일정 추가</button>
+        <button type="button" class="rc2-addbtn" id="rc2AddEvtBtn" onclick="rc2AddEvent()" style="display:none;margin-top:8px;width:100%;padding:9px;font-size:12px">＋ 이 일정 추가</button>
       </div>
-      <div id="rc2EvtList"></div>
+      <div id="rc2EvtList" style="display:none"></div>
     </div>
 
     <!-- ③ 입과 · 상태 -->
@@ -8376,7 +8376,7 @@ function renderSchedCal(){
   var y=_schedMonth.getFullYear(), m=_schedMonth.getMonth();
   var first=new Date(y,m,1), startDow=first.getDay();
   var daysInMonth=new Date(y,m+1,0).getDate();
-  var db=_schedAllItems();
+  var db=getSchedDB();
   var todayStr=_schedYmd(new Date());
   var dows=['일','월','화','수','목','금','토'];
   var h='<div class="sched-cal-grid" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;font-size:13px">';
@@ -8408,7 +8408,7 @@ function renderSchedCal(){
 }
 function escHtmlSch(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function schedDayClick(ds){
-  var db=_schedAllItems();
+  var db=getSchedDB();
   var list=db.filter(function(s){ return s.date===ds; });
   var dl=document.getElementById('schedDayList');
   if(!dl) return;
@@ -10845,8 +10845,9 @@ function rc2RenderEvtList() {
   var html='<div style="font-size:11px;font-weight:800;color:var(--text2);margin:4px 2px 6px">📌 등록된 진행 일정</div>';
   for(var i=0;i<sorted.length;i++){
     var ev=sorted[i];
+    // type labels (read-only): set via top section chips
     var tagHtml='';
-    for(var j=0;j<ev.types.length;j++){ var tm=rc2TypeMeta(ev.types[j]); tagHtml += '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;margin-right:3px;background:'+tm.soft+';color:'+tm.deep+';border:1px solid '+tm.bd+'">'+tm.key+'</span>'; }
+    for(var j=0;j<(ev.types||[]).length;j++){ var tm=rc2TypeMeta(ev.types[j]); tagHtml += '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;margin-right:3px;background:'+tm.soft+';color:'+tm.deep+';border:1px solid '+tm.bd+'">'+tm.short+'</span>'; }
     var dl = ev.dt ? rc2DtLabel(ev.dt) : '날짜미정';
     var doneTag = ev.cancelled ? '<span style="font-size:10px;color:#C0392B;font-weight:800">✕불참/취소</span>' : (ev.done ? '<span style="font-size:10px;color:#1F7A4D;font-weight:800">✓완료</span>' : '<span style="font-size:10px;color:#2563EB;font-weight:700">예정</span>');
     html += '<div style="display:flex;align-items:center;gap:6px;padding:7px 9px;margin-bottom:5px;background:var(--bg3);border:1px solid var(--border);border-radius:9px">'
@@ -11008,7 +11009,7 @@ function rc2RenderEvtPicker() {
   var _planTimeLbl = dt && dt.split(' ')[1] ? rc2TimeKor(dt.split(' ')[1]) : '시간 선택';
   html += '<div class="rc2-pk-tbox"><div class="rc2-pk-label" style="margin-bottom:6px">🕐 시간 선택</div>';
   html += '<div class="pk-trigger" data-rc2plantime="1" style="padding:9px 12px"><span'+(dt&&dt.split(' ')[1]?'':' class="pk-ph"')+'>'+_planTimeLbl+'</span><span class="pk-ico">🕐</span></div></div>';
-  html += '<div class="rc2-pk-result">'+( dt ? ('✓ '+rc2DtLabel(dt)) : '날짜를 선택하세요' )+'</div>';
+  html += dt ? ('<div class="rc2-pk-result">✓ '+rc2DtLabel(dt)+'</div>') : '';
   pickEl.innerHTML = html;
 
   var navs = pickEl.querySelectorAll('[data-pkmove]');
@@ -11086,28 +11087,25 @@ function rc2SaveCand() {
     rc2.fTypes = []; rc2.fDt = ''; rc2._pk = null;
   }
 
-  // 칩 선택(rc2.fTypes)을 활동 목록(editEvents)에 동기화
+  // sync: keep date-bearing events always; drop only date-less placeholders whose type was unchecked
   var _chips = rc2.fTypes || [];
   var _evs = (rc2.editEvents||[]).slice();
-  // 1) 날짜 없는 placeholder 일정만 칩 동기화 대상.
-  //    날짜가 있는 실제 일정(dt 있음)은 칩 선택과 무관하게 항상 보존한다.
   _evs = _evs.filter(function(ev){
-    if(ev.dt) return true;                 // 날짜 있는 일정은 무조건 유지
+    if(ev.dt) return true;
     var tps = ev.types || [];
-    if(tps.length===0) return true;        // 종류 없는 이벤트도 유지
+    if(tps.length===0) return true;
     for(var t=0;t<tps.length;t++){ if(_chips.indexOf(tps[t])>=0) return true; }
-    return false;                          // 날짜없고 칩 해제된 종류만 제거
+    return false;
   });
-  // 2) 칩에 선택됐지만 아직 일정 없는 종류는 날짜 없는 활동으로 추가
-  for(var ci=0; ci<_chips.length; ci++){
-    var has=false;
-    for(var ei=0; ei<_evs.length; ei++){
-      var et=_evs[ei].types||[];
-      if(et.indexOf(_chips[ci])>=0){ has=true; break; }
+  // apply top-section chips to the latest date-bearing event (edit mode)
+  // so changing chips and saving updates that visit's types (reflected in kakao)
+  if(rc2.editId && _chips.length){
+    var _latest=null;
+    for(var li2=0; li2<_evs.length; li2++){
+      if(!_evs[li2].dt) continue;
+      if(!_latest || String(_evs[li2].dt) > String(_latest.dt)) _latest=_evs[li2];
     }
-    if(!has){
-      _evs.push({ id:'e'+Date.now()+'_'+ci+'_'+Math.floor(Math.random()*1000), types:[_chips[ci]], dt:'', done:false });
-    }
+    if(_latest){ _latest.types = _chips.slice(); }
   }
   rc2.editEvents = _evs;
 
