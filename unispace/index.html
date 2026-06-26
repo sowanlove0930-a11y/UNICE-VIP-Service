@@ -2117,6 +2117,8 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 .rc2-cal-cell.today .dn { color:#E8820E; font-weight:800; }
 .rc2-cal-cell .dn { font-weight:600; }
 .rc2-cal-ev { display:block; width:100%; box-sizing:border-box; margin-top:2px; font-size:11.5px; line-height:1.4; border-radius:4px; padding:2px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rc2-cnt-al { font-size:11px; font-weight:700; color:#0F6E56; background:rgba(29,158,117,.16); border-radius:5px; padding:1px 6px; }
+.rc2-cnt-br { font-size:11px; font-weight:700; color:#5A2FA0; background:rgba(123,82,208,.16); border-radius:5px; padding:1px 6px; }
 .rc2-cal-detail { margin-top:10px; padding:10px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:10px; }
 .rc2-cal-detail-title { font-size:13px; font-weight:700; margin-bottom:8px; color:var(--text); }
 .rc2-cal-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-bottom:9px; padding-bottom:9px; border-bottom:1px solid var(--border); font-size:13px; }
@@ -2142,6 +2144,8 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
   .rc2-sum-card { padding:8px 10px; }
   .rc2-sum-val { font-size:17px; }
   .rc2-cal-cell { min-height:66px; padding:4px; font-size:10.5px; }
+  .rc2-cnt-al, .rc2-cnt-br { background:none !important; padding:0 !important; font-size:10px !important; }
+  .rc2-cal-cnt { margin-left:3px !important; gap:2px !important; }
   .rc2-cal-ev { font-size:9.5px; padding:2px 4px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; gap:3px !important; }
   .rc2-cal-ev .rc2-ev-lbl { display:none !important; }
   .rc2-cal-ev .rc2-ev-time { font-size:10.5px !important; font-weight:700; }
@@ -11718,8 +11722,22 @@ function rc2RenderCal() {
     }
     var holHtml='';
     if(rc2IsHoliday(dayKey)){ holHtml='<div class="rc2-cal-ev" style="color:#E24B4A;padding:0 1px">'+RC2_HOLIDAYS[dayKey]+'</div>'; }
+    // 지점별 일정 개수 (알파/브라보)
+    var _alN=0, _brN=0;
+    for(var ci=0; ci<evs.length; ci++){
+      var _cb=evs[ci].branch;
+      var _cIsAl=(_cb==='alpha' || String(_cb||'').indexOf('\uC54C\uD30C')>=0);
+      if(_cIsAl) _alN++; else _brN++;
+    }
+    var _cntHtml='';
+    if(_alN>0 || _brN>0){
+      _cntHtml='<span class="rc2-cal-cnt" style="display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle">';
+      if(_alN>0) _cntHtml+='<span class="rc2-cnt-al">'+_alN+'</span>';
+      if(_brN>0) _cntHtml+='<span class="rc2-cnt-br">'+_brN+'</span>';
+      _cntHtml+='</span>';
+    }
     var cellStyle = hasJoinEvt ? 'background:rgba(232,130,14,.10)' : '';
-    html += '<div class="'+cellCls+'" style="'+cellStyle+'" data-calday="'+dayKey+'"><div class="dn" style="'+dnColor+'">'+dn+'</div>'+holHtml+evHtml+joinHtml+'</div>';
+    html += '<div class="'+cellCls+'" style="'+cellStyle+'" data-calday="'+dayKey+'"><div class="dn" style="'+dnColor+'">'+dn+_cntHtml+'</div>'+holHtml+evHtml+joinHtml+'</div>';
   }
   document.getElementById('rc2CalGrid').innerHTML = html;
   rc2._evByDayCache = evByDay; // 상세 팝업 렌더용 캐시
@@ -12050,7 +12068,7 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     var _tm0 = rc2TypeMeta(_tys[0]||'');
     var tColor = 'color:'+_tm0.deep;
     var typeTag = '';
-    for(var tj=0; tj<_tys.length; tj++){ var _tmj=rc2TypeMeta(_tys[tj]); typeTag += '<span class="rc2-cal-tag" style="background:'+_tmj.soft+';color:'+_tmj.deep+'">'+_tmj.key+'</span>'; }
+    for(var tj=0; tj<_tys.length; tj++){ var _tmj=rc2TypeMeta(_tys[tj]); typeTag += '<span class="rc2-cal-tag" style="background:#fff;color:'+_tmj.deep+'">'+_tmj.key+'</span>'; }
     var brTag = E.branch==='alpha' ? '<span class="rc2-cal-tag" style="background:var(--alpha-soft);color:var(--alpha-deep)">알파</span>' : '<span class="rc2-cal-tag" style="background:var(--bravo-soft);color:var(--bravo-deep)">브라보</span>';
     var doneTag = E.cancelled ? '<span class="rc2-cal-tag" style="background:rgba(226,75,74,.16);color:#C0392B">✕불참/취소</span>' : (E.done ? '<span class="rc2-cal-tag" style="background:#E7F5EC;color:#1F7A4D">✓완료</span>' : '');
     var refTxt = E.ref ? '추천 '+rc2Esc(E.ref) : '';
@@ -12059,8 +12077,13 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     var _btnResult = '<button type="button" class="rc2-rowact-btn" data-act="result" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" data-rcevid="'+(E.evid||'')+'" style="padding:6px 9px;border:none;border-radius:7px;background:#1F9268;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+(_hasResult?'결과수정':'결과입력')+'</button>';
     var _btnDel = '<button type="button" class="rc2-rowact-btn" data-act="del" data-rcid="'+E.id+'" data-rcevid="'+(E.evid||'')+'" data-rcname="'+rc2Esc(E.name)+'" style="padding:6px 9px;border:1px solid #E0A4A4;border-radius:7px;background:#fff;color:#A32D2D;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">삭제</button>';
     var _btns = _hasResult ? (_btnResult + _btnDel) : (_btnEdit + _btnResult + _btnDel);
-    rows += '<div class="rc2-cal-rowwrap" data-rcwrap="'+E.id+'_'+(E.evid||'')+'" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.05)">'+
-      '<div class="rc2-cal-row" style="flex:1;min-width:0"><span class="t" style="'+tColor+'">'+(E.time||'-')+'</span><span class="nm">'+rc2Esc(E.name)+'</span><span class="rf">'+refTxt+'</span><span class="tags">'+typeTag+doneTag+brTag+'</span></div>'+
+    var _isAl = (E.branch==='alpha');
+    var _rowBg = _isAl ? '#DCEFE8' : '#EADCF6';
+    var _cTime = _isAl ? '#0F6E56' : '#5A2FA0';
+    var _cName = _isAl ? '#0A3D30' : '#3A1D6B';
+    var _cRef  = _isAl ? '#3F8A72' : '#7B5AAD';
+    rows += '<div class="rc2-cal-rowwrap" data-rcwrap="'+E.id+'_'+(E.evid||'')+'" style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;border-radius:8px;background:'+_rowBg+'">'+
+      '<div class="rc2-cal-row" style="flex:1;min-width:0"><span class="t" style="color:'+_cTime+';font-weight:700">'+(E.time||'-')+'</span><span class="nm" style="color:'+_cName+'">'+rc2Esc(E.name)+'</span><span class="rf" style="color:'+_cRef+'">'+refTxt+'</span><span class="tags">'+typeTag+doneTag+brTag+'</span></div>'+
       '<div style="display:flex;gap:5px;flex-shrink:0">'+_btns+'</div>'+
     '</div>';
   }
