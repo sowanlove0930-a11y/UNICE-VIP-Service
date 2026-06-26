@@ -11368,6 +11368,15 @@ function rc2SaveCand() {
   }
   rc2.editEvents = _evs;
 
+  // 새로 추가된(또는 날짜가 막 잡힌) 이벤트에 생성시각 부여 - NEW 표시용
+  try{
+    var _nowIso = new Date().toISOString();
+    for(var _ce=0; _ce<(rc2.editEvents||[]).length; _ce++){
+      var _evc = rc2.editEvents[_ce];
+      if(_evc && _evc.dt && !_evc.createdAt){ _evc.createdAt = _nowIso; }
+    }
+  }catch(e){}
+
   var d = rc2GetMonthData(getCurrentYM());
   // 추진일정 탭에서 새로 추가하는 일정은 로그인한 사람의 실제 소속 지점으로 저장
   // (지점장이 상단 알파/브라보 칩을 어디에 두었든, 브라보지점장이 넣으면 브라보로)
@@ -11642,12 +11651,12 @@ function rc2RenderCal() {
     if(!isNaN(dd.getTime())){ var h2=dd.getHours(),n2=dd.getMinutes(); return {y:dd.getFullYear(),m:dd.getMonth()+1,d:dd.getDate(),time:(h2||n2)?(h2+':'+('0'+n2).slice(-2)):''}; }
     return null;
   }
-  function pushEv(dt, name, ref, type, branch, id, types, done, evid, cancelled, age, phoenix){
+  function pushEv(dt, name, ref, type, branch, id, types, done, evid, cancelled, age, phoenix, createdAt){
     var pd=_rcParseDt(dt); if(!pd) return;
     if(pd.y!==y || pd.m-1!==m) return;
     var day=pd.y+'-'+(pd.m<10?'0':'')+pd.m+'-'+(pd.d<10?'0':'')+pd.d;
     if(!evByDay[day]) evByDay[day]=[];
-    evByDay[day].push({ time:pd.time, name:name, ref:ref, type:type, branch:branch, id:id, types:types||[], done:!!done, evid:evid||'', cancelled:!!cancelled, age:age||'', phoenix:!!phoenix });
+    evByDay[day].push({ time:pd.time, name:name, ref:ref, type:type, branch:branch, id:id, types:types||[], done:!!done, evid:evid||'', cancelled:!!cancelled, age:age||'', phoenix:!!phoenix, createdAt:createdAt||'' });
   }
   var joinByDay = 0; // 입과는 '월' 단위 → 말일에 표기
   var joinCount = 0;
@@ -11658,7 +11667,7 @@ function rc2RenderCal() {
       var _ev=_evs[ei];
       if(!_ev.dt) continue;
       var _t0 = (_ev.types&&_ev.types[0])||'';
-      pushEv(_ev.dt, it.name, it.ref, _t0, it.branch, it.id, _ev.types, _ev.done, _ev.id, _ev.cancelled, it.age, it.phoenix===true);
+      pushEv(_ev.dt, it.name, it.ref, _t0, it.branch, it.id, _ev.types, _ev.done, _ev.id, _ev.cancelled, it.age, it.phoenix===true, _ev.createdAt);
     }
     if(it.status==='입과확보') joinCount++;
   }
@@ -11722,18 +11731,23 @@ function rc2RenderCal() {
     }
     var holHtml='';
     if(rc2IsHoliday(dayKey)){ holHtml='<div class="rc2-cal-ev" style="color:#E24B4A;padding:0 1px">'+RC2_HOLIDAYS[dayKey]+'</div>'; }
-    // 지점별 일정 개수 (알파/브라보)
-    var _alN=0, _brN=0;
+    // 지점별 일정 개수 (알파/브라보) + 3시간내 새 일정 여부
+    var _alN=0, _brN=0, _alNew=false, _brNew=false;
+    var _NEW_MS = 3*60*60*1000;
+    var _nowMs = Date.now();
     for(var ci=0; ci<evs.length; ci++){
       var _cb=evs[ci].branch;
       var _cIsAl=(_cb==='alpha' || String(_cb||'').indexOf('\uC54C\uD30C')>=0);
-      if(_cIsAl) _alN++; else _brN++;
+      var _isNew=false;
+      if(evs[ci].createdAt){ var _ct=new Date(evs[ci].createdAt).getTime(); if(!isNaN(_ct) && (_nowMs-_ct)>=0 && (_nowMs-_ct)<_NEW_MS) _isNew=true; }
+      if(_cIsAl){ _alN++; if(_isNew) _alNew=true; } else { _brN++; if(_isNew) _brNew=true; }
     }
+    function _dot(){ return '<span style="position:absolute;top:-3px;right:-3px;width:6px;height:6px;border-radius:50%;background:#E24B4A"></span>'; }
     var _cntHtml='';
     if(_alN>0 || _brN>0){
       _cntHtml='<span class="rc2-cal-cnt" style="display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle">';
-      if(_alN>0) _cntHtml+='<span class="rc2-cnt-al">'+_alN+'</span>';
-      if(_brN>0) _cntHtml+='<span class="rc2-cnt-br">'+_brN+'</span>';
+      if(_alN>0) _cntHtml+='<span class="rc2-cnt-al" style="position:relative">'+_alN+(_alNew?_dot():'')+'</span>';
+      if(_brN>0) _cntHtml+='<span class="rc2-cnt-br" style="position:relative">'+_brN+(_brNew?_dot():'')+'</span>';
       _cntHtml+='</span>';
     }
     var cellStyle = hasJoinEvt ? 'background:rgba(232,130,14,.10)' : '';
@@ -12082,8 +12096,10 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     var _cTime = _isAl ? '#0F6E56' : '#5A2FA0';
     var _cName = _isAl ? '#0A3D30' : '#3A1D6B';
     var _cRef  = _isAl ? '#3F8A72' : '#7B5AAD';
+    var _newBadge='';
+    if(E.createdAt){ var _ct2=new Date(E.createdAt).getTime(); if(!isNaN(_ct2)){ var _diff=Date.now()-_ct2; if(_diff>=0 && _diff<3*60*60*1000){ var _nbc=_isAl?'#1D9E75':'#7B52D0'; _newBadge=' <span style="background:'+_nbc+';color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;vertical-align:middle">NEW</span>'; } } }
     rows += '<div class="rc2-cal-rowwrap" data-rcwrap="'+E.id+'_'+(E.evid||'')+'" style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;border-radius:8px;background:'+_rowBg+'">'+
-      '<div class="rc2-cal-row" style="flex:1;min-width:0"><span class="t" style="color:'+_cTime+';font-weight:700">'+(E.time||'-')+'</span><span class="nm" style="color:'+_cName+'">'+rc2Esc(E.name)+'</span><span class="rf" style="color:'+_cRef+'">'+refTxt+'</span><span class="tags">'+typeTag+doneTag+brTag+'</span></div>'+
+      '<div class="rc2-cal-row" style="flex:1;min-width:0"><span class="t" style="color:'+_cTime+';font-weight:700">'+(E.time||'-')+'</span><span class="nm" style="color:'+_cName+'">'+rc2Esc(E.name)+'</span>'+_newBadge+'<span class="rf" style="color:'+_cRef+'">'+refTxt+'</span><span class="tags">'+typeTag+doneTag+brTag+'</span></div>'+
       '<div style="display:flex;gap:5px;flex-shrink:0">'+_btns+'</div>'+
     '</div>';
   }
