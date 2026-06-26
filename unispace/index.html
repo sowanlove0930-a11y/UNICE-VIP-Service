@@ -7387,6 +7387,18 @@ function _fpWeekGoal(fpId, weekKey){
   if(c && c.weeks && c.weeks[weekKey]) return c.weeks[weekKey];
   return { life:0, non:0 };
 }
+// normalize a plan goal raw value to 10k-won (man). FP may input in won (>=10000) or man (<10000).
+function _planValToMan(v){
+  var n=parseInt(v)||0;
+  if(n<=0) return 0;
+  return n>=10000 ? Math.round(n/10000) : n;
+}
+// plan month goal (life+non) normalized to man-won
+function _fpPlanGoalMan(fpId){
+  var og=_fpOrigGoal(fpId);
+  var m=og.month||{};
+  return _planValToMan(m.life) + _planValToMan(m.non);
+}
 // current submission week label from plan period setting, e.g. month + week
 function _gaWeekKey(){
   try{
@@ -8975,11 +8987,9 @@ function renderFpPerf(){
   fpList.forEach(function(fp){
     var g=goalDB[fp.id]||{};
     var _goalMan=parseInt(g.goal);
-    // fallback to FP activity-plan month goal (won -> 10k won) when no admin goal set
+    // fallback to FP activity-plan month goal (auto unit) when no admin goal set
     if(isNaN(_goalMan)||_goalMan<=0){
-      var _og=_fpOrigGoal(fp.id);
-      var _planWon=(parseInt((_og.month||{}).life)||0)+(parseInt((_og.month||{}).non)||0);
-      _goalMan=Math.round(_planWon/10000);
+      _goalMan=_fpPlanGoalMan(fp.id);
     }
     byFp[fp.id]={ id:fp.id, name:fp.name, branch:fp.branch, mgr:g.mgr||'', goal:_goalMan||0,
       life:0, non:0, lifeCnt:0, nonCnt:0, cnt:0, total:0 };
@@ -9230,8 +9240,7 @@ function renderFpGoalList(){
     var g=db[fp.id]||{};
     var bk=_pvBranchKey(fp.branch);
     var chip = bk==='al'?'<span class="pv-bchip al">알</span>':'<span class="pv-bchip br">브</span>';
-    var _og=_fpOrigGoal(fp.id);
-    var _planMan=Math.round(((parseInt((_og.month||{}).life)||0)+(parseInt((_og.month||{}).non)||0))/10000);
+    var _planMan=_fpPlanGoalMan(fp.id);
     var _ph = _planMan>0 ? ('계획 '+_planMan) : '목표(만)';
     h+='<div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--bdr)">'+
       '<div style="flex:1;font-size:13px;font-weight:700">'+chip+fp.name+'</div>'+
@@ -9457,11 +9466,9 @@ function _fpAllRows(){
   fpList.forEach(function(fp){
     var g=goalDB[fp.id]||{};
     var _goalMan=parseInt(g.goal);
-    // priority: admin goal-adjust value first; fallback to FP activity-plan month goal (won -> 10k won)
+    // priority: admin goal-adjust value first; fallback to FP activity-plan month goal (auto unit)
     if(isNaN(_goalMan)||_goalMan<=0){
-      var _og=_fpOrigGoal(fp.id);
-      var _planWon=(parseInt((_og.month||{}).life)||0)+(parseInt((_og.month||{}).non)||0);
-      _goalMan=Math.round(_planWon/10000);
+      _goalMan=_fpPlanGoalMan(fp.id);
     }
     byFp[fp.id]={ id:fp.id, name:fp.name, branch:fp.branch, title:(fp.title||''), mgr:g.mgr||'', goal:_goalMan||0,
       life:0, non:0, cnt:0, total:0 };
