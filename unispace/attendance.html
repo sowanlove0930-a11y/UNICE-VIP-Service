@@ -120,7 +120,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .prcal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:5px;}
 .prcal-dow span{text-align:center;font-size:10px;font-weight:700;color:var(--text3);padding:4px 0;}
 .prcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
-.prcal-day{height:58px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px;font-size:17px;font-weight:700;cursor:pointer;border:1px solid var(--bdr);position:relative;background:var(--sur);color:var(--text);transition:all .15s;}
+.prcal-day{height:64px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px;font-size:17px;font-weight:700;cursor:pointer;border:1px solid var(--bdr);position:relative;background:var(--sur);color:var(--text);transition:all .15s;}
 .prcal-day:hover{border-color:var(--gold);}
 .prcal-day.empty{background:transparent;border-color:transparent;cursor:default;height:58px;}
 .prcal-day.disabled{color:var(--text3);background:transparent;border-color:transparent;cursor:not-allowed;}
@@ -135,10 +135,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .prcal-dot.done{background:var(--green);}
 .prcal-cnt{font-size:8px;font-weight:800;position:absolute;bottom:3px;color:#fff;border-radius:7px;padding:0 4px;line-height:13px;background:var(--orange);}
 .prcal-cnt.alldone{background:var(--green);}
-.prcal-bcnt{font-size:8px;font-weight:800;color:#fff;border-radius:6px;padding:0 4px;line-height:13px;background:var(--orange);white-space:nowrap;display:inline-block;}
+.prcal-bcnt{font-size:10.5px;font-weight:800;color:#fff;border-radius:6px;padding:1px 6px;line-height:15px;background:var(--orange);white-space:nowrap;display:inline-block;}
 .prcal-bcnt.alldone{background:var(--green);}
-.prcal-bwrap{position:absolute;bottom:4px;left:0;right:0;display:flex;gap:2px;justify-content:center;}
-.bc-alpha{background:#2E9E6B;}
+.prcal-bwrap{position:absolute;bottom:4px;left:0;right:0;display:flex;gap:3px;justify-content:center;}
+.bc-alpha{background:#1D9E75;}
 .bc-bravo{background:#7B52D0;}
 .bc-etc{background:#5C6678;}
 .prcal-sel.sel{color:#fff;}
@@ -233,6 +233,8 @@ textarea.prm-input{resize:vertical;}
 .prm-del{flex:0 0 auto;padding:11px 16px;border-radius:11px;font-size:13px;font-weight:800;background:rgba(239,68,68,.1);color:#DC2626;border:1px solid rgba(239,68,68,.25);cursor:pointer;font-family:'Noto Sans KR',sans-serif;}
 .prm-save{flex:1;padding:11px;border-radius:11px;font-size:14px;font-weight:800;background:linear-gradient(135deg,#C9A84C,#B8860B);color:#fff;border:none;cursor:pointer;font-family:'Noto Sans KR',sans-serif;}
 .pr-delete{background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all .2s;}
+.pr-manage-mini{background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.4);color:var(--gold2);font-size:12px;font-weight:700;cursor:pointer;padding:4px 10px;border-radius:7px;transition:all .2s;font-family:'Noto Sans KR',sans-serif;}
+.pr-manage-mini:hover{background:rgba(201,168,76,.22);}
 .pr-delete:hover{background:rgba(239,68,68,.1);color:#FCA5A5;}
 .pr-empty{text-align:center;padding:28px;color:var(--text2);font-size:13px;}
 
@@ -333,8 +335,8 @@ textarea.prm-input{resize:vertical;}
   .prcal-person .pr-badge{margin-left:0;}
   .prcal-person .pr-admin-actions{margin-left:auto;}
   /* 달력 칸 지점 뱃지: 칸이 좁아 알·브가 꽉 차므로 축소 */
-  .prcal-bcnt{font-size:7px;padding:0 3px;border-radius:5px;line-height:12px;}
-  .prcal-bwrap{gap:1px;bottom:3px;}
+  .prcal-bcnt{font-size:9px;padding:1px 4px;border-radius:5px;line-height:13px;}
+  .prcal-bwrap{gap:2px;bottom:3px;}
   /* 사전보고 내역 행: 좁으면 줄바꿈해 증빙배지가 카드 밖으로 안 잘리게 */
   .pr-item{flex-wrap:wrap;gap:6px 8px;padding:11px 13px;}
   .pr-item-who{flex:1 1 100%;min-width:0;}
@@ -1662,6 +1664,18 @@ function renderPrereportTab(){
   var listEl=document.getElementById('prereportList');
   if(!items.length){listEl.innerHTML='<div class="pr-empty">이번 달 사전보고 내역이 없습니다</div>';return;}
 
+  // 정렬: 알파 먼저 → 브라보 → 기타, 같은 지점 내 인증샷 있는 사람 위, 그다음 날짜 최신순
+  if(_isAdminPR){
+    items.sort(function(a,b){
+      function _bo(br){ if(String(br||'').indexOf('\uC54C\uD30C')>=0) return 0; if(String(br||'').indexOf('\uBE0C\uB77C\uBCF4')>=0) return 1; return 2; }
+      var oa=_bo(a.rec.branch), ob=_bo(b.rec.branch);
+      if(oa!==ob) return oa-ob;
+      var pa=a.rec.proof?0:1, pb=b.rec.proof?0:1;
+      if(pa!==pb) return pa-pb;
+      return (b.date||'').localeCompare(a.date||'');
+    });
+  }
+
   var typeMap={'지각예정':'prt-late','미출결예정':'prt-absent','휴가':'prt-leave','반차':'prt-half','외근':'prt-offsite'};
   var typeEmoji={'지각예정':'⚠️','미출결예정':'❌','휴가':'🌴','반차':'🌤','외근':'🚗'};
   listEl.innerHTML=items.map(function(item){
@@ -1677,19 +1691,25 @@ function renderPrereportTab(){
     var _isAdmin = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장';
     var _canDel = _isAdmin || (item.date > getTodayStr());
     var _tfp = item.fp || currentUser.id;
+    var mgmtBtn = _isAdmin
+      ? '<button type="button" class="pr-manage-mini" onclick="openPrManage(\''+item.date+'\',\''+_tfp+'\')">⚙️ 관리</button>'
+      : '';
     var delBtn = _canDel
       ? '<button type="button" class="pr-delete" onclick="deletePrereport(\''+item.date+'\',\''+_tfp+'\')">삭제</button>'
       : '<span class="pr-delete" style="opacity:.4;cursor:not-allowed" title="해당일이 되어 삭제할 수 없습니다 (지점장·대표 문의)">삭제</span>';
     var _whoHtml = _isAdminPR
       ? '<div class="pr-item-who" style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:2px">'+(item.rec.name||'')+' · '+((item.rec.branch||'').replace('지점',''))+'</div>'
       : '';
-    return '<div class="pr-item">'+
+    var _pbr2=(item.rec.branch||'');
+    var _rowBg2 = _pbr2.indexOf('\uC54C\uD30C')>=0 ? 'background:rgba(29,158,117,.07);' : (_pbr2.indexOf('\uBE0C\uB77C\uBCF4')>=0 ? 'background:rgba(123,82,208,.07);' : '');
+    return '<div class="pr-item" style="'+_rowBg2+'">'+
       _whoHtml+
       '<div class="pr-item-date">'+item.date+'</div>'+
       '<span class="pr-item-type '+cls+'">'+emo+' '+item.rec.type+'</span>'+
       '<div class="pr-item-note">'+item.rec.note+'</div>'+
       proofHtml+
       photoBtn+
+      mgmtBtn+
       delBtn+
     '</div>';
   }).join('');
