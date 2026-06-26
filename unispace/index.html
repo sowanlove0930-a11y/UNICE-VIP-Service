@@ -8839,13 +8839,20 @@ function openFpPerf(){
   if(typeof loadAllFpsFromGas==='function'){
     loadAllFpsFromGas(function(){
       if(typeof loadPerfFromGas==='function'){
-        loadPerfFromGas(function(){ renderFpPerf(); }, true);
+        loadPerfFromGas(function(){
+          if(typeof loadPlansFromGas==='function'){ loadPlansFromGas(null, function(){ renderFpPerf(); }); }
+          else { renderFpPerf(); }
+        }, true);
       } else {
-        renderFpPerf();
+        if(typeof loadPlansFromGas==='function'){ loadPlansFromGas(null, function(){ renderFpPerf(); }); }
+        else { renderFpPerf(); }
       }
     });
   } else if(typeof loadPerfFromGas==='function'){
-    loadPerfFromGas(function(){ renderFpPerf(); }, true);
+    loadPerfFromGas(function(){
+      if(typeof loadPlansFromGas==='function'){ loadPlansFromGas(null, function(){ renderFpPerf(); }); }
+      else { renderFpPerf(); }
+    }, true);
   }
 }
 function closeFpPerf(){ document.getElementById('fpPerfOverlay').classList.remove('open'); _scrollToSubmenu(); }
@@ -9474,103 +9481,141 @@ function _buildFpExcel(){
   var now=new Date();
   var hh=('0'+now.getHours()).slice(-2);
   var mm=('0'+now.getMinutes()).slice(-2);
-  var rangeLabel;
-  if(_fpRange==='today') rangeLabel='오늘';
-  else if(_fpRange==='week') rangeLabel='이번 주';
-  else if(_fpRange==='range') rangeLabel=(_fpRangeStart||'')+' ~ '+(_fpRangeEnd||'');
-  else { var md=_fpMonthRef(); rangeLabel=md.getFullYear()+'년 '+(md.getMonth()+1)+'월'; }
-  var baseStr=now.getFullYear()+'\ub144 '+(now.getMonth()+1)+'\uc6d4 '+now.getDate()+'\uc77c '+hh+'\uc2dc'+mm+'\ubd84 \uae30\uc900 \u00b7 '+rangeLabel;
+  // base time line (no trailing month range, per request)
+  var baseStr=now.getFullYear()+'\ub144 '+(now.getMonth()+1)+'\uc6d4 '+now.getDate()+'\uc77c '+hh+'\uc2dc'+mm+'\ubd84 \uae30\uc900';
+
+  // standard-FP per-condition map by name
+  var _stdMap={};
+  try{
+    var _stdRows=(typeof _stdFpCompute==='function')?_stdFpCompute():[];
+    (_stdRows||[]).forEach(function(r){ if(r && r.name) _stdMap[r.name]={c1:!!r.c1,c2:!!r.c2,c3:!!r.c3,c4:!!r.c4}; });
+  }catch(e){}
+  function _stdCntAll(){ var n=0; for(var k in _stdMap){ var s=_stdMap[k]; if(s.c1&&s.c2&&s.c3&&s.c4) n++; } return n; }
 
   var NAVY='FF1A2744', GOLD='FFB8860B', HEAD='FFEAE2CE', SUMBG='FAEEDA', HILITE='FFFFF3D6', BD='FFD8D2C2';
-  var FNT='\ub9d1\uc740 \uace0\ub515';
+  var HDR='FF2E3D5C', HDR2='FF2E3D5C';
+  var SUMBG2='FFEEF1F5';
+  var AMT50='FFFAD9A8', AMT70='FFBFE0A8', AMT100='FF9FC7EF';
+  var STDOK='FFFCEFD2';
+  var ALBG='FFDCEFE8', ALTX='FF0F6E56';
+  var BRBG='FFEADCF6', BRTX='FF5A2FA0';
+  var FNT='\\ub9d1\\uc740 \\uace0\\ub515';
   var wb=new ExcelJS.Workbook();
 
+  function _achCell(ws, rn, col, ok, bd2){
+    var c=ws.getCell(rn,col);
+    if(ok){ c.value='\uB2EC\uC131'; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:STDOK}}; c.font={size:11,name:FNT,bold:true,color:{argb:'FF854F0B'}}; }
+    else { c.value='-'; c.font={size:11,name:FNT,color:{argb:'FFC8C5BC'}}; }
+    c.alignment={vertical:'middle',horizontal:'center'};
+    c.border=bd2();
+  }
   function buildSheet(title, scopeKey, scopeLabel){
     var ws=wb.addWorksheet(title);
-    ws.columns=[{width:8},{width:12},{width:11},{width:10},{width:15},{width:10},{width:11},{width:11},{width:11},{width:8}];
-    var headers=['\uc9c0\uc810','FP','\ub9e4\ub2c8\uc800','\ubaa9\ud45c(\ub9cc)','\ud604\uc7ac\uc5c5\uc801(\uc6d0)','\ub2ec\uc131\ub960','\uc794\uc5ec(\uc6d0)','\uc0dd\ubcf4(\uc6d0)','\uc190\ubcf4(\uc6d0)','\uac74\uc218'];
+    ws.columns=[{width:8},{width:12},{width:9},{width:14},{width:7},{width:9},{width:12},{width:12},{width:10},{width:8},{width:9},{width:9}];
+    var headers=['\uC9C0\uC810','FP','\uBAA9\uD45C(\uB9CC)','\uD604\uC7AC\uC5C5\uC801(\uC6D0)','\uAC74\uC218','\uB2EC\uC131\uB960','\uC0DD\uBCF4(\uC6D0)','\uC190\uBCF4(\uC6D0)'];
+    var stdHeaders=['\uC870\uAE30\uAC00\uB3D9','\uD788\uB4E0','\uC190\uBCF410\uB9CC','\uC6D4\uB9D050\uB9CC'];
     function bd(){ return {top:{style:'thin',color:{argb:BD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}}; }
 
     var rows=allRows.filter(function(f){
       var inScope = (scopeKey==='all' || _pvBranchKey(f.branch)===scopeKey);
-      if(!inScope) return false;
-      var ti=(f.title||'');
-      if(scopeKey==='all') return ti!=='\ub9e4\ub2c8\uc800' && ti!=='\uc9c0\uc810\uc7a5';
-      return ti!=='\ub9e4\ub2c8\uc800';
+      return inScope;
     });
-    rows.sort(function(a,b){ if(b.total!==a.total) return b.total-a.total; return b.cnt-a.cnt; });
+    rows.sort(function(a,b){ return (a.name||'').localeCompare((b.name||''),'ko'); });
 
-    var titleTxt = scopeKey==='all' ? 'Unice \uc2e4\uc2dc\uac04 \uc5c5\uc801 \uc77c\ubcf4' : scopeLabel+' \uc2e4\uc2dc\uac04 \uc5c5\uc801 \uc77c\ubcf4';
-    ws.mergeCells('A1:J1');
+    var titleTxt = scopeKey==='all' ? 'Unice \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4' : scopeLabel+' \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4';
+    ws.mergeCells('A1:L1');
     var t=ws.getCell('A1'); t.value=titleTxt;
-    t.font={bold:true,size:18,color:{argb:'FFFFFFFF'},name:FNT};
-    t.fill={type:'pattern',pattern:'solid',fgColor:{argb:NAVY}};
+    t.font={bold:true,size:20,color:{argb:'FF111111'},name:FNT};
     t.alignment={vertical:'middle',horizontal:'center'};
-    ws.getRow(1).height=36;
-    ws.mergeCells('A2:J2');
+    ws.getRow(1).height=40;
+    ws.mergeCells('A2:L2');
     var st=ws.getCell('A2'); st.value=baseStr;
-    st.font={size:11,bold:true,color:{argb:GOLD},name:FNT};
-    st.fill={type:'pattern',pattern:'solid',fgColor:{argb:NAVY}};
+    st.font={size:11,color:{argb:'FF5F5E5A'},name:FNT};
     st.alignment={vertical:'middle',horizontal:'right',indent:1};
-    ws.getRow(2).height=22;
+    ws.getRow(2).height=20;
 
     var sumGoal=0,sumTot=0,sumLife=0,sumNon=0,sumCnt=0;
     rows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumCnt+=f.cnt; });
-    var sumTotMan=Math.round(sumTot/10000);
-    var sumRate=sumGoal>0?Math.round(sumTotMan/sumGoal*100)+'%':'-';
-    ws.mergeCells('A4:J4');
+    ws.mergeCells('A4:L4');
     var sm=ws.getCell('A4');
-    sm.value='\ub2ec\uc131\ub960 '+sumRate+'      \ud604\uc7ac\uc5c5\uc801 '+sumTot.toLocaleString()+'\uc6d0      \uc0dd\ubcf4 '+sumLife.toLocaleString()+'\uc6d0      \uc190\ubcf4 '+sumNon.toLocaleString()+'\uc6d0      \ucd1d '+sumCnt+'\uac74';
-    sm.font={bold:true,size:12,name:FNT,color:{argb:'FF854F0B'}};
-    sm.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG}};
+    sm.value='\uD604\uC7AC\uC5C5\uC801 '+sumTot.toLocaleString()+'\uC6D0  /  \uC0DD\uBCF4 '+sumLife.toLocaleString()+'\uC6D0  /  \uC190\uBCF4 '+sumNon.toLocaleString()+'\uC6D0  /  \uCD1D '+sumCnt+'\uAC74  /  \uC2A4\uD0E0\uB2E4\uB4DCFP \uB2EC\uC131 '+_stdCntAll()+'\uBA85';
+    sm.font={bold:true,size:12,name:FNT,color:{argb:'FF1A2744'}};
+    sm.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
     sm.alignment={vertical:'middle',horizontal:'center'};
     ws.getRow(4).height=26;
 
+    var HR1=6, HR2=7;
     for(var i=0;i<headers.length;i++){
-      var c=ws.getCell(6,i+1); c.value=headers[i];
-      c.font={bold:true,size:12,name:FNT,color:{argb:'FF2C2C2A'}};
-      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:HEAD}};
+      ws.mergeCells(HR1,i+1,HR2,i+1);
+      var c=ws.getCell(HR1,i+1); c.value=headers[i];
+      c.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR}};
       c.alignment={vertical:'middle',horizontal:'center'};
       c.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
     }
-    ws.getRow(6).height=28;
+    ws.mergeCells(HR1,9,HR1,12);
+    var sh=ws.getCell(HR1,9); sh.value='\uD83C\uDFC6 \uC2A4\uD0E0\uB2E4\uB4DCFP';
+    sh.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
+    sh.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
+    sh.alignment={vertical:'middle',horizontal:'center'};
+    sh.border=bd();
+    for(var s2=0;s2<stdHeaders.length;s2++){
+      var sc=ws.getCell(HR2,9+s2); sc.value=stdHeaders[s2];
+      sc.font={bold:true,size:11,name:FNT,color:{argb:'FFFFFFFF'}};
+      sc.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
+      sc.alignment={vertical:'middle',horizontal:'center'};
+      sc.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
+    }
+    ws.getRow(HR1).height=24; ws.getRow(HR2).height=22;
 
-    var rn=7;
+    var rn=8;
     rows.forEach(function(f){
       var bk=_pvBranchKey(f.branch);
-      var bLabel=bk==='al'?'\uc54c\ud30c':bk==='br'?'\ube0c\ub77c\ubcf4':'';
+      var bLabel=bk==='al'?'\uC54C\uD30C':bk==='br'?'\uBE0C\uB77C\uBCF4':'';
       var totMan=Math.round(f.total/10000);
       var pct=f.goal>0?Math.round(totMan/f.goal*100)+'%':'-';
-      var remainWon=f.goal>0?Math.max(0,f.goal*10000-f.total):'-';
-      var vals=[bLabel,f.name,f.mgr||'-',f.goal||'-',f.total,pct,remainWon,f.life,f.non,f.cnt];
-      var hi=f.total>500000;
+      var vals=[bLabel,f.name,f.goal||'-',f.total,f.cnt,pct,f.life,f.non];
       for(var i=0;i<vals.length;i++){
         var c=ws.getCell(rn,i+1); c.value=vals[i];
-        c.font={size:11,name:FNT,bold:(i===4)};
+        c.font={size:11,name:FNT,bold:(i===3)};
         c.alignment={vertical:'middle',horizontal:'center'};
         c.border=bd();
-        if(i===0 && bk==='al'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFDCE8FB'}}; c.font={size:11,name:FNT,bold:true,color:{argb:'FF1D4ED8'}}; }
-        else if(i===0 && bk==='br'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEEDDFB'}}; c.font={size:11,name:FNT,bold:true,color:{argb:'FF7E22CE'}}; }
-        if(hi && i===4) c.fill={type:'pattern',pattern:'solid',fgColor:{argb:HILITE}};
-        if(i===4||i===6||i===7||i===8) c.numFmt='#,##0';
+        if(i===0 && bk==='al'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ALBG}}; c.font={size:11,name:FNT,bold:true,color:{argb:ALTX}}; }
+        else if(i===0 && bk==='br'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:BRBG}}; c.font={size:11,name:FNT,bold:true,color:{argb:BRTX}}; }
+        if(i===3){
+          var tier=null, tcol=null;
+          if(f.total>=1000000){ tier=AMT100; tcol='FF0C447C'; }
+          else if(f.total>=700000){ tier=AMT70; tcol='FF3B6D11'; }
+          else if(f.total>=500000){ tier=AMT50; tcol='FF9A4F0F'; }
+          if(tier){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:tier}}; c.font={size:11,name:FNT,bold:true,color:{argb:tcol}}; }
+        }
+        if(i===3||i===6||i===7) c.numFmt='#,##0';
       }
-      ws.getRow(rn).height=26;
+      var sd=_stdMap[f.name]||{};
+      _achCell(ws, rn, 9, !!sd.c1, bd);
+      _achCell(ws, rn, 10, !!sd.c2, bd);
+      _achCell(ws, rn, 11, !!sd.c3, bd);
+      _achCell(ws, rn, 12, !!sd.c4, bd);
+      ws.getRow(rn).height=24;
       rn++;
     });
 
-    var remainSumWon=sumGoal>0?Math.max(0,sumGoal*10000-sumTot):'-';
-    var svals=['\ud569\uacc4','','',sumGoal||'-',sumTot,sumRate,remainSumWon,sumLife,sumNon,sumCnt];
+    var svals=['\uD569\uACC4','',sumGoal||'-',sumTot,sumCnt,(sumGoal>0?Math.round(Math.round(sumTot/10000)/sumGoal*100)+'%':'-'),sumLife,sumNon];
     for(var i=0;i<svals.length;i++){
       var c=ws.getCell(rn,i+1); c.value=svals[i];
-      c.font={bold:true,size:12,name:FNT,color:{argb:'FF854F0B'}};
-      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG}};
+      c.font={bold:true,size:12,name:FNT,color:{argb:'FF1A2744'}};
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
       c.alignment={vertical:'middle',horizontal:'center'};
       c.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
-      if(i===4||i===6||i===7||i===8) c.numFmt='#,##0';
+      if(i===3||i===6||i===7) c.numFmt='#,##0';
     }
-    ws.mergeCells(rn,1,rn,3);
-    ws.getCell(rn,1).value='\ud569\uacc4';
-    ws.getRow(rn).height=28;
+    ws.mergeCells(rn,9,rn,12);
+    var sc2=ws.getCell(rn,9); sc2.value='\uC2A4\uD0E0\uB2E4\uB4DC \uB2EC\uC131 '+_stdCntAll()+'\uBA85';
+    sc2.font={bold:true,size:11,name:FNT,color:{argb:'FF854F0B'}};
+    sc2.fill={type:'pattern',pattern:'solid',fgColor:{argb:STDOK}};
+    sc2.alignment={vertical:'middle',horizontal:'center'};
+    sc2.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
+    ws.getRow(rn).height=26;
   }
 
   buildSheet('\uc804\uccb4','all','\uc804\uccb4');
