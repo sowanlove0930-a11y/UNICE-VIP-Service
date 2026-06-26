@@ -90,6 +90,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .filter-select{padding:8px 34px 8px 14px;background:var(--sur);border:1px solid var(--bdr2);border-radius:10px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:13px;cursor:pointer;-webkit-appearance:none;-moz-appearance:none;appearance:none;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23C9A84C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;}
 .filter-select:focus{outline:none;border-color:var(--purple);}
 .filter-select option{background:var(--bg2);color:var(--text);}
+.branch-chip{padding:8px 16px;border-radius:20px;border:1px solid var(--bdr2);background:var(--sur);color:var(--text2);font-family:'Noto Sans KR',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .15s;}
+.branch-chip.on[data-br="all"]{background:#5F6B7A;color:#fff;border-color:#5F6B7A;}
+.branch-chip.al.on{background:#E1F5EE;color:#0F6E56;border-color:#1D9E75;}
+.branch-chip.br.on{background:#EEEDFE;color:#5A2FA0;border-color:#7B52D0;}
+.acc-body{overflow:hidden;transition:max-height .25s ease;max-height:2000px;}
+.acc-body.collapsed{max-height:0 !important;}
+.acc-head .acc-arrow.up{transform:rotate(180deg);}
 .att-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
 .att-sum-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:12px;padding:14px;text-align:center;}
 .att-sum-val{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;margin-bottom:3px;}
@@ -396,11 +403,12 @@ textarea.prm-input{resize:vertical;}
       <select class="filter-select" id="statusDay" onchange="renderStatus()">
         <option value="all">전체 일자</option>
       </select>
-      <select class="filter-select" id="statusBranch" onchange="renderStatus()">
-        <option value="all">전체 지점</option>
-        <option value="알파지점">알파지점</option>
-        <option value="브라보지점">브라보지점</option>
-      </select>
+      <input type="hidden" id="statusBranch" value="all">
+      <div class="branch-chip-wrap" style="display:inline-flex;gap:6px;align-items:center">
+        <button type="button" class="branch-chip on" data-br="all" onclick="setStatusBranch('all',this)">전체</button>
+        <button type="button" class="branch-chip al" data-br="알파지점" onclick="setStatusBranch('알파지점',this)">알파</button>
+        <button type="button" class="branch-chip br" data-br="브라보지점" onclick="setStatusBranch('브라보지점',this)">브라보</button>
+      </div>
     </div>
     <div class="att-summary">
       <div class="att-sum-card"><div class="att-sum-val" style="color:#34D399" id="sumAttRate">—</div><div class="att-sum-label">이번달 출근율</div></div>
@@ -491,7 +499,8 @@ textarea.prm-input{resize:vertical;}
 
     <!-- 증빙 처리 -->
     <div class="pr-section">
-      <div class="pr-section-title" style="white-space:nowrap">✅ 증빙 처리</div>
+      <div class="pr-section-title acc-head" style="white-space:nowrap;cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleAcc('accProof',this)">✅ 증빙 처리 <span class="acc-arrow" style="transition:transform .2s">▾</span></div>
+      <div id="accProof" class="acc-body">
 
       <div class="proof-select-wrap">
         <select class="wn-select" id="proofTargetDate">
@@ -531,12 +540,15 @@ textarea.prm-input{resize:vertical;}
       </div>
 
       <div style="font-size:11px;color:var(--text3);margin-top:6px">증빙 완료 시 해당 날짜 출결이 ✅ 출결인정으로 변경됩니다</div>
+      </div>
     </div>
 
     <!-- 이번달 내역 -->
     <div class="pr-section" style="padding-bottom:8px">
-      <div class="pr-section-title">📅 이번 달 사전보고 내역</div>
-      <div class="pr-list" id="prereportList"></div>
+      <div class="pr-section-title acc-head" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleAcc('accPrelist',this)">📅 이번 달 사전보고 내역 <span class="acc-arrow" style="transition:transform .2s">▾</span></div>
+      <div id="accPrelist" class="acc-body">
+        <div class="pr-list" id="prereportList"></div>
+      </div>
     </div>
 
   </div>
@@ -1247,6 +1259,13 @@ function _renderPrAdminList(){
     if(!branchFilter) return true;
     return (recs[id].branch||'')===branchFilter;
   });
+  // 알파 먼저, 브라보 나중, 그 외 마지막 + 같은 지점 내 이름순
+  ids.sort(function(a,b){
+    function _bo(br){ if(String(br||'').indexOf('\uC54C\uD30C')>=0) return 0; if(String(br||'').indexOf('\uBE0C\uB77C\uBCF4')>=0) return 1; return 2; }
+    var oa=_bo(recs[a].branch), ob=_bo(recs[b].branch);
+    if(oa!==ob) return oa-ob;
+    return (recs[a].name||'').localeCompare((recs[b].name||''),'ko');
+  });
   if(!ids.length){
     box.style.display='';
     box.innerHTML='<div class="prcal-nlhd">👥 이 날 보고한 FP</div><div class="prcal-empty">등록된 사전보고가 없습니다</div>'+_prAddBtnHtml(ds);
@@ -1270,7 +1289,9 @@ function _renderPrAdminList(){
       '<div class="pr-admin-actions">'+
         '<button type="button" class="pra-btn pra-manage" onclick="openPrManage(\''+ds+'\',\''+fpcode+'\')">⚙️ 관리</button>'+
       '</div>';
-    rows+='<div class="prcal-person">'+
+    var _pbr=(r.branch||'');
+    var _rowBg = _pbr.indexOf('\uC54C\uD30C')>=0 ? 'background:rgba(29,158,117,.08);' : (_pbr.indexOf('\uBE0C\uB77C\uBCF4')>=0 ? 'background:rgba(123,82,208,.08);' : '');
+    rows+='<div class="prcal-person" style="'+_rowBg+'">'+
       '<div class="prcal-pinit">'+init+'</div>'+
       '<div style="flex:1"><div class="prcal-pname">'+(r.name||'')+'</div><div class="prcal-pbranch">'+((r.branch||'').replace('지점','').replace(/\s+/g,''))+'</div></div>'+
       '<span class="pr-type '+tcls+'">'+emoji+' '+tlabel+'</span>'+
@@ -1871,10 +1892,12 @@ function deletePrereport(date, fp){
 function initFilters(){
   var now=new Date();
   var yearSel=document.getElementById('statusYear');
+  yearSel.innerHTML='';
   for(var y=now.getFullYear();y>=2025;y--){
     yearSel.innerHTML+='<option value="'+y+'"'+(y===now.getFullYear()?' selected':'')+'>'+y+'년</option>';
   }
   var monthSel=document.getElementById('statusMonth');
+  monthSel.innerHTML='';
   for(var mo=1;mo<=12;mo++){
     monthSel.innerHTML+='<option value="'+mo+'"'+(mo===now.getMonth()+1?' selected':'')+'>'+mo+'월</option>';
   }
@@ -1904,6 +1927,22 @@ function updateDayOptions(){
   }
 }
 
+function toggleAcc(bodyId, head){
+  var body=document.getElementById(bodyId);
+  if(!body) return;
+  var collapsed=body.classList.toggle('collapsed');
+  if(!collapsed){ body.style.maxHeight=body.scrollHeight+'px'; }
+  else { body.style.maxHeight='0px'; }
+  if(head){ var ar=head.querySelector('.acc-arrow'); if(ar) ar.classList.toggle('up', collapsed); }
+}
+function setStatusBranch(val, el){
+  var hid=document.getElementById('statusBranch');
+  if(hid) hid.value=val;
+  var chips=document.querySelectorAll('.branch-chip-wrap .branch-chip');
+  for(var i=0;i<chips.length;i++) chips[i].classList.remove('on');
+  if(el) el.classList.add('on');
+  renderStatus();
+}
 function renderStatus(){
   var year   = parseInt(document.getElementById('statusYear').value);
   var month  = parseInt(document.getElementById('statusMonth').value);
