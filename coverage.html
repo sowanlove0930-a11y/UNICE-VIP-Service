@@ -4207,6 +4207,30 @@ async function startAnalysis() {
           if (!json.savings_contracts) json.savings_contracts = [];
           json.savings_contracts = json.savings_contracts.concat(_toSav2);
         }
+        // ── [savings_contracts 역방향 구제 v131] Stage3가 보장성 계약을 저축성에 넣은 경우 복귀
+        // 보장담보 필드가 하나라도 있거나, 상품명에 건강/암보험 명시 + 순수저축 키워드 없음 → contracts(건강보험)로 이동
+        var _parseRC = function(v) { var n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+        var _HF_RC = ['disease_death','accident_death','high_cancer','cancer_diagnosis','similar_cancer','brain_vessel','brain_stroke','brain_bleed','heart_ischemic','heart_mi','surgery','cancer_surgery','hospitalization','dementia','caregiver','cancer_treat_once','cancer_treat_repeat'];
+        var _PURE_SAV = ['연금', '저축보험', '변액연금', '연금저축', '재테크', '공제'];
+        var _toContracts_RC = [];
+        json.savings_contracts = (json.savings_contracts || []).filter(function(c) {
+          var prod = (c.product || '') + (c.company || '');
+          var isPureSav = _PURE_SAV.some(function(k){ return prod.includes(k); });
+          if (isPureSav) return true; // 순수 저축/연금 키워드 있으면 저축성 유지
+          var hasHF = _HF_RC.some(function(f){ return _parseRC(c[f]) > 0; });
+          var nameHealth = prod.includes('건강보험') || prod.includes('암보험') || prod.includes('종신보험');
+          if (hasHF || nameHealth) {
+            c.category = '건강보험';
+            c.memo = ((c.memo||'') + ' [저축성->건강보험역구제v131]').trim();
+            _toContracts_RC.push(c);
+            return false; // savings_contracts에서 제거
+          }
+          return true;
+        });
+        if (_toContracts_RC.length > 0) {
+          if (!json.contracts) json.contracts = [];
+          json.contracts = json.contracts.concat(_toContracts_RC);
+        }
         analysisResult = json;
       } catch(eRC) { console.warn('[Stage3 후 분류 재교정] skip:', eRC); }
     }
@@ -4489,6 +4513,28 @@ function postProcessJson(json) {
     if (_toSavPP.length > 0) {
       if (!json.savings_contracts) json.savings_contracts = [];
       json.savings_contracts = json.savings_contracts.concat(_toSavPP);
+    }
+    // ── [savings_contracts 역방향 구제 v131] AI가 보장성 계약을 저축성에 직접 넣은 경우 복귀
+    var _parsePP = function(v) { var n = parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return isNaN(n)?0:n; };
+    var _HF_PP = ['disease_death','accident_death','high_cancer','cancer_diagnosis','similar_cancer','brain_vessel','brain_stroke','brain_bleed','heart_ischemic','heart_mi','surgery','cancer_surgery','hospitalization','dementia','caregiver','cancer_treat_once','cancer_treat_repeat'];
+    var _PURE_PP = ['연금', '저축보험', '변액연금', '연금저축', '재테크', '공제'];
+    var _toCon_PP = [];
+    json.savings_contracts = (json.savings_contracts || []).filter(function(c) {
+      var prod = (c.product || '') + (c.company || '');
+      if (_PURE_PP.some(function(k){ return prod.includes(k); })) return true;
+      var hasHF = _HF_PP.some(function(f){ return _parsePP(c[f]) > 0; });
+      var nameHealth = prod.includes('건강보험') || prod.includes('암보험') || prod.includes('종신보험');
+      if (hasHF || nameHealth) {
+        c.category = '건강보험';
+        c.memo = ((c.memo||'') + ' [저축성->건강보험역구제v131]').trim();
+        _toCon_PP.push(c);
+        return false;
+      }
+      return true;
+    });
+    if (_toCon_PP.length > 0) {
+      if (!json.contracts) json.contracts = [];
+      json.contracts = json.contracts.concat(_toCon_PP);
     }
   } catch(e) {}
   // ②-C 이동 후에도 contracts에 같은 계약이 남아 건강보험탭에 이중 표시되는 현상 제거
