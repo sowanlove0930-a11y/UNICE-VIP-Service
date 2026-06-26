@@ -881,8 +881,9 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 
 /* ── 오늘 출결 현황 카드 ── */
 @keyframes uniSpin { from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
-.ga-inp{ width:100%; box-sizing:border-box; padding:7px 9px; border:1px solid var(--bdr2); border-radius:7px; background:var(--surface); color:var(--text); font-size:13px; font-family:'Noto Sans KR',sans-serif; text-align:right; }
-.ga-inp:focus{ outline:none; border-color:var(--gold); }
+.ga-inp{ width:100%; box-sizing:border-box; padding:7px 9px; border:1px solid var(--bdr2); border-radius:7px; background:#FFFFFF; color:#222; font-size:13px; font-family:'Noto Sans KR',sans-serif; text-align:right; }
+.ga-inp::placeholder{ color:#B8B8B8; font-size:11px; }
+.ga-inp:focus{ outline:none; border-color:var(--gold); background:#FFFFFF; }
 .uni-spinning { animation: uniSpin .7s linear infinite; }
 .att-today-card {
   grid-column: 1 / -1;
@@ -3890,7 +3891,22 @@ function _mergePlansToActivities(plans, planKeyFilter){
     (plans||[]).forEach(function(pl){
       if(!pl || !pl.fpId) return;
       var mg=pl.monthGoal||{}, wg=pl.weekGoal||{};
-      pg[pl.fpId]={ month:{ life:_gaNum(mg.life), non:_gaNum(mg.non) }, week:{ life:_gaNum(wg.life), non:_gaNum(wg.non) } };
+      var wk=pl.weekKey||'';
+      var prev=pg[pl.fpId]||{};
+      var weeks=prev.weeks||{};
+      // store this week's goal under its weekKey
+      if(wk){ weeks[wk]={ life:_gaNum(wg.life), non:_gaNum(wg.non) }; }
+      // month goal: keep the latest submitted (by weekKey string compare)
+      var keepMonth=prev.month||{life:0,non:0};
+      var keepMonthKey=prev.monthKey||'';
+      if(!keepMonthKey || String(wk) >= String(keepMonthKey)){
+        keepMonth={ life:_gaNum(mg.life), non:_gaNum(mg.non) };
+        keepMonthKey=wk;
+      }
+      pg[pl.fpId]={
+        month:keepMonth, monthKey:keepMonthKey, weeks:weeks,
+        week:{ life:_gaNum(wg.life), non:_gaNum(wg.non) } // legacy field (latest)
+      };
     });
     localStorage.setItem('unispace_plan_goals', JSON.stringify(pg));
   }catch(e){}
@@ -7364,8 +7380,25 @@ function _gaInpVal(n){ var x=parseInt(n)||0; return x===0?'':x.toLocaleString();
 // read FP original goal from GAS plan data cached in unispace_activities source: use _gaPlanGoals
 // FP plan goals live in localStorage 'unispace_plan_goals' = { fpId: {month:{life,non}, week:{life,non}} }
 function getPlanGoalsCache(){ try{ return JSON.parse(localStorage.getItem('unispace_plan_goals')||'{}'); }catch(e){ return {}; } }
-function _fpOrigGoal(fpId){ var c=getPlanGoalsCache()[fpId]; return c||{ month:{life:0,non:0}, week:{life:0,non:0} }; }
+function _fpOrigGoal(fpId){ var c=getPlanGoalsCache()[fpId]; return c||{ month:{life:0,non:0}, week:{life:0,non:0}, weeks:{} }; }
+// FP plan goal for a specific weekKey (empty if not submitted for that week)
+function _fpWeekGoal(fpId, weekKey){
+  var c=getPlanGoalsCache()[fpId];
+  if(c && c.weeks && c.weeks[weekKey]) return c.weeks[weekKey];
+  return { life:0, non:0 };
+}
 // current submission week label from plan period setting, e.g. month + week
+function _gaWeekKey(){
+  try{
+    var s=localStorage.getItem('unispace_plan_period');
+    if(s){ var p=JSON.parse(s); if(p && p.week){
+      var n=new Date(); var ym=n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2);
+      return ym+'-W'+(parseInt(p.week)||1);
+    } }
+  }catch(e){}
+  var n2=new Date(); var ym2=n2.getFullYear()+'-'+('0'+(n2.getMonth()+1)).slice(-2);
+  return ym2+'-W'+Math.ceil(n2.getDate()/7);
+}
 function _gaWeekLabel(){
   try{
     var s=localStorage.getItem('unispace_plan_period');
@@ -8605,13 +8638,14 @@ function _gaRenderBranchGoal(){
   function row(bk,label){
     var v=br[bk]||{};
     var wl=_gaWeekLabel();
+    function man(x){ var n=parseInt(x)||0; return n>0 ? Math.round(n/10000) : 0; }
     return '<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:12px;margin-bottom:8px">'+
       '<div style="font-size:13px;font-weight:700;margin-bottom:8px">'+label+' 지점 목표</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 생보</div><input type="text" id="gab_'+bk+'_life" value="'+_gaInpVal(v.life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 손보</div><input type="text" id="gab_'+bk+'_non" value="'+_gaInpVal(v.non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 생보</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaInpVal(v.wLife)+'" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 손보</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaInpVal(v.wNon)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 생보 (만원)</div><input type="text" id="gab_'+bk+'_life" value="'+_gaInpVal(man(v.life))+'" placeholder="만원" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 손보 (만원)</div><input type="text" id="gab_'+bk+'_non" value="'+_gaInpVal(man(v.non))+'" placeholder="만원" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 생보 (만원)</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaInpVal(man(v.wLife))+'" placeholder="만원" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 손보 (만원)</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaInpVal(man(v.wNon))+'" placeholder="만원" class="ga-inp"></div>'+
       '</div>'+
     '</div>';
   }
@@ -8641,28 +8675,38 @@ function _gaRenderFpList(){
   if(q) list=list.filter(function(fp){ return fp.name.indexOf(q)>=0; });
   if(!list.length){ wrap.innerHTML='<div class="pv-empty" style="padding:16px">FP가 없습니다</div>'; return; }
   var wl=_gaWeekLabel();
+  var _wk=_gaWeekKey();
   var h='';
   list.forEach(function(fp){
     var orig=_fpOrigGoal(fp.id);
+    var wkGoal=_fpWeekGoal(fp.id, _wk); // only this week's submitted goal
     var sv=saved[fp.id]||{};
-    var life = sv.life!==undefined ? sv.life : orig.month.life;
-    var non  = sv.non!==undefined ? sv.non : orig.month.non;
-    var wlife= sv.wLife!==undefined ? sv.wLife : orig.week.life;
-    var wnon = sv.wNon!==undefined ? sv.wNon : orig.week.non;
+    // value priority: admin saved (>0) first; else FP plan goal. 0/blank saved falls back to plan.
+    function pick(savedV, planV){
+      var s=parseInt(savedV); if(!isNaN(s) && s>0) return s;
+      var p=parseInt(planV)||0; return p;
+    }
+    var life = pick(sv.life, orig.month.life);
+    var non  = pick(sv.non,  orig.month.non);
+    var wlife= pick(sv.wLife, wkGoal.life);
+    var wnon = pick(sv.wNon,  wkGoal.non);
     var bk=_pvBranchKey(fp.branch);
     var chip = bk==='al'?'<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(244,163,38,.16);color:#854F0B">알</span>':bk==='br'?'<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(37,99,235,.12);color:#0C447C">브</span>':'';
-    var hasOrig=(orig.month.life||orig.month.non||orig.week.life||orig.week.non);
-    var origTxt = hasOrig ? ('FP 작성: 월 생'+_gaComma(orig.month.life)+'·손'+_gaComma(orig.month.non)) : 'FP 작성: 없음';
+    var hasOrig=(orig.month.life||orig.month.non);
+    var hasWk=(wkGoal.life||wkGoal.non);
+    var origTxt = hasOrig ? ('FP 작성: 월 생'+_gaComma(orig.month.life)+'·손'+_gaComma(orig.month.non)+' (만원)') : 'FP 작성: 없음';
+    var phM='만원';
+    var phWk = hasWk ? '만원' : '미제출';
     h+='<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:11px 12px;margin-bottom:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
         '<div style="font-size:13px;font-weight:700">'+chip+' '+fp.name+'</div>'+
         '<div style="font-size:10px;color:'+(hasOrig?'var(--gold2)':'var(--text3)')+'">'+origTxt+'</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 생보</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaInpVal(life)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 손보</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaInpVal(non)+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 생보</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaInpVal(wlife)+'" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 손보</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaInpVal(wnon)+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 생보 (만원)</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaInpVal(life)+'" placeholder="'+phM+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 손보 (만원)</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaInpVal(non)+'" placeholder="'+phM+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 생보 (만원)</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaInpVal(wlife)+'" placeholder="'+phWk+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 손보 (만원)</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaInpVal(wnon)+'" placeholder="'+phWk+'" class="ga-inp"></div>'+
       '</div>'+
     '</div>';
   });
@@ -8678,22 +8722,22 @@ function _gaUpdateSum(){
     sLife+=le?_gaNum(le.value):0;
     sNon+=ne?_gaNum(ne.value):0;
   });
-  box.innerHTML='<b>FP 합계 (월)</b> &nbsp; 생보 <b style="color:var(--gold2)">'+_gaComma(sLife)+'</b> · 손보 <b style="color:#185FA5">'+_gaComma(sNon)+'</b> · 합계 <b>'+_gaComma(sLife+sNon)+'</b>원';
+  box.innerHTML='<b>FP 합계 (월)</b> &nbsp; 생보 <b style="color:var(--gold2)">'+_gaComma(sLife)+'</b> · 손보 <b style="color:#185FA5">'+_gaComma(sNon)+'</b> · 합계 <b>'+_gaComma(sLife+sNon)+'</b> 만원';
 }
 function saveGoalAdj(){
   var db=getGoalAdjDB(); var ym=_gaYm();
   if(!db[ym]) db[ym]={};
   if(!db[ym].branch) db[ym].branch={};
   if(!db[ym].fp) db[ym].fp={};
-  // branch goals (only branches currently shown)
+  // branch goals (only branches currently shown). inputs are in 10k-won; store as won.
   ['al','br'].forEach(function(bk){
     var le=document.getElementById('gab_'+bk+'_life');
     if(!le) return; // not shown for this tab
     db[ym].branch[bk]={
-      life:_gaNum(le.value),
-      non:_gaNum(document.getElementById('gab_'+bk+'_non').value),
-      wLife:_gaNum(document.getElementById('gab_'+bk+'_wlife').value),
-      wNon:_gaNum(document.getElementById('gab_'+bk+'_wnon').value)
+      life:_gaNum(le.value)*10000,
+      non:_gaNum(document.getElementById('gab_'+bk+'_non').value)*10000,
+      wLife:_gaNum(document.getElementById('gab_'+bk+'_wlife').value)*10000,
+      wNon:_gaNum(document.getElementById('gab_'+bk+'_wnon').value)*10000
     };
   });
   // fp goals
@@ -8716,8 +8760,11 @@ function saveGoalAdj(){
   saveGoalAdjDB(db);
   saveFpGoalDB(goalDb);
   if(typeof gasSaveGoalAdj==='function') gasSaveGoalAdj(db);
-  closeGoalAdj();
   if(typeof renderFpPerf==='function') renderFpPerf();
+  // keep modal open; refresh inputs so saved values are reflected
+  if(typeof _gaRenderBranchGoal==='function') _gaRenderBranchGoal();
+  if(typeof _gaRenderFpList==='function') _gaRenderFpList();
+  if(typeof _gaUpdateSum==='function') _gaUpdateSum();
   showToast('🎯 목표가 저장되었습니다');
 }
 function gasSaveGoalAdj(db){
