@@ -2603,6 +2603,7 @@ window.UNISPACE_FCM = {
         <button type="button" class="rc2-addbtn" id="rc2AddEvtBtn" onclick="rc2AddEvent()" style="display:none;margin-top:8px;width:100%;padding:9px;font-size:12px">＋ 이 일정 추가</button>
       </div>
       <div id="rc2EvtList" style="display:none"></div>
+      <div id="rc2EvtWarn" style="display:none;margin-top:8px;padding:8px 11px;background:#FCEBEB;border:1px solid #F09595;border-radius:8px;color:#A32D2D;font-size:12.5px;font-weight:600">⚠️ 진행 일정을 1개 이상 선택하고 날짜를 지정해주세요.</div>
     </div>
 
     <!-- ③ 입과 · 상태 -->
@@ -11039,6 +11040,7 @@ function rc2OpenAdd(id) {
   rc2RenderTypeChips();
   rc2RenderEvtPicker();
   rc2RenderEvtList();
+  var _ew=document.getElementById('rc2EvtWarn'); if(_ew) _ew.style.display='none';
   document.getElementById('rc2AddOverlay').classList.add('open');
 }
 function rc2CloseAdd() { document.getElementById('rc2AddOverlay').classList.remove('open'); }
@@ -11099,6 +11101,8 @@ function rc2RenderEvtList() {
   var box = document.getElementById('rc2EvtList');
   if(!box) return;
   var evs = rc2.editEvents || [];
+  var _w=document.getElementById('rc2EvtWarn');
+  if(_w){ var _has=false; for(var _wi=0;_wi<evs.length;_wi++){ if(evs[_wi]&&evs[_wi].dt){_has=true;break;} } if(_has) _w.style.display='none'; }
   if(!evs.length){ box.innerHTML='<div class="rc2-empty" style="padding:6px 2px;font-size:11px">아직 등록된 일정이 없습니다.</div>'; return; }
   var sorted = evs.slice().sort(function(a,b){ return (a.dt||'').localeCompare(b.dt||''); });
   var html='<div style="font-size:11px;font-weight:800;color:var(--text2);margin:4px 2px 6px">📌 등록된 진행 일정</div>';
@@ -11368,7 +11372,16 @@ function rc2SaveCand() {
   }
   rc2.editEvents = _evs;
 
-  // 새로 추가된(또는 날짜가 막 잡힌) 이벤트에 생성시각 부여 - NEW 표시용
+  // 진행 일정(날짜 있는 이벤트) 1개 이상 필수
+  var _hasDated=false;
+  for(var _hd=0; _hd<rc2.editEvents.length; _hd++){ if(rc2.editEvents[_hd] && rc2.editEvents[_hd].dt){ _hasDated=true; break; } }
+  if(!_hasDated){
+    var _warn=document.getElementById('rc2EvtWarn');
+    if(_warn){ _warn.style.display=''; try{ _warn.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
+    showToast('진행 일정을 선택해주세요');
+    return;
+  }
+
   try{
     var _nowIso = new Date().toISOString();
     for(var _ce=0; _ce<(rc2.editEvents||[]).length; _ce++){
