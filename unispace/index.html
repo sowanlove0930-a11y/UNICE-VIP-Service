@@ -11276,7 +11276,10 @@ function rc2RenderEvtPicker() {
   if(dt && dt.split(' ')[1]){ var tp=dt.split(' ')[1].split(':'); var H=parseInt(tp[0],10); ap=H<12?'오전':'오후'; var h12=H%12; if(h12===0)h12=12; hh=(h12<10?'0':'')+h12; mm=tp[1]; }
   var _planTimeLbl = dt && dt.split(' ')[1] ? rc2TimeKor(dt.split(' ')[1]) : '시간 선택';
   html += '<div class="rc2-pk-tbox"><div class="rc2-pk-label" style="margin-bottom:6px">🕐 시간 선택</div>';
-  html += '<div class="pk-trigger" data-rc2plantime="1" style="padding:9px 12px"><span'+(dt&&dt.split(' ')[1]?'':' class="pk-ph"')+'>'+_planTimeLbl+'</span><span class="pk-ico">🕐</span></div></div>';
+  html += '<div class="pk-trigger" data-rc2plantime="1" style="padding:9px 12px"><span'+(dt&&dt.split(' ')[1]?'':' class="pk-ph"')+'>'+_planTimeLbl+'</span><span class="pk-ico">🕐</span></div>';
+  // 내방 가능 시간 칩 (선택된 날짜 + 현재 지점 기준)
+  html += _rc2IvSlotChips(dt);
+  html += '</div>';
   html += dt ? ('<div class="rc2-pk-result">✓ '+rc2DtLabel(dt)+'</div>') : '';
   pickEl.innerHTML = html;
 
@@ -11288,6 +11291,61 @@ function rc2RenderEvtPicker() {
   for(var mo=0;mo<mores.length;mo++) mores[mo].addEventListener('click', function(ev){ ev.stopPropagation(); rc2ShowDayInfo(this.getAttribute('data-moreday')); });
   var _ptt = pickEl.querySelector('[data-rc2plantime]');
   if(_ptt) _ptt.addEventListener('click', function(){ rc2OpenPlanTime(); });
+  var _ivc = pickEl.querySelectorAll('[data-ivpick]');
+  for(var _ic=0;_ic<_ivc.length;_ic++) _ivc[_ic].addEventListener('click', function(){ rc2PickIvSlot(this.getAttribute('data-ivpick')); });
+}
+// 내방 가능 시간 칩 HTML (dt=선택된 날짜 문자열). 현재 rc2.branch 지점 기준.
+function _rc2IvSlotChips(dt){
+  if(!dt || !dt.split(' ')[0]) return '';
+  var dayKey = dt.split(' ')[0];
+  var curTime = dt.split(' ')[1] || '';
+  var br = rc2.branch; // 'alpha' | 'bravo'
+  var d = rc2GetMonthData(getCurrentYM());
+  var evsAll = [];
+  for(var i=0;i<d.list.length;i++){
+    var it=d.list[i];
+    var evs=(typeof rc2NormEvents==='function')? rc2NormEvents(it) : (it.events||[]);
+    for(var e=0;e<evs.length;e++){
+      var ev=evs[e];
+      if(!ev || !ev.dt) continue;
+      if(ev.dt.split(' ')[0]!==dayKey) continue;
+      // 편집 중인 본인 이벤트는 점유에서 제외
+      var _bn = (it.branch==='alpha' || String(it.branch||'').indexOf('\uC54C\uD30C')>=0) ? 'alpha' : 'bravo';
+      evsAll.push({ time:(ev.dt.split(' ')[1]||''), branch:_bn, cancelled:ev.cancelled });
+    }
+  }
+  var slots = _ivComputeSlots(evsAll, br);
+  // 점유 시간 집합(취소선 표시용): 11~17시 전체 중 빈 슬롯이 아닌 것
+  var allStart=[11*60,12*60,13*60,14*60,15*60,16*60];
+  var freeSet={}; for(var s=0;s<slots.length;s++) freeSet[slots[s]]=true;
+  var bd = br==='alpha'?'#9FD9BC':'#CDBCEC';
+  var tx = br==='alpha'?'#0F6E56':'#5A2FA0';
+  var selBg = br==='alpha'?'#1D9E75':'#7B52D0';
+  var brLbl = br==='alpha'?'알파':'브라보';
+  var chips='';
+  for(var a=0;a<allStart.length;a++){
+    var min=allStart[a];
+    var hh=Math.floor(min/60), mm=min%60;
+    var hhmm=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
+    var korTxt=_ivKor(min);
+    if(freeSet[min]){
+      var isSel = (curTime===hhmm);
+      var st = isSel
+        ? 'background:'+selBg+';border:1px solid '+selBg+';color:#fff;'
+        : 'background:#fff;border:1px solid '+bd+';color:'+tx+';';
+      chips += '<span class="iv-pickchip" data-ivpick="'+hhmm+'" style="cursor:pointer;font-size:12px;font-weight:700;padding:6px 11px;border-radius:8px;'+st+'">'+korTxt+'</span>';
+    } else {
+      chips += '<span style="font-size:12px;font-weight:700;padding:6px 11px;border-radius:8px;background:#F1EFE8;border:1px solid #D3D1C7;color:#B4B2A9;text-decoration:line-through">'+korTxt+'</span>';
+    }
+  }
+  return '<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;color:'+tx+';margin-bottom:6px">'+brLbl+' 내방 가능 시간 · 탭하면 선택</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px">'+chips+'</div></div>';
+}
+// 가능시간 칩 선택 -> rc2.fDt 시간 채움
+function rc2PickIvSlot(hhmm){
+  var datePart = (rc2.fDt && rc2.fDt.split(' ')[0]) ? rc2.fDt.split(' ')[0] : (function(){ var pk=rc2._pk; var mo=(pk.m+1<10?'0':'')+(pk.m+1); return pk.y+'-'+mo+'-01'; })();
+  rc2.fDt = datePart+' '+hhmm;
+  rc2RenderEvtPicker();
 }
 function rc2Opt(arr, sel){ var h=''; for(var i=0;i<arr.length;i++) h+='<option'+(arr[i]===sel?' selected':'')+'>'+arr[i]+'</option>'; return h; }
 function rc2OptNum(a,b,sel){ var h=''; for(var i=a;i<=b;i++){ var v=(i<10?'0':'')+i; h+='<option value="'+v+'"'+(i===sel?' selected':'')+'>'+v+'</option>'; } return h; }
