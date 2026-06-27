@@ -12289,6 +12289,7 @@ function rc2OpenCalDetail(){
   var p=document.getElementById('rc2CalDetailPop'), m=document.getElementById('rc2CalDetailMask');
   if(p) p.style.display='';
   if(m) m.style.display='';
+  try{ history.pushState({ _guard:true }, '', location.href); if(typeof _bumpGuard==='function') _bumpGuard(); }catch(e){}
 }
 function rc2CloseCalDetail(){
   var p=document.getElementById('rc2CalDetailPop'), m=document.getElementById('rc2CalDetailMask');
@@ -15317,25 +15318,29 @@ function doCheckin() { doSmartCheckin(); }
       return false;
     }
     // 뒤로가기 버퍼를 여러 칸 미리 쌓아둠 (PC 연타 대비)
+    var _guardCount = 0;
     function _fillHist(){
       for (var _bi = 0; _bi < 5; _bi++) {
         history.pushState({ _guard: true, _i: _bi }, '', location.href);
+        _guardCount++;
       }
     }
     _fillHist();
     // bfcache 복귀(뒤로/앞으로 캐시)나 재표시 때도 히스토리 다시 채움
     window.addEventListener('pageshow', function(){ _fillHist(); });
-    // 사용자가 화면을 처음 만질 때 히스토리 재충전 (크롬: 상호작용 전 가드 무효 우회)
-    var _histPrimed = false;
-    function _primeHist(){ if(_histPrimed) return; _histPrimed = true; _fillHist(); }
-    window.addEventListener('touchstart', _primeHist, { once: true, passive: true });
-    window.addEventListener('click', _primeHist, { once: true });
+    // 사용자가 화면을 만질 때마다 버퍼가 부족하면 재충전 (\uD06C\uB86C/\uC0BC\uC131\uBE0C\uB77C\uC6B0\uC800: \uC0C1\uD638\uC791\uC6A9 \uC804 \uAC00\uB4DC \uBB34\uD6A8 \uC6B0\uD68C)
+    function _refillIfLow(){ if (_guardCount < 3) _fillHist(); }
+    window._bumpGuard = function(){ _guardCount++; };
+    window.addEventListener('touchstart', _refillIfLow, { passive: true });
+    window.addEventListener('click', _refillIfLow);
     var _backExitArmed = false;
     var _backExitTimer = null;
     window.addEventListener('popstate', function(){
+      // \uC774 popstate\uAC00 \uAC00\uB4DC 1\uCE78\uC744 \uC18C\uBE44\uD568
+      if (_guardCount > 0) _guardCount--;
       // 모달/메뉴가 열려 있으면 그것부터 닫고 머문다
       if (_anyOpen()){
-        history.pushState({ _guard: true }, '', location.href);
+        history.pushState({ _guard: true }, '', location.href); _guardCount++;
         _closeTopOne();
         // \uBAA8\uB2EC\uC744 \uB2EB\uC558\uC73C\uBA74 \uC885\uB8CC \uCE74\uC6B4\uD130 \uCD08\uAE30\uD654
         _backExitArmed = false;
@@ -15350,7 +15355,7 @@ function doCheckin() { doSmartCheckin(); }
         return;
       }
       // 첫 번째 뒤로가기: 머물면서 안내
-      history.pushState({ _guard: true }, '', location.href);
+      history.pushState({ _guard: true }, '', location.href); _guardCount++;
       _backExitArmed = true;
       if (typeof showToast === 'function') showToast('\uD55C \uBC88 \uB354 \uB204\uB974\uBA74 \uC885\uB8CC\uB429\uB2C8\uB2E4');
       if (_backExitTimer) clearTimeout(_backExitTimer);
