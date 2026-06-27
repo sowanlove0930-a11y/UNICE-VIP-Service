@@ -15148,13 +15148,33 @@ function doCheckin() { doSmartCheckin(); }
     _fillHist();
     // bfcache 복귀(뒤로/앞으로 캐시)나 재표시 때도 히스토리 다시 채움
     window.addEventListener('pageshow', function(){ _fillHist(); });
+    // 사용자가 화면을 처음 만질 때 히스토리 재충전 (크롬: 상호작용 전 가드 무효 우회)
+    var _histPrimed = false;
+    function _primeHist(){ if(_histPrimed) return; _histPrimed = true; _fillHist(); }
+    window.addEventListener('touchstart', _primeHist, { once: true, passive: true });
+    window.addEventListener('click', _primeHist, { once: true });
+    var _backExitArmed = false;
+    var _backExitTimer = null;
     window.addEventListener('popstate', function(){
-      // 어떤 경우든 즉시 히스토리를 다시 채워, 연타로도 사이트를 벗어나지 않게
-      history.pushState({ _guard: true }, '', location.href);
+      // 모달/메뉴가 열려 있으면 그것부터 닫고 머문다
       if (_anyOpen()){
+        history.pushState({ _guard: true }, '', location.href);
         _closeTopOne();
+        return;
       }
-      // 메인화면(_anyOpen=false)에서는 위 pushState로 그대로 머문다.
+      // 메인화면: 한 번 더 누르면 종료
+      if (_backExitArmed){
+        // 2초 내 두 번째 뒤로가기 -> 실제 종료 허용
+        if (_backExitTimer){ clearTimeout(_backExitTimer); _backExitTimer = null; }
+        history.back();
+        return;
+      }
+      // 첫 번째 뒤로가기: 머물면서 안내
+      history.pushState({ _guard: true }, '', location.href);
+      _backExitArmed = true;
+      if (typeof showToast === 'function') showToast('\uD55C \uBC88 \uB354 \uB204\uB974\uBA74 \uC885\uB8CC\uB429\uB2C8\uB2E4');
+      if (_backExitTimer) clearTimeout(_backExitTimer);
+      _backExitTimer = setTimeout(function(){ _backExitArmed = false; _backExitTimer = null; }, 2000);
     });
   } catch(e) {}
 })();
