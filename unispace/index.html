@@ -1472,6 +1472,11 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   }
   /* 통계 카드 2열 */
   .stats-bar { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+  /* 모바일만: 계약고객 <-> 리크루팅 위치 교환 */
+  #st1-card { order: 1; }
+  #stat2-admin, #stat2-fp { order: 4; }
+  #stat3-alarm, #stat3-admin, #stat3-fp { order: 3; }
+  #stat4-recruit, #stat4-alarm { order: 2; }
   .stat { padding: 12px 13px; border-radius: 14px; }
   /* 보장월초 카드: 내용이 많아 여유를 더 줌 */
   #st1-card { padding: 15px 18px 16px 15px; }
@@ -11391,10 +11396,11 @@ function rc2SaveCand() {
   }catch(e){}
 
   var d = rc2GetMonthData(getCurrentYM());
-  // 추진일정 탭에서 새로 추가하는 일정은 로그인한 사람의 실제 소속 지점으로 저장
-  // (지점장이 상단 알파/브라보 칩을 어디에 두었든, 브라보지점장이 넣으면 브라보로)
+  // 새 일정 지점: 대표/관리자는 상단에서 선택한 지점(rc2.branch) 그대로 사용,
+  // 단일 지점 소속(지점장·FP)만 본인 지점으로 고정
+  var _isRecAdmin = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01');
   var _saveBranch = rc2.branch;
-  if(!rc2.editId && rc2.view==='cal' && typeof _recruitMyBranch==='function'){
+  if(!_isRecAdmin && !rc2.editId && rc2.view==='cal' && typeof _recruitMyBranch==='function'){
     _saveBranch = _recruitMyBranch();
   }
   var rec = {
@@ -12109,10 +12115,14 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     var _cTime = _isAl ? '#0F6E56' : '#5A2FA0';
     var _cName = _isAl ? '#0A3D30' : '#3A1D6B';
     var _cRef  = _isAl ? '#3F8A72' : '#7B5AAD';
-    var _newBadge='';
-    if(E.createdAt){ var _ct2=new Date(E.createdAt).getTime(); if(!isNaN(_ct2)){ var _diff=Date.now()-_ct2; if(_diff>=0 && _diff<3*60*60*1000){ var _nbc=_isAl?'#1D9E75':'#7B52D0'; _newBadge=' <span style="background:'+_nbc+';color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;vertical-align:middle">NEW</span>'; } } }
-    rows += '<div class="rc2-cal-rowwrap" data-rcwrap="'+E.id+'_'+(E.evid||'')+'" style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;border-radius:8px;background:'+_rowBg+'">'+
-      '<div class="rc2-cal-row" style="flex:1;min-width:0"><span class="t" style="color:'+_cTime+';font-weight:700">'+(E.time||'-')+'</span><span class="nm" style="color:'+_cName+'">'+rc2Esc(E.name)+'</span>'+_newBadge+'<span class="rf" style="color:'+_cRef+'">'+refTxt+'</span><span class="tags">'+typeTag+doneTag+brTag+'</span></div>'+
+    var _nbc = _isAl ? '#1D9E75' : '#7B52D0';
+    var _isNew=false;
+    if(E.createdAt){ var _ct2=new Date(E.createdAt).getTime(); if(!isNaN(_ct2)){ var _diff=Date.now()-_ct2; if(_diff>=0 && _diff<3*60*60*1000) _isNew=true; } }
+    var _wrapExtra = _isNew ? ('border:2px solid '+_nbc+';box-shadow:0 0 0 3px '+(_isAl?'rgba(29,158,117,.18)':'rgba(123,82,208,.18)')+';') : '';
+    var _ribbon = _isNew ? ('<span style="position:absolute;top:0;right:0;background:'+_nbc+';color:#fff;font-size:10px;font-weight:800;padding:3px 12px;border-bottom-left-radius:10px;border-top-right-radius:8px;letter-spacing:.5px;line-height:1.2">NEW</span>') : '';
+    rows += '<div class="rc2-cal-rowwrap" data-rcwrap="'+E.id+'_'+(E.evid||'')+'" style="position:relative;display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;border-radius:8px;background:'+_rowBg+';'+_wrapExtra+'">'+
+      _ribbon+
+      '<div class="rc2-cal-row" style="flex:1;min-width:0"><span class="t" style="color:'+_cTime+';font-weight:700">'+(E.time||'-')+'</span><span class="nm" style="color:'+_cName+'">'+rc2Esc(E.name)+'</span><span class="rf" style="color:'+_cRef+'">'+refTxt+'</span><span class="tags">'+typeTag+doneTag+brTag+'</span></div>'+
       '<div style="display:flex;gap:5px;flex-shrink:0">'+_btns+'</div>'+
     '</div>';
   }
@@ -15130,12 +15140,17 @@ function doCheckin() { doSmartCheckin(); }
       return false;
     }
     // 뒤로가기 버퍼를 여러 칸 미리 쌓아둠 (PC 연타 대비)
-    for (var _bi = 0; _bi < 3; _bi++) {
-      history.pushState(null, '', location.href);
+    function _fillHist(){
+      for (var _bi = 0; _bi < 5; _bi++) {
+        history.pushState({ _guard: true, _i: _bi }, '', location.href);
+      }
     }
+    _fillHist();
+    // bfcache 복귀(뒤로/앞으로 캐시)나 재표시 때도 히스토리 다시 채움
+    window.addEventListener('pageshow', function(){ _fillHist(); });
     window.addEventListener('popstate', function(){
       // 어떤 경우든 즉시 히스토리를 다시 채워, 연타로도 사이트를 벗어나지 않게
-      history.pushState(null, '', location.href);
+      history.pushState({ _guard: true }, '', location.href);
       if (_anyOpen()){
         _closeTopOne();
       }
