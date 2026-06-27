@@ -16362,7 +16362,7 @@ if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ s
 // ===== 모바일 당겨서 새로고침 (대시보드 전용) =====
 (function(){
   if(!('ontouchstart' in window) && !(navigator.maxTouchPoints>0)) return;
-  var startY=0, pulling=false, dist=0;
+  var startY=0, pulling=false, dist=0, _decided=false, _armed=false;
   var THRESHOLD=70;
   var ind=null;
   function _anyModalOpen(){
@@ -16382,7 +16382,7 @@ if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ s
     return ind;
   }
   document.addEventListener('touchstart', function(e){
-    pulling=false; dist=0;
+    pulling=false; dist=0; _decided=false; _armed=false;
     if(_anyModalOpen()){ _hideInd(); return; }
     if(window.scrollY>0) return;
     // 터치 시작 지점이 어떤 오버레이/모달 내부면 무시
@@ -16393,6 +16393,14 @@ if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ s
     if(!pulling) return;
     if(_anyModalOpen()){ pulling=false; _hideInd(); return; }
     dist=e.touches[0].clientY-startY;
+    // 첫 움직임 방향 판정: 일정 거리 이상 움직이기 전엔 간섭하지 않음
+    if(!_decided){
+      if(Math.abs(dist) < 12) return;          // 미세 움직임은 무시 (일반 탭/짧은 스크롤 보호)
+      _decided = true;
+      _armed = (dist > 0 && window.scrollY<=0); // 최상단에서 아래로 시작할 때만 당기기로 인정
+      if(!_armed){ pulling=false; _hideInd(); return; } // 위로 스크롤 등은 즉시 해제
+    }
+    if(!_armed){ return; }
     if(dist>0 && window.scrollY<=0){
       var ip=_mkInd();
       var show=Math.min(dist,THRESHOLD+30);
@@ -16405,13 +16413,13 @@ if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ s
   document.addEventListener('touchend', function(){
     if(!pulling){ _hideInd(); return; }
     pulling=false;
-    if(dist>=THRESHOLD && window.scrollY<=0 && !_anyModalOpen()){
+    if(_armed && dist>=THRESHOLD && window.scrollY<=0 && !_anyModalOpen()){
       if(ind){ ind.textContent='\u21BB \uC0C8\uB85C\uACE0\uCE68 \uC911...'; ind.style.transform='translateX(-50%) translateY(8px)'; }
       setTimeout(function(){ location.reload(); }, 150);
     } else {
       _hideInd();
     }
-    dist=0;
+    dist=0; _decided=false; _armed=false;
   }, {passive:true});
 })();
 </script>
