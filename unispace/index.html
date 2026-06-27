@@ -12152,38 +12152,56 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     return;
   }
   evs.sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
-  var rows='';
+  // C-1: 알파/브라보 2열 + 탭하면 상세 펼침
+  var _alCol='', _brCol='', _details='';
+  var _alN=0, _brN=0;
   for(var i=0;i<evs.length;i++){
     var E=evs[i];
     var _tys = (E.types && E.types.length) ? E.types : (E.type?[E.type]:[]);
-    var _tm0 = rc2TypeMeta(_tys[0]||'');
-    var tColor = 'color:'+_tm0.deep;
     var typeTag = '';
     for(var tj=0; tj<_tys.length; tj++){ var _tmj=rc2TypeMeta(_tys[tj]); typeTag += '<span class="rc2-cal-tag" style="background:#fff;color:'+_tmj.deep+'">'+_tmj.key+'</span>'; }
     var brTag = E.branch==='alpha' ? '<span class="rc2-cal-tag" style="background:var(--alpha-soft);color:var(--alpha-deep)">알파</span>' : '<span class="rc2-cal-tag" style="background:var(--bravo-soft);color:var(--bravo-deep)">브라보</span>';
     var doneTag = E.cancelled ? '<span class="rc2-cal-tag" style="background:rgba(226,75,74,.16);color:#C0392B">✕불참/취소</span>' : (E.done ? '<span class="rc2-cal-tag" style="background:#E7F5EC;color:#1F7A4D">✓완료</span>' : '');
     var refTxt = E.ref ? '추천 '+rc2Esc(E.ref) : '';
     var _hasResult = (E.done || E.cancelled);
-    var _btnEdit = '<button type="button" class="rc2-rowact-btn" data-act="edit" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" style="padding:6px 9px;border:1px solid var(--bdr2);border-radius:7px;background:var(--bg2);color:var(--text1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">수정</button>';
-    var _btnResult = '<button type="button" class="rc2-rowact-btn" data-act="result" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" data-rcevid="'+(E.evid||'')+'" style="padding:6px 9px;border:none;border-radius:7px;background:#1F9268;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+(_hasResult?'결과수정':'결과입력')+'</button>';
-    var _btnDel = '<button type="button" class="rc2-rowact-btn" data-act="del" data-rcid="'+E.id+'" data-rcevid="'+(E.evid||'')+'" data-rcname="'+rc2Esc(E.name)+'" style="padding:6px 9px;border:1px solid #E0A4A4;border-radius:7px;background:#fff;color:#A32D2D;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">삭제</button>';
+    var _btnEdit = '<button type="button" class="rc2-rowact-btn" data-act="edit" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" style="padding:7px 11px;border:1px solid var(--bdr2);border-radius:7px;background:var(--bg2);color:var(--text1);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">수정</button>';
+    var _btnResult = '<button type="button" class="rc2-rowact-btn" data-act="result" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" data-rcevid="'+(E.evid||'')+'" style="padding:7px 11px;border:none;border-radius:7px;background:#1F9268;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+(_hasResult?'결과수정':'결과입력')+'</button>';
+    var _btnDel = '<button type="button" class="rc2-rowact-btn" data-act="del" data-rcid="'+E.id+'" data-rcevid="'+(E.evid||'')+'" data-rcname="'+rc2Esc(E.name)+'" style="padding:7px 11px;border:1px solid #E0A4A4;border-radius:7px;background:#fff;color:#A32D2D;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">삭제</button>';
     var _btns = _hasResult ? (_btnResult + _btnDel) : (_btnEdit + _btnResult + _btnDel);
     var _isAl = (E.branch==='alpha');
-    var _rowBg = _isAl ? '#DCEFE8' : '#EADCF6';
     var _cTime = _isAl ? '#0F6E56' : '#5A2FA0';
     var _cName = _isAl ? '#0A3D30' : '#3A1D6B';
     var _cRef  = _isAl ? '#3F8A72' : '#7B5AAD';
+    var _miniBg = _isAl ? '#DCEFE8' : '#EADCF6';
     var _nbc = _isAl ? '#1D9E75' : '#7B52D0';
     var _isNew=false;
     if(E.createdAt){ var _ct2=new Date(E.createdAt).getTime(); if(!isNaN(_ct2)){ var _diff=Date.now()-_ct2; if(_diff>=0 && _diff<3*60*60*1000) _isNew=true; } }
-    var _wrapExtra = _isNew ? ('border:2px solid '+_nbc+';box-shadow:0 0 0 3px '+(_isAl?'rgba(29,158,117,.18)':'rgba(123,82,208,.18)')+';') : '';
-    var _ribbon = _isNew ? ('<span style="position:absolute;top:0;right:0;background:'+_nbc+';color:#fff;font-size:10px;font-weight:800;padding:3px 12px;border-bottom-left-radius:10px;border-top-right-radius:8px;letter-spacing:.5px;line-height:1.2">NEW</span>') : '';
-    rows += '<div class="rc2-cal-rowwrap" data-rcwrap="'+E.id+'_'+(E.evid||'')+'" style="position:relative;display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;border-radius:8px;background:'+_rowBg+';'+_wrapExtra+'">'+
-      _ribbon+
-      '<div class="rc2-cal-row" style="flex:1;min-width:0"><span class="t" style="color:'+_cTime+';font-weight:700">'+(E.time||'-')+'</span><span class="nm" style="color:'+_cName+'">'+rc2Esc(E.name)+'</span><span class="rf" style="color:'+_cRef+'">'+refTxt+'</span><span class="tags">'+typeTag+doneTag+brTag+'</span></div>'+
-      '<div style="display:flex;gap:5px;flex-shrink:0">'+_btns+'</div>'+
+    var _key = E.id+'_'+(E.evid||'')+'_'+i;
+    var _newDot = _isNew ? ('<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+_nbc+';margin-left:4px;vertical-align:middle"></span>') : '';
+    // 미니 카드 (좌/우 컬럼)
+    var _mini = '<div class="rc2-mini" data-rcmini="'+_key+'" style="cursor:pointer;background:'+_miniBg+';border-radius:9px;padding:8px 9px;margin-bottom:6px'+(_isNew?(';border:1.5px solid '+_nbc):'')+'">'+
+      '<div><span style="font-weight:800;font-size:12.5px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:600;font-size:12.5px;margin-left:4px;color:'+_cName+'">'+rc2Esc(E.name)+'</span>'+_newDot+'</div>'+
+      (refTxt?('<div style="font-size:10px;margin-top:2px;color:'+_cRef+';opacity:.85">'+refTxt+'</div>'):'')+
+    '</div>';
+    if(_isAl){ _alCol+=_mini; _alN++; } else { _brCol+=_mini; _brN++; }
+    // 상세 (탭하면 표시) - 하단 공통 영역
+    _details += '<div class="rc2-detail-box" data-rcdetail="'+_key+'" style="display:none;background:'+_miniBg+';border:1.5px solid '+_nbc+';border-radius:11px;padding:12px;margin-bottom:8px">'+
+      '<div style="display:flex;align-items:center;gap:7px;margin-bottom:3px"><span style="font-weight:800;font-size:15px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:700;font-size:15px;color:'+_cName+'">'+rc2Esc(E.name)+'</span></div>'+
+      (refTxt?('<div style="font-size:11px;margin-bottom:8px;color:'+_cRef+'">'+refTxt+'</div>'):'<div style="margin-bottom:8px"></div>')+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">'+typeTag+doneTag+brTag+'</div>'+
+      '<div style="display:flex;gap:6px">'+_btns+'</div>'+
     '</div>';
   }
+  var _alHead='<div style="font-weight:800;font-size:12px;padding:7px;border-radius:8px;text-align:center;margin-bottom:8px;background:#1D9E75;color:#fff">⚡ 알파 '+_alN+'</div>';
+  var _brHead='<div style="font-weight:800;font-size:12px;padding:7px;border-radius:8px;text-align:center;margin-bottom:8px;background:#7B52D0;color:#fff">🌊 브라보 '+_brN+'</div>';
+  if(!_alCol) _alCol='<div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">없음</div>';
+  if(!_brCol) _brCol='<div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">없음</div>';
+  var rows = '<div style="display:flex;gap:7px;margin-bottom:8px">'+
+    '<div style="flex:1;min-width:0">'+_alHead+_alCol+'</div>'+
+    '<div style="flex:1;min-width:0">'+_brHead+_brCol+'</div>'+
+  '</div>'+
+  '<div class="rc2-detail-hint" style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:8px">일정을 탭하면 상세·버튼이 열립니다</div>'+
+  _details;
   document.getElementById('rc2CalDetail').innerHTML='<div class="rc2-cal-detail">'+head+rows+_ivRenderSection(dayKey, evs)+'</div>';
   rc2WireDetailRows();
   _ivWireSlots(dayKey);
@@ -12200,7 +12218,23 @@ function rc2CloseCalDetail(){
   rc2.calSel='';
 }
 function rc2WireDetailRows() {
-  // 각 일정 옆 수정/결과입력 버튼
+  // 미니 카드 탭 -> 해당 상세 토글 (다른 상세는 닫음)
+  var minis = document.querySelectorAll('#rc2CalDetail .rc2-mini');
+  for(var mi=0; mi<minis.length; mi++) minis[mi].addEventListener('click', function(){
+    var key=this.getAttribute('data-rcmini');
+    var boxes=document.querySelectorAll('#rc2CalDetail .rc2-detail-box');
+    var target=null;
+    for(var k=0;k<boxes.length;k++){
+      if(boxes[k].getAttribute('data-rcdetail')===key){ target=boxes[k]; }
+      else { boxes[k].style.display='none'; }
+    }
+    if(target){
+      var open = target.style.display!=='none' && target.style.display!=='';
+      target.style.display = open ? 'none' : 'block';
+      if(target.style.display==='block'){ try{ target.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){} }
+    }
+  });
+  // 각 일정 옆 수정/결과입력/삭제 버튼
   var btns = document.querySelectorAll('#rc2CalDetail .rc2-rowact-btn');
   for(var b=0;b<btns.length;b++) btns[b].addEventListener('click', function(e){
     e.stopPropagation();
