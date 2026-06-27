@@ -2102,6 +2102,9 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 .rc2-pk-day.sat { color:#378ADD; }
 .rc2-pk-day.hol { color:#E24B4A; font-weight:700; }
 .rc2-pk-day.sel { background:var(--purple); color:#fff !important; font-weight:700; }
+.rc2-pk-day.pk-mine { background:rgba(201,168,76,.16); border-radius:7px; }
+.rc2-pk-day.pk-today { box-shadow:inset 0 0 0 2px var(--gold); border-radius:7px; font-weight:700; }
+.rc2-pk-day.pk-today.sel, .rc2-pk-day.pk-mine.sel { background:var(--purple); box-shadow:none; }
 .rc2-pk-time { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .rc2-pk-tsel { font-size:15px; font-weight:700; padding:9px 12px; background:var(--bg3); border:1.5px solid var(--bdr2); border-radius:9px; color:var(--text); font-family:'Noto Sans KR',sans-serif; min-width:64px; cursor:pointer; }
 .rc2-pk-result { font-size:11px; color:#A78BFA; margin-top:6px; font-weight:600; }
@@ -2654,7 +2657,7 @@ window.UNISPACE_FCM = {
 <div class="mgmt-overlay" id="rc2ResOverlay">
   <div class="mgmt-box rc2-addbox">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <div class="mgmt-title">결과 입력</div>
+      <div class="mgmt-title" id="rc2ResTitle">결과 입력</div>
       <button type="button" class="modal-close-x" onclick="rc2CloseRes()" aria-label="닫기">✕</button>
     </div>
     <div class="mgmt-sub" id="rc2ResSub" style="margin-bottom:14px"></div>
@@ -2717,7 +2720,6 @@ window.UNISPACE_FCM = {
     </div>
 
     <div class="mgmt-btns">
-      <button type="button" class="mgmt-btn mgmt-btn-cancel" id="rc2ResDelBtn" onclick="rc2DeleteEvt()" style="color:#C0392B">이 일정 삭제</button>
       <button type="button" class="mgmt-btn mgmt-btn-cancel" onclick="rc2CloseRes()">취소</button>
       <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="rc2SaveRes()">결과 저장</button>
     </div>
@@ -10769,10 +10771,17 @@ function rc2SwitchView(v, el) {
   var tabBar = document.getElementById('recruitTabBar');
   var _listAccess = (typeof _canSeeRecruitList==='function') ? _canSeeRecruitList() : false;
   if(v==='list'){
-    var myBr = (typeof _recruitMyBranch==='function') ? _recruitMyBranch() : 'alpha';
-    if(tabBar) tabBar.style.display = 'none';
-    if(rc2.branch !== myBr){
-      rc2SwitchBranch(myBr, document.getElementById(myBr==='bravo'?'rTab-bravo':'rTab-alpha'));
+    var _isRecAdmin2 = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01');
+    if(_isRecAdmin2){
+      // 대표/관리자: 지점 칩 보여주고 현재 선택 지점 그대로 유지
+      if(tabBar) tabBar.style.display = _listAccess ? '' : 'none';
+    } else {
+      // 단일 지점 소속(지점장·FP): 본인 지점 고정 + 칩 숨김
+      var myBr = (typeof _recruitMyBranch==='function') ? _recruitMyBranch() : 'alpha';
+      if(tabBar) tabBar.style.display = 'none';
+      if(rc2.branch !== myBr){
+        rc2SwitchBranch(myBr, document.getElementById(myBr==='bravo'?'rTab-bravo':'rTab-alpha'));
+      }
     }
     rc2RenderList();
   } else {
@@ -10808,7 +10817,12 @@ function rc2OnGoalInput() {
 
 function rc2BranchList(d) {
   var out = [];
-  for (var i=0;i<d.list.length;i++) if(d.list[i].branch===rc2.branch) out.push(d.list[i]);
+  for (var i=0;i<d.list.length;i++){
+    var _b = String(d.list[i].branch||'');
+    var _isAl = (_b==='alpha' || _b.indexOf('알파')>=0);
+    var _norm = _isAl ? 'alpha' : 'bravo';
+    if(_norm===rc2.branch) out.push(d.list[i]);
+  }
   return out;
 }
 
@@ -10840,6 +10854,17 @@ function rc2RenderSummary(d) {
   var gl = document.getElementById('rc2GoalBranchLbl'); if(gl) gl.textContent = bn + ' 월평균 입과 목표';
 }
 
+function rc2DtKey(dt) {
+  if(!dt) return '';
+  var s0 = String(dt).trim();
+  var m1 = s0.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m1){ var mo=+m1[2], d=+m1[3]; return m1[1]+'-'+(mo<10?'0':'')+mo+'-'+(d<10?'0':'')+d; }
+  var m2 = s0.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+  if(m2){ var mo2=+m2[2], d2=+m2[3]; return m2[1]+'-'+(mo2<10?'0':'')+mo2+'-'+(d2<10?'0':'')+d2; }
+  var dd = new Date(s0);
+  if(!isNaN(dd.getTime())){ var y=dd.getFullYear(), mo3=dd.getMonth()+1, d3=dd.getDate(); return y+'-'+(mo3<10?'0':'')+mo3+'-'+(d3<10?'0':'')+d3; }
+  return '';
+}
 function rc2DtLabel(dt) {
   if(!dt) return '';
   var s0 = String(dt).trim();
@@ -11270,6 +11295,15 @@ function rc2RenderEvtPicker() {
   for(var e=0;e<startDow;e++) html += '<div class="rc2-pk-day empty"></div>';
   var pkMs=(pk.m+1<10?'0':'')+(pk.m+1);
   var _loadMap = rc2DayLoadMap(pk.y, pk.m);
+  // 오늘 날짜 키
+  var _tdNow = new Date();
+  var _todayKey = _tdNow.getFullYear()+'-'+((_tdNow.getMonth()+1<10?'0':'')+(_tdNow.getMonth()+1))+'-'+((_tdNow.getDate()<10?'0':'')+_tdNow.getDate());
+  // 이 후보자가 잡힌/다녀간 일정 날짜 집합
+  var _myDays = {};
+  var _myEvs = rc2.editEvents || [];
+  for(var _me=0;_me<_myEvs.length;_me++){
+    if(_myEvs[_me] && _myEvs[_me].dt){ var _mk=rc2DtKey(_myEvs[_me].dt); if(_mk) _myDays[_mk]=true; }
+  }
   for(var dnum=1;dnum<=daysIn;dnum++){
     var dow = (startDow+dnum-1)%7;
     var dda=(dnum<10?'0':'')+dnum;
@@ -11277,6 +11311,8 @@ function rc2RenderEvtPicker() {
     var cls = 'rc2-pk-day';
     if(dow===0) cls+=' sun'; else if(dow===6) cls+=' sat';
     if(rc2IsHoliday(dayKey)) cls+=' hol';
+    if(dayKey===_todayKey) cls+=' pk-today';
+    if(_myDays[dayKey]) cls+=' pk-mine';
     if(selDay===dnum) cls+=' sel';
     var _lm=_loadMap[dayKey];
     if(_lm){
@@ -11510,13 +11546,16 @@ function rc2OpenRes(candId, evtId) {
   var evs = rc2NormEvents(it);
   var ev=null; for(var e=0;e<evs.length;e++) if(evs[e].id===evtId){ ev=evs[e]; break; }
   if(!ev){ showToast('일정을 찾을 수 없습니다'); return; }
-  rc2res = { candId:candId, evtId:evtId, outcome:(ev.cancelled?'불참':(ev.done?'완료':'')), nextTypes:[], nextDt:'', status:(it.status||'추진중'), _pk:null };
+  var _myD={}; for(var _md=0;_md<evs.length;_md++){ if(evs[_md] && evs[_md].dt){ var _mdk=rc2DtKey(evs[_md].dt); if(_mdk) _myD[_mdk]=true; } }
+  rc2res = { candId:candId, evtId:evtId, outcome:(ev.cancelled?'불참':(ev.done?'완료':'')), nextTypes:[], nextDt:'', status:(it.status||'추진중'), _pk:null, myDays:_myD };
   var dl = ev.dt ? rc2DtLabel(ev.dt) : '';
   document.getElementById('rc2ResSub').textContent = it.name + ' · ' + (ev.types||[]).join('·') + (dl?(' · '+dl):'');
   // 결과가 이미 입력된 경우만 '결과입력 취소' 버튼 노출
+  var _hasResult = !!(ev.done || ev.cancelled);
+  var _resTitleEl = document.getElementById('rc2ResTitle');
+  if(_resTitleEl) _resTitleEl.textContent = _hasResult ? '결과 수정' : '결과 입력';
   var _planBtn = document.getElementById('rc2ResPlan');
   if(_planBtn){
-    var _hasResult = !!(ev.done || ev.cancelled);
     if(_hasResult){
       _planBtn.style.display='';
       _planBtn.textContent='↩ 결과입력 취소';
@@ -11593,9 +11632,17 @@ function rc2ResRenderPicker(){
   for(var e=0;e<startDow;e++) html+='<div class="rc2-pk-day empty"></div>';
   var pkMs=(pk.m+1<10?'0':'')+(pk.m+1);
   var _loadMap = rc2DayLoadMap(pk.y, pk.m);
+  // 오늘 날짜 키
+  var _tdNowR = new Date();
+  var _todayKeyR = _tdNowR.getFullYear()+'-'+((_tdNowR.getMonth()+1<10?'0':'')+(_tdNowR.getMonth()+1))+'-'+((_tdNowR.getDate()<10?'0':'')+_tdNowR.getDate());
+  // 이 후보자가 잡힌/다녀간 일정 날짜 집합
+  var _myDaysR = rc2res.myDays || {};
   for(var dnum=1;dnum<=daysIn;dnum++){
     var dow=(startDow+dnum-1)%7; var dda=(dnum<10?'0':'')+dnum; var dayKey=pk.y+'-'+pkMs+'-'+dda;
-    var cls='rc2-pk-day'; if(dow===0)cls+=' sun'; else if(dow===6)cls+=' sat'; if(rc2IsHoliday(dayKey))cls+=' hol'; if(selDay===dnum)cls+=' sel';
+    var cls='rc2-pk-day'; if(dow===0)cls+=' sun'; else if(dow===6)cls+=' sat'; if(rc2IsHoliday(dayKey))cls+=' hol';
+    if(dayKey===_todayKeyR) cls+=' pk-today';
+    if(_myDaysR[dayKey]) cls+=' pk-mine';
+    if(selDay===dnum)cls+=' sel';
     var _lm=_loadMap[dayKey];
     if(_lm){
       var _hasA_=_lm.al>0, _hasB_=_lm.br>0;
