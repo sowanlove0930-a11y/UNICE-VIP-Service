@@ -15336,13 +15336,21 @@ function doCheckin() { doSmartCheckin(); }
     window.addEventListener('click', _refillIfLow);
     var _backExitArmed = false;
     var _backExitTimer = null;
+    function _deferGuard(){
+      // \uCF5C\uBC31 \uBC16\uC5D0\uC11C pushState (\uC0BC\uC131\uBE0C\uB77C\uC6B0\uC800: popstate \uCF5C\uBC31 \uB0B4 pushState \uBB34\uD6A8\uD654 \uC6B0\uD68C)
+      setTimeout(function(){
+        try {
+          while (_guardCount < 5) { history.pushState({ _guard: true }, '', location.href); _guardCount++; }
+        } catch(e) {}
+      }, 0);
+    }
     window.addEventListener('popstate', function(){
       // \uC774 popstate\uAC00 \uAC00\uB4DC 1\uCE78\uC744 \uC18C\uBE44\uD568
       if (_guardCount > 0) _guardCount--;
       // 모달/메뉴가 열려 있으면 그것부터 닫고 머문다
       if (_anyOpen()){
-        history.pushState({ _guard: true }, '', location.href); _guardCount++;
         _closeTopOne();
+        _deferGuard();
         // \uBAA8\uB2EC\uC744 \uB2EB\uC558\uC73C\uBA74 \uC885\uB8CC \uCE74\uC6B4\uD130 \uCD08\uAE30\uD654
         _backExitArmed = false;
         if (_backExitTimer){ clearTimeout(_backExitTimer); _backExitTimer = null; }
@@ -15352,12 +15360,11 @@ function doCheckin() { doSmartCheckin(); }
       if (_backExitArmed){
         // 2초 내 두 번째 뒤로가기 -> 실제 종료 허용
         if (_backExitTimer){ clearTimeout(_backExitTimer); _backExitTimer = null; }
-        alert('[pop] \uC885\uB8CC\uACBD\uB85C: armed\uC774\uC5B4\uC11C history.back \uC2E4\uD589');
         history.back();
         return;
       }
       // 첫 번째 뒤로가기: 머물면서 안내
-      history.pushState({ _guard: true }, '', location.href); _guardCount++;
+      _deferGuard();
       _backExitArmed = true;
       if (typeof showToast === 'function') showToast('\uD55C \uBC88 \uB354 \uB204\uB974\uBA74 \uC885\uB8CC\uB429\uB2C8\uB2E4');
       if (_backExitTimer) clearTimeout(_backExitTimer);
