@@ -12588,12 +12588,23 @@ function _ivBranchRow(dayKey, evs, br){
   return '<div class="iv-brow" style="margin-bottom:10px"><div class="iv-blbl" style="font-size:11px;font-weight:700;color:'+lblColor+';margin-bottom:6px">'+label+'</div>'+
     '<div class="iv-chips" style="display:flex;flex-wrap:wrap;gap:6px">'+chips+'</div></div>';
 }
+var _ivExpanded = {}; // dayKey -> bool (펼침 상태 기억)
 function _ivRenderSection(dayKey, evs){
   if(!_ivCanView()) return '';
+  var open = (_ivExpanded[dayKey]===true);
+  var arrow = open ? '\u25BE' : '\u25B8';
+  var body = open ? (_ivBranchRow(dayKey, evs, 'alpha')+_ivBranchRow(dayKey, evs, 'bravo')) : '';
   return '<div data-ivday="'+dayKey+'" class="iv-sec" style="background:#F0F6FC;border:1px solid #CFE2F5;border-radius:11px;padding:13px 14px;margin-top:12px">'+
-    '<div style="margin-bottom:11px">'+
-      '<span style="font-size:13px;font-weight:800;color:#185FA5">\uD83D\uDEAA \uB0B4\uBC29 \uC778\uD130\uBDF0 \uAC00\uB2A5 \uC2DC\uAC04</span></div>'+
-    _ivBranchRow(dayKey, evs, 'alpha')+_ivBranchRow(dayKey, evs, 'bravo')+'</div>';
+    '<div onclick="_ivToggleSection(\''+dayKey+'\')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer'+(open?';margin-bottom:11px':'')+'">'+
+      '<span style="font-size:13px;font-weight:800;color:#185FA5">\uD83D\uDEAA \uB0B4\uBC29 \uC778\uD130\uBDF0 \uAC00\uB2A5 \uC2DC\uAC04</span>'+
+      '<span style="font-size:12px;color:#185FA5;font-weight:700">'+arrow+'</span></div>'+
+    body+'</div>';
+}
+function _ivToggleSection(dayKey){
+  _ivExpanded[dayKey] = !(_ivExpanded[dayKey]===true);
+  var evByDay=rc2._evByDayCache||{};
+  var sec=document.querySelector('[data-ivday="'+dayKey+'"]');
+  if(sec){ sec.outerHTML=_ivRenderSection(dayKey, evByDay[dayKey]||[]); _ivWireSlots(dayKey); }
 }
 function _ivToggleSlot(dayKey, br, hhmm){
   if(!_ivCanEditBranch(br)) return;
@@ -12656,11 +12667,14 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     var doneTag = E.cancelled ? '<span class="rc2-cal-tag" style="background:rgba(226,75,74,.16);color:#C0392B">✕불참/취소</span>' : (E.done ? '<span class="rc2-cal-tag" style="background:#E7F5EC;color:#1F7A4D">✓완료</span>' : '');
     var refTxt = E.ref ? '추천 '+rc2Esc(E.ref) : '';
     var _hasResult = (E.done || E.cancelled);
-    var _btnEdit = '<button type="button" class="rc2-rowact-btn" data-act="edit" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" style="padding:7px 11px;border:1px solid var(--bdr2);border-radius:7px;background:var(--bg2);color:var(--text1);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">수정</button>';
-    var _btnResult = '<button type="button" class="rc2-rowact-btn" data-act="result" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" data-rcevid="'+(E.evid||'')+'" style="padding:7px 11px;border:none;border-radius:7px;background:#1F9268;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+(_hasResult?'결과수정':'결과입력')+'</button>';
-    var _btnDel = '<button type="button" class="rc2-rowact-btn" data-act="del" data-rcid="'+E.id+'" data-rcevid="'+(E.evid||'')+'" data-rcname="'+rc2Esc(E.name)+'" style="padding:7px 11px;border:1px solid #E0A4A4;border-radius:7px;background:#fff;color:#A32D2D;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">삭제</button>';
+    var _isAlBtn = (E.branch==='alpha');
+    var _vcColor = _isAlBtn ? '#1F7A4D' : '#6B4FA0';   // 확정 버튼 색 (지점)
+    var _resColor = _isAlBtn ? '#1F9268' : '#7B52D0';  // 결과입력 버튼 색 (지점)
+    var _btnEdit = '<button type="button" class="rc2-rowact-btn" data-act="edit" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" style="flex:0 0 auto;padding:8px 9px;border:1px solid var(--bdr2);border-radius:7px;background:var(--bg2);color:var(--text1);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">수정</button>';
+    var _btnResult = '<button type="button" class="rc2-rowact-btn" data-act="result" data-rcid="'+E.id+'" data-rcbr="'+E.branch+'" data-rcevid="'+(E.evid||'')+'" style="flex:1 1 auto;padding:8px 6px;border:none;border-radius:7px;background:'+_resColor+';color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+(_hasResult?'결과수정':'결과입력')+'</button>';
+    var _btnDel = '<button type="button" class="rc2-rowact-btn" data-act="del" data-rcid="'+E.id+'" data-rcevid="'+(E.evid||'')+'" data-rcname="'+rc2Esc(E.name)+'" style="flex:0 0 auto;padding:8px 9px;border:1px solid #E0A4A4;border-radius:7px;background:#fff;color:#A32D2D;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">삭제</button>';
     var _vcOn = (E.visitConfirm!==false);
-    var _btnVisit = '<button type="button" class="rc2-rowact-btn" data-act="visit" data-rcid="'+E.id+'" data-rcevid="'+(E.evid||'')+'" style="padding:7px 11px;border:1px solid '+(_vcOn?'#1F7A4D':'#D98324')+';border-radius:7px;background:'+(_vcOn?'#1F7A4D':'#fff')+';color:'+(_vcOn?'#fff':'#B85C1A')+';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+(_vcOn?'✓ 내방 확정':'🏠 내방 미확정')+'</button>';
+    var _btnVisit = '<button type="button" class="rc2-rowact-btn" data-act="visit" data-rcid="'+E.id+'" data-rcevid="'+(E.evid||'')+'" style="flex:1 1 auto;padding:8px 6px;border:1px solid '+(_vcOn?_vcColor:'#D98324')+';border-radius:7px;background:'+(_vcOn?_vcColor:'#fff')+';color:'+(_vcOn?'#fff':'#B85C1A')+';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+(_vcOn?'✓ 내방 확정':'🏠 미확정')+'</button>';
     var _btns = _hasResult ? (_btnVisit + _btnResult + _btnDel) : (_vcOn ? (_btnEdit + _btnVisit + _btnResult + _btnDel) : (_btnEdit + _btnVisit + _btnDel));
     var _isAl = (E.branch==='alpha');
     var _cTime = _isAl ? '#0F6E56' : '#5A2FA0';
@@ -12718,7 +12732,7 @@ function rc2RenderCalDetail(evByDay, dayKey) {
       (refTxt?('<div style="font-size:11px;margin-bottom:8px;color:'+_cRef+'">'+refTxt+'</div>'):'<div style="margin-bottom:8px"></div>')+
       _infoHtml+
       '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">'+typeTag+doneTag+brTag+'</div>'+
-      '<div style="display:flex;gap:6px">'+_btns+'</div>'+
+      '<div style="display:flex;gap:5px;flex-wrap:nowrap">'+_btns+'</div>'+
     '</div>';
   }
   var _alHead='<div style="font-weight:800;font-size:12px;padding:7px;border-radius:8px;text-align:center;margin-bottom:8px;background:#1D9E75;color:#fff">⚡ 알파 '+_alN+'</div>';
