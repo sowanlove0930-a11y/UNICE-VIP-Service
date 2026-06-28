@@ -3199,10 +3199,10 @@ memo (비고):
   · ~2009.09 가입 → "1세대"  (자기부담 없음~10%, 재가입 없음)
   · 2009.10~2017.03 가입 → "2세대"  (자기부담 10~20%)
   · 2017.04~2021.06 가입 → "3세대"  (자기부담 20~30%)
-  · 2021.07~2025.06 가입 → "4세대"  (급여20%·비급여30%)
-  · 2025.07~ 가입 → "5세대"  (급여20%·비급여30~50%)
-  🚨 2024년 가입이어도 5세대 아님 — 반드시 4세대로 분류
-  🚨 5세대는 2025년 7월 이후 출시 상품만 해당
+  · 2021.07~2026.05.05 가입 → "4세대"  (급여20%·비급여30%)
+  · 2026.05.06~ 가입 → "5세대"  (급여20%·비급여30~50%)
+  🚨 5세대는 2026년 5월 6일 이후 가입 상품만 해당 — 그 전(2025년 포함)은 모두 4세대
+  🚨 2025년 가입이어도 5세대 아님 — 반드시 4세대로 분류
   🚨 2007~2009년 가입은 반드시 1세대 — 2세대로 오분류 금지
   🚨 실손 가입 연도가 2009년 이전이면 무조건 1세대
   · 불명확하면 상품명/특약명으로 추정
@@ -5182,7 +5182,7 @@ function postProcessJson(json) {
         if (yr < 2009 || (yr === 2009 && mo <= 9)) correctGen = '1세대';
         else if (yr < 2017 || (yr === 2017 && mo <= 3)) correctGen = '2세대';
         else if (yr < 2021 || (yr === 2021 && mo <= 6)) correctGen = '3세대';
-        else if (yr < 2025 || (yr === 2025 && mo <= 6)) correctGen = '4세대';
+        else if (yr < 2026 || (yr === 2026 && mo <= 4)) correctGen = '4세대';
         else correctGen = '5세대';
         if (correctGen) si.generation = correctGen;
       }
@@ -5207,15 +5207,18 @@ function postProcessJson(json) {
       if (yr < 2009 || (yr === 2009 && mo <= 9)) return '1세대';
       if (yr < 2017 || (yr === 2017 && mo <= 3)) return '2세대';
       if (yr < 2021 || (yr === 2021 && mo <= 6)) return '3세대';
-      if (yr < 2025 || (yr === 2025 && mo <= 6)) return '4세대';
+      if (yr < 2026 || (yr === 2026 && mo <= 4)) return '4세대';
       return '5세대';
     }
     (json.contracts||[]).forEach(c => {
       if (!c.silson) { c.silson_generation = null; return; }
-      // silson_generation이 이미 설정돼 있으면 유지
+      // 가입일(coverage_period)로 정확히 계산 가능하면 날짜 기반 결과를 최우선 적용
+      // (AI가 "2025년=최신=5세대" 식으로 잘못 박아둔 값을 날짜로 교정 — 2025.07 미만은 4세대)
+      const calcGen = calcSilsonGen(c.coverage_period);
+      if (calcGen) { c.silson_generation = calcGen; return; }
+      // coverage_period 파싱 불가 시에만 기존 값 유지
       if (c.silson_generation && c.silson_generation !== '○') return;
-      const gen = calcSilsonGen(c.coverage_period);
-      c.silson_generation = gen || (json.silson_info && json.silson_info.generation) || '○';
+      c.silson_generation = (json.silson_info && json.silson_info.generation) || '○';
     });
   }
 
