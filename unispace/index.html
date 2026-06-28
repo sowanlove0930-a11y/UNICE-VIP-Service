@@ -2570,9 +2570,9 @@ window.UNISPACE_FCM = {
       <div class="rc2-cal-legend" style="display:flex;align-items:center;gap:10px">
         <span class="lg"><span style="display:inline-block;background:#1E7A50;color:#fff;font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;margin-right:3px">알</span>알파</span>
         <span class="lg"><span style="display:inline-block;background:#5A3FB0;color:#fff;font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;margin-right:3px">브</span>브라보</span>
-        <span class="lg"><span class="rc2-cal-dot" style="background:#E8820E"></span>입과</span>
+        <span class="lg"><span class="rc2-cal-dot" style="background:#C99A2E"></span>입과</span>
         <button type="button" id="rc2KakaoBtn" onclick="rc2CopyKakao()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:#FAE100;color:#3A1D1D;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">💬 카톡 복사</button>
-        <button type="button" id="rc2JoinEvtBtn" onclick="rc2OpenJoinEvt()" style="padding:6px 13px;border:none;border-radius:8px;background:#E8820E;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
+        <button type="button" id="rc2JoinEvtBtn" onclick="rc2OpenJoinEvt()" style="padding:6px 13px;border:none;border-radius:8px;background:#C99A2E;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
       </div>
       <div class="rc2-cal-dow">
         <div style="color:#D85A30">일</div><div style="color:var(--text3)">월</div><div style="color:var(--text3)">화</div><div style="color:var(--text3)">수</div><div style="color:var(--text3)">목</div><div style="color:var(--text3)">금</div><div style="color:#378ADD">토</div>
@@ -11325,7 +11325,10 @@ function rc2DeleteJoinEvt(){
 }
 function rc2LoadJoinEvtsFromGas(cb){
   if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ if(cb) cb(); return; }
-  var url=UNISPACE_GAS_URL+'?action=getJoinEvents&fp='+encodeURIComponent(currentUser.id)+'&ym='+encodeURIComponent(getCurrentYM());
+  // 현재 표시 중인 달력 월 기준 (calOffset 반영) — 등록월과 표시월 불일치 방지
+  var _b=new Date(); _b.setDate(1); _b.setMonth(_b.getMonth()+(rc2.calOffset||0));
+  var _ym=_b.getFullYear()+'-'+((_b.getMonth()+1<10?'0':'')+(_b.getMonth()+1));
+  var url=UNISPACE_GAS_URL+'?action=getJoinEvents&fp='+encodeURIComponent(currentUser.id)+'&ym='+encodeURIComponent(_ym);
   fetch(url).then(function(r){return r.json();}).then(function(res){
     if(res && res.ok && res.list){ rc2.joinEvents = res.list; }
     if(cb) cb();
@@ -12174,8 +12177,20 @@ function rc2DeleteCand() {
 }
 
 // ===== 통합 달력 =====
-function rc2CalMove(dir){ rc2.calOffset += dir; rc2.calSel=''; rc2RenderCal(); }
-function rc2RenderCal() {
+function rc2CalMove(dir){
+  rc2.calOffset += dir; rc2.calSel='';
+  // 이전 월 입과일정을 즉시 비워 잘못된 칩이 잠깐 보이지 않게 한 뒤, 표시월 데이터 받아 한 번만 렌더
+  rc2.joinEvents = [];
+  rc2RenderCal();
+  rc2LoadJoinEvtsFromGas(function(){ rc2RenderCal(); });
+}
+var _rc2CalRenderTimer = null;
+function rc2RenderCal(){
+  // 짧은 시간 내 여러 번 호출되면 마지막 한 번만 실제 렌더 (깜빡임 방지)
+  if(_rc2CalRenderTimer){ clearTimeout(_rc2CalRenderTimer); }
+  _rc2CalRenderTimer = setTimeout(function(){ _rc2CalRenderTimer=null; _rc2RenderCalNow(); }, 40);
+}
+function _rc2RenderCalNow() {
   // 입과일정 버튼: 대표·지점장·교육지점장만 (매니저·FP·센터장 숨김)
   var _jb=document.getElementById('rc2JoinEvtBtn');
   if(_jb){ _jb.style.display = _canEditJoinEvt() ? '' : 'none'; }
@@ -12293,7 +12308,7 @@ function rc2RenderCal() {
     if(rc2.joinEvents && rc2.joinEvents.length){
       for(var je=0; je<rc2.joinEvents.length; je++){
         if(rc2.joinEvents[je].date===dayKey){
-          joinHtml += '<div class="rc2-cal-ev rc2-joinevt" data-jeid="'+rc2.joinEvents[je].id+'" style="background:#E8820E;color:#fff;font-weight:700">'+rc2Esc(rc2.joinEvents[je].label)+'</div>';
+          joinHtml += '<div class="rc2-cal-ev rc2-joinevt" data-jeid="'+rc2.joinEvents[je].id+'" style="background:#C99A2E;color:#fff;font-weight:700">'+rc2Esc(rc2.joinEvents[je].label)+'</div>';
           hasJoinEvt=true;
         }
       }
