@@ -12328,9 +12328,14 @@ function rc2RenderCal() {
   var cells = document.querySelectorAll('#rc2CalGrid .rc2-cal-cell[data-calday]');
   for(var c=0;c<cells.length;c++) cells[c].addEventListener('click', function(){
     var dk=this.getAttribute('data-calday');
+    if(!dk) return;
     rc2.calSel=dk;
     rc2RenderCalDetail(rc2._evByDayCache||{}, dk);
-    rc2OpenCalDetail();
+    // 렌더된 내용이 실제로 채워졌을 때만 팝업 표시 (빈 흰박스 방지)
+    var _dc=document.getElementById('rc2CalDetail');
+    if(_dc && _dc.innerHTML && _dc.innerHTML.replace(/\s/g,'').length>0){
+      rc2OpenCalDetail();
+    }
   });
 
   // 입과일정 칩 클릭 → 수정 (셀 클릭보다 우선)
@@ -12751,6 +12756,13 @@ function rc2RenderCalDetail(evByDay, dayKey) {
 }
 function rc2OpenCalDetail(){
   var p=document.getElementById('rc2CalDetailPop'), m=document.getElementById('rc2CalDetailMask');
+  var dc=document.getElementById('rc2CalDetail');
+  // 내용이 비어있으면 열지 않음 (빈 흰박스 방지)
+  if(!dc || !dc.innerHTML || dc.innerHTML.replace(/\s/g,'').length===0){
+    if(p) p.style.display='none';
+    if(m) m.style.display='none';
+    return;
+  }
   if(p) p.style.display='';
   if(m) m.style.display='';
   // 뒤로가기로 이 팝업만 닫히도록 history 가드 보충
