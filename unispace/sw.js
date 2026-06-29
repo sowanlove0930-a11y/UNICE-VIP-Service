@@ -35,11 +35,18 @@ messaging.onBackgroundMessage(function(payload) {
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   var target = (event.notification.data && event.notification.data.url) || './index.html?open=today';
+  var wantOpen = '';
+  if (target.indexOf('open=recruit') >= 0) wantOpen = 'recruit';
+  else if (target.indexOf('open=today') >= 0) wantOpen = 'today';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
       for (var i = 0; i < clientList.length; i++) {
         var c = clientList[i];
-        if ('focus' in c) { c.navigate(target); return c.focus(); }
+        if ('focus' in c) {
+          try { c.postMessage({ type: 'UNISPACE_OPEN', open: wantOpen }); } catch(e){}
+          try { c.navigate(target); } catch(e){}
+          return c.focus();
+        }
       }
       if (clients.openWindow) return clients.openWindow(target);
     })
