@@ -29,7 +29,7 @@ messaging.onBackgroundMessage(function(payload) {
     data: { url: data.url || './index.html?open=today' },
     requireInteraction: false
   };
-  self.registration.showNotification(title, options);
+  return self.registration.showNotification(title, options);
 });
 
 self.addEventListener('notificationclick', function(event) {
