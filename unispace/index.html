@@ -205,6 +205,19 @@ body::after {
 #stat4-recruit .stat-lbl { padding-right: 56px; }
 .stat:hover .rc-add-chip { filter: brightness(1.08); }
 @media (max-width:480px){ .rc-add-chip { top: 10px; right: 10px; padding: 3px 8px; font-size: 10.5px; } }
+/* 리크루팅 카드 NEW 펄스 배지 (좌상단, 카드 안쪽) */
+.rc-new-badge {
+  position:absolute; top:10px; left:12px; z-index:3;
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3px 9px 3px 7px; border-radius:999px;
+  font-size:10px; font-weight:800; letter-spacing:.5px; line-height:1;
+  color:#fff; background:#E84B4B;
+  box-shadow:0 2px 8px rgba(232,75,75,.45);
+}
+.rc-new-badge .rc-new-dot { width:6px; height:6px; background:#fff; border-radius:50%; animation:rcNewPulse 1.3s infinite; }
+@keyframes rcNewPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.6)} }
+/* NEW 배지가 보일 때만 라벨을 아래로 밀어 겹침 방지 */
+#stat4-recruit.has-new { padding-top:34px; }
 .stat-lbl { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
 .stat-val { font-size: 22px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .s-gold   .stat-val { color: var(--gold2); }
@@ -3258,6 +3271,7 @@ window.UNISPACE_FCM = {
 
     <!-- 4번: 리크루팅 (공통) -->
     <div class="stat s-purple" id="stat4-recruit" style="display:none;cursor:pointer" onclick="openRecruitModal()">
+      <span class="rc-new-badge" id="rcNewBadge" style="display:none"><span class="rc-new-dot"></span>NEW</span>
       <span class="rc-add-chip"><span class="rc-add-plus">＋</span>입력</span>
       <div class="stat-lbl"><span id="st4-recruit-lbl">이번달 리크루팅</span></div>
       <div class="stat-val" id="st4-recruit">—</div>
@@ -10792,7 +10806,7 @@ function rc2LoadAllFromGas(cb){
           ym:_ym, events:_ev,
           panelState:it.panelState||'', panelDt:it.panelDt||'',
           itvState:it.itvState||'', itvDt:it.itvDt||'',
-          join:it.join||'', status:it.status||'추진중', joinConfirmDate:it.joinConfirmDate||'', regMonth:it.regMonth||'', note:it.note||'',
+          join:it.join||'', status:it.status||'추진중', joinConfirmDate:it.joinConfirmDate||'', regMonth:it.regMonth||'', updatedAt:it.updatedAt||'', note:it.note||'',
           phoenix:(it.phoenix===true || it.phoenix==='true' || it.phoenix==='Y' || it.phoenix===1 || it.phoenix==='1'),
           phone:it.phone||'',
           callItv:(it.callItv===true || it.callItv==='true' || it.callItv==='Y' || it.callItv===1 || it.callItv==='1'),
@@ -10832,7 +10846,7 @@ function rc2LoadFromGas(ym, cb) {
           events:_ev,
           panelState:it.panelState||'', panelDt:it.panelDt||'',
           itvState:it.itvState||'', itvDt:it.itvDt||'',
-          join:it.join||'', status:it.status||'추진중', joinConfirmDate:it.joinConfirmDate||'', regMonth:it.regMonth||'', note:it.note||'',
+          join:it.join||'', status:it.status||'추진중', joinConfirmDate:it.joinConfirmDate||'', regMonth:it.regMonth||'', updatedAt:it.updatedAt||'', note:it.note||'',
           phoenix:(it.phoenix===true || it.phoenix==='true' || it.phoenix==='Y' || it.phoenix===1 || it.phoenix==='1'),
           phone:it.phone||'',
           callItv:(it.callItv===true || it.callItv==='true' || it.callItv==='Y' || it.callItv===1 || it.callItv==='1'),
@@ -10901,9 +10915,49 @@ function renderRecruitStat() {
   if(typeof skOff==='function') skOff(['st4-recruit']);
   document.getElementById('st4-recruit').textContent = (a+b) + '명';
   document.getElementById('st4-recruit-sub').textContent = '입과확보 · 알파 ' + a + ' · 브라보 ' + b;
+  rc2UpdateNewBadge();
+}
+// NEW 배지: 전체 후보자 중 가장 최근 수정시각이 '마지막 확인 시각'보다 이후면 표시
+function _rcCookieGet(name){
+  var n=name+'=';
+  var parts=(document.cookie||'').split(';');
+  for(var i=0;i<parts.length;i++){ var c=parts[i]; while(c.charAt(0)===' ') c=c.substring(1); if(c.indexOf(n)===0) return decodeURIComponent(c.substring(n.length)); }
+  return '';
+}
+function _rcCookieSet(name, val){
+  var d=new Date(); d.setTime(d.getTime()+ (365*24*60*60*1000));
+  document.cookie=name+'='+encodeURIComponent(val)+'; expires='+d.toUTCString()+'; path=/';
+}
+function rc2LatestActivityTime(){
+  // 전체 후보자 풀의 가장 최근 updatedAt (ISO 문자열) 반환
+  var all = (typeof rc2GetAllCandData==='function') ? rc2GetAllCandData() : rc2GetMonthData(getCurrentYM());
+  var list = (all&&all.list)||[];
+  var latest='';
+  for(var i=0;i<list.length;i++){
+    var u=list[i].updatedAt||'';
+    if(u && u>latest) latest=u;
+  }
+  return latest;
+}
+function rc2UpdateNewBadge(){
+  var badge=document.getElementById('rcNewBadge');
+  if(!badge) return;
+  var card=document.getElementById('stat4-recruit');
+  var latest=rc2LatestActivityTime();
+  if(!latest){ badge.style.display='none'; if(card) card.classList.remove('has-new'); return; }
+  var seen=_rcCookieGet('rcSeenAt');
+  if(!seen || latest>seen){ badge.style.display=''; if(card) card.classList.add('has-new'); }
+  else { badge.style.display='none'; if(card) card.classList.remove('has-new'); }
+}
+function rc2MarkRecruitSeen(){
+  var latest=rc2LatestActivityTime();
+  _rcCookieSet('rcSeenAt', latest || new Date().toISOString());
+  var badge=document.getElementById('rcNewBadge'); if(badge) badge.style.display='none';
+  var card=document.getElementById('stat4-recruit'); if(card) card.classList.remove('has-new');
 }
 
 function openRecruitModal() {
+  rc2MarkRecruitSeen();
   var tabBar = document.getElementById('recruitTabBar');
   // 권한: 추진후보자(명단) 탭은 대표·지점장·교육지점장만. FP·매니저는 추진일정만.
   var _listAccess = _canSeeRecruitList();
