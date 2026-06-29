@@ -8,6 +8,14 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
+// activate new service worker immediately (no waiting for old one)
+self.addEventListener('install', function(event) {
+  self.skipWaiting();
+});
+self.addEventListener('activate', function(event) {
+  event.waitUntil(self.clients.claim());
+});
+
 // ▼▼▼ PC에서 Firebase 콘솔 값으로 교체 ▼▼▼
 var firebaseConfig = {
   apiKey: "AIzaSyB0tI00fw7WgtYcjJJpp3EWrMh7LqpHqvY",
