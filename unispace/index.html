@@ -12350,6 +12350,21 @@ function rc2SaveCand() {
   var name = document.getElementById('rc2fName').value.trim();
   if(!name){ showToast('후보자명을 입력하세요'); return; }
 
+  // snapshot existing event ids before save (to detect newly added visit schedules)
+  var _prevEvtIds = {};
+  if(rc2.editId){
+    try {
+      var _pd = rc2GetAllCandData();
+      for(var _pi=0; _pi<(_pd.list||[]).length; _pi++){
+        if(_pd.list[_pi].id===rc2.editId){
+          var _pev = rc2NormEvents(_pd.list[_pi]);
+          for(var _pe=0; _pe<_pev.length; _pe++){ if(_pev[_pe] && _pev[_pe].id){ _prevEvtIds[_pev[_pe].id]=true; } }
+          break;
+        }
+      }
+    } catch(e){}
+  }
+
   // '이 일정 추가'를 깜빡하고 저장 시: 입력칸에 항목+날짜가 남아있으면 처리
   if(rc2.fTypes && rc2.fTypes.length && rc2.fDt){
     if(rc2._editSingleEvtId){
@@ -12480,11 +12495,40 @@ function rc2SaveCand() {
   else d.list.push(rec);
   rc2SetMonthData(_saveYm, d);
   rc2SaveToGas(rec, _saveYm);
+  _notifyScheduleAdded(rec, _prevEvtIds);
   rc2CloseAdd();
   rc2RenderList();
   if(rc2.view==='cal') rc2RenderCal();
   renderRecruitStat();
   showToast('✅ 저장되었습니다');
+}
+// scenario 1: notify manager + author when a new dated visit schedule is added
+function _notifyScheduleAdded(rec, prevEvtIds){
+  try {
+    if(!rec) return;
+    var author = (currentUser && currentUser.id) ? currentUser.id : '';
+    if(!author) return;
+    var evs = (rec.events || []);
+    // find the newest NEW dated event (id not seen before, has a date)
+    var newest = null;
+    for(var i=0;i<evs.length;i++){
+      var ev = evs[i];
+      if(!ev || !ev.dt) continue;
+      if(prevEvtIds && prevEvtIds[ev.id]) continue; // existed before -> not new
+      if(!newest || String(ev.dt) > String(newest.dt)) newest = ev;
+    }
+    if(!newest) return; // no new dated schedule -> no push
+    var br = String(rec.branch || '');
+    var nm = String(rec.name || '');
+    var ref = String(rec.ref || '');
+    var dt = String(newest.dt || '');
+    fetch(UNISPACE_GAS_URL + '?action=notifyScheduleAdded&fp=' + encodeURIComponent(author)
+      + '&cand=' + encodeURIComponent(nm)
+      + '&branch=' + encodeURIComponent(br)
+      + '&ref=' + encodeURIComponent(ref)
+      + '&dt=' + encodeURIComponent(dt))
+      .catch(function(){ /* silent */ });
+  } catch(e){}
 }
 // ===== 결과 입력 (일정 다녀간 뒤) =====
 var rc2res = { candId:null, evtId:null, outcome:'', nextTypes:[], nextDt:'', status:'추진중', _pk:null };
