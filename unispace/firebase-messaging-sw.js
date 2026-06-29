@@ -10,12 +10,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 // ▼▼▼ PC에서 Firebase 콘솔 값으로 교체 ▼▼▼
 var firebaseConfig = {
-  apiKey: "__FIREBASE_API_KEY__",
-  authDomain: "__FIREBASE_AUTH_DOMAIN__",
-  projectId: "__FIREBASE_PROJECT_ID__",
-  storageBucket: "__FIREBASE_STORAGE_BUCKET__",
-  messagingSenderId: "__FIREBASE_SENDER_ID__",
-  appId: "__FIREBASE_APP_ID__"
+  apiKey: "AIzaSyB0tI00fw7WgtYcjJJpp3EWrMh7LqpHqvY",
+  authDomain: "unispace-push.firebaseapp.com",
+  projectId: "unispace-push",
+  storageBucket: "unispace-push.firebasestorage.app",
+  messagingSenderId: "439181771310",
+  appId: "1:439181771310:web:1174d0fab279d4d9f995bf"
 };
 // ▲▲▲ 여기까지 교체 ▲▲▲
 
