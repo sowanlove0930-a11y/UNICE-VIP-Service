@@ -29,8 +29,8 @@ messaging.onBackgroundMessage(function(payload) {
   var title = note.title || data.title || '🔔 UNISPACE 알림';
   var options = {
     body: note.body || data.body || '',
-    icon: 'unispace-192.png',
-    badge: 'unispace-192.png',
+    icon: '/unispace/unispace-192.png',
+    badge: '/unispace/unispace-192.png',
     tag: data.tag || 'unispace-today',
     data: { url: data.url || './index.html?open=today' },
     requireInteraction: false
