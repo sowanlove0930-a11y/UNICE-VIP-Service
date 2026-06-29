@@ -30,7 +30,7 @@ messaging.onBackgroundMessage(function(payload) {
   var options = {
     body: note.body || data.body || '',
     icon: '/unispace/unispace-192.png',
-    badge: '/unispace/unispace-192.png',
+    badge: '/unispace/unispace-badge.png',
     tag: data.tag || 'unispace-today',
     data: { url: data.url || './index.html?open=today' },
     requireInteraction: false
