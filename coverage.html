@@ -4603,22 +4603,37 @@ function postProcessJson(json) {
   // AI가 product명 앞에 company명을 prefix로 붙이는 경우도 처리 (v127: company strip + 8글자)
   if (json.contracts && json.contracts.length > 1) {
     const _normCompD = s => String(s||'').replace(/[\s]/g,'').replace(/생명보험|손해보험|화재보험|생명|손보|화재/g,'').toLowerCase();
+    // 상품명 노이즈 단어 제거 (괄호수식어/마케팅어 제거 후 핵심만 남김)
+    const _NOISE = /\(무\)|무배당|맞춤간편심사형|맞춤간편가입|세만기형|세만기|간편심사|간편가입|꽉채운|꽉 채운|보장|올케어|플러스|종합|\(.*?\)|\[.*?\]/g;
     const _normProdD = (s, company) => {
       const co = _normCompD(company||'');
       let p = String(s||'').replace(/[\s()\[\]]/g,'').toLowerCase();
-      // AI가 product 앞에 company명을 붙이는 패턴 제거 (예: "한화생명진심가득H..." → "진심가득H...")
       if (p.startsWith(co)) p = p.slice(co.length);
       if (p.startsWith('생명')||p.startsWith('손보')||p.startsWith('화재')) p = p.slice(2);
-      return p.substring(0, 8); // 8글자 비교 (10→8: 더 넓게 매칭)
+      return p.substring(0, 8); // 8글자 비교
+    };
+    // 연도코드((YYYY) 또는 끝 4자리) 추출 — 같은 회사+연도코드+상품핵심어면 동일 계약으로 간주
+    const _yrCode = s => { const m = String(s||'').match(/(\d{4})/g); return m ? m[m.length-1] : ''; };
+    const _coreWord = (s, company) => {
+      const co = _normCompD(company||'');
+      let p = String(s||'').replace(_NOISE,'').replace(/[\s()\[\]0-9]/g,'').toLowerCase();
+      if (p.startsWith(co)) p = p.slice(co.length);
+      // 상품 종류 핵심어 (뇌심/암/실손/건강/종신/운전자/치아 등)
+      const _kinds = ['뇌심','암보험','실손','건강보험','종신','운전자','치아','정기','연금','저축'];
+      const hit = _kinds.find(k => p.includes(k));
+      return hit || p.substring(0, 4);
     };
     const _prem = c => String(c.monthly_premium||'0').replace(/[^0-9]/g,'');
     const seen = new Map();
+    const seenAlt = new Map(); // 연도코드 기반 보조 매칭
     const deduped = [];
     json.contracts.forEach(c => {
       const key = _normCompD(c.company) + '_' + _normProdD(c.product, c.company);
-      if (seen.has(key)) {
-        // 이미 등록된 계약 — 보장 필드를 기존 것에 합산 후 현재 것 버림
-        const existing = seen.get(key);
+      // 보조키: 회사 + 연도코드 + 상품핵심어 (노이즈 제거)
+      const yc = _yrCode(c.product);
+      const altKey = yc ? (_normCompD(c.company) + '_' + yc + '_' + _coreWord(c.product, c.company)) : null;
+      let existing = seen.has(key) ? seen.get(key) : (altKey && seenAlt.has(altKey) ? seenAlt.get(altKey) : null);
+      if (existing) {
         const _merge = f => {
           const ev = parseFloat(existing[f])||0;
           const cv = parseFloat(c[f])||0;
@@ -4629,13 +4644,21 @@ function postProcessJson(json) {
          'brain_vessel','brain_stroke','brain_bleed','brain_treat_once','brain_treat_repeat',
          'heart_ischemic','heart_mi','heart_treat_once','heart_treat_repeat',
          'surgery','hospitalization','dementia','caregiver'].forEach(_merge);
-        // 실손 정보 합산
         if (c.silson) existing.silson = true;
-        // 보험료: 더 낮은 값을 유지 (0 제외) — AI가 과대 기재한 경우 올바른 낮은 값 선택
+        // 상품명: 더 구체적인(긴) 이름 유지하고, 그 쪽의 보험료를 함께 채택
+        // (축약명 행에 다른 계약 보험료가 오매칭된 경우 방어 — 구체적 이름 쪽이 정답일 확률이 높음)
+        const _curLen = String(c.product||'').length, _exLen = String(existing.product||'').length;
         const ep = parseInt(_prem(existing)||'0'), cp2 = parseInt(_prem(c)||'0');
-        if (cp2 > 0 && (ep === 0 || cp2 < ep)) existing.monthly_premium = c.monthly_premium;
+        if (_curLen > _exLen) {
+          existing.product = c.product;
+          if (cp2 > 0) existing.monthly_premium = c.monthly_premium; // 구체적 이름 쪽 보험료 채택
+        } else {
+          // 기존(구체적) 이름 유지 — 보험료는 기존이 0일 때만 보완
+          if (ep === 0 && cp2 > 0) existing.monthly_premium = c.monthly_premium;
+        }
       } else {
         seen.set(key, c);
+        if (altKey) seenAlt.set(altKey, c);
         deduped.push(c);
       }
     });
