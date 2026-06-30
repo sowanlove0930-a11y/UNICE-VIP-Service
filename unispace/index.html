@@ -1209,6 +1209,55 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
   border: 1px solid var(--border2);
 }
 
+/* 카드 우상단 홍보영상 버튼 — 영상 있는 도구만 JS로 표시 */
+.cc-video-btn {
+  display: none; position: absolute; top: 10px; right: 10px; z-index: 5;
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.35); color: #fff; font-size: 13px; cursor: pointer;
+  align-items: center; justify-content: center; padding: 0;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  transition: transform .2s, background .2s;
+}
+.cc-video-btn:hover { background: rgba(0,0,0,0.55); transform: scale(1.08); }
+.cc-video-btn.show { display: flex; }
+body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333; border-color: rgba(0,0,0,0.12); }
+
+/* 영상 모달 (세로 쇼츠 대응) */
+.vid-overlay {
+  position: fixed; inset: 0; z-index: 100000;
+  background: rgba(0,0,0,0.82); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  display: none; align-items: center; justify-content: center; padding: 20px;
+}
+.vid-overlay.open { display: flex; }
+.vid-box {
+  position: relative; width: 100%; max-width: 360px;
+  background: #000; border-radius: 18px; overflow: hidden;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+}
+.vid-frame-wrap { position: relative; width: 100%; aspect-ratio: 9 / 16; background: #000; }
+.vid-frame-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.vid-close {
+  position: absolute; top: 10px; right: 10px; z-index: 3;
+  width: 38px; height: 38px; border-radius: 50%; border: none;
+  background: rgba(0,0,0,0.5); color: #fff; font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.vid-close:hover { background: rgba(0,0,0,0.75); }
+.vid-title { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3;
+  padding: 14px 16px; font-size: 14px; font-weight: 700; color: #fff;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7)); pointer-events: none; }
+.vid-replay {
+  position: absolute; inset: 0; z-index: 4; display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: rgba(0,0,0,0.78); color: #fff;
+}
+.vid-replay.show { display: flex; }
+.vid-replay-btn {
+  padding: 12px 26px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.12); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.vid-replay-btn:hover { background: rgba(255,255,255,0.22); }
+
 .cc-ugobi   { background: linear-gradient(145deg, #0F1F3D 0%, #0D1628 50%, #1a0e00 100%); }
 .cc-carefit { background: linear-gradient(145deg, #0a1a2e 0%, #0D1628 50%, #0a1a0f 100%); }
 .cc-nohupai { background: linear-gradient(145deg, #1a0e2e 0%, #0D1628 50%, #0a0a20 100%); }
@@ -4300,6 +4349,7 @@ function deleteFpAccount(id){
 // ── 초기화 ──────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', function() {
   startClock();
+  if (typeof initToolVideoButtons === 'function') initToolVideoButtons();
   _pkBindTimeTriggers();
   _bindPkDate();
   var _scFile = document.getElementById('sichaekFile');
@@ -4566,8 +4616,103 @@ const SUBMENUS = {
   }
 };
 
-// ── 초기화 ──────────────────────────────────────────
-// ── 스켈레톤 로딩 표식 (GAS 로딩 중 카드 값에 적용) ──
+// ── 도구 홍보영상 ──────────────────────────────────
+// 영상 ID만 채우면 카드에 ▶ 버튼 자동 표시. 빈 값이면 버튼 숨김.
+var TOOL_VIDEOS = {
+  ugobi:   { id: '7Zg4ptPasCM', title: 'U-GOBI 소개 영상' },
+  carefit: { id: '', title: '올라이프 케어핏 소개 영상' },
+  nohupai: { id: '', title: '노후파이클래스 소개 영상' },
+  jenius:  { id: '', title: '제니스 케어맵 소개 영상' }
+};
+var _ytPlayer = null;
+var _ytReady = false;
+var _curVideoId = '';
+
+function initToolVideoButtons() {
+  var btns = document.querySelectorAll('.cc-video-btn');
+  for (var i = 0; i < btns.length; i++) {
+    var key = btns[i].getAttribute('data-vid');
+    var v = TOOL_VIDEOS[key];
+    if (v && v.id) btns[i].classList.add('show');
+    else btns[i].classList.remove('show');
+  }
+}
+
+function _loadYTApi(cb) {
+  if (window.YT && window.YT.Player) { cb(); return; }
+  window.onYouTubeIframeAPIReady = function(){ _ytReady = true; cb(); };
+  if (!document.getElementById('ytApiScript')) {
+    var s = document.createElement('script');
+    s.id = 'ytApiScript';
+    s.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(s);
+  }
+}
+
+function openToolVideo(key, ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  var v = TOOL_VIDEOS[key];
+  if (!v || !v.id) return false;
+  _curVideoId = v.id;
+  var ov = document.getElementById('vidOverlay');
+  var titleEl = document.getElementById('vidTitle');
+  var replayEl = document.getElementById('vidReplay');
+  if (titleEl) titleEl.textContent = v.title || '';
+  if (replayEl) replayEl.classList.remove('show');
+  if (ov) ov.classList.add('open');
+  _loadYTApi(function(){ _mountPlayer(v.id); });
+  return false;
+}
+
+function _mountPlayer(id) {
+  if (_ytPlayer && _ytPlayer.loadVideoById) {
+    _ytPlayer.loadVideoById(id);
+    return;
+  }
+  _ytPlayer = new YT.Player('vidPlayer', {
+    videoId: id,
+    playerVars: {
+      rel: 0, modestbranding: 1, playsinline: 1,
+      autoplay: 1, fs: 1, controls: 1
+    },
+    events: {
+      onStateChange: function(e){
+        // 0 = ended -> 추천영상 대신 다시보기 화면
+        if (e.data === YT.PlayerState.ENDED) {
+          var r = document.getElementById('vidReplay');
+          if (r) r.classList.add('show');
+        } else if (e.data === YT.PlayerState.PLAYING) {
+          var r2 = document.getElementById('vidReplay');
+          if (r2) r2.classList.remove('show');
+        }
+      }
+    }
+  });
+}
+
+function replayToolVideo() {
+  var r = document.getElementById('vidReplay');
+  if (r) r.classList.remove('show');
+  if (_ytPlayer && _ytPlayer.seekTo) {
+    _ytPlayer.seekTo(0);
+    _ytPlayer.playVideo();
+  } else if (_curVideoId) {
+    _mountPlayer(_curVideoId);
+  }
+}
+
+function closeToolVideo() {
+  var ov = document.getElementById('vidOverlay');
+  if (ov) ov.classList.remove('open');
+  // 재생 중단 (소리 끊기)
+  if (_ytPlayer && _ytPlayer.stopVideo) {
+    try { _ytPlayer.stopVideo(); } catch(e) {}
+  }
+  var r = document.getElementById('vidReplay');
+  if (r) r.classList.remove('show');
+}
+
+
 function skOn(ids, w){
   for(var i=0;i<ids.length;i++){
     var el = document.getElementById(ids[i]);
@@ -10259,6 +10404,7 @@ function toggleConsultMode() {
     btn.classList.add('active');
     btn.textContent = '✕ 상담 종료';
     document.body.style.overflow = 'hidden';
+    if (typeof initToolVideoButtons === 'function') initToolVideoButtons();
   } else {
     overlay.classList.remove('open');
     btn.classList.remove('active');
@@ -17181,28 +17327,47 @@ function doCheckin() { doSmartCheckin(); }
 
   <div class="consult-tools">
     <a class="consult-card cc-ugobi pc-only-tool" href="https://unice-vip.co.kr/ugobi/index.html" target="_blank" onclick="return openUgobiConsult(event)">
+      <button type="button" class="cc-video-btn" data-vid="ugobi" onclick="return openToolVideo('ugobi',event)" aria-label="홍보영상 보기">▶</button>
       <div class="cc-icon">💎</div>
       <div class="cc-name">U-GOBI</div>
       <div class="cc-desc">실시간 보험료 비교<br>손보 10사 · 생보 14사</div>
       <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
     </a>
     <a class="consult-card cc-carefit pc-only-tool" href="https://unice-vip.co.kr/올라이프_케어핏/carefit.html" target="_blank" onclick="return openCarefitConsult(event)">
+      <button type="button" class="cc-video-btn" data-vid="carefit" onclick="return openToolVideo('carefit',event)" aria-label="홍보영상 보기">▶</button>
       <div class="cc-icon">🌿</div>
       <div class="cc-name">올라이프 케어핏</div>
       <div class="cc-desc">지금 가입한 보장,<br>최신 의료 환경에 맞는지 점검</div>
       <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
     </a>
     <a class="consult-card cc-nohupai pc-only-tool" href="https://unice-vip.co.kr/노후파이/index.html" target="_blank" onclick="return openNohupaiConsult(event)">
+      <button type="button" class="cc-video-btn" data-vid="nohupai" onclick="return openToolVideo('nohupai',event)" aria-label="홍보영상 보기">▶</button>
       <div class="cc-icon">🌙</div>
       <div class="cc-name">노후파이클래스</div>
       <div class="cc-desc">내 노후 준비,<br>어디까지 왔는지 심층 분석</div>
       <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
     </a>
     <a class="consult-card cc-jenius" href="https://unice-vip.co.kr/coverage.html" target="_blank" onclick="return openJeniusConsult(event)">
+      <button type="button" class="cc-video-btn" data-vid="jenius" onclick="return openToolVideo('jenius',event)" aria-label="홍보영상 보기">▶</button>
       <div class="cc-icon">⚡</div>
       <div class="cc-name">제니스 케어맵</div>
       <div class="cc-desc">보험금, 어느 회사에<br>청구할지 한눈에 정리</div>
     </a>
+  </div>
+</div>
+
+<!-- 도구 홍보영상 모달 -->
+<div class="vid-overlay" id="vidOverlay" onclick="if(event.target===this)closeToolVideo()">
+  <div class="vid-box">
+    <button type="button" class="vid-close" onclick="closeToolVideo()" aria-label="닫기">✕</button>
+    <div class="vid-title" id="vidTitle"></div>
+    <div class="vid-frame-wrap">
+      <div id="vidPlayer"></div>
+      <div class="vid-replay" id="vidReplay">
+        <div style="font-size:14px;opacity:.85">영상이 끝났어요</div>
+        <button type="button" class="vid-replay-btn" onclick="replayToolVideo()">▶ 다시보기</button>
+      </div>
+    </div>
   </div>
 </div>
 <!-- 활동 팝업 — body 최상위 (스크롤 컨테이너 밖) -->
