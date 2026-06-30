@@ -5007,6 +5007,31 @@ function postProcessJson(json) {
       if (hasRepeat && !hasOnce && parse(c.cancer_treat_once) === 0 && parse(c.cancer_treat_repeat) > 0) {
         // 정상 — already in repeat
       }
+
+      // ── [역교정 v133] 1회한 확정 키워드(중입자/표적허가/암통합)가 있으면
+      // AI가 _repeat에 잘못 넣은 값을 _once로 되돌림 (중입자는 무조건 1회한).
+      // 단, 진짜 반복형 담보(주요치료비/연간/만기N년/치료당/매회)가 함께 있으면 repeat 유지.
+      var _STRONG_ONCE = ['중입자','항암중입자','표적항암약물허가','암통합치료비','암 통합치료비'];
+      var _TRUE_REPEAT = ['주요치료비','연간1회','연간 1회','연간','진단후',
+        '만기5년','만기10년','만기15년','만기20년','5년한','10년한','15년한','20년한','25년한',
+        '5년 한','10년 한','15년 한','통원1회당','통원 1회당','치료당','매회','매 회'];
+      var _hasStrongOnce = _STRONG_ONCE.some(function(k){ return searchText.includes(k); });
+      var _hasTrueRepeat = _TRUE_REPEAT.some(function(k){ return searchText.includes(k); });
+      if (_hasStrongOnce && !_hasTrueRepeat) {
+        if (parse(c.cancer_treat_repeat) > 0) {
+          c.cancer_treat_once = (parse(c.cancer_treat_once) + parse(c.cancer_treat_repeat)) || null;
+          c.cancer_treat_repeat = null;
+          c.memo = ((c.memo||'') + ' [중입자등1회한->once역교정v133]').trim();
+        }
+        if (parse(c.brain_treat_repeat) > 0) {
+          c.brain_treat_once = (parse(c.brain_treat_once) + parse(c.brain_treat_repeat)) || null;
+          c.brain_treat_repeat = null;
+        }
+        if (parse(c.heart_treat_repeat) > 0) {
+          c.heart_treat_once = (parse(c.heart_treat_once) + parse(c.heart_treat_repeat)) || null;
+          c.heart_treat_repeat = null;
+        }
+      }
     });
   }
   // ㉗ 저축성 보험 사망담보 contracts 자동 보완 (v114)
@@ -5174,10 +5199,10 @@ function postProcessJson(json) {
     const silsonInHealth = (json.contracts || []).find(c => c.silson === true);
     const target = silsonContract || silsonInHealth;
     if (target && target.coverage_period) {
-      const yearMatch = target.coverage_period.match(/^(\d{4})/);
+      const yearMatch = String(target.coverage_period).match(/(\d{4})[.\-\/]?(\d{2})/);
       if (yearMatch) {
         const yr = parseInt(yearMatch[1]);
-        const mo = parseInt((target.coverage_period.match(/^(\d{4})\.(\d{2})/) || [])[2] || '1');
+        const mo = parseInt(yearMatch[2] || '1');
         let correctGen = '';
         if (yr < 2009 || (yr === 2009 && mo <= 9)) correctGen = '1세대';
         else if (yr < 2017 || (yr === 2017 && mo <= 3)) correctGen = '2세대';
@@ -5201,7 +5226,8 @@ function postProcessJson(json) {
   {
     function calcSilsonGen(coveragePeriod) {
       if (!coveragePeriod) return null;
-      const m = coveragePeriod.match(/^(\d{4})\.(\d{2})/);
+      // 구분자 무관(. - / 또는 연속) YYYY + MM 추출 — AI가 2025-07 / 2025.07 / 202507 등으로 추출해도 인식
+      const m = String(coveragePeriod).match(/(\d{4})[.\-\/]?(\d{2})/);
       if (!m) return null;
       const yr = parseInt(m[1]), mo = parseInt(m[2]);
       if (yr < 2009 || (yr === 2009 && mo <= 9)) return '1세대';
