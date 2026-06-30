@@ -418,6 +418,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
 /* ── 리스트뷰 ── */
 .list-view { display: flex; flex-direction: column; gap: 6px; }
+/* 선택삭제 모드: 아바타 위에 체크박스 오버레이 (그리드 레이아웃 불변) */
+.bulkmode .list-row { cursor: pointer; }
+.bulkmode .list-avatar { position: relative; }
+.bulk-chk { position:absolute; top:-7px; left:-7px; width:19px; height:19px; margin:0; accent-color:#DC2626; z-index:3; cursor:pointer; }
+.list-row.bulk-picked { background: rgba(220,38,38,.07); border-color: rgba(220,38,38,.4); }
+.list-row.bulk-picked .list-avatar { box-shadow: 0 0 0 2px #DC2626; }
 .list-row {
   display: grid; grid-template-columns: 36px 1fr 105px 1.7fr 80px 70px 90px 110px 80px;
   align-items: center; gap: 12px;
@@ -1209,6 +1215,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <span class="filter-rlabel frl-all">전체</span>
           <div class="filter-chip chip-all active" onclick="clearAllFilters(this)">전체 보기</div>
           <div class="view-toggle" style="margin-left:auto;">
+            <button class="view-btn" id="btnBulkDel" onclick="toggleBulkMode()" style="display:none;border-color:rgba(220,38,38,.35);color:var(--red)">🗑️ 선택삭제</button>
             <button class="view-btn" id="btnCard" onclick="setView('card')">⊞ 카드</button>
             <button class="view-btn active" id="btnList" onclick="setView('list')">≡ 리스트</button>
           </div>
@@ -1238,6 +1245,21 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 
     </div>
     <div id="customerGrid"></div>
+    <div id="bulkDelBar" style="display:none;position:sticky;bottom:0;z-index:50;margin:0 -14px;padding:12px 16px;background:rgba(220,38,38,.08);border-top:1px solid rgba(220,38,38,.3);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:980px;margin:0 auto">
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--red);cursor:pointer">
+            <input type="checkbox" id="bulkSelectAll" onchange="bulkToggleAll(this.checked)" style="width:17px;height:17px;accent-color:#DC2626">전체
+          </label>
+          <span style="font-size:13px;font-weight:700;color:var(--red)"><span id="bulkCnt">0</span>건 선택</span>
+          <span id="bulkScopeNote" style="font-size:11px;color:var(--text2)"></span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="view-btn" onclick="toggleBulkMode()" style="font-size:13px;padding:7px 12px">취소</button>
+          <button class="view-btn" id="bulkDelBtn" onclick="runBulkDelete()" style="font-size:13px;padding:7px 14px;background:var(--red);color:#fff;border-color:var(--red);opacity:.5;pointer-events:none">🗑️ 선택 삭제 (<span id="bulkCnt2">0</span>)</button>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -2046,6 +2068,11 @@ window.addEventListener('DOMContentLoaded', function() {
     var _ebtn = document.getElementById('excelBulkBtn');
     if (_ebtn) _ebtn.style.display = '';
   }
+  // 선택삭제 버튼: 대표/지점장에게만 표시
+  if (_custIsAdmin()) {
+    var _bdbtn = document.getElementById('btnBulkDel');
+    if (_bdbtn) _bdbtn.style.display = '';
+  }
 
   // 고객 데이터는 GAS에서 로드 (아래 loadCustomersFromGas)
 
@@ -2713,9 +2740,131 @@ function resetForm() {
 // ══ 고객 목록 렌더 ═══════════════════════════════════
 function setView(v) {
   currentView = v;
+  if(v==='card' && _bulkMode) toggleBulkMode(); // 카드뷰 전환 시 선택삭제 모드 해제
   document.getElementById('btnCard').classList.toggle('active', v === 'card');
   document.getElementById('btnList').classList.toggle('active', v === 'list');
   renderCustomerList();
+}
+
+// ══ 선택 삭제 (대표/지점장 전용) ══════════════════════
+var _bulkMode = false;
+var _bulkPicked = {};
+function onRowClick(id, ev){
+  if(_bulkMode){
+    if(ev) ev.stopPropagation();
+    bulkTogglePick(id);
+    return;
+  }
+  openDetail(id);
+}
+function toggleBulkMode(){
+  if(!_custIsAdmin()) return;
+  _bulkMode = !_bulkMode;
+  _bulkPicked = {};
+  if(_bulkMode && currentView==='card') setView('list'); // 선택삭제는 리스트뷰에서만
+  var btn = document.getElementById('btnBulkDel');
+  if(btn) btn.classList.toggle('active', _bulkMode);
+  document.body.classList.toggle('bulkmode', _bulkMode);
+  var bar = document.getElementById('bulkDelBar');
+  if(bar) bar.style.display = _bulkMode ? 'block' : 'none';
+  var note = document.getElementById('bulkScopeNote');
+  if(note){
+    var sc = _custScope();
+    note.textContent = (sc==='all') ? '· 전체 지점' : ('· '+sc+'지점만 삭제 가능');
+  }
+  _bulkUpdateBar();
+  renderCustomerList();
+}
+function bulkTogglePick(id){
+  if(_bulkPicked[id]) delete _bulkPicked[id];
+  else _bulkPicked[id] = true;
+  // 행 클래스만 갱신 (전체 재렌더 없이 빠르게)
+  var row = document.querySelector('.list-row[data-id="'+id+'"]');
+  if(row){
+    row.classList.toggle('bulk-picked', !!_bulkPicked[id]);
+    var chk = row.querySelector('.bulk-chk');
+    if(chk) chk.checked = !!_bulkPicked[id];
+  }
+  _bulkUpdateBar();
+}
+function _bulkVisibleIds(){
+  var ids = [];
+  var rows = document.querySelectorAll('#customerGrid .list-row');
+  for(var i=0;i<rows.length;i++){ ids.push(rows[i].getAttribute('data-id')); }
+  return ids;
+}
+function bulkToggleAll(on){
+  var ids = _bulkVisibleIds();
+  for(var i=0;i<ids.length;i++){
+    if(on) _bulkPicked[ids[i]] = true; else delete _bulkPicked[ids[i]];
+  }
+  var rows = document.querySelectorAll('#customerGrid .list-row');
+  for(var j=0;j<rows.length;j++){
+    rows[j].classList.toggle('bulk-picked', on);
+    var chk = rows[j].querySelector('.bulk-chk');
+    if(chk) chk.checked = on;
+  }
+  _bulkUpdateBar();
+}
+function _bulkCount(){ return Object.keys(_bulkPicked).length; }
+function _bulkUpdateBar(){
+  var n = _bulkCount();
+  var c1 = document.getElementById('bulkCnt'); if(c1) c1.textContent = n;
+  var c2 = document.getElementById('bulkCnt2'); if(c2) c2.textContent = n;
+  var btn = document.getElementById('bulkDelBtn');
+  if(btn){
+    btn.style.opacity = n ? '1' : '.5';
+    btn.style.pointerEvents = n ? 'auto' : 'none';
+  }
+  var all = document.getElementById('bulkSelectAll');
+  if(all){
+    var vis = _bulkVisibleIds();
+    var pickedVis = 0;
+    for(var i=0;i<vis.length;i++){ if(_bulkPicked[vis[i]]) pickedVis++; }
+    all.checked = vis.length>0 && pickedVis===vis.length;
+  }
+}
+function runBulkDelete(){
+  var ids = Object.keys(_bulkPicked);
+  if(!ids.length) return;
+  // 권한 범위 재검증: 지점장은 본인 지점 고객만
+  var scope = _custScope();
+  var allowed = [], denied = 0;
+  for(var i=0;i<ids.length;i++){
+    var c = null;
+    for(var j=0;j<DB.length;j++){ if(DB[j].id===ids[i]){ c=DB[j]; break; } }
+    if(!c) continue;
+    if(scope==='all' || _custBranchOf(c)===scope) allowed.push(c.id);
+    else denied++;
+  }
+  if(!allowed.length){
+    showToast('삭제 권한이 없는 고객입니다');
+    return;
+  }
+  var msg = '<b>'+allowed.length+'명</b>의 고객을 삭제할까요?<br>이 작업은 되돌릴 수 없어요.';
+  if(denied>0) msg += '<br><span style="color:#C77D14;font-size:12px">(타 지점 '+denied+'명은 제외됩니다)</span>';
+  showConfirm({
+    icon:'🗑️', title:'선택 고객 일괄 삭제',
+    msg: msg, okLabel:'삭제'
+  }).then(function(ok){
+    if(!ok) return;
+    var allowSet = {};
+    for(var k=0;k<allowed.length;k++) allowSet[allowed[k]] = true;
+    DB = DB.filter(function(c){ return !allowSet[c.id]; });
+    localStorage.setItem('unispace_customers', JSON.stringify(DB));
+    gasBulkDeleteCustomers(allowed);
+    _bulkPicked = {};
+    toggleBulkMode(); // 모드 종료 + 재렌더
+    updateHeaderCount();
+    showToast('🗑️ '+allowed.length+'명 삭제됐어요');
+  });
+}
+function gasBulkDeleteCustomers(ids){
+  if(!ids || !ids.length) return;
+  gasPost({ action:'bulkDeleteCustomers', ids:ids }).catch(function(){
+    // 폴백: 일괄 액션 미배포 시 단건 반복
+    for(var i=0;i<ids.length;i++){ gasDeleteCustomer(ids[i]); }
+  });
 }
 
 // 다중 토글 필터: 카테고리별 Set (같은 줄=OR, 다른 줄=AND)
@@ -3032,8 +3181,8 @@ function renderCustomerList() {
         else if (_cd >= 0 && _cd >= 7) _stripe='#C9A84C';
         else if (_cd >= 0) _stripe='#1F9268';
         else _stripe='transparent';
-        return '<div class="list-row '+gradeRowCls+' '+typeRowCls+'" data-id="'+c.id+'" onclick="openDetail(this.dataset.id)" style="border-left:3px solid '+_stripe+'">'+
-          '<div class="list-avatar '+av+'">'+c.name[0]+'</div>'+
+        return '<div class="list-row '+gradeRowCls+' '+typeRowCls+(_bulkPicked[c.id]?' bulk-picked':'')+'" data-id="'+c.id+'" onclick="onRowClick(this.dataset.id,event)" style="border-left:3px solid '+_stripe+'">'+
+          '<div class="list-avatar '+av+'">'+(_bulkMode?'<input type="checkbox" class="bulk-chk" '+(_bulkPicked[c.id]?'checked':'')+' onclick="onRowClick(\''+c.id+'\',event)">':'')+c.name[0]+'</div>'+
           '<div><div class="list-name-wrap">'+alertDot+'<span class="list-name">'+c.name+'</span>'+_newBadgeHtml(c)+insBadgeL+_fpBadge(c)+'</div>'+alertBadges+'</div>'+
           '<div class="list-cell val">'+c.phone+'</div>'+
           '<div class="list-cell list-addr-cell">'+(c.address ? '<span title="'+c.address.replace(/"/g,'&quot;')+'">📍 '+c.address+'</span>' : '<span style="color:var(--text3)">미등록</span>')+'</div>'+
