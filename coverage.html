@@ -5008,20 +5008,19 @@ function postProcessJson(json) {
         // 정상 — already in repeat
       }
 
-      // ── [역교정 v133] 1회한 확정 키워드(중입자/표적허가/암통합)가 있으면
-      // AI가 _repeat에 잘못 넣은 값을 _once로 되돌림 (중입자는 무조건 1회한).
-      // 단, 진짜 반복형 담보(주요치료비/연간/만기N년/치료당/매회)가 함께 있으면 repeat 유지.
-      var _STRONG_ONCE = ['중입자','항암중입자','표적항암약물허가','암통합치료비','암 통합치료비'];
-      var _TRUE_REPEAT = ['주요치료비','연간1회','연간 1회','연간','진단후',
-        '만기5년','만기10년','만기15년','만기20년','5년한','10년한','15년한','20년한','25년한',
-        '5년 한','10년 한','15년 한','통원1회당','통원 1회당','치료당','매회','매 회'];
-      var _hasStrongOnce = _STRONG_ONCE.some(function(k){ return searchText.includes(k); });
-      var _hasTrueRepeat = _TRUE_REPEAT.some(function(k){ return searchText.includes(k); });
-      if (_hasStrongOnce && !_hasTrueRepeat) {
+      // ── [역교정 v134] 표적항암 계열(표적/세기조절/양성자/중입자)은 전부 1회한.
+      // AI가 한 계약 안에서 once/repeat으로 쪼개 넣어 합계가 깨지는 문제를 계약 단위로 통합.
+      // 판정은 키워드(memo/product)뿐 아니라 신정원 담보 분류 흔적까지 폭넓게 인정.
+      var _ONCE_TARGET = ['중입자','항암중입자','표적항암약물허가','표적항암','세기조절','양성자','암통합치료비','암 통합치료비','고액항암치료비'];
+      var _REAL_REPEAT = ['주요치료비','연간1회','연간 1회','진단후','만기5년','만기10년','만기15년','만기20년',
+        '5년한','10년한','15년한','20년한','25년한','5년 한','10년 한','15년 한','통원1회당','통원 1회당','치료당','매회','매 회'];
+      var _hasOnceTarget = _ONCE_TARGET.some(function(k){ return searchText.includes(k); });
+      var _hasRealRepeat = _REAL_REPEAT.some(function(k){ return searchText.includes(k); });
+      if (_hasOnceTarget && !_hasRealRepeat) {
         if (parse(c.cancer_treat_repeat) > 0) {
           c.cancer_treat_once = (parse(c.cancer_treat_once) + parse(c.cancer_treat_repeat)) || null;
           c.cancer_treat_repeat = null;
-          c.memo = ((c.memo||'') + ' [중입자등1회한->once역교정v133]').trim();
+          c.memo = ((c.memo||'') + ' [표적항암계열->1회한통합v134]').trim();
         }
         if (parse(c.brain_treat_repeat) > 0) {
           c.brain_treat_once = (parse(c.brain_treat_once) + parse(c.brain_treat_repeat)) || null;
@@ -5031,6 +5030,13 @@ function postProcessJson(json) {
           c.heart_treat_once = (parse(c.heart_treat_once) + parse(c.heart_treat_repeat)) || null;
           c.heart_treat_repeat = null;
         }
+      }
+      // [2차 안전장치 v134] 같은 계약에 1회한(once) 담보가 이미 존재하고, repeat에 진짜 반복 키워드가
+      // 전혀 없으면(세기조절/양성자처럼 memo에 담보명이 빠진 경우 대비) repeat을 once로 흡수.
+      else if (parse(c.cancer_treat_once) > 0 && parse(c.cancer_treat_repeat) > 0 && !_hasRealRepeat) {
+        c.cancer_treat_once = (parse(c.cancer_treat_once) + parse(c.cancer_treat_repeat)) || null;
+        c.cancer_treat_repeat = null;
+        c.memo = ((c.memo||'') + ' [1회한계약내repeat흡수v134]').trim();
       }
     });
   }
