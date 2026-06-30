@@ -7498,7 +7498,42 @@ async function downloadExcel() {
     return co + '_' + pr.replace(/[()\[\]]/g,'').slice(0,5); // 괄호제거+5글자
   };
   const _savNormKeys = new Set((json.savings_contracts||[]).map(_normSavDedup));
+  // ── [v135] contracts 내부 동일계약 중복 제거 (Stage3가 dedup 이후 추가한 중복 방어)
+  // 회사 + 연도코드(2601 등) + 상품핵심어로 매칭. 더 구체적(긴) 상품명 + 그 보험료 유지.
+  const _internalSeen = new Map();
+  const _intNoise = /\(무\)|무배당|맞춤간편심사형|맞춤간편가입|세만기형|세만기|간편심사|간편가입|꽉채운|꽉 채운|보장|올케어|플러스|종합|\(.*?\)|\[.*?\]/g;
+  const _intCo = s => String(s||'').replace(/\s/g,'').replace(/생명보험|손해보험|화재보험|생명|손보|화재/g,'').toLowerCase();
+  const _intYr = s => { const m=String(s||'').match(/(\d{4})/g); return m?m[m.length-1]:''; };
+  const _intCore = (s,company) => {
+    const co=_intCo(company); let p=String(s||'').replace(_intNoise,'').replace(/[\s()\[\]0-9]/g,'').toLowerCase();
+    if (p.startsWith(co)) p=p.slice(co.length);
+    const kinds=['뇌심','암보험','실손','건강보험','종신','운전자','치아','정기','연금','저축'];
+    const hit=kinds.find(k=>p.includes(k)); return hit||p.substring(0,4);
+  };
+  const _intPrem = c => parseInt(String(c.monthly_premium||'0').replace(/[^0-9]/g,''))||0;
+  (json.contracts||[]).forEach(c=>{
+    const yc=_intYr(c.product);
+    if (!yc) return; // 연도코드 없으면 내부 dedup 대상 아님 (오병합 방지)
+    const k=_intCo(c.company)+'_'+yc+'_'+_intCore(c.product,c.company);
+    if (_internalSeen.has(k)) {
+      const ex=_internalSeen.get(k);
+      // 더 구체적(긴) 상품명 + 그 보험료 채택
+      if (String(c.product||'').length > String(ex.product||'').length) {
+        ex._dupProduct = c.product;
+        if (_intPrem(c)>0) ex._dupPremium = c.monthly_premium;
+      }
+      c._isDupRemove = true; // allForPay에서 제외
+    } else {
+      _internalSeen.set(k, c);
+    }
+  });
+  // 병합 결과를 대표 계약에 반영
+  _internalSeen.forEach(ex=>{
+    if (ex._dupProduct) ex.product = ex._dupProduct;
+    if (ex._dupPremium) ex.monthly_premium = ex._dupPremium;
+  });
   const _dedupedContracts = (json.contracts||[]).filter(c=>{
+    if (c._isDupRemove) return false; // 내부 중복 제거
     if (c.category === '저축성') return false; // savings_contracts에서 계산됨
     if (_savNormKeys.has(_normSavDedup(c))) return false; // 정규화 키로 savings와 중복 감지
     const pk=String((c.company||'')+(c.product||'')).replace(/\s/g,'');
