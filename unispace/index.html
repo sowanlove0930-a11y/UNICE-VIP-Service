@@ -8109,6 +8109,16 @@ function _schedYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-
 // ── 시책 조회/등록 ─────────────────────────────────
 var _sichaekTab = 'active';
 var _sichaekFileData = null;
+var _sichaekAllCache = null;   // status=all 캠페인 전체 캐시
+var _sichaekPastMonth = null;  // 지난 시책 탭에서 보고 있는 월(1~12), null=가장 최근 지난달
+
+// startWeek("6월 3주차")에서 월(1~12) 추출. 실패 시 0
+function _sichaekMonthOf(c){
+  var s = String((c && c.startWeek) || '');
+  var m = s.match(/(\d{1,2})\s*월/);
+  return m ? parseInt(m[1],10) : 0;
+}
+function _sichaekCurMonth(){ return new Date().getMonth()+1; }
 
 function _sichaekWeekOptions(){
   var n = new Date();
@@ -8143,20 +8153,80 @@ function closeSichaekModal(){ document.getElementById('sichaekOverlay').classLis
 
 function switchSichaekTab(tab){
   _sichaekTab = tab;
+  if(tab==='ended'){ _sichaekPastMonth = null; } // 항상 최근 지난달부터
   document.getElementById('sichaekTabActive').classList.toggle('sichaek-tab-on', tab==='active');
   document.getElementById('sichaekTabEnded').classList.toggle('sichaek-tab-on', tab==='ended');
-  loadSichaek();
+  // 캐시 있으면 재조회 없이 즉시 분류
+  if(_sichaekAllCache){ _sichaekRenderByMonth(_sichaekLastCanManage); }
+  else { loadSichaek(); }
 }
 
 function loadSichaek(){
   var wrap = document.getElementById('sichaekListWrap');
   wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">불러오는 중...</div>';
-  var url = UNISPACE_GAS_URL + '?action=getCampaigns&fp=' + encodeURIComponent(currentUser.id) + '&status=' + _sichaekTab;
+  // status=all 로 전체 조회 후 월 기준으로 클라이언트 분류
+  var url = UNISPACE_GAS_URL + '?action=getCampaigns&fp=' + encodeURIComponent(currentUser.id) + '&status=all';
   fetch(url).then(function(r){return r.json();}).then(function(res){
     if(!res || !res.ok){ wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">불러오기 실패</div>'; return; }
-    renderSichaekList(res.campaigns || [], res.canManage);
+    _sichaekAllCache = res.campaigns || [];
+    _sichaekRenderByMonth(res.canManage);
   }).catch(function(){ wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">네트워크 오류</div>'; });
 }
+
+// 월 기준 분류 렌더
+function _sichaekRenderByMonth(canManage){
+  _sichaekLastCanManage = canManage;
+  var all = _sichaekAllCache || [];
+  var curM = _sichaekCurMonth();
+  if(_sichaekTab === 'active'){
+    // 진행 중 = 이번달 시책 (종료 처리 안 된 것 우선, 월 일치)
+    var cur = all.filter(function(c){ return _sichaekMonthOf(c)===curM && c.status!=='ended'; });
+    _sichaekRenderMonthNav(false);
+    renderSichaekList(cur, canManage);
+  } else {
+    // 지난 시책 = 이번달 이전 월. 월 화살표로 선택.
+    var past = all.filter(function(c){ var m=_sichaekMonthOf(c); return m>0 && m!==curM; });
+    // 존재하는 지난 월 목록 (내림차순)
+    var monthsSet = {};
+    past.forEach(function(c){ monthsSet[_sichaekMonthOf(c)]=true; });
+    var months = Object.keys(monthsSet).map(function(x){return parseInt(x,10);}).sort(function(a,b){return b-a;});
+    if(!months.length){
+      _sichaekRenderMonthNav(false);
+      renderSichaekList([], canManage);
+      return;
+    }
+    // 선택월 결정 (없으면 가장 최근 지난달)
+    if(_sichaekPastMonth==null || months.indexOf(_sichaekPastMonth)<0){ _sichaekPastMonth = months[0]; }
+    _sichaekRenderMonthNav(true, months);
+    var sel = past.filter(function(c){ return _sichaekMonthOf(c)===_sichaekPastMonth; });
+    renderSichaekList(sel, canManage);
+  }
+}
+
+// 지난 시책 월 화살표 렌더
+function _sichaekRenderMonthNav(show, months){
+  var bar = document.getElementById('sichaekMonthNav');
+  if(!bar) return;
+  if(!show){ bar.style.display='none'; return; }
+  bar.style.display='flex';
+  var lbl = document.getElementById('sichaekMonthLbl');
+  if(lbl) lbl.textContent = _sichaekPastMonth + '월';
+  // 이전/다음 월 존재 여부로 화살표 활성화
+  var idx = months.indexOf(_sichaekPastMonth);
+  var prevBtn = document.getElementById('sichaekMonthPrev'); // 더 과거
+  var nextBtn = document.getElementById('sichaekMonthNext'); // 더 최근
+  if(prevBtn){ var hasPrev = idx < months.length-1; prevBtn.style.opacity=hasPrev?'1':'0.28'; prevBtn.style.pointerEvents=hasPrev?'auto':'none'; prevBtn.setAttribute('data-target', hasPrev?months[idx+1]:''); }
+  if(nextBtn){ var hasNext = idx > 0; nextBtn.style.opacity=hasNext?'1':'0.28'; nextBtn.style.pointerEvents=hasNext?'auto':'none'; nextBtn.setAttribute('data-target', hasNext?months[idx-1]:''); }
+}
+function sichaekShiftMonth(dir){
+  var btn = document.getElementById(dir<0?'sichaekMonthPrev':'sichaekMonthNext');
+  if(!btn) return;
+  var t = btn.getAttribute('data-target');
+  if(!t) return;
+  _sichaekPastMonth = parseInt(t,10);
+  _sichaekRenderByMonth(_sichaekLastCanManage);
+}
+var _sichaekLastCanManage = false;
 
 var SICHAEK_LIFE_ORDER = ['한화생명','라이나생명','미래에셋','신한라이프','흥국생명','메트라이프'];
 var SICHAEK_NON_ORDER = ['한화손보','현대해상','DB손보','메리츠화재','KB손보','삼성화재'];
@@ -17361,6 +17431,11 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" id="sichaekTabEnded" class="sichaek-tab" onclick="switchSichaekTab('ended')">지난 시책</button>
       <div style="flex:1"></div>
       <button type="button" id="sichaekAddBtn" onclick="openSichaekAdd()" style="display:none;font-size:13px;font-weight:700;padding:7px 14px;border:none;border-radius:8px;background:var(--gold);color:#fff;cursor:pointer">➕ 시책 등록</button>
+    </div>
+    <div id="sichaekMonthNav" style="display:none;align-items:center;justify-content:center;gap:6px;padding:8px 0;margin-bottom:6px">
+      <button type="button" id="sichaekMonthPrev" onclick="sichaekShiftMonth(-1)" style="min-width:30px;height:30px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text);font-size:15px;cursor:pointer">‹</button>
+      <span id="sichaekMonthLbl" style="font-size:14px;font-weight:800;color:var(--gold);min-width:52px;text-align:center"></span>
+      <button type="button" id="sichaekMonthNext" onclick="sichaekShiftMonth(1)" style="min-width:30px;height:30px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text);font-size:15px;cursor:pointer">›</button>
     </div>
     <div id="sichaekListWrap" style="overflow-y:auto;flex:1">
       <div style="padding:30px;text-align:center;color:var(--text3)">불러오는 중...</div>
