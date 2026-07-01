@@ -3455,13 +3455,24 @@ window.UNISPACE_FCM = {
     <!-- ① 보장월초 + 활동/리크루팅 우수 (기본 열림) -->
     <div class="accordion-section acc-perf">
       <div class="accordion-header" onclick="toggleAccordion('acc1')">
-        <div class="accordion-title" id="perfSecTitle" style="font-size:19px">🏆 이번달 현황</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="accordion-title" id="perfSecTitle" style="font-size:19px">🏆 이번달 현황</div>
+          <div id="perfMonthNav" style="display:none;align-items:center;gap:3px;padding:3px 4px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:9px" onclick="event.stopPropagation()">
+            <button type="button" onclick="event.stopPropagation();perfShiftMonth(-1)" style="min-width:26px;height:26px;border:none;background:transparent;color:var(--text);font-size:15px;cursor:pointer;border-radius:6px">‹</button>
+            <span id="perfMonthLbl" style="font-size:13px;font-weight:800;color:var(--gold);min-width:42px;text-align:center">7월</span>
+            <button type="button" id="perfMonthNext" onclick="event.stopPropagation();perfShiftMonth(1)" style="min-width:26px;height:26px;border:none;background:transparent;color:var(--text);font-size:15px;cursor:pointer;border-radius:6px">›</button>
+          </div>
+        </div>
         <div style="display:flex;align-items:center;gap:8px">
           <button type="button" id="perfRefreshBtn" onclick="event.stopPropagation();refreshPerf()" style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer"><span id="perfRefreshIcon" style="display:inline-block">🔄</span> <span id="perfRefreshTxt">새로고침</span></button>
           <span class="accordion-chevron" id="chev1">▼</span>
         </div>
       </div>
       <div class="accordion-body" id="acc1">
+        <div id="perfPastBanner" style="display:none;align-items:center;justify-content:space-between;margin:0 12px 12px;padding:8px 14px;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.3);border-radius:10px">
+          <span id="perfPastBannerTxt" style="font-size:12px;color:var(--gold);font-weight:700"></span>
+          <button type="button" onclick="perfGoCurrentMonth()" style="background:var(--gold);border:none;color:#1A1200;font-size:11px;font-weight:800;padding:4px 12px;border-radius:7px;cursor:pointer">이번달로 →</button>
+        </div>
         <div class="perf-rank-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:0 12px 16px">
           <!-- 보장월초 TOP 5 -->
           <div style="background:var(--bg3);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column">
@@ -3473,6 +3484,7 @@ window.UNISPACE_FCM = {
           <div style="background:var(--bg3);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column">
             <div class="dash-card-title perf-blk-title">🤝 리크루팅 활동 TOP 5</div>
             <div class="perf-blk-sub">일정 1점 · 입과확보 +4점</div>
+            <div id="recruitCycleTabs" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
             <div id="recruitTopList" style="display:flex;flex-direction:column;gap:0"></div>
           </div>
           <!-- 업적활동 TOP 5 -->
@@ -4966,6 +4978,8 @@ function showDashboard() {
   rebuildPerfData();
   renderGoals();
   renderTop10();
+  if(typeof perfInitMonthNav==='function') perfInitMonthNav();
+  if(typeof perfLoadCurrentCyclesIfAdmin==='function') perfLoadCurrentCyclesIfAdmin();
   loadNotice();
   renderSmartCheckinBtn();
   renderAttToday();
@@ -5796,6 +5810,175 @@ function renderGoals() {
 
 function renderTop3() { renderTop10(); }
 
+// ── 현황 월 이동 (대표·지점장 전용) : 지난달 TOP5 다시보기 ──
+var _perfViewYm = null; // null = 이번 달
+function _perfCurYm(){ var n=new Date(); return n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2); }
+function _perfSelYm(){ return _perfViewYm || _perfCurYm(); }
+function _perfIsPast(){ return _perfViewYm && _perfViewYm !== _perfCurYm(); }
+function perfInitMonthNav(){
+  // 대표·지점장만 월 화살표 표시
+  var canNav = (typeof _canSeeReport==='function') && _canSeeReport(currentUser);
+  var nav=document.getElementById('perfMonthNav');
+  if(nav) nav.style.display = canNav ? 'flex' : 'none';
+  perfRenderMonthUI();
+}
+function perfRenderMonthUI(){
+  var ym=_perfSelYm();
+  var mo=parseInt(ym.substr(5,2),10);
+  var lbl=document.getElementById('perfMonthLbl'); if(lbl) lbl.textContent=mo+'월';
+  // 다음달(미래) 비활성
+  var nextBtn=document.getElementById('perfMonthNext');
+  if(nextBtn){ var isCur=(ym===_perfCurYm()); nextBtn.style.opacity=isCur?'0.28':'1'; nextBtn.style.pointerEvents=isCur?'none':'auto'; }
+  // 제목
+  var st=document.getElementById('perfSecTitle');
+  if(st) st.textContent='🏆 '+(_perfIsPast()?(mo+'월 현황'):'이번달 현황');
+  // 지난달 배너
+  var ban=document.getElementById('perfPastBanner');
+  var bt=document.getElementById('perfPastBannerTxt');
+  if(ban){ ban.style.display=_perfIsPast()?'flex':'none'; }
+  if(bt && _perfIsPast()){ bt.textContent='📅 '+ym.substr(0,4)+'년 '+mo+'월 지난 기록 보는 중 (마감된 순위)'; }
+}
+function perfShiftMonth(delta){
+  var ym=_perfSelYm();
+  var y=parseInt(ym.substr(0,4),10), m=parseInt(ym.substr(5,2),10)-1;
+  var d=new Date(y, m+delta, 1);
+  var newYm=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
+  if(newYm > _perfCurYm()) return; // 미래 차단
+  _perfViewYm = (newYm===_perfCurYm()) ? null : newYm;
+  _perfCycleSel = null; // 월 바뀌면 주기 선택 초기화
+  perfRenderMonthUI();
+  perfReloadForMonth();
+}
+function perfGoCurrentMonth(){
+  _perfViewYm=null; _perfCycleSel=null;
+  perfRenderMonthUI();
+  perfReloadForMonth();
+}
+// 선택 월 기준으로 3개 TOP5 재조회
+function perfReloadForMonth(){
+  if(!_perfIsPast()){
+    // 이번 달: 기존 번들/렌더 그대로
+    if(typeof renderTop10==='function') renderTop10();
+    if(typeof renderActTop4==='function') renderActTop4();
+    if(typeof renderRecruitTop4==='function') renderRecruitTop4();
+    return;
+  }
+  var ym=_perfSelYm();
+  // 지난달: 개별 GAS 엔드포인트로 그 달 데이터 직접 조회
+  if(typeof UNISPACE_GAS_URL==='undefined'){ return; }
+  // 보장월초 + 업적활동: getDashboardBundle(ym)
+  var burl=UNISPACE_GAS_URL+'?action=getDashboardBundle&ym='+encodeURIComponent(ym)+'&_='+Date.now();
+  fetch(burl).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok){
+      if(res.bojangTop) _renderPastBojang(res.bojangTop);
+      if(res.actTop) _renderPastAct(res.actTop);
+    }
+  }).catch(function(){});
+  // 리크루팅: 주기 목록 + 선택 주기 TOP
+  perfLoadRecruitCycles(ym);
+}
+
+// 지난달 보장월초 렌더 (topList)
+function _renderPastBojang(rows){
+  var el=document.getElementById('topList'); if(!el) return;
+  var medals=['🥇','🥈','🥉'];
+  if(!rows || !rows.length){ el.innerHTML='<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">기록 없음</div>'; return; }
+  el.innerHTML=rows.map(function(fp,i){
+    var isAlpha=fp.branch==='알파지점'||fp.branch==='알파';
+    var badge='<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;'+(isAlpha?'background:var(--alpha-soft);color:var(--alpha-deep)':'background:var(--bravo-soft);color:var(--bravo-deep)')+'">'+(isAlpha?'알파':'브라보')+'</span>';
+    var rankEl=i<3?'<span style="width:20px;text-align:center;font-size:13px">'+medals[i]+'</span>':'<span style="width:20px;text-align:center;font-size:11px;color:var(--text3)">'+(i+1)+'</span>';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:0;border-bottom:1px solid rgba(255,255,255,.04)">'+rankEl+'<span style="font-size:13px;font-weight:600;flex:1">'+fp.name+' FP</span>'+badge+'<span style="font-size:13px;font-weight:700;color:var(--gold2)">'+(parseInt(fp.amt)||0).toLocaleString()+'원</span></div>';
+  }).join('');
+}
+// 지난달 업적활동 렌더 (actTopList)
+function _renderPastAct(rows){
+  var el=document.getElementById('actTopList'); if(!el) return;
+  var medals=['🥇','🥈','🥉','',''];
+  if(!rows || !rows.length){ el.innerHTML='<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">기록 없음</div>'; return; }
+  var maxS=rows[0].score||1;
+  el.innerHTML=rows.map(function(fp,i){
+    var _fb=String(fp.branch||''); var isAlpha=_fb.indexOf('알파')>=0;
+    var pct=Math.round((fp.score/maxS)*100);
+    var badge='<span style="font-size:10px;padding:2px 5px;border-radius:4px;font-weight:700;'+(isAlpha?'background:var(--alpha-soft);color:var(--alpha-deep)':'background:var(--bravo-soft);color:var(--bravo-deep)')+'">'+(isAlpha?'알파':'브라보')+'</span>';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+
+      '<span style="width:20px;text-align:center;font-size:'+(i<3?'13px':'11px')+'">'+(i<3?medals[i]:(i+1))+'</span>'+
+      '<span style="font-size:12px;font-weight:600;flex:1">'+fp.name+'</span>'+badge+
+      '<div style="width:60px;height:4px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin:0 6px"><div style="height:100%;width:'+pct+'%;background:#3E8E5A;border-radius:4px"></div></div>'+
+      '<span style="font-size:12px;color:var(--text2);min-width:28px;text-align:right">'+fp.score+'점</span></div>';
+  }).join('');
+}
+// 리크루팅 주기 로드 + 탭 렌더 (지난달/이번달 공용)
+var _perfCycleSel = null; // 선택 주기 인덱스 (null=현재주기)
+var _perfCyclesCache = null;
+function perfLoadRecruitCycles(ym){
+  if(typeof UNISPACE_GAS_URL==='undefined'){ return; }
+  var url=UNISPACE_GAS_URL+'?action=getRecruitCycles&ym='+encodeURIComponent(ym)+'&_='+Date.now();
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(!res || !res.ok || !res.cycles){ return; }
+    _perfCyclesCache=res.cycles;
+    var sel=(_perfCycleSel!=null)?_perfCycleSel:res.curIdx;
+    if(sel==null || sel<0 || sel>=res.cycles.length) sel=res.cycles.length-1;
+    _perfCycleSel=sel;
+    perfRenderCycleTabs(res.cycles, sel);
+    perfLoadRecruitTopForCycle(ym, res.cycles[sel]);
+  }).catch(function(){});
+}
+function perfRenderCycleTabs(cycles, selIdx){
+  var wrap=document.getElementById('recruitCycleTabs');
+  if(!wrap) return;
+  // 주기가 1개뿐이면 탭 숨김 (그 달 전체)
+  if(!cycles || cycles.length<=1){ wrap.style.display='none'; wrap.innerHTML=''; return; }
+  wrap.style.display='flex';
+  wrap.innerHTML=cycles.map(function(c,i){
+    var on=(i===selIdx);
+    var range=c.start.substr(5).replace('-','/')+'~'+c.end.substr(5).replace('-','/');
+    return '<button type="button" onclick="perfPickCycle('+i+')" style="font-size:10px;padding:4px 8px;border-radius:12px;cursor:pointer;line-height:1.25;'+
+      (on?'background:#6D4FB8;color:#fff;border:1px solid #6D4FB8;font-weight:700':'background:transparent;color:var(--text2);border:1px solid rgba(123,82,208,.3)')+
+      '">'+c.no+'주기<br><span style="font-size:8.5px;opacity:.85">'+range+'</span></button>';
+  }).join('');
+}
+// 이번 달 주기 탭 로드 (대표·지점장만) — B안 탭을 현재 달에도 표시
+function perfLoadCurrentCyclesIfAdmin(){
+  var canNav=(typeof _canSeeReport==='function') && _canSeeReport(currentUser);
+  if(!canNav) return;
+  if(_perfIsPast()) return; // 지난달은 perfReloadForMonth 가 처리
+  perfLoadRecruitCycles(_perfCurYm());
+}
+function perfPickCycle(idx){
+  _perfCycleSel=idx;
+  if(!_perfCyclesCache || !_perfCyclesCache[idx]) return;
+  perfRenderCycleTabs(_perfCyclesCache, idx);
+  perfLoadRecruitTopForCycle(_perfSelYm(), _perfCyclesCache[idx]);
+}
+function perfLoadRecruitTopForCycle(ym, cyc){
+  var el=document.getElementById('recruitTopList'); if(!el) return;
+  el.innerHTML='<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">불러오는 중...</div>';
+  if(typeof UNISPACE_GAS_URL==='undefined'){ return; }
+  var url=UNISPACE_GAS_URL+'?action=getRecruitTop&ym='+encodeURIComponent(ym)+'&limit=5'+
+    '&cStart='+encodeURIComponent(cyc.start)+'&cEnd='+encodeURIComponent(cyc.end)+'&_='+Date.now();
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.rows){ _renderRecruitRowsPast(res.rows); }
+    else { el.innerHTML='<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">기록 없음</div>'; }
+  }).catch(function(){ el.innerHTML='<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">불러오기 실패</div>'; });
+}
+function _renderRecruitRowsPast(ranked){
+  var el=document.getElementById('recruitTopList'); if(!el) return;
+  if(!ranked || !ranked.length){ el.innerHTML='<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">기록 없음</div>'; return; }
+  var medals=['🥇','🥈','🥉','',''];
+  var maxScore=ranked[0].score||1;
+  el.innerHTML=ranked.map(function(fp,i){
+    var _fb=String(fp.branch||''); var isAlpha=_fb.indexOf('알파')>=0;
+    var pct=Math.round(fp.score/maxScore*100);
+    var badge='<span style="font-size:10px;padding:2px 5px;border-radius:4px;font-weight:700;'+(isAlpha?'background:var(--alpha-soft);color:var(--alpha-deep)':'background:var(--bravo-soft);color:var(--bravo-deep)')+'">'+(isAlpha?'알파':'브라보')+'</span>';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+
+      '<span style="width:20px;text-align:center;font-size:'+(i<3?'13px':'11px')+'">'+(i<3?medals[i]:(i+1))+'</span>'+
+      '<span style="font-size:12px;font-weight:600;flex:1">'+fp.name+'</span>'+badge+
+      '<div style="width:60px;height:4px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin:0 6px"><div style="height:100%;width:'+pct+'%;background:#6D4FB8;border-radius:4px"></div></div>'+
+      '<span style="font-size:12px;color:var(--text2);min-width:28px;text-align:right">'+fp.score+'점</span></div>';
+  }).join('');
+}
+
+
 var DUMMY_TOP10 = [];
 
 var DUMMY_ACT_TOP4 = [];
@@ -5827,9 +6010,12 @@ function loadDashboardBundle(cb){
 
 function renderTop10() {
   var el = document.getElementById('topList');
-  var _mn = (new Date()).getMonth()+1;
-  var st = document.getElementById('perfSecTitle'); if(st) st.textContent='🏆 '+_mn+'월 현황';
+  var _selYm = (typeof _perfSelYm==='function') ? _perfSelYm() : ((new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2));
+  var _mn = parseInt(_selYm.substr(5,2),10);
+  var _past = (typeof _perfIsPast==='function') && _perfIsPast();
+  var st = document.getElementById('perfSecTitle'); if(st) st.textContent='🏆 '+(_past?(_mn+'월 현황'):'이번달 현황');
   var tt = document.getElementById('topListTitle'); if(tt) tt.textContent='🏆 보장월초 TOP 5';
+  if(_past){ return; } // 지난달 조회 중엔 _renderPastBojang 이 담당 (덮어쓰기 방지)
   var realData = Object.entries(perfData).map(function(e) {
     return { name: e[0], branch: e[1].branch, amt: e[1].amt };
   });
@@ -5884,6 +6070,7 @@ function renderTop10() {
 function renderActTop4() {
   var el = document.getElementById('actTopList');
   if(!el) return;
+  if((typeof _perfIsPast==='function') && _perfIsPast()){ return; } // 지난달은 _renderPastAct 담당
   function _renderActRows(ranked){
     if(!ranked || !ranked.length){
       el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">활동 입력 시 자동 집계됩니다</div>';
@@ -5936,6 +6123,7 @@ function renderActTop4() {
 function renderRecruitTop4() {
   var el = document.getElementById('recruitTopList');
   if(!el) return;
+  if((typeof _perfIsPast==='function') && _perfIsPast()){ return; } // 지난달은 주기 조회가 담당
 
   var now = new Date();
   var ym = now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
