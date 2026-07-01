@@ -1867,6 +1867,8 @@ body.theme-light .wv-toggle-btn.on { color: #fff; }
 .mcal-cell.empty { background: transparent; border: none; cursor: default; }
 .mcal-cell.today { border: 2px solid var(--gold); background: rgba(201,168,76,.06); }
 .mcal-cell.selected { border: 2px solid var(--gold); background: rgba(201,168,76,.1); }
+/* 날짜 피커 전용 셀: 정사각 컴팩트 (월간 달력 60px 규칙 무시) */
+.pk-cell { aspect-ratio: 1 !important; min-height: 0 !important; padding: 0 !important; display: flex; align-items: center; justify-content: center; }
 .mcal-daynum { font-size: 11px; color: var(--text); }
 .mcal-daynum.sun { color: #C0392B; }
 .mcal-daynum.sat { color: var(--blue); }
@@ -6842,6 +6844,7 @@ function confirmPerfInput() {
 var _pvRange = 'today';
 var _pvDay = null; // Date (오늘 모드에서 날짜 이동)
 var _pvMonth = null; // Date (이번 달 모드에서 월 이동, 1일 기준)
+var _pvWeekStart = null; // Date (이번 주 모드에서 선택된 주의 월요일; null=이번 주)
 var _pvRangeStart = ''; // 기간 지정 시작
 var _pvRangeEnd = '';   // 기간 지정 종료
 var _pvBranch = 'all'; // all | al | br
@@ -6852,6 +6855,7 @@ function openPerfView(){
   _pvRange = 'today';
   _pvBranch = 'all';
   _pvDay = new Date(); _pvDay.setHours(0,0,0,0);
+  _pvWeekStart = null;
   // 대표급(_canSeeReport)=카톡공유·지점필터 보임 / FP·센터장=숨김(본인 지점 고정)
   var isAdminPv = _canSeeReport(currentUser);
   var sBtn=document.getElementById('pvShareBtn');
@@ -6893,6 +6897,7 @@ function setPerfRange(r, el){
   document.querySelectorAll('.pv-seg').forEach(function(b){ b.classList.remove('on'); });
   if(el) el.classList.add('on');
   if(r==='today' && !_pvDay){ _pvDay=new Date(); _pvDay.setHours(0,0,0,0); }
+  if(r==='week'){ _pvWeekStart=null; }
   if(r==='month' && !_pvMonth){ _pvMonth=new Date(); _pvMonth.setDate(1); _pvMonth.setHours(0,0,0,0); }
   if(r==='range'){
     var s=document.getElementById('pvRangeStart'), e=document.getElementById('pvRangeEnd');
@@ -6924,6 +6929,27 @@ function movePerfMonth(delta){
   _pvMonth.setMonth(_pvMonth.getMonth()+delta);
   renderPerfView();
 }
+function movePerfWeek(delta){
+  var cur=_pvWeekRange();
+  if(delta<0){
+    // 이전 구간: 현재 시작일 하루 전이 속한 구간
+    var prevDay=new Date(cur.mon); prevDay.setDate(prevDay.getDate()-1);
+    var seg=_pvSegForDate(prevDay);
+    _pvWeekStart=new Date(seg.mon);
+  } else {
+    // 다음 구간: 현재 끝일 다음날이 속한 구간
+    var nextDay=new Date(cur.sun); nextDay.setDate(nextDay.getDate()+1);
+    var seg2=_pvSegForDate(nextDay);
+    _pvWeekStart=new Date(seg2.mon);
+  }
+  _pvWeekStart.setHours(0,0,0,0);
+  renderPerfView();
+}
+// 주 구간 -> "N월 N주차" 라벨
+function _pvWeekLabel(mon){
+  var seg=_pvSegForDate(mon);
+  return (seg.mon.getMonth()+1)+'월 '+seg.no+'주차';
+}
 function onPvRangeChange(){
   var s=document.getElementById('pvRangeStart'), e=document.getElementById('pvRangeEnd');
   _pvRangeStart = s ? s.value : '';
@@ -6937,6 +6963,39 @@ function onPvRangeChange(){
   renderPerfView();
 }
 function _pvYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+// 한 달을 월요일 시작 + 월말 자름 방식으로 주 구간들로 분할. [{no, mon, sun, ms, ss}]
+function _pvMonthWeekSegs(y, m){
+  var first=new Date(y,m,1); first.setHours(0,0,0,0);
+  var last=new Date(y,m+1,0); last.setHours(0,0,0,0);
+  var segs=[];
+  var cur=new Date(first);
+  var no=1;
+  while(cur<=last){
+    // 이 구간 시작: cur. 끝: 같은 주 일요일 또는 월말 중 빠른 것
+    var dow=cur.getDay();
+    var thisSun=new Date(cur); thisSun.setDate(cur.getDate()+(dow===0?0:7-dow)); // 이번 주 일요일
+    var segEnd=(thisSun>last)?new Date(last):new Date(thisSun);
+    segs.push({ no:no, mon:new Date(cur), sun:new Date(segEnd), ms:_pvYmd(cur), ss:_pvYmd(segEnd) });
+    var nx=new Date(segEnd); nx.setDate(nx.getDate()+1);
+    cur=nx; no++;
+  }
+  return segs;
+}
+// 특정 날짜(주 시작 기준)가 속한 월-클램프 주 구간 반환
+function _pvSegForDate(d){
+  var segs=_pvMonthWeekSegs(d.getFullYear(), d.getMonth());
+  var ds=_pvYmd(d);
+  for(var i=0;i<segs.length;i++){ if(ds>=segs[i].ms && ds<=segs[i].ss) return segs[i]; }
+  return segs[0];
+}
+// 선택된 주 구간. _pvWeekStart 있으면 그 날이 속한 구간, 없으면 오늘이 속한 구간.
+function _pvWeekRange(){
+  var ref;
+  if(_pvWeekStart){ ref=new Date(_pvWeekStart); }
+  else { ref=new Date(); }
+  ref.setHours(0,0,0,0);
+  return _pvSegForDate(ref);
+}
 function _pvSelYm(){
   var now=new Date();
   if(_pvRange==='month' && _pvMonth) return _pvMonth.getFullYear()+'-'+('0'+(_pvMonth.getMonth()+1)).slice(-2);
@@ -7082,11 +7141,8 @@ function renderPerfView(){
     var ds = _pvYmd(_pvDay || now);
     rangeRecs = log.filter(function(r){ return r.date===ds; });
   } else if(_pvRange==='week'){
-    var dow = now.getDay();
-    var mon = new Date(now); mon.setDate(now.getDate() - (dow===0?6:dow-1));
-    var sun = new Date(mon); sun.setDate(mon.getDate()+6);
-    var ms=_pvYmd(mon), ss=_pvYmd(sun);
-    rangeRecs = log.filter(function(r){ return r.date>=ms && r.date<=ss; });
+    var _wr = _pvWeekRange();
+    rangeRecs = log.filter(function(r){ return r.date>=_wr.ms && r.date<=_wr.ss; });
   } else if(_pvRange==='range'){
     if(_pvRangeStart && _pvRangeEnd){
       rangeRecs = log.filter(function(r){ return (r.date||'')>=_pvRangeStart && (r.date||'')<=_pvRangeEnd; });
@@ -7171,9 +7227,11 @@ function renderPerfView(){
   var dayNav = document.getElementById('pvDayNav');
   var monthNav = document.getElementById('pvMonthNav');
   var rangeNav = document.getElementById('pvRangeNav');
+  var weekNav = document.getElementById('pvWeekNav');
   if(dayNav) dayNav.style.display='none';
   if(monthNav) monthNav.style.display='none';
   if(rangeNav) rangeNav.style.display='none';
+  if(weekNav) weekNav.style.display='none';
   var listRecs;
   if(_pvRange==='today'){
     if(dayNav) dayNav.style.display='flex';
@@ -7181,6 +7239,12 @@ function renderPerfView(){
     var days=['일','월','화','수','목','금','토'];
     document.getElementById('pvDayLabel').textContent = d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 ('+days[d.getDay()]+')';
     listRecs = rangeRecs;
+  } else if(_pvRange==='week'){
+    if(weekNav) weekNav.style.display='flex';
+    var _wrL=_pvWeekRange();
+    var wl=document.getElementById('pvWeekLabel');
+    if(wl) wl.textContent = _wrL.mon.getFullYear()+'년 '+_pvWeekLabel(_wrL.mon)+' ('+(_wrL.mon.getMonth()+1)+'/'+_wrL.mon.getDate()+'~'+(_wrL.sun.getMonth()+1)+'/'+_wrL.sun.getDate()+')';
+    listRecs = rangeRecs.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   } else if(_pvRange==='month'){
     if(monthNav) monthNav.style.display='flex';
     var md=_pvMonth||now;
@@ -7242,6 +7306,27 @@ function perfJumpToDay(ds){
   renderPerfView();
   var listEl=document.getElementById('pvList');
   if(listEl && listEl.scrollIntoView) listEl.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function perfJumpToMonth(yy, mm){
+  // 막대그래프(월별)에서 특정 월 클릭 -> 그 달로 이동 (이번 달 모드 유지)
+  _pvMonth = new Date(parseInt(yy), parseInt(mm)-1, 1);
+  _pvMonth.setHours(0,0,0,0);
+  _pvRange = 'month';
+  var segs=document.querySelectorAll('.pv-seg');
+  for(var i=0;i<segs.length;i++){ segs[i].classList.remove('on'); }
+  var seg=document.getElementById('pvSegMonth'); if(seg) seg.classList.add('on');
+  renderPerfView();
+}
+function perfJumpToWeek(mondayYmd){
+  // 막대그래프(주별)에서 특정 주 클릭 -> 그 주로 이동 (이번 주 모드 유지)
+  var p=mondayYmd.split('-');
+  _pvWeekStart=new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
+  _pvWeekStart.setHours(0,0,0,0);
+  _pvRange='week';
+  var segs=document.querySelectorAll('.pv-seg');
+  for(var i=0;i<segs.length;i++){ segs[i].classList.remove('on'); }
+  var seg=document.getElementById('pvSegWeek'); if(seg) seg.classList.add('on');
+  renderPerfView();
 }
 function deletePerfRec(id){
   var log=getPerfLog();
@@ -7323,30 +7408,36 @@ function renderPerfTrend(log, now){
     for(var mo=1;mo<=12;mo++){
       var vv=byMon[mo]||0;
       var hp=vv>0?Math.max(4,Math.round(vv/maxM*70)):0;
-      html+='<div class="pv-bar" title="'+mo+'월 '+Math.round(vv/10000).toLocaleString()+'만"><div class="pv-barfill" style="height:'+hp+'px"></div><div class="pv-barday'+(mo===curMon?' on':'')+'">'+mo+'</div></div>';
+      html+='<div class="pv-bar" onclick="perfJumpToMonth(\''+y+'\',\''+mo+'\')" title="'+mo+'월 '+Math.round(vv/10000).toLocaleString()+'만 (클릭하여 보기)"><div class="pv-barfill" style="height:'+hp+'px"></div><div class="pv-barday'+(mo===curMon?' on':'')+'">'+mo+'</div></div>';
     }
     labelText='('+y+'년 · 월별)';
   } else if(_pvRange==='week'){
-    // 주별: 이번 달 주차 (1일 기준 7일 단위)
-    var mp2=y+'-'+('0'+(m+1)).slice(-2);
-    var dim=new Date(y,m+1,0).getDate();
-    var nWeeks=Math.ceil(dim/7);
-    var byWk={};
+    // 주별: 표시 달의 주 구간(월요일 시작 + 월말 자름). 막대 클릭 시 해당 주로 이동.
+    var _wr0=_pvWeekRange();
+    var baseMon=_wr0.mon;
+    var wy=baseMon.getFullYear(), wm=baseMon.getMonth();
+    var segs=_pvMonthWeekSegs(wy, wm);
+    var byDay={};
     log.forEach(function(r){
-      if((r.date||'').indexOf(mp2)!==0) return;
       if(!_bMatch(r)) return;
-      var dd=parseInt((r.date||'').slice(8,10))||0;
-      var wk=Math.ceil(dd/7);
-      byWk[wk]=(byWk[wk]||0)+(parseInt(r.total)||0);
+      var rd=r.date||'';
+      byDay[rd]=(byDay[rd]||0)+(parseInt(r.total)||0);
     });
-    var maxW=1; for(var kw in byWk){ if(byWk[kw]>maxW) maxW=byWk[kw]; }
-    var curWk=(now.getMonth()===m)?Math.ceil(now.getDate()/7):-1;
-    for(var wk=1;wk<=nWeeks;wk++){
-      var vw=byWk[wk]||0;
-      var hw=vw>0?Math.max(4,Math.round(vw/maxW*70)):0;
-      html+='<div class="pv-bar" title="'+wk+'주차 '+Math.round(vw/10000).toLocaleString()+'만"><div class="pv-barfill" style="height:'+hw+'px"></div><div class="pv-barday'+(wk===curWk?' on':'')+'">'+wk+'주</div></div>';
+    function _segSum(seg){
+      var s=0;
+      for(var dd=new Date(seg.mon); dd<=seg.sun; dd.setDate(dd.getDate()+1)){ s+=byDay[_pvYmd(dd)]||0; }
+      return s;
     }
-    labelText='('+(m+1)+'월 · 주별)';
+    var sums=segs.map(function(sg){ return _segSum(sg); });
+    var maxW=1; sums.forEach(function(v){ if(v>maxW) maxW=v; });
+    var selMs=_wr0.ms;
+    segs.forEach(function(sg, idx){
+      var vw=sums[idx];
+      var hw=vw>0?Math.max(4,Math.round(vw/maxW*70)):0;
+      var isSel=(sg.ms===selMs);
+      html+='<div class="pv-bar" onclick="perfJumpToWeek(\''+sg.ms+'\')" title="'+sg.no+'주차 '+Math.round(vw/10000).toLocaleString()+'만 (클릭하여 보기)"><div class="pv-barfill" style="height:'+hw+'px"></div><div class="pv-barday'+(isSel?' on':'')+'">'+sg.no+'주</div></div>';
+    });
+    labelText='('+(wm+1)+'월 · 주별)';
   } else {
     // 일별: 1일~말일
     var mp=y+'-'+('0'+(m+1)).slice(-2);
@@ -7450,11 +7541,8 @@ function _pvApplyRange(log){
     var ds=_pvYmd(_pvDay||now);
     return log.filter(function(r){ return r.date===ds; });
   } else if(_pvRange==='week'){
-    var dow=now.getDay();
-    var mon=new Date(now); mon.setDate(now.getDate()-(dow===0?6:dow-1));
-    var sun=new Date(mon); sun.setDate(mon.getDate()+6);
-    var ms=_pvYmd(mon), ss=_pvYmd(sun);
-    return log.filter(function(r){ return r.date>=ms && r.date<=ss; });
+    var _wr=_pvWeekRange();
+    return log.filter(function(r){ return r.date>=_wr.ms && r.date<=_wr.ss; });
   } else if(_pvRange==='range'){
     if(_pvRangeStart && _pvRangeEnd) return log.filter(function(r){ return (r.date||'')>=_pvRangeStart && (r.date||'')<=_pvRangeEnd; });
     return log;
@@ -7593,14 +7681,20 @@ function _renderPvCompanyView(){
   var isAdminPv=_canSeeReport(currentUser);
   // 날짜/월/기간 네비
   var dayNav=document.getElementById('pvDayNav'), monthNav=document.getElementById('pvMonthNav'), rangeNav=document.getElementById('pvRangeNav');
+  var weekNav2=document.getElementById('pvWeekNav');
   if(dayNav) dayNav.style.display='none';
   if(monthNav) monthNav.style.display='none';
   if(rangeNav) rangeNav.style.display='none';
+  if(weekNav2) weekNav2.style.display='none';
   var now=new Date(); now.setHours(0,0,0,0);
   if(_pvRange==='today'){
     if(dayNav) dayNav.style.display='flex';
     var d=_pvDay||now; var days=['일','월','화','수','목','금','토'];
     var dl=document.getElementById('pvDayLabel'); if(dl) dl.textContent=d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 ('+days[d.getDay()]+')';
+  } else if(_pvRange==='week'){
+    if(weekNav2) weekNav2.style.display='flex';
+    var _wr2=_pvWeekRange();
+    var wl2=document.getElementById('pvWeekLabel'); if(wl2) wl2.textContent=_wr2.mon.getFullYear()+'년 '+_pvWeekLabel(_wr2.mon)+' ('+(_wr2.mon.getMonth()+1)+'/'+_wr2.mon.getDate()+'~'+(_wr2.sun.getMonth()+1)+'/'+_wr2.sun.getDate()+')';
   } else if(_pvRange==='month'){
     if(monthNav) monthNav.style.display='flex';
     var md=_pvMonth||now; var ml=document.getElementById('pvMonthLabel'); if(ml) ml.textContent=md.getFullYear()+'년 '+(md.getMonth()+1)+'월';
@@ -10221,12 +10315,9 @@ function _buildPerfShareText(){
     title=(d.getMonth()+1)+'월'+d.getDate()+'일('+days[d.getDay()]+')';
     recs=log.filter(function(r){ return r.date===ds; });
   } else if(_pvRange==='week'){
-    var dow=now.getDay();
-    var mon=new Date(now); mon.setDate(now.getDate()-(dow===0?6:dow-1));
-    var sun=new Date(mon); sun.setDate(mon.getDate()+6);
-    var ms=_pvYmd(mon), ss=_pvYmd(sun);
-    title=(mon.getMonth()+1)+'/'+mon.getDate()+'~'+(sun.getMonth()+1)+'/'+sun.getDate();
-    recs=log.filter(function(r){ return r.date>=ms && r.date<=ss; });
+    var _wr=_pvWeekRange();
+    title=(_wr.mon.getMonth()+1)+'/'+_wr.mon.getDate()+'~'+(_wr.sun.getMonth()+1)+'/'+_wr.sun.getDate();
+    recs=log.filter(function(r){ return r.date>=_wr.ms && r.date<=_wr.ss; });
   } else {
     var mp=now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
     title=(now.getMonth()+1)+'월';
@@ -15688,15 +15779,15 @@ function renderPkDate(){
   var sel = document.getElementById(_pkDateTarget).value;
   var todayStr = base.getFullYear()+'-'+('0'+(base.getMonth()+1)).slice(-2)+'-'+('0'+base.getDate()).slice(-2);
   var html = '';
-  for (var i=0;i<firstDow;i++) html += '<div class="mcal-cell empty"></div>';
+  for (var i=0;i<firstDow;i++) html += '<div class="mcal-cell pk-cell empty"></div>';
   for (var d=1; d<=dim; d++){
     var ds = y+'-'+('0'+(m+1)).slice(-2)+'-'+('0'+d).slice(-2);
     var dow = new Date(y,m,d).getDay();
     var dowCls = dow==0?' sun':(dow==6?' sat':'');
-    var cls = 'mcal-cell';
+    var cls = 'mcal-cell pk-cell';
     if (ds==todayStr) cls += ' today';
     if (ds==sel) cls += ' selected';
-    html += '<div class="'+cls+'" data-pkdt="'+ds+'" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center">' +
+    html += '<div class="'+cls+'" data-pkdt="'+ds+'">' +
       '<span class="mcal-daynum'+dowCls+'">'+d+'</span></div>';
   }
   var grid = document.getElementById('pkDateDays');
@@ -16919,6 +17010,11 @@ function doCheckin() { doSmartCheckin(); }
       <span class="pv-dlabel" id="pvMonthLabel"></span>
       <button type="button" class="pv-dnav" onclick="movePerfMonth(1)">›</button>
     </div>
+    <div id="pvWeekNav" style="display:none;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <button type="button" class="pv-dnav" onclick="movePerfWeek(-1)">‹</button>
+      <span class="pv-dlabel" id="pvWeekLabel"></span>
+      <button type="button" class="pv-dnav" onclick="movePerfWeek(1)">›</button>
+    </div>
     <div id="pvList"></div>
 
     <!-- 일자별 추이 -->
@@ -17679,7 +17775,6 @@ function doCheckin() { doSmartCheckin(); }
     </div>
     <div class="mcal-grid" id="pkDateDays"></div>
     <div class="pk-btns">
-      <button type="button" class="pk-btn pk-cancel" id="pkDateClear" style="flex:0 0 auto;padding-left:14px;padding-right:14px">지우기</button>
       <button type="button" class="pk-btn pk-cancel" id="pkDateCancel">취소</button>
     </div>
   </div>
