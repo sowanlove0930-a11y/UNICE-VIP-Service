@@ -11217,6 +11217,27 @@ function rc2NormEvents(it){
 var rc2 = { branch:'alpha', view:'list', editId:null, status:'추진중', calOffset:0, calSel:'', joinEvents:[], focusOn:false,
             fTypes:[], fDt:'', editEvents:[] };
 
+// 추진일정 달력에서 현재 보고 있는 월(calOffset 반영)의 YYYY-MM
+function rc2ViewedYm(){
+  var b=new Date(); b.setDate(1); b.setMonth(b.getMonth()+(rc2.calOffset||0));
+  return b.getFullYear()+'-'+((b.getMonth()+1<10?'0':'')+(b.getMonth()+1));
+}
+// 후보자는 등록월 키에 저장되고 일정은 다른 달일 수 있으므로, 보고 있는 월 기준 앞뒤 몇 달을 훑어 찾는다.
+// 반환: { it: 후보자, ym: 그 후보자가 저장된 월키 } 또는 null
+function rc2FindCandAcross(candId){
+  var b=new Date(); b.setDate(1); b.setMonth(b.getMonth()+(rc2.calOffset||0));
+  var y=b.getFullYear(), m=b.getMonth();
+  for(var mo=-3; mo<=3; mo++){
+    var mb=new Date(y, m+mo, 1);
+    var mym=mb.getFullYear()+'-'+((mb.getMonth()+1<10?'0':'')+(mb.getMonth()+1));
+    var md=rc2GetMonthData(mym);
+    if(md && md.list){
+      for(var i=0;i<md.list.length;i++){ if(md.list[i].id===candId){ return { it:md.list[i], ym:mym }; } }
+    }
+  }
+  return null;
+}
+
 function getRecruitDB() {
   try { return JSON.parse(localStorage.getItem(RECRUIT_KEY) || '{}'); } catch(e) { return {}; }
 }
@@ -13093,10 +13114,12 @@ function _notifyScheduleAdded(rec, prevEvtIds){
 }
 // ===== 결과 입력 (일정 다녀간 뒤) =====
 var rc2res = { candId:null, evtId:null, outcome:'', nextTypes:[], nextDt:'', status:'추진중', _pk:null };
+var rc2res_ym = null; // rc2OpenRes 에서 찾은 후보자의 저장 월키 (결과 저장/삭제 시 사용)
 function rc2OpenRes(candId, evtId) {
-  var d = rc2GetMonthData(getCurrentYM());
-  var it=null; for(var i=0;i<d.list.length;i++) if(d.list[i].id===candId){ it=d.list[i]; break; }
-  if(!it){ showToast('후보자를 찾을 수 없습니다'); return; }
+  var _found = rc2FindCandAcross(candId);
+  if(!_found){ showToast('후보자를 찾을 수 없습니다'); return; }
+  var it = _found.it;
+  rc2res_ym = _found.ym; // 결과 저장 시 이 월키 사용
   var evs = rc2NormEvents(it);
   var ev=null; for(var e=0;e<evs.length;e++) if(evs[e].id===evtId){ ev=evs[e]; break; }
   if(!ev){ showToast('일정을 찾을 수 없습니다'); return; }
@@ -13225,7 +13248,8 @@ function rc2ResRenderPicker(){
   if(_rtt) _rtt.addEventListener('click', function(){ rc2OpenResultTime(); });
 }
 function rc2SaveRes(){
-  var d=rc2GetMonthData(getCurrentYM());
+  var _ym = rc2res_ym || getCurrentYM();
+  var d=rc2GetMonthData(_ym);
   var it=null,idx=-1; for(var i=0;i<d.list.length;i++) if(d.list[i].id===rc2res.candId){ it=d.list[i]; idx=i; break; }
   if(!it){ showToast('후보자를 찾을 수 없습니다'); return; }
   var evs = rc2NormEvents(it).slice();
@@ -13274,8 +13298,8 @@ function rc2SaveRes(){
     if(_rjEl) it.join = _rjEl.value;
   }
   d.list[idx] = it;
-  rc2SetMonthData(getCurrentYM(), d);
-  rc2SaveToGas(it, getCurrentYM());
+  rc2SetMonthData(_ym, d);
+  rc2SaveToGas(it, _ym);
   rc2CloseRes();
   rc2CloseCalDetail();
   rc2RenderList();
@@ -13286,7 +13310,8 @@ function rc2SaveRes(){
 function rc2DeleteEvt(){
   if(!rc2res.candId || !rc2res.evtId) return;
   if(!confirm('이 일정을 삭제할까요?')) return;
-  var d=rc2GetMonthData(getCurrentYM());
+  var _ym = rc2res_ym || getCurrentYM();
+  var d=rc2GetMonthData(_ym);
   var it=null,idx=-1; for(var i=0;i<d.list.length;i++) if(d.list[i].id===rc2res.candId){ it=d.list[i]; idx=i; break; }
   if(!it){ showToast('후보자를 찾을 수 없습니다'); return; }
   var evs=rc2NormEvents(it).slice();
@@ -13300,8 +13325,8 @@ function rc2DeleteEvt(){
     if(_rid.indexOf('_pnl')>=0){ it.panelState=''; it.panelDt=''; }
   }
   d.list[idx]=it;
-  rc2SetMonthData(getCurrentYM(), d);
-  rc2SaveToGas(it, getCurrentYM());
+  rc2SetMonthData(_ym, d);
+  rc2SaveToGas(it, _ym);
   rc2CloseRes();
   rc2CloseCalDetail();
   rc2RenderList();
@@ -14020,9 +14045,11 @@ function rc2WireDetailRows() {
 }
 // 내방확정 토글: 일정 단위 visitConfirm 켜고/끄고 저장
 function rc2ToggleVisitConfirm(candId, evtId){
-  var d = rc2GetMonthData(getCurrentYM());
-  var it = null;
-  for(var i=0;i<d.list.length;i++){ if(d.list[i].id===candId){ it=d.list[i]; break; } }
+  var _f = rc2FindCandAcross(candId);
+  if(!_f){ showToast('후보자를 찾을 수 없습니다'); return; }
+  var _ym = _f.ym;
+  var d = rc2GetMonthData(_ym);
+  var it = null; for(var i=0;i<d.list.length;i++){ if(d.list[i].id===candId){ it=d.list[i]; break; } }
   if(!it){ showToast('후보자를 찾을 수 없습니다'); return; }
   var evs = rc2NormEvents(it);
   var target = null;
@@ -14031,8 +14058,8 @@ function rc2ToggleVisitConfirm(candId, evtId){
   if(!target){ showToast('일정을 찾을 수 없습니다'); return; }
   target.visitConfirm = !(target.visitConfirm===true);
   it.events = evs;
-  rc2SetMonthData(getCurrentYM(), d);
-  rc2SaveToGas(it, getCurrentYM());
+  rc2SetMonthData(_ym, d);
+  rc2SaveToGas(it, _ym);
   if(rc2.view==='cal') rc2RenderCal();
   rc2RenderList();
   // 모달 유지: 현재 열린 날짜 상세를 다시 그림 (rc2RenderCal이 _evByDayCache 갱신)
@@ -14089,7 +14116,9 @@ function rc2DeleteChoice(candId, evtId, name){
 }
 // 특정 후보자의 특정 일정만 삭제
 function rc2DeleteEvtById(candId, evtId){
-  var d=rc2GetMonthData(getCurrentYM());
+  var _f=rc2FindCandAcross(candId);
+  var _ym=_f?_f.ym:getCurrentYM();
+  var d=rc2GetMonthData(_ym);
   var it=null,idx=-1; for(var i=0;i<d.list.length;i++) if(d.list[i].id===candId){ it=d.list[i]; idx=i; break; }
   if(!it){ showToast('후보자를 찾을 수 없습니다'); return; }
   var evs=rc2NormEvents(it).slice();
@@ -14102,8 +14131,8 @@ function rc2DeleteEvtById(candId, evtId){
     if(_rid.indexOf('_pnl')>=0){ it.panelState=''; it.panelDt=''; }
   }
   d.list[idx]=it;
-  rc2SetMonthData(getCurrentYM(), d);
-  rc2SaveToGas(it, getCurrentYM());
+  rc2SetMonthData(_ym, d);
+  rc2SaveToGas(it, _ym);
   rc2RenderList();
   if(rc2.view==='cal') rc2RenderCal();
   renderRecruitStat();
@@ -14111,10 +14140,12 @@ function rc2DeleteEvtById(candId, evtId){
 }
 // 후보자 통째 삭제
 function rc2DeleteCandById(candId){
-  var d=rc2GetMonthData(getCurrentYM());
+  var _fc=rc2FindCandAcross(candId);
+  var _cym=_fc?_fc.ym:getCurrentYM();
+  var d=rc2GetMonthData(_cym);
   var nl=[]; for(var i=0;i<d.list.length;i++){ if(d.list[i].id!==candId) nl.push(d.list[i]); }
   d.list=nl;
-  rc2SetMonthData(getCurrentYM(), d);
+  rc2SetMonthData(_cym, d);
   rc2DeleteFromGas(candId);
   rc2RenderList();
   if(rc2.view==='cal') rc2RenderCal();
