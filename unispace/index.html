@@ -1294,6 +1294,21 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
   font-size: 13px; font-weight: 700; padding: 7px 14px;
 }
 .vid-box.landscape .vid-fs { display: inline-flex; }
+/* CSS 회전 방식 가로모드: 기기 회전 불가 환경에서도 확실히 동작 */
+.vid-overlay.fake-land { padding: 0; background: #000; }
+.vid-overlay.fake-land .vid-box.landscape {
+  position: fixed; top: 0; left: 0;
+  width: 100vh; height: 100vw;
+  max-width: none; border-radius: 0; box-shadow: none;
+  transform: rotate(90deg) translateY(-100%);
+  transform-origin: top left;
+}
+.vid-overlay.fake-land .vid-box.landscape .vid-frame-wrap {
+  width: 100%; height: 100%; aspect-ratio: auto; max-height: none;
+}
+.vid-overlay.fake-land .vid-box.landscape .vid-frame-wrap iframe {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+}
 .vid-title { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3;
   padding: 14px 16px; font-size: 14px; font-weight: 700; color: #fff;
   background: linear-gradient(transparent, rgba(0,0,0,0.7)); pointer-events: none; }
@@ -4736,42 +4751,43 @@ function openToolVideo(key, ev) {
   return false;
 }
 
-/* PWA 세로고정 환경에서도 가로영상을 전체화면+가로로 강제 전환 */
+/* 가로모드 토글: CSS 회전 방식 (모든 기기에서 동작) + 전체화면 병행 */
+function toggleVideoLandscape() {
+  var ov = document.getElementById('vidOverlay');
+  if (!ov) return;
+  if (ov.classList.contains('fake-land')) { _exitLandscapeFullscreen(); }
+  else { _tryLandscapeFullscreen(); }
+}
+
 function _tryLandscapeFullscreen() {
-  var box = document.getElementById('vidOverlay');
-  if (!box) return;
-  var req = box.requestFullscreen || box.webkitRequestFullscreen;
-  if (!req) return;
-  var doLock = function() {
-    try {
-      if (screen.orientation && screen.orientation.lock) {
-        screen.orientation.lock('landscape').catch(function(){});
-      }
-    } catch(e) {}
-  };
-  try {
-    var p = req.call(box);
-    if (p && p.then) { p.then(doLock).catch(function(){}); } else { doLock(); }
-  } catch(e) {}
+  var ov = document.getElementById('vidOverlay');
+  if (!ov) return;
+  ov.classList.add('fake-land');
+  var btn = document.getElementById('vidFsBtn');
+  if (btn) { btn.innerHTML = '⤡ 세로로 보기'; }
+  var req = ov.requestFullscreen || ov.webkitRequestFullscreen;
+  if (req) { try { req.call(ov); } catch(e) {} }
 }
 
 function _exitLandscapeFullscreen() {
-  try {
-    if (screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); }
-  } catch(e) {}
+  var ov = document.getElementById('vidOverlay');
+  if (ov) { ov.classList.remove('fake-land'); }
+  var btn = document.getElementById('vidFsBtn');
+  if (btn) { btn.innerHTML = '⤢ 크게 보기'; }
   try {
     if (document.fullscreenElement && document.exitFullscreen) { document.exitFullscreen(); }
     else if (document.webkitFullscreenElement && document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
   } catch(e) {}
 }
 
-/* 전체화면 상태 변화 감지: 버튼 표시 토글 + 나올 때 가로잠금 해제 */
+/* 뒤로가기 등으로 전체화면이 해제되면 회전 상태도 함께 복구 */
 function _onVidFsChange() {
   var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-  var btn = document.getElementById('vidFsBtn');
-  if (btn) { btn.style.display = fsEl ? 'none' : ''; }
   if (!fsEl) {
-    try { if (screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); } } catch(e) {}
+    var ov = document.getElementById('vidOverlay');
+    if (ov) { ov.classList.remove('fake-land'); }
+    var btn = document.getElementById('vidFsBtn');
+    if (btn) { btn.innerHTML = '⤢ 크게 보기'; }
   }
 }
 document.addEventListener('fullscreenchange', _onVidFsChange);
@@ -17880,7 +17896,7 @@ function doCheckin() { doSmartCheckin(); }
 <div class="vid-overlay" id="vidOverlay" onclick="if(event.target===this)closeToolVideo()">
   <div class="vid-box">
     <button type="button" class="vid-close" onclick="closeToolVideo()" aria-label="닫기">✕</button>
-    <button type="button" class="vid-fs" id="vidFsBtn" onclick="_tryLandscapeFullscreen()" aria-label="가로 전체화면">⤢ 크게 보기</button>
+    <button type="button" class="vid-fs" id="vidFsBtn" onclick="toggleVideoLandscape()" aria-label="가로 전체화면">⤢ 크게 보기</button>
     <div class="vid-frame-wrap">
       <div id="vidPlayer"></div>
       <div class="vid-replay" id="vidReplay">
