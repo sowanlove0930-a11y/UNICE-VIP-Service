@@ -4724,8 +4724,38 @@ function openToolVideo(key, ev) {
   var vbox = document.querySelector('#vidOverlay .vid-box');
   if (vbox) { if (v.orient === 'landscape') vbox.classList.add('landscape'); else vbox.classList.remove('landscape'); }
   if (ov) ov.classList.add('open');
+  if (v.orient === 'landscape') { _tryLandscapeFullscreen(); }
   _loadYTApi(function(){ _mountPlayer(v.id); });
   return false;
+}
+
+/* PWA 세로고정 환경에서도 가로영상을 전체화면+가로로 강제 전환 */
+function _tryLandscapeFullscreen() {
+  var box = document.getElementById('vidOverlay');
+  if (!box) return;
+  var req = box.requestFullscreen || box.webkitRequestFullscreen;
+  if (!req) return;
+  var doLock = function() {
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(function(){});
+      }
+    } catch(e) {}
+  };
+  try {
+    var p = req.call(box);
+    if (p && p.then) { p.then(doLock).catch(function(){}); } else { doLock(); }
+  } catch(e) {}
+}
+
+function _exitLandscapeFullscreen() {
+  try {
+    if (screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); }
+  } catch(e) {}
+  try {
+    if (document.fullscreenElement && document.exitFullscreen) { document.exitFullscreen(); }
+    else if (document.webkitFullscreenElement && document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
+  } catch(e) {}
 }
 
 function _mountPlayer(id) {
@@ -4773,6 +4803,7 @@ function replayToolVideo() {
 }
 
 function closeToolVideo() {
+  _exitLandscapeFullscreen();
   var ov = document.getElementById('vidOverlay');
   if (ov) ov.classList.remove('open');
   // 재생 중단 (소리 끊기)
