@@ -4780,12 +4780,22 @@ function _exitLandscapeFullscreen() {
   } catch(e) {}
 }
 
-/* 뒤로가기 등으로 전체화면이 해제되면 회전 상태도 함께 복구 */
+/* 뒤로가기 등으로 전체화면이 해제되면 회전 상태도 함께 복구.
+   유튜브 자체 전체화면(iframe)이 감지되면 우리 가로모드로 전환 */
 function _onVidFsChange() {
   var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  var ov = document.getElementById('vidOverlay');
+  if (!ov) return;
+  if (fsEl && fsEl.tagName === 'IFRAME' && ov.contains(fsEl)) {
+    try {
+      if (document.exitFullscreen) { document.exitFullscreen(); }
+      else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
+    } catch(e) {}
+    setTimeout(_tryLandscapeFullscreen, 80);
+    return;
+  }
   if (!fsEl) {
-    var ov = document.getElementById('vidOverlay');
-    if (ov) { ov.classList.remove('fake-land'); }
+    ov.classList.remove('fake-land');
     var btn = document.getElementById('vidFsBtn');
     if (btn) { btn.innerHTML = '⤢ 크게 보기'; }
   }
@@ -4802,7 +4812,7 @@ function _mountPlayer(id) {
     videoId: id,
     playerVars: {
       rel: 0, modestbranding: 1, playsinline: 1,
-      autoplay: 1, fs: 1, controls: 1
+      autoplay: 1, fs: 0, controls: 1
     },
     events: {
       onReady: function(e){
