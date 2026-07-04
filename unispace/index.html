@@ -1286,6 +1286,14 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
   display: flex; align-items: center; justify-content: center;
 }
 .vid-close:hover { background: rgba(220,38,38,0.85); }
+.vid-fs {
+  position: absolute; top: 6px; left: 6px; z-index: 20;
+  display: none; align-items: center; gap: 4px;
+  border: 1px solid rgba(255,255,255,0.35); border-radius: 100px;
+  background: rgba(0,0,0,0.55); color: #fff;
+  font-size: 13px; font-weight: 700; padding: 7px 14px;
+}
+.vid-box.landscape .vid-fs { display: inline-flex; }
 .vid-title { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3;
   padding: 14px 16px; font-size: 14px; font-weight: 700; color: #fff;
   background: linear-gradient(transparent, rgba(0,0,0,0.7)); pointer-events: none; }
@@ -4756,6 +4764,18 @@ function _exitLandscapeFullscreen() {
     else if (document.webkitFullscreenElement && document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
   } catch(e) {}
 }
+
+/* 전체화면 상태 변화 감지: 버튼 표시 토글 + 나올 때 가로잠금 해제 */
+function _onVidFsChange() {
+  var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  var btn = document.getElementById('vidFsBtn');
+  if (btn) { btn.style.display = fsEl ? 'none' : ''; }
+  if (!fsEl) {
+    try { if (screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); } } catch(e) {}
+  }
+}
+document.addEventListener('fullscreenchange', _onVidFsChange);
+document.addEventListener('webkitfullscreenchange', _onVidFsChange);
 
 function _mountPlayer(id) {
   if (_ytPlayer && _ytPlayer.loadVideoById) {
@@ -17860,6 +17880,7 @@ function doCheckin() { doSmartCheckin(); }
 <div class="vid-overlay" id="vidOverlay" onclick="if(event.target===this)closeToolVideo()">
   <div class="vid-box">
     <button type="button" class="vid-close" onclick="closeToolVideo()" aria-label="닫기">✕</button>
+    <button type="button" class="vid-fs" id="vidFsBtn" onclick="_tryLandscapeFullscreen()" aria-label="가로 전체화면">⤢ 크게 보기</button>
     <div class="vid-frame-wrap">
       <div id="vidPlayer"></div>
       <div class="vid-replay" id="vidReplay">
