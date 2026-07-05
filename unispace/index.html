@@ -1227,15 +1227,29 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
 }
 .vvb-text { flex: 1; min-width: 0; }
 .vvb-text b { font-size: 16px; font-weight: 800; color: #fff; }
+.vvb-actions {
+  margin-left: auto; flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: stretch; gap: 7px;
+}
 .vvb-tag {
-  margin-left: auto; flex: 0 0 auto; font-size: 11px; color: #F0D98A;
+  flex: 0 0 auto; font-size: 11px; color: #F0D98A; text-align: center;
   border: 1px solid rgba(240,217,138,.45); padding: 5px 12px; border-radius: 20px; white-space: nowrap;
 }
+.vvb-share {
+  flex: 0 0 auto; font-size: 11px; font-weight: 800; color: #17335c; text-align: center;
+  background: linear-gradient(180deg, #e3c37e 0%, #c9a96a 100%);
+  border: 1px solid #e3c37e; padding: 6px 12px; border-radius: 20px; white-space: nowrap;
+  cursor: pointer; font-family: inherit; transition: transform .15s, box-shadow .15s;
+  box-shadow: 0 3px 10px rgba(201,169,106,.35);
+}
+.vvb-share:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(201,169,106,.5); }
+.vvb-share:active { transform: scale(.97); }
 @media (max-width: 768px) {
   .vip-video-banner { padding: 15px 16px; gap: 12px; width: calc(100% - 28px); max-width: none; }
   .vvb-play { width: 44px; height: 44px; font-size: 16px; }
   .vvb-text b { font-size: 14px; }
   .vvb-tag { font-size: 10px; padding: 4px 9px; }
+  .vvb-share { font-size: 10.5px; padding: 5px 10px; }
 }
 
 /* 카드 우상단 홍보영상 버튼 — 영상 있는 도구만 JS로 표시 */
@@ -10875,6 +10889,43 @@ function saveNotice() {
 }
 
 
+// ---- VIP apply link share (consult mode banner) ----
+function shareVipApply(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  var fpName = currentUser.name || '';
+  var url = 'https://unice-vip.co.kr/vip-apply.html?from=fp&fp=' + encodeURIComponent(String(currentUser.id));
+  var msg = (fpName ? fpName + ' FP가 ' : '') + '보내드리는 UNICE VIP 고객지원 서비스입니다. 3분 영상 보시고 신청해 보세요!';
+  if (navigator.share) {
+    navigator.share({ title: 'UNICE VIP 고객지원 서비스', text: msg, url: url }).catch(function(e){});
+    return false;
+  }
+  var full = msg + '\n' + url;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(full).then(function() {
+      showToast('📋 링크가 복사되었습니다. 카톡에 붙여넣어 보내세요');
+    }).catch(function() { shareVipApplyLegacyCopy(full); });
+  } else {
+    shareVipApplyLegacyCopy(full);
+  }
+  return false;
+}
+function shareVipApplyLegacyCopy(txt) {
+  var ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast('📋 링크가 복사되었습니다. 카톡에 붙여넣어 보내세요');
+  } catch (e) {
+    showToast('⚠️ 복사에 실패했습니다');
+  }
+  document.body.removeChild(ta);
+}
+
 // ── 고객 상담 모드 ─────────────────────────────────
 var consultMode = false;
 function toggleConsultMode() {
@@ -17868,7 +17919,10 @@ function doCheckin() { doSmartCheckin(); }
   <div class="vip-video-banner" id="vipVideoBanner" onclick="openToolVideo('vip',event)" style="display:none">
     <div class="vvb-play">▶</div>
     <div class="vvb-text"><b>VIP 고객지원 서비스 안내영상</b></div>
-    <div class="vvb-tag">▶ 영상 보기</div>
+    <div class="vvb-actions">
+      <div class="vvb-tag">▶ 영상 보기</div>
+      <button type="button" class="vvb-share" onclick="return shareVipApply(event)">➤ 링크 보내기</button>
+    </div>
   </div>
 
   <div class="consult-tools">
