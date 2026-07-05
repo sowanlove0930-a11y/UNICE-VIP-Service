@@ -1184,6 +1184,9 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
   flex: 1;
   padding: 0 32px 32px;
   max-width: 900px; margin: 0 auto; width: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  align-content: start;
 }
 
 .consult-card {
@@ -1201,11 +1204,11 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
 
 /* PC·태블릿 전용 뱃지 — 기본 숨김, 폰에서만 표시 */
 .pc-only-badge {
-  display: none; position: absolute; top: 12px; left: 50%;
-  transform: translateX(-50%); z-index: 3;
-  font-size: 10px; font-weight: 700; white-space: nowrap;
-  padding: 4px 10px; border-radius: 20px;
-  background: rgba(120,120,120,.25); color: var(--text2);
+  display: none; position: absolute; top: 10px; left: 10px; z-index: 3;
+  width: 30px; height: 30px; border-radius: 50%;
+  align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1;
+  background: rgba(120,120,120,.16); color: var(--text2);
   border: 1px solid var(--border2);
 }
 
@@ -1255,8 +1258,8 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
 /* 카드 우상단 홍보영상 버튼 — 영상 있는 도구만 JS로 표시 */
 .cc-video-btn {
   display: none; position: absolute; top: 10px; right: 10px; z-index: 5;
-  width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
-  background: rgba(0,0,0,0.35); color: #fff; font-size: 13px; cursor: pointer;
+  width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.35); color: #fff; font-size: 12px; cursor: pointer;
   align-items: center; justify-content: center; padding: 0;
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
   transition: transform .2s, background .2s;
@@ -1265,12 +1268,12 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
 .cc-video-btn.show { display: flex; }
 body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333; border-color: rgba(0,0,0,0.12); }
 
-/* card top-right gold share button (video link send) */
+/* card top-right gold share button, stacked below the video button */
 .cc-share-btn {
-  display: none; position: absolute; top: 10px; right: 52px; z-index: 5;
-  width: 34px; height: 34px; border-radius: 50%; border: 1px solid #c9a96a;
+  display: none; position: absolute; top: 46px; right: 10px; z-index: 5;
+  width: 30px; height: 30px; border-radius: 50%; border: 1px solid #c9a96a;
   background: linear-gradient(180deg, #e3c37e 0%, #c9a96a 100%); color: #17335c;
-  font-size: 13px; font-weight: 800; cursor: pointer;
+  font-size: 12px; font-weight: 800; cursor: pointer;
   align-items: center; justify-content: center; padding: 0;
   box-shadow: 0 3px 10px rgba(201,169,106,.35);
   transition: transform .2s, box-shadow .2s;
@@ -1567,7 +1570,7 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   .consult-close-btn { padding: 8px 12px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
   .consult-greeting { padding: 18px 16px 12px; }
   .consult-greeting-sub { font-size: 12px; }
-  .consult-tools { gap: 10px; padding: 0 14px 24px; }
+  .consult-tools { gap: 10px; padding: 0 14px 40px; }
   .consult-card { gap: 10px; padding: 18px 10px; }
   .cc-icon { width: 56px; height: 56px; font-size: 26px; }
   .cc-name { font-size: 18px; }
@@ -1575,7 +1578,7 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   /* 폰에서 PC전용 도구 3개: 색감 유지 + 뱃지로만 잠긴 느낌 표시 */
   .pc-only-tool { opacity: .92; filter: none; }
   .pc-only-tool:active { transform: none; }
-  .pc-only-tool .pc-only-badge { display: inline-block; left: 12px; transform: none; max-width: calc(100% - 58px); overflow: hidden; text-overflow: ellipsis; }
+  .pc-only-tool .pc-only-badge { display: flex; }
   .pc-only-tool .cc-icon, .pc-only-tool .cc-name, .pc-only-tool .cc-desc { margin-top: 2px; }
   /* FP 순위표: 옵션 컬럼(목표/현재업적/잔여) 숨겨서 가로 스크롤 없이 한 화면에 */
   .fp-rank-tbl .fp-col-opt { display: none; }
@@ -6571,6 +6574,19 @@ function renderStdFp(){
   var n1=0,n2=0,n3=0,n4=0;
   rows.forEach(function(r){ if(r.c1)n1++; if(r.c2)n2++; if(r.c3)n3++; if(r.c4)n4++; });
   var total = rows.length || 1;
+  // 게이지 분모: 전체 설계사 인원(대표 제외). 로스터가 있으면 그걸 우선 사용.
+  var denom = total;
+  try {
+    if (typeof FP_LIST !== 'undefined' && FP_LIST.length) {
+      var _cnt = 0;
+      for (var _fi = 0; _fi < FP_LIST.length; _fi++) {
+        var _f = FP_LIST[_fi];
+        if (_f && _f.active !== false && _f.role !== '\uB300\uD45C') _cnt++;
+      }
+      if (_cnt > 0) denom = _cnt;
+    }
+  } catch(e){}
+  if (denom < total) denom = total;
   // 각 조건별 후보(4개 미달성자 중 그 조건 달성자), 달성수 내림차순
   function rosterFor(key){
     var f = rows.filter(function(r){ return r[key]; });
@@ -6580,7 +6596,7 @@ function renderStdFp(){
   _stdRosterData = { c1:rosterFor('c1'), c2:rosterFor('c2'), c3:rosterFor('c3'), c4:rosterFor('c4') };
 
   function bar(key, label, cnt, bg, fill, txt, bd, hoverable){
-    var pct = Math.round(cnt/total*100);
+    var pct = Math.round(cnt/denom*100);
     var right = hoverable ? '<span style="position:absolute;right:9px;top:7px;font-size:9px;color:'+txt+';font-weight:700;background:rgba(255,255,255,.65);padding:2px 7px;border-radius:5px">명단 보기</span>' : '<span style="position:absolute;left:11px;top:7px;font-size:12px;font-weight:700;color:'+txt+'">\uC804\uC6D0 \uC778\uC815</span>';
     var inner = hoverable
       ? '<div style="position:absolute;left:0;top:0;bottom:0;width:'+pct+'%;background:'+fill+'"></div><span style="position:absolute;left:11px;top:7px;font-size:12px;font-weight:700;color:'+txt+'">'+cnt+'\uBA85</span>'+right
@@ -6595,7 +6611,7 @@ function renderStdFp(){
   var _moStd = parseInt(_stdCurrentYm().substr(5,2),10);
   h += '<div style="font-size:16px;font-weight:700;color:var(--text);text-align:center;margin-bottom:14px">\uD83C\uDF96\uFE0F '+_moStd+'\uC6D4 \uC2A4\uD0E0\uB2E4\uB4DCFP \uD604\uD669</div>';
   h += '<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px">';
-  h += bar('c1','\uD83C\uDFC3 10\uC77C\uAE4C\uC9C0 \uAC00\uB3D9', n1, '#ECEAE3','#ECEAE3','#5F5E5A','#D3D1C7', true);
+  h += bar('c1','\uD83C\uDFC3 10\uC77C\uAE4C\uC9C0 \uAC00\uB3D9', n1, '#E7EBF5','#E7EBF5','#3B4C7A','#AEB9DA', true);
   h += bar('c2','\uD83D\uDC8E \uD788\uB4E0\uACE0\uAC1D \uB2EC\uC131', n2, '#FAEEDA','#FAEEDA','#854F0B','#E0C98A', true);
   h += bar('c3','\uD83D\uDEE1\uFE0F \uC190\uBCF4 \uB204\uACC4 10\uB9CC \uB2EC\uC131', n3, '#E6F1FB','#E6F1FB','#185FA5','#85B7EB', true);
   h += bar('c4','\uD83D\uDCB0 \uCD1D\uBCF4\uC7A5\uC6D4\uCD08 50\uB9CC \uB2EC\uC131', n4, '#FAECE7','#FAECE7','#993C1D','#F0997B', true);
@@ -6696,7 +6712,7 @@ function _stdLoadConfirmsFromGas(cb){
       }).catch(function(){ if(cb) cb(); });
   } catch(e){ if(cb) cb(); }
 }
-function _stdCondLabel(key){ return key==='c2'?'\uD83D\uDC8E \uD788\uB4E0\uACE0\uAC1D':key==='c3'?'\uD83D\uDEE1\uFE0F \uC190\uBCF4 10\uB9CC':'\uD83D\uDCB0 \uCD1D\uBCF4\uC7A5\uC6D4\uCD08 50\uB9CC'; }
+function _stdCondLabel(key){ return key==='c1'?'\uD83C\uDFC3 10\uC77C\uAE4C\uC9C0 \uAC00\uB3D9':key==='c2'?'\uD83D\uDC8E \uD788\uB4E0\uACE0\uAC1D':key==='c3'?'\uD83D\uDEE1\uFE0F \uC190\uBCF4 10\uB9CC':'\uD83D\uDCB0 \uCD1D\uBCF4\uC7A5\uC6D4\uCD08 50\uB9CC'; }
 function _stdRowHtml(r){
   var cntBg = r.cnt===4?'#D85A30':r.cnt===3?'#E5825A':r.cnt===2?'#EDA982':'#A8A39A';
   var nb = String(r.branch||'');
@@ -6709,7 +6725,7 @@ function _stdRowHtml(r){
     ? '<span style="font-size:9px;font-weight:800;color:#5A2FA0;background:#EFE9FA;width:17px;height:16px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">\uBE0C</span>'
     : '<span style="width:7px;height:7px;border-radius:50%;background:#B4B0A4;flex-shrink:0"></span>';
   var icons='';
-  if(r.c1) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#ECEAE3;color:#5F5E5A">\uAC00\uB3D9</span>';
+  if(r.c1) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#E7EBF5;color:#3B4C7A">\uAC00\uB3D9</span>';
   if(r.c2) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#FAEEDA;color:#854F0B">\uD788\uB4E0</span>';
   if(r.c3) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#E1F5EE;color:#0F6E56">\uC190\uBCF4</span>';
   if(r.c4) icons+='<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:5px;background:#FBEAF0;color:#993556">50\uB9CC</span>';
@@ -6726,7 +6742,7 @@ function _stdRosterInner(key){
   var rows = (_stdPopBranch==='all') ? all : all.filter(function(r){ return nb(r.branch)===_stdPopBranch; });
   var nAll=all.length, nAl=all.filter(function(r){return nb(r.branch)==='\uC54C\uD30C';}).length, nBr=all.filter(function(r){return nb(r.branch)==='\uBE0C\uB77C\uBCF4';}).length;
   var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;padding-bottom:7px;border-bottom:0.5px solid var(--bdr)">'+
-    '<span style="font-size:12px;font-weight:700;color:#1F7A4D">'+_stdCondLabel(key)+' \uB2EC\uC131 \u00B7 '+rows.length+'\uBA85</span></div>';
+    '<span style="font-size:12px;font-weight:700;color:var(--text)">'+_stdCondLabel(key)+' \uB2EC\uC131 \u00B7 '+rows.length+'\uBA85</span></div>';
   // 지점 버튼
   function btn(val,label,cnt,onCls){
     var on = (_stdPopBranch===val);
@@ -10921,13 +10937,26 @@ function saveNotice() {
 }
 
 
+// ---- share sender label: name + role + subject particle ----
+function _shareSender() {
+  if (!currentUser || !currentUser.name) return '';
+  var nm = currentUser.name;
+  var role = (currentUser.role && currentUser.role !== 'FP') ? currentUser.role : 'FP';
+  var last = role.charCodeAt(role.length - 1);
+  var particle = 'ga';
+  if (last >= 0xAC00 && last <= 0xD7A3) {
+    if ((last - 0xAC00) % 28 !== 0) particle = 'i';
+  }
+  return nm + ' ' + role + (particle === 'i' ? '이' : '가');
+}
+
 // ---- VIP apply link share (consult mode banner) ----
 function shareVipApply(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
-  var fpName = currentUser.name || '';
+  var sender = _shareSender();
   var url = 'https://unice-vip.co.kr/vip-apply.html?from=fp&fp=' + encodeURIComponent(String(currentUser.id));
-  var msg = (fpName ? fpName + ' FP가 ' : '') + '보내드리는 UNICE VIP 고객지원 서비스입니다. 3분 영상 보시고 신청해 보세요!';
+  var msg = (sender ? sender + ' 보내드립니다. ' : '') + '보험은 가입보다 관리! 3분 영상 보시고 VIP 고객지원 서비스를 신청해 보세요.';
   if (navigator.share) {
     navigator.share({ title: 'UNICE VIP 고객지원 서비스', text: msg, url: url }).catch(function(e){});
     return false;
@@ -10968,9 +10997,9 @@ function shareToolVideo(key, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var v = TOOL_VIDEOS[key];
   if (!v || !v.id) return false;
-  var fpName = (currentUser && currentUser.name) ? currentUser.name : '';
+  var sender = _shareSender();
   var url = 'https://youtu.be/' + v.id;
-  var msg = (fpName ? fpName + ' FP가 보내드리는 ' : '') + (v.title || '안내 영상') + '입니다. ' + (TOOL_SHARE_MSG[key] || '');
+  var msg = (sender ? sender + ' 보내드립니다. ' : '') + (TOOL_SHARE_MSG[key] || '');
   if (navigator.share) {
     navigator.share({ title: v.title || 'UNICE', text: msg, url: url }).catch(function(e){});
     return false;
@@ -17992,7 +18021,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="cc-icon">💎</div>
       <div class="cc-name">U-GOBI</div>
       <div class="cc-desc">실시간 보험료 비교<br>손보 10사 · 생보 14사</div>
-      <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
+      <div class="pc-only-badge" role="img" aria-label="PC·태블릿 전용" title="PC·태블릿에서 이용해 주세요">💻</div>
     </a>
     <a class="consult-card cc-carefit pc-only-tool" href="https://unice-vip.co.kr/올라이프_케어핏/carefit.html" target="_blank" onclick="return openCarefitConsult(event)">
       <button type="button" class="cc-share-btn" data-vid="carefit" onclick="return shareToolVideo('carefit',event)" aria-label="영상 링크 보내기">&#10148;</button>
@@ -18000,7 +18029,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="cc-icon">🌿</div>
       <div class="cc-name">올라이프 케어핏</div>
       <div class="cc-desc">지금 가입한 보장,<br>최신 의료 환경에 맞는지 점검</div>
-      <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
+      <div class="pc-only-badge" role="img" aria-label="PC·태블릿 전용" title="PC·태블릿에서 이용해 주세요">💻</div>
     </a>
     <a class="consult-card cc-nohupai pc-only-tool" href="https://unice-vip.co.kr/노후파이/index.html" target="_blank" onclick="return openNohupaiConsult(event)">
       <button type="button" class="cc-share-btn" data-vid="nohupai" onclick="return shareToolVideo('nohupai',event)" aria-label="영상 링크 보내기">&#10148;</button>
@@ -18008,7 +18037,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="cc-icon">🌙</div>
       <div class="cc-name">노후파이클래스</div>
       <div class="cc-desc">내 노후 준비,<br>어디까지 왔는지 심층 분석</div>
-      <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
+      <div class="pc-only-badge" role="img" aria-label="PC·태블릿 전용" title="PC·태블릿에서 이용해 주세요">💻</div>
     </a>
     <a class="consult-card cc-jenius" href="https://unice-vip.co.kr/coverage.html" target="_blank" onclick="return openJeniusConsult(event)">
       <button type="button" class="cc-video-btn" data-vid="jenius" onclick="return openToolVideo('jenius',event)" aria-label="홍보영상 보기">▶</button>
