@@ -6015,7 +6015,17 @@ function perfGoCurrentMonth(){
   perfReloadForMonth();
 }
 // 선택 월 기준으로 3개 TOP5 재조회
+function _stdPastAllowed(){
+  return currentUser && (currentUser.role==='대표' || currentUser.role==='지점장' || currentUser.id==='ktk01');
+}
+function _stdReloadForMonth(){
+  _stdServerRows = null;
+  if(typeof renderStdFp==='function') renderStdFp();
+  if((typeof _perfIsPast==='function') && _perfIsPast() && !_stdPastAllowed()) return;
+  if(typeof _stdLoadStatsFromGas==='function') _stdLoadStatsFromGas(function(){ if(typeof renderStdFp==='function') renderStdFp(); });
+}
 function perfReloadForMonth(){
+  _stdReloadForMonth();
   if(!_perfIsPast()){
     // 이번 달: 기존 번들/렌더 그대로
     if(typeof renderTop10==='function') renderTop10();
@@ -6435,6 +6445,7 @@ var STD_CONFIRM_KEY = 'unispace_std_confirm';
 function _stdGetConfirms(){ try{ return JSON.parse(localStorage.getItem(STD_CONFIRM_KEY)||'{}'); }catch(e){ return {}; } }
 function _stdSaveConfirms(o){ localStorage.setItem(STD_CONFIRM_KEY, JSON.stringify(o)); }
 function _stdCurrentYm(){
+  if (typeof _perfSelYm === 'function') return _perfSelYm();
   var now = new Date();
   var v = new Date(now.getFullYear(), now.getMonth() + (typeof monthOffset!=='undefined'?monthOffset:0), 1);
   return v.getFullYear()+'-'+('0'+(v.getMonth()+1)).slice(-2);
@@ -6480,7 +6491,7 @@ function _stdFpCompute(){
   if(_stdServerRows){
     return _stdServerRows.slice();
   }
-  if(_dashBundle && _dashBundle.stdFp){
+  if(_dashBundle && _dashBundle.stdFp && !((typeof _perfIsPast==='function') && _perfIsPast())){
     _stdServerRows = _dashBundle.stdFp.map(function(r){
       var cnt=(r.c1?1:0)+(r.c2?1:0)+(r.c3?1:0)+(r.c4?1:0);
       return { name:r.name, branch:r.branch, c1:!!r.c1, c2:!!r.c2, c3:!!r.c3, c4:!!r.c4, cnt:cnt };
@@ -6497,8 +6508,7 @@ function _stdFpCompute(){
   }
   var log = getPerfLog();
   var now = new Date(); now.setHours(0,0,0,0);
-  var viewM = new Date(now.getFullYear(), now.getMonth() + (typeof monthOffset!=='undefined'?monthOffset:0), 1);
-  var ymPrefix = viewM.getFullYear()+'-'+('0'+(viewM.getMonth()+1)).slice(-2);
+  var ymPrefix = _stdCurrentYm();
   var isJune2026 = (ymPrefix === '2026-06');
   var seeAll = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'||(typeof _isManagerUser==='function'&&_isManagerUser(currentUser))||(typeof _isMgrTitleUser==='function'&&_isMgrTitleUser(currentUser)));
   var nb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
@@ -6542,6 +6552,13 @@ var _stdRosterData = {}; // 조건키 -> rows (호버/모달용)
 function renderStdFp(){
   var host = document.getElementById('stdFpSection');
   if(!host) return;
+  if((typeof _perfIsPast==='function') && _perfIsPast() && !_stdPastAllowed()){
+    var _moPast = parseInt(_stdCurrentYm().substr(5,2),10);
+    host.innerHTML = '<div style="background:var(--bg3);border-radius:14px;padding:18px 20px">'+
+      '<div style="font-size:16px;font-weight:700;color:var(--text);text-align:center;margin-bottom:10px">\uD83C\uDF96\uFE0F '+_moPast+'\uC6D4 \uC2A4\uD0E0\uB2E4\uB4DCFP \uD604\uD669</div>'+
+      '<div style="text-align:center;color:var(--text2);font-size:13px;padding:12px">\uC9C0\uB09C\uB2EC \uC2A4\uD0E0\uB2E4\uB4DCFP \uD604\uD669\uC740 \uB300\uD45C\u00B7\uC9C0\uC810\uC7A5\uB9CC \uC870\uD68C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4</div></div>';
+    return;
+  }
   var rows = _stdFpCompute();
   if(rows && rows._loading){
     var _moLoad = parseInt(_stdCurrentYm().substr(5,2),10);
