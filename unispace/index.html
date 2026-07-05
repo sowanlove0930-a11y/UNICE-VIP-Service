@@ -1265,6 +1265,19 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
 .cc-video-btn.show { display: flex; }
 body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333; border-color: rgba(0,0,0,0.12); }
 
+/* card top-right gold share button (video link send) */
+.cc-share-btn {
+  display: none; position: absolute; top: 10px; right: 52px; z-index: 5;
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid #c9a96a;
+  background: linear-gradient(180deg, #e3c37e 0%, #c9a96a 100%); color: #17335c;
+  font-size: 13px; font-weight: 800; cursor: pointer;
+  align-items: center; justify-content: center; padding: 0;
+  box-shadow: 0 3px 10px rgba(201,169,106,.35);
+  transition: transform .2s, box-shadow .2s;
+}
+.cc-share-btn:hover { transform: scale(1.08); box-shadow: 0 5px 14px rgba(201,169,106,.5); }
+.cc-share-btn.show { display: flex; }
+
 /* 영상 모달 (세로 쇼츠 대응) */
 .vid-overlay {
   position: fixed; inset: 0; z-index: 100000;
@@ -4724,7 +4737,7 @@ var _ytReady = false;
 var _curVideoId = '';
 
 function initToolVideoButtons() {
-  var btns = document.querySelectorAll('.cc-video-btn');
+  var btns = document.querySelectorAll('.cc-video-btn, .cc-share-btn');
   for (var i = 0; i < btns.length; i++) {
     var key = btns[i].getAttribute('data-vid');
     var v = TOOL_VIDEOS[key];
@@ -10924,6 +10937,34 @@ function shareVipApplyLegacyCopy(txt) {
     showToast('⚠️ 복사에 실패했습니다');
   }
   document.body.removeChild(ta);
+}
+
+// ---- tool promo video share (consult mode cards) ----
+var TOOL_SHARE_MSG = {
+  ugobi: '내 보험료가 적정한지 24개 보험사와 비교해 보세요.',
+  carefit: '지금 가입한 보장이 최신 의료환경에 맞는지 확인해 보세요.',
+  nohupai: '내 노후 준비가 어디까지 왔는지 확인해 보세요.'
+};
+function shareToolVideo(key, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var v = TOOL_VIDEOS[key];
+  if (!v || !v.id) return false;
+  var fpName = (currentUser && currentUser.name) ? currentUser.name : '';
+  var url = 'https://youtu.be/' + v.id;
+  var msg = (fpName ? fpName + ' FP가 보내드리는 ' : '') + (v.title || '안내 영상') + '입니다. ' + (TOOL_SHARE_MSG[key] || '');
+  if (navigator.share) {
+    navigator.share({ title: v.title || 'UNICE', text: msg, url: url }).catch(function(e){});
+    return false;
+  }
+  var full = msg + '\n' + url;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(full).then(function() {
+      showToast('📋 링크가 복사되었습니다. 카톡에 붙여넣어 보내세요');
+    }).catch(function() { shareVipApplyLegacyCopy(full); });
+  } else {
+    shareVipApplyLegacyCopy(full);
+  }
+  return false;
 }
 
 // ── 고객 상담 모드 ─────────────────────────────────
@@ -17927,6 +17968,7 @@ function doCheckin() { doSmartCheckin(); }
 
   <div class="consult-tools">
     <a class="consult-card cc-ugobi pc-only-tool" href="https://unice-vip.co.kr/ugobi/index.html" target="_blank" onclick="return openUgobiConsult(event)">
+      <button type="button" class="cc-share-btn" data-vid="ugobi" onclick="return shareToolVideo('ugobi',event)" aria-label="영상 링크 보내기">&#10148;</button>
       <button type="button" class="cc-video-btn" data-vid="ugobi" onclick="return openToolVideo('ugobi',event)" aria-label="홍보영상 보기">▶</button>
       <div class="cc-icon">💎</div>
       <div class="cc-name">U-GOBI</div>
@@ -17934,6 +17976,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
     </a>
     <a class="consult-card cc-carefit pc-only-tool" href="https://unice-vip.co.kr/올라이프_케어핏/carefit.html" target="_blank" onclick="return openCarefitConsult(event)">
+      <button type="button" class="cc-share-btn" data-vid="carefit" onclick="return shareToolVideo('carefit',event)" aria-label="영상 링크 보내기">&#10148;</button>
       <button type="button" class="cc-video-btn" data-vid="carefit" onclick="return openToolVideo('carefit',event)" aria-label="홍보영상 보기">▶</button>
       <div class="cc-icon">🌿</div>
       <div class="cc-name">올라이프 케어핏</div>
@@ -17941,6 +17984,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="pc-only-badge">💻 PC·태블릿에서 이용</div>
     </a>
     <a class="consult-card cc-nohupai pc-only-tool" href="https://unice-vip.co.kr/노후파이/index.html" target="_blank" onclick="return openNohupaiConsult(event)">
+      <button type="button" class="cc-share-btn" data-vid="nohupai" onclick="return shareToolVideo('nohupai',event)" aria-label="영상 링크 보내기">&#10148;</button>
       <button type="button" class="cc-video-btn" data-vid="nohupai" onclick="return openToolVideo('nohupai',event)" aria-label="홍보영상 보기">▶</button>
       <div class="cc-icon">🌙</div>
       <div class="cc-name">노후파이클래스</div>
