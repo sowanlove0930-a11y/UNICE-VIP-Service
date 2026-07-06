@@ -1202,6 +1202,11 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
 .consult-card:hover { transform: translateY(-6px) scale(1.02); box-shadow: 0 24px 60px rgba(0,0,0,0.5); border-color: var(--border2); }
 .consult-card:active { transform: scale(0.97); }
 
+/* PC·태블릿: 카드 세로 확보 */
+@media (min-width: 700px) {
+  .consult-card { min-height: 260px; padding: 36px 20px; gap: 22px; }
+}
+
 /* PC·태블릿 전용 뱃지 — 기본 숨김, 폰에서만 표시 */
 .pc-only-badge {
   display: none; position: absolute; top: 10px; left: 10px; z-index: 3;
@@ -10953,10 +10958,18 @@ function saveNotice() {
 
 
 // ---- share sender label: name + role + subject particle ----
+var SHARE_TITLES = {
+  'ktk01': '대표',
+  'H2502969': '지점장',
+  'H2502965': '지점장',
+  'H2502982': '센터장',
+  'H2503162': '교육지점장',
+  'H2502953': '매니저'
+};
 function _shareSender() {
   if (!currentUser || !currentUser.name) return '';
   var nm = currentUser.name;
-  var role = (currentUser.role && currentUser.role !== 'FP') ? currentUser.role : 'FP';
+  var role = SHARE_TITLES[String(currentUser.id)] || ((currentUser.role && currentUser.role !== 'FP') ? currentUser.role : 'FP');
   var last = role.charCodeAt(role.length - 1);
   var particle = 'ga';
   if (last >= 0xAC00 && last <= 0xD7A3) {
@@ -10971,8 +10984,11 @@ function shareVipApply(ev) {
   if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
   var sender = _shareSender();
   var url = 'https://unice-vip.co.kr/vip-apply.html?from=fp&fp=' + encodeURIComponent(String(currentUser.id));
-  var msg = (sender ? sender + ' 보내드립니다. ' : '') + '보험은 가입보다 관리! 3분 영상 보시고 VIP 고객지원 서비스를 신청해 보세요.';
-  if (navigator.share) {
+  var msg = '[UNICE VIP 고객지원 서비스]\n'
+    + (sender ? sender + ' 보내드립니다.\n' : '')
+    + '보험은 가입보다 관리! 3분 영상 보시고\nVIP 고객지원 서비스를 신청해보세요.';
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share) {
     navigator.share({ title: 'UNICE VIP 고객지원 서비스', text: msg, url: url }).catch(function(e){});
     return false;
   }
@@ -11004,7 +11020,7 @@ function shareVipApplyLegacyCopy(txt) {
 
 // ---- tool promo video share (consult mode cards) ----
 var TOOL_SHARE_MSG = {
-  ugobi: '내 보험료가 적정한지 24개 보험사와 비교해 보세요.',
+  ugobi: '내 보험료가 적정한지 32개 보험사와 비교해 보세요.',
   carefit: '지금 가입한 보장이 최신 의료환경에 맞는지 확인해 보세요.',
   nohupai: '내 노후 준비가 어디까지 왔는지 확인해 보세요.'
 };
@@ -11015,7 +11031,8 @@ function shareToolVideo(key, ev) {
   var sender = _shareSender();
   var url = 'https://youtu.be/' + v.id;
   var msg = (sender ? sender + ' 보내드립니다. ' : '') + (TOOL_SHARE_MSG[key] || '');
-  if (navigator.share) {
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share) {
     navigator.share({ title: v.title || 'UNICE', text: msg, url: url }).catch(function(e){});
     return false;
   }
@@ -13848,6 +13865,14 @@ function _rc2RenderCalNow() {
     rc2RenderCalDetail(rc2._evByDayCache||{}, rc2.calSel);
   } else {
     document.getElementById('rc2CalDetail').innerHTML='';
+    if(_popOpen){
+      if(typeof rc2CloseCalDetail==='function'){ rc2CloseCalDetail(); }
+      else {
+        _pop.style.display='none';
+        var _mk=document.getElementById('rc2CalDetailMask');
+        if(_mk) _mk.style.display='none';
+      }
+    }
   }
 }
 
