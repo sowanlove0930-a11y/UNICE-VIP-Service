@@ -1326,6 +1326,19 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .vid-box.landscape .vid-fs { display: inline-flex; }
 /* CSS 회전 방식 가로모드: 기기 회전 불가 환경에서도 확실히 동작 */
 .vid-overlay.fake-land { padding: 0; background: #000; }
+/* PC(가로 화면)용: 회전 없이 화면 꽉 채우기 */
+.vid-overlay.pc-fs { padding: 0; background: #000; }
+.vid-overlay.pc-fs .vid-box.landscape {
+  position: fixed; top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  max-width: none; border-radius: 0; box-shadow: none;
+}
+.vid-overlay.pc-fs .vid-box.landscape .vid-frame-wrap {
+  width: 100%; height: 100%; aspect-ratio: auto; max-height: none;
+}
+.vid-overlay.pc-fs .vid-box.landscape .vid-frame-wrap iframe {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+}
 .vid-overlay.fake-land .vid-box.landscape {
   position: fixed; top: 0; left: 0;
   width: 100vh; height: 100vw;
@@ -4781,27 +4794,28 @@ function openToolVideo(key, ev) {
   return false;
 }
 
-/* 가로모드 토글: CSS 회전 방식 (모든 기기에서 동작) + 전체화면 병행 */
+/* 가로모드 토글: 세로 화면(모바일)은 CSS 회전, 가로 화면(PC)은 회전 없이 꽉 채움 */
 function toggleVideoLandscape() {
   var ov = document.getElementById('vidOverlay');
   if (!ov) return;
-  if (ov.classList.contains('fake-land')) { _exitLandscapeFullscreen(); }
+  if (ov.classList.contains('fake-land') || ov.classList.contains('pc-fs')) { _exitLandscapeFullscreen(); }
   else { _tryLandscapeFullscreen(); }
 }
 
 function _tryLandscapeFullscreen() {
   var ov = document.getElementById('vidOverlay');
   if (!ov) return;
-  ov.classList.add('fake-land');
+  var isPortrait = window.innerHeight > window.innerWidth;
+  ov.classList.add(isPortrait ? 'fake-land' : 'pc-fs');
   var btn = document.getElementById('vidFsBtn');
-  if (btn) { btn.innerHTML = '⤡ 세로로 보기'; }
+  if (btn) { btn.innerHTML = isPortrait ? '⤡ 세로로 보기' : '⤡ 작게 보기'; }
   var req = ov.requestFullscreen || ov.webkitRequestFullscreen;
   if (req) { try { req.call(ov); } catch(e) {} }
 }
 
 function _exitLandscapeFullscreen() {
   var ov = document.getElementById('vidOverlay');
-  if (ov) { ov.classList.remove('fake-land'); }
+  if (ov) { ov.classList.remove('fake-land'); ov.classList.remove('pc-fs'); }
   var btn = document.getElementById('vidFsBtn');
   if (btn) { btn.innerHTML = '⤢ 크게 보기'; }
   try {
@@ -4826,6 +4840,7 @@ function _onVidFsChange() {
   }
   if (!fsEl) {
     ov.classList.remove('fake-land');
+    ov.classList.remove('pc-fs');
     var btn = document.getElementById('vidFsBtn');
     if (btn) { btn.innerHTML = '⤢ 크게 보기'; }
   }
