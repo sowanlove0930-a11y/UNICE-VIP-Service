@@ -8716,7 +8716,7 @@ function deleteSichaekViewImage(e){
 function closeSichaekImg(){ document.getElementById('sichaekImgOverlay').classList.remove('open'); }
 
 // ── 자료조회 (자료실) 4단: 상위 > 중간 > 하위 > 자료 ───────
-var _docState = { parents: [], tree: {}, docs: [], canManage: false, curParent: '', curMid: '', curFolder: '' };
+var _docState = { parents: [], tree: {}, docs: [], canManage: false, manage: false, curParent: '', curMid: '', curFolder: '' };
 function _docCanManage(){ return _docState.canManage === true; }
 function _docFmtSize(bytes){
   var n = parseInt(bytes) || 0;
@@ -8756,15 +8756,16 @@ function _docBuildModal(){
   var inner = ''
     + '<div class="mgmt-box" onclick="event.stopPropagation()" style="max-width:760px;width:94vw;max-height:92vh;display:flex;flex-direction:column">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-    +     '<div class="mgmt-title">📁 자료 조회</div>'
+    +     '<div class="mgmt-title">🗂️ 자료실</div>'
     +     '<button type="button" onclick="closeDocModal()" class="modal-close-x" aria-label="닫기">✕</button>'
     +   '</div>'
-    +   '<div id="docBreadcrumb" style="font-size:12px;color:var(--text2);margin-bottom:8px;min-height:16px"></div>'
-    +   '<div id="docParentBar" style="display:flex;flex-wrap:wrap;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--bdr2);margin-bottom:10px"></div>'
-    +   '<div id="docMidBar" style="display:flex;flex-wrap:wrap;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--bdr2);margin-bottom:10px"></div>'
-    +   '<div id="docFolderBar" style="display:flex;flex-wrap:wrap;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--bdr2);margin-bottom:12px"></div>'
-    +   '<div id="docToolbar" style="display:none;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>'
-    +   '<div id="docList" style="min-height:120px;overflow-y:auto"></div>'
+    +   '<div id="docBreadcrumb" style="font-size:13px;color:var(--text2);margin-bottom:10px;min-height:18px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"></div>'
+    +   '<div id="docToolbar" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--bdr2)"></div>'
+    +   '<div style="flex:1;overflow-y:auto;min-height:120px">'
+    +     '<div id="docFolderGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px"></div>'
+    +     '<div id="docList"></div>'
+    +   '</div>'
+    +   '<input type="file" id="docFileInput" multiple style="display:none" onchange="_docDoUpload(this)">'
     + '</div>';
   ov.innerHTML = inner;
   document.body.appendChild(ov);
@@ -8789,123 +8790,164 @@ function _docLoad(){
     })
     .catch(function(){ if(listEl) listEl.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">네트워크 오류</div>'; });
 }
-function _docChip(label, on, onclickStr){
-  return '<span class="fp-filter-chip'+(on?' active':'')+'" style="cursor:pointer" onclick="'+onclickStr+'">'+label+'</span>';
+function _docDepth(){
+  if (!_docState.curParent) return 0;
+  if (!_docState.curMid) return 1;
+  if (!_docState.curFolder) return 2;
+  return 3;
 }
-function _docMiniBtn(label, color, onclickStr){
-  var col = color ? (';color:'+color) : '';
-  return '<span class="fp-filter-chip" style="cursor:pointer;padding:4px 8px'+col+'" onclick="'+onclickStr+'">'+label+'</span>';
+function _docFoldersHere(){
+  var d = _docDepth();
+  if (d === 0) return _docState.parents.slice();
+  if (d === 1) return Object.keys(_docState.tree[_docState.curParent] || {});
+  if (d === 2) return ((_docState.tree[_docState.curParent]||{})[_docState.curMid] || []).slice();
+  return [];
 }
-function _docRender(){
-  // breadcrumb
-  var bc = document.getElementById('docBreadcrumb');
-  if (bc){
-    var t = '자료실';
-    if (_docState.curParent) t += ' › ' + _docEsc(_docState.curParent);
-    if (_docState.curMid) t += ' › ' + _docEsc(_docState.curMid);
-    if (_docState.curFolder) t += ' › ' + _docEsc(_docState.curFolder);
-    bc.innerHTML = t;
-  }
-  // 상위
-  var pbar = document.getElementById('docParentBar');
-  if (pbar){
-    var ph = '';
-    for (var i=0;i<_docState.parents.length;i++){
-      var pn = _docState.parents[i];
-      var on = (pn === _docState.curParent);
-      ph += _docChip('📁 '+_docEsc(pn), on, '_docSelectParent(\''+_docEsc(pn)+'\')');
-      if (on && _docCanManage()){
-        ph += _docMiniBtn('✏️','', '_docRenameParent(\''+_docEsc(pn)+'\')');
-        ph += _docMiniBtn('🗑','#C0392B', '_docDeleteParent(\''+_docEsc(pn)+'\')');
-      }
-    }
-    if (_docCanManage()) ph += '<span class="fp-filter-chip" style="cursor:pointer;border-style:dashed" onclick="_docNewParent()">+ 상위 폴더</span>';
-    if (!_docState.parents.length && !_docCanManage()) ph = '<span style="color:var(--text2);font-size:13px">등록된 폴더가 없습니다</span>';
-    pbar.innerHTML = ph;
-  }
-  // 중간
-  var mbar = document.getElementById('docMidBar');
-  if (mbar){
-    if (!_docState.curParent){ mbar.style.display='none'; mbar.innerHTML=''; }
-    else {
-      mbar.style.display='flex';
-      var mids = Object.keys(_docState.tree[_docState.curParent] || {});
-      var mh = '';
-      for (var k=0;k<mids.length;k++){
-        var mn = mids[k];
-        var mon = (mn === _docState.curMid);
-        mh += _docChip('📂 '+_docEsc(mn), mon, '_docSelectMid(\''+_docEsc(mn)+'\')');
-        if (mon && _docCanManage()){
-          mh += _docMiniBtn('✏️','', '_docRenameMid(\''+_docEsc(mn)+'\')');
-          mh += _docMiniBtn('🗑','#C0392B', '_docDeleteMid(\''+_docEsc(mn)+'\')');
-        }
-      }
-      if (_docCanManage()) mh += '<span class="fp-filter-chip" style="cursor:pointer;border-style:dashed" onclick="_docNewMid()">+ 중간 폴더</span>';
-      if (!mids.length && !_docCanManage()) mh = '<span style="color:var(--text2);font-size:13px">중간 폴더가 없습니다</span>';
-      mbar.innerHTML = mh;
-    }
-  }
-  // 하위
-  var fbar = document.getElementById('docFolderBar');
-  if (fbar){
-    if (!_docState.curParent || !_docState.curMid){ fbar.style.display='none'; fbar.innerHTML=''; }
-    else {
-      fbar.style.display='flex';
-      var subs = (_docState.tree[_docState.curParent] && _docState.tree[_docState.curParent][_docState.curMid]) ? _docState.tree[_docState.curParent][_docState.curMid] : [];
-      var fh = '';
-      for (var s=0;s<subs.length;s++){
-        var fn = subs[s];
-        var fon = (fn === _docState.curFolder);
-        fh += _docChip(_docEsc(fn), fon, '_docSelectFolder(\''+_docEsc(fn)+'\')');
-        if (fon && _docCanManage()){
-          fh += _docMiniBtn('✏️','', '_docRenameFolder(\''+_docEsc(fn)+'\')');
-          fh += _docMiniBtn('🗑','#C0392B', '_docDeleteFolder(\''+_docEsc(fn)+'\')');
-        }
-      }
-      if (_docCanManage()) fh += '<span class="fp-filter-chip" style="cursor:pointer;border-style:dashed" onclick="_docNewFolder()">+ 하위 폴더</span>';
-      if (!subs.length && !_docCanManage()) fh = '<span style="color:var(--text2);font-size:13px">하위 폴더가 없습니다</span>';
-      fbar.innerHTML = fh;
-    }
-  }
-  // toolbar (하위까지 선택돼야 업로드)
-  var tb = document.getElementById('docToolbar');
-  if (tb){
-    if (_docCanManage() && _docState.curParent){
-      tb.style.display='flex';
-      tb.innerHTML = ''
-        + '<button type="button" onclick="_docUploadClick()" style="font-size:12px;font-weight:700;padding:8px 14px;border:none;border-radius:8px;background:#8B6FD6;color:#fff;cursor:pointer">⬆ 파일 업로드</button>'
-        + '<button type="button" onclick="_docAddLink()" style="font-size:12px;font-weight:700;padding:8px 14px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text);cursor:pointer">🔗 링크 등록</button>'
-        + '<input type="file" id="docFileInput" multiple style="display:none" onchange="_docDoUpload(this)">';
-    } else { tb.style.display='none'; tb.innerHTML=''; }
-  }
-  // 자료 목록
-  var listEl = document.getElementById('docList');
-  if (!listEl) return;
-  if (!_docState.curParent){ listEl.innerHTML='<div style="text-align:center;color:var(--text2);padding:40px 20px">상위 폴더를 선택하세요</div>'; return; }
-  // 현재 위치한 폴더의 자료만 (상위만/중간까지/하위까지 선택한 그 자리)
-  var curP = String(_docState.curParent).trim();
-  var curM = String(_docState.curMid || '').trim();
-  var curF = String(_docState.curFolder || '').trim();
-  var inFolder = [];
+function _docFilesAt(p, m, f){
+  var out = [];
   for (var j=0;j<_docState.docs.length;j++){
     var d0 = _docState.docs[j];
-    if (String(d0.parent).trim()===curP && String(d0.mid||'').trim()===curM && String(d0.folder||'').trim()===curF) inFolder.push(d0);
+    if (String(d0.parent).trim()===String(p).trim() && String(d0.mid||'').trim()===String(m||'').trim() && String(d0.folder||'').trim()===String(f||'').trim()) out.push(d0);
   }
-  if (!inFolder.length){ listEl.innerHTML='<div style="text-align:center;color:var(--text2);padding:40px 20px">이 폴더에 자료가 없습니다<br><span style="font-size:12px">하위 폴더가 있으면 위에서 선택하세요</span></div>'; return; }
-  var lh = '';
-  for (var m=0;m<inFolder.length;m++){
-    var d = inFolder[m];
-    var icon = _docIcon(d.name, d.mime);
-    var sz = _docFmtSize(d.size);
-    var meta = (d.createdByName || '') + (sz ? ' · ' + sz : '') + (d.fileType==='link' ? ' · 링크' : '');
+  return out;
+}
+function _docChildCount(name){
+  var d = _docDepth();
+  var sub = 0, files = 0;
+  if (d === 0){
+    sub = Object.keys(_docState.tree[name] || {}).length;
+    files = _docFilesAt(name,'','').length;
+  } else if (d === 1){
+    sub = ((_docState.tree[_docState.curParent]||{})[name] || []).length;
+    files = _docFilesAt(_docState.curParent, name, '').length;
+  } else {
+    files = _docFilesAt(_docState.curParent, _docState.curMid, name).length;
+  }
+  var parts = [];
+  if (sub) parts.push('\ud3f4\ub354 ' + sub);
+  parts.push('\ud30c\uc77c ' + files);
+  return parts.join(' \u00b7 ');
+}
+function _docEnter(name){
+  var d = _docDepth();
+  if (d === 0){ _docState.curParent = name; _docState.curMid=''; _docState.curFolder=''; }
+  else if (d === 1){ _docState.curMid = name; _docState.curFolder=''; }
+  else if (d === 2){ _docState.curFolder = name; }
+  _docRender();
+}
+function _docBack(){
+  var d = _docDepth();
+  if (d === 3) _docState.curFolder='';
+  else if (d === 2) _docState.curMid='';
+  else if (d === 1) _docState.curParent='';
+  _docRender();
+}
+function _docGo(depth){
+  if (depth <= 0){ _docState.curParent=''; _docState.curMid=''; _docState.curFolder=''; }
+  else if (depth === 1){ _docState.curMid=''; _docState.curFolder=''; }
+  else if (depth === 2){ _docState.curFolder=''; }
+  _docRender();
+}
+function _docToggleManage(){
+  _docState.manage = !_docState.manage;
+  _docRender();
+}
+function _docNewHere(){
+  var d = _docDepth();
+  if (d === 0) _docNewParent();
+  else if (d === 1) _docNewMid();
+  else if (d === 2) _docNewFolder();
+}
+function _docRenameHere(name){
+  var d = _docDepth();
+  if (d === 0) _docRenameParent(name);
+  else if (d === 1) _docRenameMid(name);
+  else if (d === 2) _docRenameFolder(name);
+}
+function _docDeleteHere(name){
+  var d = _docDepth();
+  if (d === 0) _docDeleteParent(name);
+  else if (d === 1) _docDeleteMid(name);
+  else if (d === 2) _docDeleteFolder(name);
+}
+function _docOpenFile(url){
+  try { window.open(url, '_blank'); } catch(e) {}
+}
+function _docRender(){
+  var manage = _docCanManage() && _docState.manage === true;
+  var depth = _docDepth();
+  var bc = document.getElementById('docBreadcrumb');
+  if (bc){
+    var segs = '<span style="cursor:pointer;font-weight:'+(depth===0?'800':'600')+';color:var(--text)" onclick="_docGo(0)">\ud83c\udfe0 \uc790\ub8cc\uc2e4</span>';
+    if (_docState.curParent) segs += ' <span style="color:var(--text3)">\u203a</span> <span style="cursor:pointer;font-weight:'+(depth===1?'800':'400')+';color:'+(depth===1?'var(--text)':'var(--text2)')+'" onclick="_docGo(1)">'+_docEsc(_docState.curParent)+'</span>';
+    if (_docState.curMid) segs += ' <span style="color:var(--text3)">\u203a</span> <span style="cursor:pointer;font-weight:'+(depth===2?'800':'400')+';color:'+(depth===2?'var(--text)':'var(--text2)')+'" onclick="_docGo(2)">'+_docEsc(_docState.curMid)+'</span>';
+    if (_docState.curFolder) segs += ' <span style="color:var(--text3)">\u203a</span> <span style="font-weight:800;color:var(--text)">'+_docEsc(_docState.curFolder)+'</span>';
+    bc.innerHTML = segs;
+  }
+  var tb = document.getElementById('docToolbar');
+  if (tb){
+    var th = '';
+    th += '<button type="button" onclick="_docBack()"'+(depth===0?' disabled':'')+' style="font-size:12px;font-weight:700;padding:8px 14px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text);cursor:pointer'+(depth===0?';opacity:.4':'')+'">\u2190 \ub4a4\ub85c</button>';
+    if (_docCanManage()){
+      if (depth >= 1){
+        th += '<button type="button" onclick="_docUploadClick()" style="font-size:12px;font-weight:700;padding:8px 14px;border:none;border-radius:8px;background:#8B6FD6;color:#fff;cursor:pointer">\u2b06 \ud30c\uc77c \uc5c5\ub85c\ub4dc</button>';
+        th += '<button type="button" onclick="_docAddLink()" style="font-size:12px;font-weight:700;padding:8px 14px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text);cursor:pointer">\ud83d\udd17 \ub9c1\ud06c \ub4f1\ub85d</button>';
+      }
+      if (depth <= 2){
+        th += '<button type="button" onclick="_docNewHere()" style="font-size:12px;font-weight:700;padding:8px 14px;border:1px dashed var(--bdr2);border-radius:8px;background:transparent;color:var(--text2);cursor:pointer">\uff0b \uc0c8 \ud3f4\ub354</button>';
+      }
+      th += '<button type="button" onclick="_docToggleManage()" style="margin-left:auto;font-size:12px;font-weight:700;padding:8px 14px;border:1px solid '+(manage?'#C0392B':'var(--bdr2)')+';border-radius:8px;background:'+(manage?'rgba(192,57,43,.12)':'var(--bg2)')+';color:'+(manage?'#C0392B':'var(--text2)')+';cursor:pointer">\u2699\ufe0f \uad00\ub9ac'+(manage?' ON':'')+'</button>';
+    }
+    tb.innerHTML = th;
+  }
+  var fg = document.getElementById('docFolderGrid');
+  if (fg){
+    var folders = _docFoldersHere();
+    var gh = '';
+    for (var i=0;i<folders.length;i++){
+      var nm = folders[i];
+      var esc = _docEsc(nm);
+      gh += '<div style="background:var(--bg2);border:1px solid var(--bdr2);border-radius:12px;padding:12px;cursor:pointer;position:relative" onclick="_docEnter(\''+esc+'\')">'
+          +   '<div style="font-size:26px;margin-bottom:6px">\ud83d\udcc1</div>'
+          +   '<div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc+'</div>'
+          +   '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+_docChildCount(nm)+'</div>';
+      if (manage){
+        gh += '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px">'
+            +   '<span style="cursor:pointer;font-size:13px;padding:3px 6px;border-radius:6px;background:var(--bg1)" onclick="event.stopPropagation();_docRenameHere(\''+esc+'\')">\u270f\ufe0f</span>'
+            +   '<span style="cursor:pointer;font-size:13px;padding:3px 6px;border-radius:6px;background:var(--bg1);color:#C0392B" onclick="event.stopPropagation();_docDeleteHere(\''+esc+'\')">\ud83d\uddd1</span>'
+            + '</div>';
+      }
+      gh += '</div>';
+    }
+    fg.innerHTML = gh;
+    fg.style.display = folders.length ? 'grid' : 'none';
+  }
+  var listEl = document.getElementById('docList');
+  if (!listEl) return;
+  if (!_docState.curParent){
+    listEl.innerHTML = _docState.parents.length ? '' : '<div style="text-align:center;color:var(--text2);padding:40px 20px">\ub4f1\ub85d\ub41c \ud3f4\ub354\uac00 \uc5c6\uc2b5\ub2c8\ub2e4</div>';
+    return;
+  }
+  var inFolder = _docFilesAt(_docState.curParent, _docState.curMid, _docState.curFolder);
+  if (!inFolder.length){
+    var folders2 = _docFoldersHere();
+    listEl.innerHTML = folders2.length ? '' : '<div style="text-align:center;color:var(--text2);padding:30px 20px">\uc774 \ud3f4\ub354\uc5d0 \uc790\ub8cc\uac00 \uc5c6\uc2b5\ub2c8\ub2e4</div>';
+    return;
+  }
+  var lh = '<div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.08em;margin:2px 0 8px">\ud30c\uc77c '+inFolder.length+'</div>';
+  for (var m2=0;m2<inFolder.length;m2++){
+    var d2 = inFolder[m2];
+    var icon = _docIcon(d2.name, d2.mime);
+    var sz = _docFmtSize(d2.size);
+    var meta = (d2.createdByName || '') + (sz ? ' \u00b7 ' + sz : '') + (d2.fileType==='link' ? ' \u00b7 \ub9c1\ud06c' : '');
     lh += '<div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--bdr2);border-radius:10px;margin-bottom:8px;background:var(--bg2)">'
         +   '<div style="font-size:24px">'+icon+'</div>'
         +   '<div style="flex:1;min-width:0">'
-        +     '<div style="font-weight:700;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_docEsc(d.name)+'</div>'
+        +     '<div style="font-weight:700;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_docEsc(d2.name)+'</div>'
         +     '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+_docEsc(meta)+'</div>'
         +   '</div>'
-        +   '<a href="'+_docEsc(d.fileUrl)+'" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;background:#8B6FD6;color:#fff;text-decoration:none;white-space:nowrap">⬇ 받기</a>';
-    if (_docCanManage()) lh += '<button type="button" onclick="_docDelete(\''+_docEsc(d.id)+'\')" style="font-size:12px;padding:7px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:#C0392B;cursor:pointer">삭제</button>';
+        +   '<button type="button" onclick="event.stopPropagation();_docOpenFile(\''+_docEsc(d2.fileUrl)+'\')" style="font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;border:none;background:#8B6FD6;color:#fff;cursor:pointer;white-space:nowrap">\u2b07 \ubc1b\uae30</button>';
+    if (manage) lh += '<button type="button" onclick="_docDelete(\''+_docEsc(d2.id)+'\')" style="font-size:12px;padding:7px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:#C0392B;cursor:pointer">\uc0ad\uc81c</button>';
     lh += '</div>';
   }
   listEl.innerHTML = lh;
