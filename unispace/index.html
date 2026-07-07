@@ -14946,17 +14946,22 @@ function resultBadgeHtml(a) {
   var label='', bg='#2563EB';
   if (a.resultType==='취소') { return ' <span style="background:#C0392B;color:#fff;font-size:9px;padding:1px 6px;border-radius:5px;margin-left:3px">✓취소</span>'; }
   var _rtags = Array.isArray(a.resultTags)?a.resultTags:[];
-  // 내근 활동은 별도 글자 없이 초록(완료) 표시만 — 배지 생략
-  if (_rtags.indexOf('내근')>=0) { return ''; }
-  label = (a.resultChasu?a.resultChasu+'차':'상담');
+  // 내근만 선택된 경우: 별도 글자 없이 초록(완료) 표시만 — 배지 생략
+  if (_rtags.length===1 && _rtags.indexOf('내근')>=0) { return ''; }
   var tags = _rtags;
+  var _shorted = tags.map(function(t){ return t.replace('진행',''); });
+  // 상담성 활동(PT/청약/케어핏/노파클/U고비 등) 포함 여부 판정
+  var _consult = false;
+  for (var _ci=0; _ci<tags.length; _ci++){ if(_isConsultTag(tags[_ci].replace('진행',''))){ _consult=true; break; } }
+  if (!_consult) {
+    // 비상담 태그만(문고리·친숙·관리·리쿨·소개·패널): 상담 라벨 없이 태그명만
+    return ' <span style="background:#6D4FB8;color:#fff;font-size:9px;padding:1px 6px;border-radius:5px;margin-left:3px">✓'+_shorted.join('·')+'</span>';
+  }
+  // 상담성 활동 포함: 'N차/상담' + 부가 태그 병기
+  label = (a.resultChasu?a.resultChasu+'차':'상담');
   if (tags.indexOf('청약진행')>=0 || tags.indexOf('PT진행')>=0) bg='#BA7517';
   else bg='#6D4FB8';
-  var extra='';
-  if (tags.length){
-    var shorted = tags.map(function(t){ return t.replace('진행',''); });
-    extra=' '+shorted.join('·');
-  }
+  var extra = tags.length ? (' '+_shorted.join('·')) : '';
   return ' <span style="background:'+bg+';color:#fff;font-size:9px;padding:1px 6px;border-radius:5px;margin-left:3px">✓'+label+extra+'</span>';
 }
 function newBadgeHtml(a){
@@ -15651,10 +15656,7 @@ function saveActEdit(){
   var reqEnd   = supportVal ? document.getElementById('editReqEnd').value : '';
   var ecn=document.getElementById('editChasuN');
   if(ecn && ecn.style.display!=='none' && ecn.value) _editChasu=ecn.value;
-  var type;
-  if(_editChasu) type = _editChasu+'차 상담';
-  else if(_editTags.length) type = _editTags[0];
-  else type = '활동';
+  var type = _composeActType(_editChasu, _editTags);
   db[_currentActId].type    = type;
   db[_currentActId].planTags = _editTags.slice();
   var edv=document.getElementById('editActDate'); if(edv && edv.value) db[_currentActId].date = edv.value;
@@ -16016,6 +16018,28 @@ function _chasuFromType(t){
   if(!t) return 0;
   var m = String(t).match(/([0-9]+)\s*차/);
   return m ? parseInt(m[1]) : 0;
+}
+// 비상담 활동 태그: 이것들만 선택되면 '상담' 접두어 없이 태그명만 표시
+var _NONCONSULT_TAGS = ['문고리','친숙','관리','리쿨','소개','패널','내근'];
+function _isConsultTag(tag){ return _NONCONSULT_TAGS.indexOf(tag) < 0; }
+// 선택 태그 배열에 상담성 활동(PT/청약/케어핏/노파클/U고비 등)이 하나라도 있는지
+function _hasConsultTag(tags){
+  if(!tags || !tags.length) return false;
+  for(var i=0;i<tags.length;i++){ if(_isConsultTag(tags[i])) return true; }
+  return false;
+}
+// 차수·태그로 활동 type 조립 (공통 규칙)
+function _composeActType(chasu, tags){
+  var t = tags && tags.length ? tags.slice() : [];
+  var consult = _hasConsultTag(t);
+  if(consult){
+    // 상담성 활동 포함: 차수 있으면 'N차 상담', 없으면 '상담' + (부가 비상담 태그는 뒤에 병기)
+    var base = chasu ? (chasu+'차 상담') : '상담';
+    return base;
+  }
+  // 비상담 태그만: 첫 태그명 그대로 (상담 접두어 없음)
+  if(t.length) return t[0];
+  return chasu ? (chasu+'차 상담') : '활동';
 }
 function _typeLabel(t){
   if(!t) return '';
@@ -16882,10 +16906,7 @@ function saveQuickAdd() {
   var placeStr = document.getElementById('qaPlace').value.trim();
   var nEl=document.getElementById('qaChasuN');
   if(nEl && nEl.style.display!=='none') _qaChasu = nEl.value||_qaChasu;
-  var aType;
-  if(_qaChasu) aType = _qaChasu+'차 상담';
-  else if(_qaTags.length) aType = _qaTags[0];
-  else aType = '활동';
+  var aType = _composeActType(_qaChasu, _qaTags);
   var hasAmt = (_qaTags.indexOf('PT')>=0 || _qaTags.indexOf('청약')>=0);
   var preLat = document.getElementById('qaLat').value, preLng = document.getElementById('qaLng').value;
 
@@ -18176,6 +18197,10 @@ function doCheckin() { doSmartCheckin(); }
         <button type="button" class="res-tag" data-rtag="관리" onclick="toggleResTag(this)">관리</button>
         <button type="button" class="res-tag" data-rtag="리쿨" onclick="toggleResTag(this)">리쿨</button>
         <button type="button" class="res-tag" data-rtag="패널" onclick="toggleResTag(this)">패널</button>
+        <button type="button" class="res-tag" data-rtag="케어핏" onclick="toggleResTag(this)">케어핏</button>
+        <button type="button" class="res-tag" data-rtag="노파클" onclick="toggleResTag(this)">노파클</button>
+        <button type="button" class="res-tag" data-rtag="U고비" onclick="toggleResTag(this)">U고비</button>
+        <button type="button" class="res-tag" data-rtag="문고리" onclick="toggleResTag(this)">문고리</button>
         <button type="button" class="res-tag" data-rtag="내근" onclick="toggleResTag(this)">내근</button>
       </div>
       <div id="resAmtWrap" style="display:none;margin-bottom:8px">
