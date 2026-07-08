@@ -3578,6 +3578,7 @@ window.UNISPACE_FCM = {
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" id="perfShareBtn" onclick="event.stopPropagation();sharePerfSummary()" style="display:none;background:#FAE100;border:none;border-radius:8px;padding:4px 12px;color:#3A1D1D;font-size:11px;font-weight:800;cursor:pointer">💬 공유</button>
           <button type="button" id="perfRefreshBtn" onclick="event.stopPropagation();refreshPerf()" style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer"><span id="perfRefreshIcon" style="display:inline-block">🔄</span> <span id="perfRefreshTxt">새로고침</span></button>
           <span class="accordion-chevron" id="chev1">▼</span>
         </div>
@@ -6202,6 +6203,11 @@ function loadDashboardBundle(cb){
 }
 
 function renderTop10() {
+  var _sb = document.getElementById('perfShareBtn');
+  if (_sb) {
+    var _canShare = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장' || currentUser.level==='admin');
+    _sb.style.display = _canShare ? 'inline-block' : 'none';
+  }
   var el = document.getElementById('topList');
   var _selYm = (typeof _perfSelYm==='function') ? _perfSelYm() : ((new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2));
   var _mn = parseInt(_selYm.substr(5,2),10);
@@ -6227,7 +6233,7 @@ function renderTop10() {
             : '<span style="width:20px;text-align:center;font-size:11px;color:var(--text3);">'+(i+1)+'</span>';
           return '<div style="display:flex;align-items:center;gap:8px;padding:0;border-bottom:1px solid rgba(255,255,255,.04)">'+
             rankEl+
-            '<span style="font-size:13px;font-weight:600;flex:1">'+fp.name+' FP</span>'+
+            '<span style="font-size:13px;font-weight:600;flex:1">'+fp.name+'</span>'+
             badge+
             '<span style="font-size:13px;font-weight:700;color:var(--gold2)">'+(parseInt(fp.amt)||0).toLocaleString()+'원</span>'+
           '</div>';
@@ -8833,6 +8839,7 @@ function _docEnter(name){
   if (d === 0){ _docState.curParent = name; _docState.curMid=''; _docState.curFolder=''; }
   else if (d === 1){ _docState.curMid = name; _docState.curFolder=''; }
   else if (d === 2){ _docState.curFolder = name; }
+  _docState.selected = {};
   _docRender();
 }
 function _docBack(){
@@ -8840,12 +8847,14 @@ function _docBack(){
   if (d === 3) _docState.curFolder='';
   else if (d === 2) _docState.curMid='';
   else if (d === 1) _docState.curParent='';
+  _docState.selected = {};
   _docRender();
 }
 function _docGo(depth){
   if (depth <= 0){ _docState.curParent=''; _docState.curMid=''; _docState.curFolder=''; }
   else if (depth === 1){ _docState.curMid=''; _docState.curFolder=''; }
   else if (depth === 2){ _docState.curFolder=''; }
+  _docState.selected = {};
   _docRender();
 }
 function _docToggleManage(){
@@ -8935,7 +8944,7 @@ function _docMoveHere(name){
     showToast('상위 폴더는 이동할 수 없습니다');
   }
 }
-function _docMoveDoc(id, docName){
+function _docDestOptions(){
   var opts = [];
   for (var i=0;i<_docState.parents.length;i++){
     var pp = _docState.parents[i];
@@ -8956,9 +8965,64 @@ function _docMoveDoc(id, docName){
       }
     }
   }
-  _docPickDest('"'+docName+'" 이동', opts, function(opt){
+  return opts;
+}
+function _docMoveDoc(id, docName){
+  _docPickDest('"'+docName+'" 이동', _docDestOptions(), function(opt){
     _docPost({ action:'moveDoc', data:{ fpCode: currentUser.id, id:id, parent:opt.parent, mid:opt.mid, folder:opt.folder } }, null, '✅ 이동되었습니다');
   });
+}
+function _docToggleSel(id, on){
+  if (!_docState.selected) _docState.selected = {};
+  if (on) _docState.selected[String(id)] = true; else delete _docState.selected[String(id)];
+  _docRender();
+}
+function _docSelIds(){
+  var ids = [];
+  if (_docState.selected){ for (var k in _docState.selected){ if (_docState.selected[k]) ids.push(k); } }
+  return ids;
+}
+function _docSelectAll(on){
+  var files = _docFilesAt(_docState.curParent, _docState.curMid, _docState.curFolder);
+  _docState.selected = {};
+  if (on){ for (var i=0;i<files.length;i++){ _docState.selected[String(files[i].id)] = true; } }
+  _docRender();
+}
+function _docBulkRun(ids, makeBody, verb, doneVerb){
+  var idx = 0, ok = 0, fail = 0;
+  function _next(){
+    if (idx >= ids.length){
+      showToast('✅ ' + ok + '개 ' + doneVerb + (fail ? (' · ' + fail + '개 실패') : ''), 2500);
+      _docState.selected = {};
+      _docLoad();
+      return;
+    }
+    var id = ids[idx]; idx++;
+    showToast(verb + ' ' + idx + '/' + ids.length, 3000);
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(makeBody(id)) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){ if (res && res.ok) ok++; else fail++; _next(); })
+      .catch(function(){ fail++; _next(); });
+  }
+  _next();
+}
+function _docBulkMove(){
+  var ids = _docSelIds();
+  if (!ids.length){ showToast('선택된 파일이 없습니다'); return; }
+  _docPickDest(ids.length + '개 파일 이동', _docDestOptions(), function(opt){
+    _docBulkRun(ids, function(id){
+      return { action:'moveDoc', data:{ fpCode: currentUser.id, id:id, parent:opt.parent, mid:opt.mid, folder:opt.folder } };
+    }, '📦 이동 중', '이동 완료');
+  });
+}
+function _docBulkDelete(){
+  var ids = _docSelIds();
+  if (!ids.length){ showToast('선택된 파일이 없습니다'); return; }
+  _docConfirm('선택 삭제', ids.length + '개 파일을 삭제할까요?', function(){
+    _docBulkRun(ids, function(id){
+      return { action:'deleteDoc', data:{ fpCode: currentUser.id, id:id } };
+    }, '🗑 삭제 중', '삭제 완료');
+  }, true);
 }
 function _docRender(){
   var manage = _docCanManage() && _docState.manage === true;
@@ -9024,14 +9088,26 @@ function _docRender(){
     listEl.innerHTML = folders2.length ? '' : '<div style="text-align:center;color:var(--text2);padding:30px 20px">\uc774 \ud3f4\ub354\uc5d0 \uc790\ub8cc\uac00 \uc5c6\uc2b5\ub2c8\ub2e4</div>';
     return;
   }
-  var lh = '<div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.08em;margin:2px 0 8px">\ud30c\uc77c '+inFolder.length+'</div>';
+  var selCnt = _docSelIds().length;
+  var lh = '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 8px;flex-wrap:wrap">'
+         + '<span style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.08em">\ud30c\uc77c '+inFolder.length+'</span>';
+  if (manage){
+    lh += '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer"><input type="checkbox" style="accent-color:#8B6FD6" '+((selCnt===inFolder.length&&inFolder.length>0)?'checked ':'')+'onclick="_docSelectAll(this.checked)">\uc804\uccb4\uc120\ud0dd</label>';
+    if (selCnt > 0){
+      lh += '<span style="font-size:11px;font-weight:800;color:#8B6FD6">'+selCnt+'\uac1c \uc120\ud0dd</span>'
+          + '<button type="button" onclick="_docBulkMove()" style="font-size:11px;font-weight:700;padding:5px 12px;border:none;border-radius:7px;background:#8B6FD6;color:#fff;cursor:pointer">\ud83d\udce6 \uc120\ud0dd \uc774\ub3d9</button>'
+          + '<button type="button" onclick="_docBulkDelete()" style="font-size:11px;font-weight:700;padding:5px 12px;border:1px solid var(--bdr2);border-radius:7px;background:var(--bg2);color:#C0392B;cursor:pointer">\uc120\ud0dd \uc0ad\uc81c</button>';
+    }
+  }
+  lh += '</div>';
   for (var m2=0;m2<inFolder.length;m2++){
     var d2 = inFolder[m2];
     var icon = _docIcon(d2.name, d2.mime);
     var sz = _docFmtSize(d2.size);
     var meta = (d2.createdByName || '') + (sz ? ' \u00b7 ' + sz : '') + (d2.fileType==='link' ? ' \u00b7 \ub9c1\ud06c' : '');
-    lh += '<div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--bdr2);border-radius:10px;margin-bottom:8px;background:var(--bg2)">'
-        +   '<div style="font-size:24px">'+icon+'</div>'
+    lh += '<div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--bdr2);border-radius:10px;margin-bottom:8px;background:var(--bg2)">';
+    if (manage) lh += '<input type="checkbox" style="width:18px;height:18px;flex-shrink:0;accent-color:#8B6FD6" '+((_docState.selected && _docState.selected[String(d2.id)])?'checked ':'')+'onclick="event.stopPropagation();_docToggleSel(\''+_docEsc(d2.id)+'\', this.checked)">';
+    lh += '<div style="font-size:24px">'+icon+'</div>'
         +   '<div style="flex:1;min-width:0">'
         +     '<div style="font-weight:700;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_docEsc(d2.name)+'</div>'
         +     '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+_docEsc(meta)+'</div>'
@@ -11099,6 +11175,100 @@ var SHARE_TITLES = {
   'H2503162': '교육지점장',
   'H2502953': '매니저'
 };
+// 이름 -> 직급 (업적현황 TOP5 표기용; TOP 데이터엔 이름만 오므로 이름 기준)
+var _RANK_TITLE_BY_NAME = {
+  '김태규': '대표',
+  '전소영': '지점장',
+  '이수아': '지점장',
+  '김진영': '센터장',
+  '최성경': '교육지점장',
+  '허영민': '매니저'
+};
+function _titleByName(nm){
+  return _RANK_TITLE_BY_NAME[String(nm||'').trim()] || 'FP';
+}
+// 직급자만 이름 뒤에 직급 표기, 일반 FP는 이름만 (화면용)
+function _nameWithTitle(nm){
+  var tt = _RANK_TITLE_BY_NAME[String(nm||'').trim()];
+  return tt ? (nm + ' ' + tt) : nm;
+}
+// 업적현황 요약 카톡 공유 (관리자 전용)
+function _perfBrAbbr(b){
+  var s = String(b||'');
+  if (s.indexOf('알파')>=0 || s==='alpha') return '알';
+  if (s.indexOf('브라보')>=0 || s==='bravo') return '브';
+  return '';
+}
+function _perfShareText(){
+  var now = new Date();
+  var mm = now.getMonth()+1, dd = now.getDate();
+  var hh = ('0'+now.getHours()).slice(-2), mi = ('0'+now.getMinutes()).slice(-2);
+  var out = '*업적 현황 공유(' + mm + '/' + dd + ' ' + hh + ':' + mi + ')\n';
+
+  // 보장월초 TOP5
+  var boj = (_dashBundle && _dashBundle.bojangTop) ? _dashBundle.bojangTop
+    : Object.entries(perfData).map(function(e){ return { name:e[0], branch:e[1].branch, amt:e[1].amt }; }).sort(function(a,b){ return b.amt-a.amt; }).slice(0,5);
+  out += '\n[보장월초 TOP 5]\n';
+  for (var i=0;i<boj.length;i++){
+    var b0 = boj[i];
+    out += (i+1) + '. ' + b0.name + ' ' + (parseInt(b0.amt)||0).toLocaleString() + '원(' + _perfBrAbbr(b0.branch) + ')\n';
+  }
+
+  // 리크루팅 TOP5
+  if (_dashBundle && _dashBundle.recruitTop && _dashBundle.recruitTop.length){
+    out += '\n[리크루팅 활동 TOP 5]\n';
+    var rc = _dashBundle.recruitTop;
+    for (var r=0;r<rc.length;r++){
+      out += (r+1) + '. ' + rc[r].name + ' ' + (rc[r].score||0) + '점(' + _perfBrAbbr(rc[r].branch) + ')\n';
+    }
+  }
+
+  // 업적활동 TOP5
+  if (_dashBundle && _dashBundle.actTop && _dashBundle.actTop.length){
+    out += '\n[업적 활동 TOP 5]\n';
+    var ac = _dashBundle.actTop;
+    for (var a=0;a<ac.length;a++){
+      out += (a+1) + '. ' + ac[a].name + ' ' + (ac[a].score||0) + '점(' + _perfBrAbbr(ac[a].branch) + ')\n';
+    }
+  }
+
+  // 스탠다드FP 달성 현황 (4개 달성=스탠다드 달성, 그외 개수 내림차순, 1개 이상만)
+  var std = (typeof _stdFpCompute==='function') ? _stdFpCompute() : [];
+  if (std && std.length){
+    var ranked = std.filter(function(s){ return s.cnt>=3; }).sort(function(x,y){ return y.cnt - x.cnt; });
+    if (ranked.length){
+      out += '\n[스탠다드FP 달성 현황]\n';
+      for (var s=0;s<ranked.length;s++){
+        var one = ranked[s];
+        var txt = (one.cnt>=4) ? '스탠다드 달성' : (one.cnt + '개');
+        out += (s+1) + '. ' + one.name + ' ' + txt + '(' + _perfBrAbbr(one.branch) + ')\n';
+      }
+    }
+  }
+  return out.replace(/\n+$/,'');
+}
+function sharePerfSummary(){
+  var text = _perfShareText();
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share){
+    navigator.share({ text: text }).catch(function(){});
+    return;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      showToast('📋 복사되었습니다. 카톡에 붙여넣기 하세요', 2500);
+    }).catch(function(){ _perfShareFallback(text); });
+  } else { _perfShareFallback(text); }
+}
+function _perfShareFallback(text){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('📋 복사되었습니다. 카톡에 붙여넣기 하세요', 2500);
+  } catch(e){ showToast('복사 실패 - 길게 눌러 복사해주세요'); }
+}
 function _shareSender() {
   if (!currentUser || !currentUser.name) return '';
   var nm = currentUser.name;
