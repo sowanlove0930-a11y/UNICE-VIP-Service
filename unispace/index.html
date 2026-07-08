@@ -8873,6 +8873,93 @@ function _docDeleteHere(name){
 function _docOpenFile(url){
   try { window.open(url, '_blank'); } catch(e) {}
 }
+function _docPickDest(title, options, onPick){
+  _docCloseDlg();
+  var ov = document.createElement('div');
+  ov.id = 'docDlgOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999999;background:rgba(8,12,22,.62);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick = function(e){ if(e.target===ov) _docCloseDlg(); };
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg1,#fff);border:1px solid var(--bdr2,rgba(0,0,0,.1));border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.4);max-width:380px;width:100%;padding:20px 18px;display:flex;flex-direction:column;max-height:80vh';
+  var h = '<div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;text-align:center">'+_docEsc(title)+'</div>'
+        + '<div style="font-size:12px;color:var(--text2);margin-bottom:14px;text-align:center">이동할 위치를 선택하세요</div>'
+        + '<div id="docPickList" style="overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>'
+        + '<button type="button" id="docPickCancel" style="padding:12px;border-radius:11px;border:1.5px solid var(--bdr2);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">취소</button>';
+  box.innerHTML = h;
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  var list = document.getElementById('docPickList');
+  if (!options.length){
+    list.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:16px 0">이동할 수 있는 위치가 없습니다</div>';
+  } else {
+    for (var i=0;i<options.length;i++){
+      (function(opt){
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.style.cssText = 'padding:12px 14px;border-radius:11px;border:1px solid var(--bdr2);background:var(--bg2);color:var(--text);font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;text-align:left';
+        btn.textContent = opt.label;
+        btn.addEventListener('click', function(){ _docCloseDlg(); onPick(opt); });
+        list.appendChild(btn);
+      })(options[i]);
+    }
+  }
+  var c = document.getElementById('docPickCancel');
+  if (c) c.addEventListener('click', _docCloseDlg);
+}
+function _docMoveHere(name){
+  var d = _docDepth();
+  if (d === 1){
+    var opts = [];
+    for (var i=0;i<_docState.parents.length;i++){
+      var pn = _docState.parents[i];
+      if (pn === _docState.curParent) continue;
+      opts.push({ label:'📁 '+pn, toParent:pn });
+    }
+    _docPickDest('"'+name+'" 이동', opts, function(opt){
+      _docPost({ action:'moveDocFolder', data:{ fpCode: currentUser.id, kind:'mid', parent:_docState.curParent, mid:name, toParent:opt.toParent } }, null, '✅ 이동되었습니다');
+    });
+  } else if (d === 2){
+    var opts2 = [];
+    for (var p2=0;p2<_docState.parents.length;p2++){
+      var pp = _docState.parents[p2];
+      var mids = Object.keys(_docState.tree[pp] || {});
+      for (var m2=0;m2<mids.length;m2++){
+        if (pp === _docState.curParent && mids[m2] === _docState.curMid) continue;
+        opts2.push({ label:'📁 '+pp+' › '+mids[m2], toParent:pp, toMid:mids[m2] });
+      }
+    }
+    _docPickDest('"'+name+'" 이동', opts2, function(opt){
+      _docPost({ action:'moveDocFolder', data:{ fpCode: currentUser.id, kind:'folder', parent:_docState.curParent, mid:_docState.curMid, folder:name, toParent:opt.toParent, toMid:opt.toMid } }, null, '✅ 이동되었습니다');
+    });
+  } else {
+    showToast('상위 폴더는 이동할 수 없습니다');
+  }
+}
+function _docMoveDoc(id, docName){
+  var opts = [];
+  for (var i=0;i<_docState.parents.length;i++){
+    var pp = _docState.parents[i];
+    if (!(pp === _docState.curParent && !_docState.curMid && !_docState.curFolder)){
+      opts.push({ label:'📁 '+pp, parent:pp, mid:'', folder:'' });
+    }
+    var mids = Object.keys(_docState.tree[pp] || {});
+    for (var m=0;m<mids.length;m++){
+      var mm = mids[m];
+      if (!(pp === _docState.curParent && mm === _docState.curMid && !_docState.curFolder)){
+        opts.push({ label:'📁 '+pp+' › '+mm, parent:pp, mid:mm, folder:'' });
+      }
+      var subs = (_docState.tree[pp][mm] || []);
+      for (var s=0;s<subs.length;s++){
+        var ff = subs[s];
+        if (pp === _docState.curParent && mm === _docState.curMid && ff === _docState.curFolder) continue;
+        opts.push({ label:'📁 '+pp+' › '+mm+' › '+ff, parent:pp, mid:mm, folder:ff });
+      }
+    }
+  }
+  _docPickDest('"'+docName+'" 이동', opts, function(opt){
+    _docPost({ action:'moveDoc', data:{ fpCode: currentUser.id, id:id, parent:opt.parent, mid:opt.mid, folder:opt.folder } }, null, '✅ 이동되었습니다');
+  });
+}
 function _docRender(){
   var manage = _docCanManage() && _docState.manage === true;
   var depth = _docDepth();
@@ -8912,9 +8999,12 @@ function _docRender(){
           +   '<div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc+'</div>'
           +   '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+_docChildCount(nm)+'</div>';
       if (manage){
-        gh += '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px">'
-            +   '<span style="cursor:pointer;font-size:13px;padding:3px 6px;border-radius:6px;background:var(--bg1)" onclick="event.stopPropagation();_docRenameHere(\''+esc+'\')">\u270f\ufe0f</span>'
-            +   '<span style="cursor:pointer;font-size:13px;padding:3px 6px;border-radius:6px;background:var(--bg1);color:#C0392B" onclick="event.stopPropagation();_docDeleteHere(\''+esc+'\')">\ud83d\uddd1</span>'
+        gh += '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px">';
+        if (depth === 1 || depth === 2){
+          gh += '<span style="cursor:pointer;font-size:13px;padding:3px 6px;border-radius:6px;background:var(--bg1)" onclick="event.stopPropagation();_docMoveHere(\''+esc+'\')">\ud83d\udce6</span>';
+        }
+        gh += '<span style="cursor:pointer;font-size:13px;padding:3px 6px;border-radius:6px;background:var(--bg1)" onclick="event.stopPropagation();_docRenameHere(\''+esc+'\')">\u270f\ufe0f</span>'
+            + '<span style="cursor:pointer;font-size:13px;padding:3px 6px;border-radius:6px;background:var(--bg1);color:#C0392B" onclick="event.stopPropagation();_docDeleteHere(\''+esc+'\')">\ud83d\uddd1</span>'
             + '</div>';
       }
       gh += '</div>';
@@ -8947,6 +9037,7 @@ function _docRender(){
         +     '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+_docEsc(meta)+'</div>'
         +   '</div>'
         +   '<button type="button" onclick="event.stopPropagation();_docOpenFile(\''+_docEsc(d2.fileUrl)+'\')" style="font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;border:none;background:#8B6FD6;color:#fff;cursor:pointer;white-space:nowrap">\u2b07 \ubc1b\uae30</button>';
+    if (manage) lh += '<button type="button" onclick="_docMoveDoc(\''+_docEsc(d2.id)+'\',\''+_docEsc(d2.name)+'\')" style="font-size:12px;padding:7px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text2);cursor:pointer">\uc774\ub3d9</button>';
     if (manage) lh += '<button type="button" onclick="_docDelete(\''+_docEsc(d2.id)+'\')" style="font-size:12px;padding:7px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:#C0392B;cursor:pointer">\uc0ad\uc81c</button>';
     lh += '</div>';
   }
