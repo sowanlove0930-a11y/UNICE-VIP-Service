@@ -894,12 +894,14 @@ function renderLeaderboard(){
 /* ---------- 자료실 ---------- */
 var MATERIALS = [
   { icon:"🎬", title:"소비자 패널 홍보 영상", sub:"1분 · 유튜브", share:true,
-    copy:"유니스 오픈랩 소비자 패널 홍보 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)\nhttps://youtu.be/LChecM_Du1M" },
+    msg:"유니스 오픈랩 소비자 패널 홍보 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)",
+    link:"https://youtu.be/LChecM_Du1M" },
   { icon:"🖼️", title:"소비자 패널 안내 브로셔", sub:"사진 7장 · 바로 전송", imgShare:true,
     imgBase:"https://unice-vip.co.kr/openlab/", imgCount:7,
-    copy:"유니스 오픈랩 소비자 패널 모집! 딱 1시간, 3만원 받아가세요. 이번 모집 지역은 부산이에요 :)" },
+    msg:"유니스 오픈랩 소비자 패널 모집! 딱 1시간, 3만원 받아가세요. 이번 모집 지역은 부산이에요 :)" },
   { icon:"📄", title:"VIP고객 지원서비스 홍보 영상", sub:"담당 FP 링크 자동 연결", share:true, fpLink:true,
-    copy:"유니스 VIP고객 지원서비스 소개예요. 법률·손해사정·헬스케어까지 연결해드립니다!\nhttps://unice-vip.co.kr/vip-apply.html" }
+    msg:"유니스 VIP고객 지원서비스 소개예요. 법률·손해사정·헬스케어까지 연결해드립니다!",
+    link:"https://unice-vip.co.kr/vip-apply.html" }
 ];
 function renderMaterials(){
   var html="";
@@ -910,19 +912,19 @@ function renderMaterials(){
   }
   $("matList").innerHTML=html;
 }
-function matText(i){
-  var m=MATERIALS[i];
-  var text=m.copy;
+function matLink(m){
+  var link=m.link||"";
+  if(!link)return "";
   /* 담당 FP 파라미터 부착 (cardnews / vip-apply 링크) */
   if(m.fpLink){
     var fpName=(ME&&ME.fp)?ME.fp:"";
     if(fpName){
       var enc=encodeURIComponent(fpName);
-      text=text.replace("cardnews.html","cardnews.html?fp="+enc);
-      text=text.replace("vip-apply.html","vip-apply.html?fp="+enc);
+      link=link.replace("cardnews.html","cardnews.html?fp="+enc);
+      link=link.replace("vip-apply.html","vip-apply.html?fp="+enc);
     }
   }
-  return text;
+  return link;
 }
 function sendMat(i){
   var m=MATERIALS[i];
@@ -931,18 +933,21 @@ function sendMat(i){
     shareImages(m);
     return;
   }
-  var text=matText(i);
-  /* 카톡 등으로 바로 공유 (모바일) */
+  var msg=m.msg||"";
+  var link=matLink(m);
+  /* 문구(text)와 링크(url)를 분리해 보내면 긴 URL이 그대로 노출되지 않고
+     미리보기 카드로만 표시됨 */
   if(navigator.share){
-    navigator.share({ text:text }).then(function(){
+    var payload=link ? { text:msg, url:link } : { text:msg };
+    navigator.share(payload).then(function(){
       showToast("공유창이 열렸어요 📤");
     }).catch(function(err){
-      if(String(err).indexOf("AbortError")<0){ copyMatText(text); }
+      if(String(err).indexOf("AbortError")<0){ copyMatText(msg, link); }
     });
     return;
   }
   /* 공유 미지원(PC 등)은 복사로 폴백 */
-  copyMatText(text);
+  copyMatText(msg, link);
 }
 function shareImages(m){
   var n=m.imgCount||7;
@@ -990,7 +995,8 @@ function saveImages(files){
   }
   uiAlert("사진 7장을 저장했어요! 📥\n\n카카오톡을 열고 사진 첨부로\n보내주시면 됩니다.", "사진 저장 완료", "✅");
 }
-function copyMatText(text){
+function copyMatText(msg, link){
+  var text=link ? (msg+"\n"+link) : msg;
   var ta=document.createElement("textarea");
   ta.value=text; ta.style.position="fixed"; ta.style.left="-9999px";
   document.body.appendChild(ta); ta.focus(); ta.select();
