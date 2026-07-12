@@ -1790,7 +1790,20 @@ updateBioBtn();
   /* Service Worker 등록 */
   if("serviceWorker" in navigator){
     window.addEventListener("load", function(){
-      navigator.serviceWorker.register("sw.js").catch(function(){});
+      navigator.serviceWorker.register("sw.js").then(function(reg){
+        /* 새 버전 감지 시 자동 반영 */
+        reg.addEventListener("updatefound", function(){
+          var nw = reg.installing;
+          if(!nw) return;
+          nw.addEventListener("statechange", function(){
+            if(nw.state === "installed" && navigator.serviceWorker.controller){
+              /* 새 SW가 대기 중이면 즉시 활성화 후 새로고침 */
+              nw.postMessage && nw.postMessage("skipWaiting");
+              window.location.reload();
+            }
+          });
+        });
+      }).catch(function(){});
     });
   }
 

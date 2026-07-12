@@ -1,5 +1,5 @@
 /* UNICE 서포터즈 PWA Service Worker */
-var CACHE_NAME = "unice-sup-v1";
+var CACHE_NAME = "unice-sup-v2";
 var APP_SHELL = [
   "./",
   "./index.html",
@@ -33,8 +33,8 @@ self.addEventListener("fetch", function(e){
   if(url.indexOf("script.google.com") > -1 || url.indexOf("googleusercontent") > -1){
     return;
   }
-  /* 명함 이미지(cards) 는 네트워크 우선, 실패 시 캐시 */
-  if(url.indexOf("/cards/") > -1){
+  /* HTML 문서는 네트워크 우선: 항상 최신 버전을 먼저 가져오고, 오프라인일 때만 캐시 */
+  if(e.request.mode === "navigate" || url.indexOf(".html") > -1 || url.indexOf("/cards/") > -1){
     e.respondWith(
       fetch(e.request).then(function(res){
         var copy = res.clone();
@@ -44,10 +44,12 @@ self.addEventListener("fetch", function(e){
     );
     return;
   }
-  /* 나머지 앱 셸: 캐시 우선, 없으면 네트워크 */
+  /* 아이콘/매니페스트 등 정적 자원: 캐시 우선 (빠른 로딩) */
   e.respondWith(
     caches.match(e.request).then(function(cached){
       return cached || fetch(e.request).then(function(res){
+        var copy = res.clone();
+        caches.open(CACHE_NAME).then(function(c){ c.put(e.request, copy); });
         return res;
       });
     })
