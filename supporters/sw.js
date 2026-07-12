@@ -1,5 +1,5 @@
 /* UNICE 서포터즈 PWA Service Worker */
-var CACHE_NAME = "unice-sup-v5";
+var CACHE_NAME = "unice-sup-v6";
 var APP_SHELL = [
   "./",
   "./index.html",
@@ -15,6 +15,11 @@ self.addEventListener("install", function(e){
       return cache.addAll(APP_SHELL);
     }).then(function(){ return self.skipWaiting(); })
   );
+});
+
+/* 페이지에서 skipWaiting 요청 시 즉시 활성화 */
+self.addEventListener("message", function(e){
+  if(e.data === "skipWaiting"){ self.skipWaiting(); }
 });
 
 self.addEventListener("activate", function(e){

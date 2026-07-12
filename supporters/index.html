@@ -892,6 +892,8 @@ function renderLeaderboard(){
 }
 
 /* ---------- 자료실 ---------- */
+/* FP 이름 -> 사번 (VIP 링크 단축용) */
+var FP_CODE={"전소영":"H2502969","허영민":"H2502953","정윤주":"H2502970","강민경":"H2502956","박주미":"H2503663","추희진":"H2503695","문희영":"H2502984","강현주":"H2502976","옥서윤":"H2502962","박자연":"H2605005","최나헬":"H2502955","정연미":"H2605053","박미옥":"H2605144","김윤미":"H2605024","박성미":"H2605022","김유경":"H2503207","유지예":"H2502988","김희연":"H2504707","이윤희":"H2502966","이정원":"H2605021","김려원":"H2502980","서일선":"H2502961","전선희":"H2502992","반민주":"H2502975","성형희":"H2503173","이강애":"H2502990","김현주":"H2503839","이정희":"H2503658","김명옥":"H2502972","유순남":"H2502987","박경화":"H2502959","이수아":"H2502965","고혜영":"H2502957","조윤서":"H2502997","박혜윤":"H2502985","윤선정":"H2502989","한송이":"H2605017","김윤희":"H2503698","고은채":"H2504847","최영주":"H2502993","최은희":"H2502952","김진영":"H2502982","노유경":"H2505077","박지온":"H2605023","서누리":"H2503188","강아름":"H2503600","손진이":"H2605244","백금채":"H2605134","이경화":"H2502951","김윤아":"H2605020","박혜리":"H2504600","구지혜":"H2605405","최성경":"H2503162","김태규":"ktk01"};
 var MATERIALS = [
   { icon:"🎬", title:"소비자 패널 홍보 영상", sub:"1분 · 유튜브", share:true,
     msg:"유니스 오픈랩 소비자 패널 홍보 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)",
@@ -919,9 +921,10 @@ function matLink(m){
   if(m.fpLink){
     var fpName=(ME&&ME.fp)?ME.fp:"";
     if(fpName){
-      var enc=encodeURIComponent(fpName);
-      link=link.replace("cardnews.html","cardnews.html?fp="+enc);
-      link=link.replace("vip-apply.html","vip-apply.html?fp="+enc);
+      /* vip-apply: 사번(짧은 코드)로 URL 단축, 없으면 이름 사용 */
+      var fpCode=(typeof FP_CODE!=="undefined"&&FP_CODE[fpName])?FP_CODE[fpName]:fpName;
+      link=link.replace("cardnews.html","cardnews.html?fp="+encodeURIComponent(fpName));
+      link=link.replace("vip-apply.html","vip-apply.html?fp="+encodeURIComponent(fpCode));
     }
   }
   return link;
@@ -1846,22 +1849,30 @@ updateBioBtn();
 
 <script>
 (function(){
-  /* Service Worker 등록 */
+  /* Service Worker 등록 + 강제 업데이트 */
   if("serviceWorker" in navigator){
+    var refreshing = false;
+    /* 새 SW가 제어권을 넘겨받으면 1회만 새로고침 */
+    navigator.serviceWorker.addEventListener("controllerchange", function(){
+      if(refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
     window.addEventListener("load", function(){
       navigator.serviceWorker.register("sw.js").then(function(reg){
-        /* 새 버전 감지 시 자동 반영 */
-        reg.addEventListener("updatefound", function(){
-          var nw = reg.installing;
+        /* 열 때마다 최신 SW가 있는지 강제 확인 */
+        reg.update();
+        function promote(nw){
           if(!nw) return;
           nw.addEventListener("statechange", function(){
             if(nw.state === "installed" && navigator.serviceWorker.controller){
-              /* 새 SW가 대기 중이면 즉시 활성화 후 새로고침 */
-              nw.postMessage && nw.postMessage("skipWaiting");
-              window.location.reload();
+              /* 새 버전 대기 중 -> 즉시 활성화 요청 (controllerchange가 새로고침) */
+              nw.postMessage("skipWaiting");
             }
           });
-        });
+        }
+        if(reg.waiting){ reg.waiting.postMessage("skipWaiting"); }
+        reg.addEventListener("updatefound", function(){ promote(reg.installing); });
       }).catch(function(){});
     });
   }
