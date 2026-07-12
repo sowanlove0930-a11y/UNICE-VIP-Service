@@ -1286,6 +1286,65 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .cc-share-btn:hover { transform: scale(1.08); box-shadow: 0 5px 14px rgba(201,169,106,.5); }
 .cc-share-btn.show { display: flex; }
 
+/* ===== 자료 보내기 아코디언 ===== */
+.send-acc {
+  max-width: 900px; margin: 0 auto 24px; width: calc(100% - 64px);
+  background: linear-gradient(135deg, #1a2744 0%, #243356 60%, #2a2818 100%);
+  border-radius: 16px; overflow: hidden;
+  box-shadow: 0 10px 30px rgba(26,39,68,.3); box-sizing: border-box;
+}
+.send-acc-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 18px; cursor: pointer; user-select: none;
+}
+.send-acc-head .sah-ic {
+  width: 36px; height: 36px; flex: none; border-radius: 10px;
+  background: rgba(240,217,138,.14); display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.send-acc-head .sah-tx { flex: 1; min-width: 0; }
+.send-acc-head .sah-tx .a { color: #F0D98A; font-size: 15px; font-weight: 800; }
+.send-acc-head .sah-tx .b { color: rgba(255,255,255,.5); font-size: 11px; margin-top: 2px; }
+.send-acc-head .sah-chev { color: #F0D98A; font-size: 15px; transition: transform .3s; flex: none; }
+.send-acc.open .send-acc-head .sah-chev { transform: rotate(180deg); }
+.send-acc-body { padding: 0 14px 14px; }
+.send-acc:not(.open) .send-acc-body { display: none; }
+
+.sa-row {
+  display: flex; align-items: center; gap: 11px;
+  background: rgba(255,255,255,.055); border: 1px solid rgba(240,217,138,.16);
+  border-radius: 12px; padding: 11px 12px; margin-bottom: 8px;
+}
+.sa-row:last-child { margin-bottom: 0; }
+.sa-row .sa-ic {
+  width: 38px; height: 38px; flex: none; border-radius: 10px;
+  background: rgba(240,217,138,.13); display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.sa-row .sa-tx { flex: 1; min-width: 0; }
+.sa-row .sa-tx .a { color: #fff; font-size: 13.5px; font-weight: 700; }
+.sa-row .sa-tx .b { color: rgba(255,255,255,.45); font-size: 11px; margin-top: 2px; }
+.sa-row .sa-acts { flex: none; display: flex; gap: 6px; }
+.sa-row .sa-vbtn {
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); color: #fff;
+  font-size: 11px; font-weight: 700; padding: 7px 11px; border-radius: 9px; white-space: nowrap;
+  cursor: pointer; font-family: inherit; transition: background .15s;
+}
+.sa-row .sa-vbtn:hover { background: rgba(255,255,255,.15); }
+.sa-row .sa-sbtn {
+  background: linear-gradient(180deg, #e3c37e, #c9a96a); color: #17335c;
+  font-size: 11.5px; font-weight: 800; padding: 7px 13px; border: none; border-radius: 9px; white-space: nowrap;
+  cursor: pointer; font-family: inherit; box-shadow: 0 3px 10px rgba(201,169,106,.3); transition: transform .15s;
+}
+.sa-row .sa-sbtn:active { transform: scale(.96); }
+@media (max-width: 768px) {
+  .send-acc { width: calc(100% - 28px); }
+  .sa-row { padding: 10px; gap: 9px; }
+  .sa-row .sa-ic { width: 34px; height: 34px; font-size: 16px; }
+  .sa-row .sa-tx .a { font-size: 12.5px; }
+  .sa-row .sa-tx .b { font-size: 10px; }
+  .sa-row .sa-vbtn { padding: 6px 9px; font-size: 10px; }
+  .sa-row .sa-sbtn { padding: 6px 10px; font-size: 10.5px; }
+}
+
 /* 영상 모달 (세로 쇼츠 대응) */
 .vid-overlay {
   position: fixed; inset: 0; z-index: 100000;
@@ -4749,6 +4808,7 @@ const SUBMENUS = {
 // 영상 ID만 채우면 카드에 ▶ 버튼 자동 표시. 빈 값이면 버튼 숨김.
 var TOOL_VIDEOS = {
   vip:     { id: 'tC4_Ed7OJhk', title: 'VIP 고객지원 서비스 안내영상', orient: 'landscape' },
+  panel:   { id: 'LChecM_Du1M', title: '소비자 패널 안내영상', orient: 'landscape' },
   ugobi:   { id: '7Zg4ptPasCM', title: 'U-GOBI 소개 영상' },
   carefit: { id: 'jvSS1-bKHGc', title: '올라이프 케어핏 소개 영상' },
   nohupai: { id: 'KzIj5g6jrdM', title: '노후파이클래스 소개 영상' },
@@ -11279,6 +11339,121 @@ function _shareSender() {
     if ((last - 0xAC00) % 28 !== 0) particle = 'i';
   }
   return nm + ' ' + role + (particle === 'i' ? '이' : '가');
+}
+
+// ---- 자료 보내기 아코디언 ----
+var UNICE_CARD_BASE = 'https://unice-vip.co.kr/supporters/cards/';
+var UNICE_OPENLAB_BASE = 'https://unice-vip.co.kr/openlab/';
+
+function toggleSendAcc() {
+  var acc = document.getElementById('sendAcc');
+  if (acc) { acc.classList.toggle('open'); }
+}
+
+/* 소비자 패널 영상 보기 (기존 모달 재사용) */
+function openPanelVideo(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  return openToolVideo('panel', ev);
+}
+
+/* 소비자 패널 영상 공유 (문구/링크 분리) */
+function sharePanelVideo(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var msg = '유니스 오픈랩 소비자 패널 안내 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)';
+  var url = 'https://youtu.be/LChecM_Du1M';
+  if (navigator.share) {
+    navigator.share({ text: msg, url: url }).catch(function(){});
+    return false;
+  }
+  _uniceCopy(msg + '\n' + url);
+  return false;
+}
+
+/* 소비자 패널 카드뉴스 사진 7장 공유 (안되면 저장) */
+function sharePanelCards(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var msg = '유니스 오픈랩 소비자 패널 모집! 딱 1시간, 3만원 받아가세요. 이번 모집 지역은 부산이에요 :)';
+  if (typeof showToast === 'function') { showToast('사진을 준비하고 있어요...'); }
+  var urls = [], i;
+  for (i = 1; i <= 7; i++) { urls.push(UNICE_OPENLAB_BASE + i + '.png'); }
+  Promise.all(urls.map(function(u) {
+    return fetch(u).then(function(r) { if (!r.ok) throw new Error('nofile'); return r.blob(); });
+  })).then(function(blobs) {
+    var files = blobs.map(function(b, idx) {
+      return new File([b], '소비자패널_' + (idx + 1) + '.png', { type: 'image/png' });
+    });
+    if (navigator.canShare && navigator.canShare({ files: files }) && navigator.share) {
+      navigator.share({ files: files, text: msg }).catch(function(err) {
+        if (String(err).indexOf('AbortError') < 0) { _uniceSaveImages(files); }
+      });
+      return;
+    }
+    _uniceSaveImages(files);
+  }).catch(function() {
+    if (typeof showToast === 'function') { showToast('⚠️ 사진을 불러오지 못했어요'); }
+  });
+  return false;
+}
+
+/* 내 전자명함 공유 (FP 명함 이미지) */
+function shareMyCard(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!currentUser) { if (typeof showToast === 'function') showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  var branch = (currentUser.branch || '').replace('지점', '');
+  if (currentUser.role === '대표' || branch === '유니스지사' || branch === '유니스') { branch = '대표'; }
+  var role = currentUser.title || currentUser.role || 'FP';
+  var fname = '명함_' + branch + '_' + currentUser.name + '_' + role + '.png';
+  var url = UNICE_CARD_BASE + encodeURIComponent(fname);
+  var title = currentUser.name + ' ' + role + ' 전자명함';
+  if (navigator.share && window.fetch) {
+    fetch(url).then(function(res) {
+      if (!res.ok) throw new Error('nofile');
+      return res.blob();
+    }).then(function(blob) {
+      var file = new File([blob], fname, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        return navigator.share({ files: [file], title: title });
+      }
+      return navigator.share({ title: title, url: url });
+    }).catch(function(err) {
+      if (String(err).indexOf('nofile') >= 0) {
+        if (typeof showToast === 'function') showToast('⚠️ 명함이 아직 등록되지 않았어요');
+      } else {
+        _uniceCopy(url);
+      }
+    });
+    return false;
+  }
+  _uniceCopy(url);
+  return false;
+}
+
+function _uniceSaveImages(files) {
+  var i;
+  for (i = 0; i < files.length; i++) {
+    (function(f) {
+      var u = URL.createObjectURL(f);
+      var a = document.createElement('a');
+      a.href = u; a.download = f.name;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(u); }, 4000);
+    })(files[i]);
+  }
+  if (typeof showToast === 'function') { showToast('📥 사진 7장 저장 완료! 카톡에서 사진 첨부로 보내세요'); }
+}
+function _uniceCopy(txt) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function() {
+      if (typeof showToast === 'function') showToast('📋 복사되었습니다. 카톡에 붙여넣어 보내세요');
+    }).catch(function() { _uniceCopyLegacy(txt); });
+  } else { _uniceCopyLegacy(txt); }
+}
+function _uniceCopyLegacy(txt) {
+  var ta = document.createElement('textarea');
+  ta.value = txt; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); if (typeof showToast === 'function') showToast('📋 복사되었습니다'); } catch (e) {}
+  document.body.removeChild(ta);
 }
 
 // ---- VIP apply link share (consult mode banner) ----
@@ -18368,15 +18543,6 @@ function doCheckin() { doSmartCheckin(); }
     <div class="consult-greeting-sub">실손 보장 점검부터 노후자산 준비까지 · 유니스지사 전용 컨설팅 시스템으로 분석해 드립니다</div>
   </div>
 
-  <div class="vip-video-banner" id="vipVideoBanner" onclick="openToolVideo('vip',event)" style="display:none">
-    <div class="vvb-play">▶</div>
-    <div class="vvb-text"><b>VIP 고객지원 서비스 안내영상</b></div>
-    <div class="vvb-actions">
-      <div class="vvb-tag">▶ 영상 보기</div>
-      <button type="button" class="vvb-share" onclick="return shareVipApply(event)">➤ 링크 보내기</button>
-    </div>
-  </div>
-
   <div class="consult-tools">
     <a class="consult-card cc-ugobi pc-only-tool" href="https://unice-vip.co.kr/ugobi/index.html" target="_blank" onclick="return openUgobiConsult(event)">
       <button type="button" class="cc-share-btn" data-vid="ugobi" onclick="return shareToolVideo('ugobi',event)" aria-label="영상 링크 보내기">&#10148;</button>
@@ -18408,6 +18574,49 @@ function doCheckin() { doSmartCheckin(); }
       <div class="cc-name">제니스 케어맵</div>
       <div class="cc-desc">보험금, 어느 회사에<br>청구할지 한눈에 정리</div>
     </a>
+  </div>
+
+  <div class="send-acc" id="sendAcc">
+    <div class="send-acc-head" onclick="toggleSendAcc()">
+      <div class="sah-ic">📤</div>
+      <div class="sah-tx">
+        <div class="a">자료 보내기</div>
+        <div class="b" id="sahSub">VIP 영상 · 소비자 패널 · 내 명함</div>
+      </div>
+      <div class="sah-chev">▾</div>
+    </div>
+    <div class="send-acc-body">
+      <div class="sa-row">
+        <div class="sa-ic">🎬</div>
+        <div class="sa-tx"><div class="a">VIP 고객지원 서비스</div><div class="b">담당자 자동 연결</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-vbtn" onclick="return openToolVideo('vip',event)">▶ 영상</button>
+          <button type="button" class="sa-sbtn" onclick="return shareVipApply(event)">보내기</button>
+        </div>
+      </div>
+      <div class="sa-row">
+        <div class="sa-ic">📹</div>
+        <div class="sa-tx"><div class="a">소비자 패널 영상</div><div class="b">1분 · 유튜브</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-vbtn" onclick="return openPanelVideo(event)">▶ 영상</button>
+          <button type="button" class="sa-sbtn" onclick="return sharePanelVideo(event)">보내기</button>
+        </div>
+      </div>
+      <div class="sa-row">
+        <div class="sa-ic">🖼️</div>
+        <div class="sa-tx"><div class="a">소비자 패널 카드뉴스</div><div class="b">사진 7장 · 바로 전송</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-sbtn" onclick="return sharePanelCards(event)">보내기</button>
+        </div>
+      </div>
+      <div class="sa-row">
+        <div class="sa-ic">🪪</div>
+        <div class="sa-tx"><div class="a">내 전자명함</div><div class="b">VIP·영상 QR 포함</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-sbtn" onclick="return shareMyCard(event)">보내기</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
