@@ -387,9 +387,9 @@ input,select,textarea,button{font-family:inherit;}
       </div>
     </div>
     <div class="sec">
-      <div class="secT"><div class="bar"></div><h3>홍보 자료실</h3><div class="rt">복사해서 카톡에 붙여넣기</div></div>
+      <div class="secT"><div class="bar"></div><h3>홍보 자료실</h3><div class="rt">카톡으로 바로 보내기</div></div>
       <div id="matList"></div>
-      <div style="font-size:12px;color:var(--gray);line-height:1.7;margin-top:8px;background:var(--green-soft);border-radius:12px;padding:12px 14px;">💡 <b>사용법</b> — [복사]를 누르면 소개 문구와 링크가 함께 복사됩니다. 카카오톡에 붙여넣기만 하세요!</div>
+      <div style="font-size:12px;color:var(--gray);line-height:1.7;margin-top:8px;background:var(--green-soft);border-radius:12px;padding:12px 14px;">💡 <b>사용법</b> — [보내기]를 누르면 소개 문구와 링크가 카톡 공유창으로 바로 열려요. 보낼 사람만 고르세요!</div>
     </div>
   </div>
 
@@ -893,26 +893,51 @@ function renderLeaderboard(){
 
 /* ---------- 자료실 ---------- */
 var MATERIALS = [
-  { icon:"🎬", title:"소비자 패널 안내 영상", sub:"1분 · 유튜브",
-    copy:"유니스 오픈랩 소비자 패널 안내 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)\nhttps://youtu.be/LChecM_Du1M" },
-  { icon:"🖼️", title:"패널 모집 카드뉴스 (7장)", sub:"카톡·인스타 공유용",
+  { icon:"🎬", title:"소비자 패널 홍보 영상", sub:"1분 · 유튜브", share:true,
+    copy:"유니스 오픈랩 소비자 패널 홍보 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)\nhttps://youtu.be/LChecM_Du1M" },
+  { icon:"🖼️", title:"소비자 패널 안내 브로셔", sub:"7장 · 담당 FP 링크 자동 연결", share:true, fpLink:true,
     copy:"유니스 오픈랩 소비자 패널 모집! 딱 1시간, 3만원 받아가세요. 이번 모집 지역은 부산이에요 :)\nhttps://unice-vip.co.kr/openlab/cardnews.html" },
-  { icon:"📄", title:"고객지원서비스 소개", sub:"브로셔 링크",
-    copy:"유니스 고객지원서비스 소개 자료예요. 법률·손해사정·헬스케어까지 연결해드립니다!\nhttps://unice-vip.co.kr" },
-  { icon:"🎓", title:"UNICE 라이프디자인 1기", sub:"5회 실전 체험 과정",
-    copy:"암 진단부터 노후 준비까지, 인생의 중요한 순간을 직접 체험하는 UNICE 라이프디자인! 수료지원금 15만원까지!\nhttps://unice-vip.co.kr" }
+  { icon:"📄", title:"VIP고객 지원서비스 홍보 영상", sub:"담당 FP 링크 자동 연결", share:true, fpLink:true,
+    copy:"유니스 VIP고객 지원서비스 소개예요. 법률·손해사정·헬스케어까지 연결해드립니다!\nhttps://unice-vip.co.kr/vip-apply.html" }
 ];
 function renderMaterials(){
   var html="";
   for(var i=0;i<MATERIALS.length;i++){
     var m=MATERIALS[i];
     html+='<div class="mat"><div class="mi">'+m.icon+'</div><div class="mt"><div class="a">'+esc(m.title)+'</div><div class="b">'+esc(m.sub)+'</div></div>';
-    html+='<button class="copyBtn" onclick="copyMat('+i+')">복사</button></div>';
+    html+='<button class="copyBtn" onclick="sendMat('+i+')">보내기</button></div>';
   }
   $("matList").innerHTML=html;
 }
-function copyMat(i){
-  var text=MATERIALS[i].copy;
+function matText(i){
+  var m=MATERIALS[i];
+  var text=m.copy;
+  /* 담당 FP 파라미터 부착 (cardnews / vip-apply 링크) */
+  if(m.fpLink){
+    var fpName=(ME&&ME.fp)?ME.fp:"";
+    if(fpName){
+      var enc=encodeURIComponent(fpName);
+      text=text.replace("cardnews.html","cardnews.html?fp="+enc);
+      text=text.replace("vip-apply.html","vip-apply.html?fp="+enc);
+    }
+  }
+  return text;
+}
+function sendMat(i){
+  var text=matText(i);
+  /* 카톡 등으로 바로 공유 (모바일) */
+  if(navigator.share){
+    navigator.share({ text:text }).then(function(){
+      showToast("공유창이 열렸어요 📤");
+    }).catch(function(err){
+      if(String(err).indexOf("AbortError")<0){ copyMatText(text); }
+    });
+    return;
+  }
+  /* 공유 미지원(PC 등)은 복사로 폴백 */
+  copyMatText(text);
+}
+function copyMatText(text){
   var ta=document.createElement("textarea");
   ta.value=text; ta.style.position="fixed"; ta.style.left="-9999px";
   document.body.appendChild(ta); ta.focus(); ta.select();
@@ -920,7 +945,7 @@ function copyMat(i){
   try{ ok=document.execCommand("copy"); }catch(e){ ok=false; }
   document.body.removeChild(ta);
   if(ok){ showToast("복사 완료! 카톡에 붙여넣기 하세요 📋"); }
-  else{ uiAlert("복사가 지원되지 않는 환경이에요.", "복사 실패", "📋"); }
+  else{ uiAlert("공유가 지원되지 않는 환경이에요.", "안내", "📋"); }
 }
 
 /* ---------- 전자명함 공유 ---------- */
