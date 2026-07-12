@@ -1,5 +1,5 @@
 /* UNICE 서포터즈 PWA Service Worker */
-var CACHE_NAME = "unice-sup-v2";
+var CACHE_NAME = "unice-sup-v3";
 var APP_SHELL = [
   "./",
   "./index.html",

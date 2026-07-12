@@ -895,8 +895,9 @@ function renderLeaderboard(){
 var MATERIALS = [
   { icon:"🎬", title:"소비자 패널 홍보 영상", sub:"1분 · 유튜브", share:true,
     copy:"유니스 오픈랩 소비자 패널 홍보 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)\nhttps://youtu.be/LChecM_Du1M" },
-  { icon:"🖼️", title:"소비자 패널 안내 브로셔", sub:"7장 · 담당 FP 링크 자동 연결", share:true, fpLink:true,
-    copy:"유니스 오픈랩 소비자 패널 모집! 딱 1시간, 3만원 받아가세요. 이번 모집 지역은 부산이에요 :)\nhttps://unice-vip.co.kr/openlab/cardnews.html" },
+  { icon:"🖼️", title:"소비자 패널 안내 브로셔", sub:"사진 7장 · 바로 전송", imgShare:true,
+    imgBase:"https://unice-vip.co.kr/openlab/", imgCount:7,
+    copy:"유니스 오픈랩 소비자 패널 모집! 딱 1시간, 3만원 받아가세요. 이번 모집 지역은 부산이에요 :)" },
   { icon:"📄", title:"VIP고객 지원서비스 홍보 영상", sub:"담당 FP 링크 자동 연결", share:true, fpLink:true,
     copy:"유니스 VIP고객 지원서비스 소개예요. 법률·손해사정·헬스케어까지 연결해드립니다!\nhttps://unice-vip.co.kr/vip-apply.html" }
 ];
@@ -924,6 +925,12 @@ function matText(i){
   return text;
 }
 function sendMat(i){
+  var m=MATERIALS[i];
+  /* 이미지 여러 장 공유 (브로셔 카드뉴스) */
+  if(m.imgShare){
+    shareImages(m);
+    return;
+  }
   var text=matText(i);
   /* 카톡 등으로 바로 공유 (모바일) */
   if(navigator.share){
@@ -936,6 +943,52 @@ function sendMat(i){
   }
   /* 공유 미지원(PC 등)은 복사로 폴백 */
   copyMatText(text);
+}
+function shareImages(m){
+  var n=m.imgCount||7;
+  var base=m.imgBase;
+  showToast("사진을 준비하고 있어요...");
+  var urls=[], i;
+  for(i=1;i<=n;i++){ urls.push(base+i+".png"); }
+  /* 모든 이미지를 파일로 받아서 공유 시도 */
+  Promise.all(urls.map(function(u){
+    return fetch(u).then(function(r){
+      if(!r.ok)throw new Error("nofile");
+      return r.blob();
+    });
+  })).then(function(blobs){
+    var files=blobs.map(function(b, idx){
+      return new File([b], "소비자패널_"+(idx+1)+".png", { type:"image/png" });
+    });
+    /* 1) 여러 이미지 동시 공유 시도 */
+    if(navigator.canShare && navigator.canShare({files:files}) && navigator.share){
+      navigator.share({ files:files, text:m.copy }).then(function(){
+        showToast("사진 7장 공유창이 열렸어요 📤");
+      }).catch(function(err){
+        if(String(err).indexOf("AbortError")<0){ saveImages(files); }
+      });
+      return;
+    }
+    /* 2) 동시 공유 미지원이면 저장으로 폴백 */
+    saveImages(files);
+  }).catch(function(){
+    uiAlert("사진을 불러오지 못했어요.\n잠시 후 다시 시도해주세요.", "안내", "🖼️");
+  });
+}
+function saveImages(files){
+  /* 갤러리(다운로드)로 저장 후 안내 */
+  var i;
+  for(i=0;i<files.length;i++){
+    (function(f){
+      var url=URL.createObjectURL(f);
+      var a=document.createElement("a");
+      a.href=url; a.download=f.name;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    })(files[i]);
+  }
+  uiAlert("사진 7장을 저장했어요! 📥\n\n카카오톡을 열고 사진 첨부로\n보내주시면 됩니다.", "사진 저장 완료", "✅");
 }
 function copyMatText(text){
   var ta=document.createElement("textarea");
