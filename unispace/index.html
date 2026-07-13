@@ -5782,9 +5782,26 @@ function toggleFpActive(id) {
   if (!fp) return;
   // 대표 계정은 비활성화 불가
   if (fp.role === '대표') { showToast('⚠️ 대표 계정은 비활성화할 수 없습니다'); return; }
-  saveFpOverride(id, 'active', !fp.active);
-  renderFpMgmtTable();
-  showToast((fp.active ? '🚫 ' : '✅ ') + fp.name + ' 계정을 ' + (fp.active ? '비활성화' : '활성화') + '했습니다');
+  var nextOn = (fp.active === false); // currently off -> turn on
+  var url = UNISPACE_GAS_URL + '?action=setFpActive&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  showToast('🔄 계정 상태 변경 중...');
+  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok) {
+      fp.active = res.active;
+      saveFpOverride(id, 'active', res.active);
+      // GAS 명단 캐시도 갱신해 활동/출결/계획 화면에 즉시 반영
+      if (typeof loadAllFpsFromGas === 'function') {
+        loadAllFpsFromGas(function(){ renderFpMgmtTable(); });
+      } else {
+        renderFpMgmtTable();
+      }
+      showToast((res.active ? '✅ ' : '🚫 ') + fp.name + ' 계정을 ' + (res.active ? '활성화' : '비활성화') + '했습니다');
+    } else {
+      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
+    }
+  }).catch(function(){
+    showToast('⚠️ 서버 연결 실패');
+  });
 }
 function toggleFpCarefit(id) {
   var list = getMergedFpList();
