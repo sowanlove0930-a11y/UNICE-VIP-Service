@@ -520,6 +520,38 @@ input:focus,select,textarea:focus{border-color:var(--gold)}
 var PLAN_KEY='unispace_plan';
 var PERF_LOG_KEY='unispace_perf_log';
 var CUST_KEY='unispace_customers';
+var GOAL_ADJ_KEY='unispace_goal_adjust';
+
+// goal-adjust DB (set by rep/manager in index.html)
+function getGoalAdjDB(){ try{ return JSON.parse(localStorage.getItem(GOAL_ADJ_KEY)||'{}'); }catch(e){ return {}; } }
+function saveGoalAdjDB(db){ try{ localStorage.setItem(GOAL_ADJ_KEY, JSON.stringify(db)); }catch(e){} }
+// return YYYY-MM string for the given week info
+function _wiYm(wi){ return wi.mon.getFullYear()+'-'+_pad2(wi.month); }
+// admin-adjusted month goal -> {life,non} or null (won unit)
+function getAdminMonthGoal(fpId, wi){
+  var db=getGoalAdjDB(); var ym=_wiYm(wi);
+  var rec = db[ym] && db[ym].fp && db[ym].fp[fpId];
+  if(rec && (rec.life||rec.non)){ return { life:String(rec.life||''), non:String(rec.non||'') }; }
+  return null;
+}
+// inherit latest month goal from earlier weeks of same month
+function getInheritedMonthGoal(fpId, wi){
+  var db=getPlanDB();
+  var ym=_wiYm(wi);
+  var best=null, bestWk=-1;
+  for(var wk in db){
+    if(!db.hasOwnProperty(wk)) continue;
+    if(wk.indexOf(ym+'-W')!==0) continue; // same month only
+    if(wk===wi.key) continue;             // skip current week
+    var wn=parseInt(wk.split('-W')[1])||0;
+    if(wn>=wi.weekNo) continue;           // earlier weeks only
+    var r=db[wk] && db[wk][fpId];
+    if(r && r.monthGoal && (r.monthGoal.life||r.monthGoal.non)){
+      if(wn>bestWk){ bestWk=wn; best={ life:String(r.monthGoal.life||''), non:String(r.monthGoal.non||'') }; }
+    }
+  }
+  return best;
+}
 
 // ── 2026년 법정공휴일(대체·임시공휴일 포함) ──
 var HOLIDAYS_2026={'2026-01-01':'신정','2026-02-16':'설날 연휴','2026-02-17':'설날','2026-02-18':'설날 연휴','2026-03-01':'삼일절','2026-03-02':'대체공휴일','2026-05-05':'어린이날','2026-05-24':'부처님오신날','2026-05-25':'대체공휴일','2026-06-03':'지방선거','2026-06-06':'현충일','2026-07-17':'제헌절','2026-08-15':'광복절','2026-08-17':'대체공휴일','2026-09-24':'추석 연휴','2026-09-25':'추석','2026-09-26':'추석 연휴','2026-10-03':'개천절','2026-10-05':'대체공휴일','2026-10-09':'한글날','2026-12-25':'성탄절'};
@@ -1775,12 +1807,19 @@ function collect(){
 function loadExisting(){
   var wi=effectiveWeekInfo();
   // GAS에서 이번 주 본인 계획 먼저 로드 -> localStorage 반영 후 화면 채움
-  planGasGet({ action:'getPlans', fp:currentUser.id, weekKey:wi.key }).then(function(res){
+  // sync admin goal-adjust from GAS first
+  planGasGet({ action:'getGoalAdjust' }).then(function(gr){
+    if(gr && gr.ok && gr.data){ saveGoalAdjDB(gr.data); }
+  }).catch(function(){}).then(function(){
+    // omit weekKey to fetch all of my plans (needed for cross-device month-goal inheritance)
+    return planGasGet({ action:'getPlans', fp:currentUser.id });
+  }).then(function(res){
     if(res && res.ok && res.plans){
       var db=getPlanDB();
-      if(!db[wi.key]) db[wi.key]={};
       res.plans.forEach(function(pl){
-        db[wi.key][pl.fpId]={
+        var wk=pl.weekKey||wi.key;
+        if(!db[wk]) db[wk]={};
+        db[wk][pl.fpId]={
           fpId:pl.fpId, name:pl.name, branch:pl.branch,
           monthGoal:pl.monthGoal, weekGoal:pl.weekGoal, request:pl.request,
           customers:pl.customers, updatedAt:pl.updatedAt, submittedAt:pl.submittedAt||null
@@ -1795,8 +1834,17 @@ function _fillExistingFromDb(){
   var wi=effectiveWeekInfo();
   var db=getPlanDB();
   var rec = db[wi.key] && db[wi.key][currentUser.id];
+  // month goal fill priority: admin adjust > this-week saved > inherit earlier week
+  var mgFill=null;
+  var adminMg=getAdminMonthGoal(currentUser.id, wi);
+  if(adminMg){ mgFill=adminMg; }
+  else if(rec && rec.monthGoal && (rec.monthGoal.life||rec.monthGoal.non)){ mgFill={ life:rec.monthGoal.life, non:rec.monthGoal.non }; }
+  else { mgFill=getInheritedMonthGoal(currentUser.id, wi); }
+  if(mgFill){
+    var mL=document.getElementById('mGoalLife'); if(mL && !mL.value) mL.value=fmtComma(mgFill.life);
+    var mN=document.getElementById('mGoalNon'); if(mN && !mN.value) mN.value=fmtComma(mgFill.non);
+  }
   if(rec){
-    if(rec.monthGoal){ document.getElementById('mGoalLife').value=fmtComma(rec.monthGoal.life); document.getElementById('mGoalNon').value=fmtComma(rec.monthGoal.non); }
     if(rec.weekGoal){ document.getElementById('wGoalLife').value=fmtComma(rec.weekGoal.life); document.getElementById('wGoalNon').value=fmtComma(rec.weekGoal.non); }
     if(rec.request){ var wr=document.getElementById('weekRequest'); if(wr) wr.value=rec.request; }
     if(rec.customers && rec.customers.length){ custs=rec.customers.slice(); if(typeof renderCusts==='function') renderCusts(); }
