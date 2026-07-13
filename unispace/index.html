@@ -12914,17 +12914,7 @@ function rc2SaveJoinEvt(){
   if(!label){ showToast('⚠️ 일정명을 입력해 주세요'); return; }
   if(!date){ showToast('⚠️ 날짜를 선택해 주세요'); return; }
   if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ showToast('⚠️ 로그인 정보 없음'); return; }
-  // 월 1개 규칙: 신규 저장 시 같은 달에 이미 입과일정이 있으면 그 id로 덮어쓰기 (자동 교체)
-  if(!id){
-    var _newYm=String(date).substr(0,7);
-    var _cache=rc2._joinCache||{};
-    if(_cache[_newYm] && _cache[_newYm].length){ id=_cache[_newYm][0].id; }
-    else if(rc2.joinEvents){
-      for(var _ji=0;_ji<rc2.joinEvents.length;_ji++){
-        if(String(rc2.joinEvents[_ji].date||'').substr(0,7)===_newYm){ id=rc2.joinEvents[_ji].id; break; }
-      }
-    }
-  }
+  // 복수 입과일정 허용: 신규는 항상 새 일정으로 저장 (같은 달 자동 덮어쓰기 제거)
   var url=UNISPACE_GAS_URL+'?action=saveJoinEvent&fp='+encodeURIComponent(currentUser.id)+
     '&id='+encodeURIComponent(id)+
     '&date='+encodeURIComponent(date)+
@@ -14472,8 +14462,8 @@ function rc2BuildKakaoText(){
     }
   }
   if(!anyDay) return '';
-  // ── 입과확보 현황 블록 ──
-  var dCur = rc2GetMonthData(getCurrentYM());
+  // ── 입과확보 현황 블록 (전체 후보자 풀 기준: 다른 달 입과확보자도 포함) ──
+  var dCur = rc2GetAllCandData();
   var okList = [];
   for(var li=0; li<dCur.list.length; li++){
     var c = dCur.list[li];
