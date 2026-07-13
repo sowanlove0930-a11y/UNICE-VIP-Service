@@ -11401,12 +11401,15 @@ function shareMyCard(ev) {
   if (!currentUser) { if (typeof showToast === 'function') showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
   var branch = (currentUser.branch || '').replace('지점', '');
   if (currentUser.role === '대표' || branch === '유니스지사' || branch === '유니스') { branch = '대표'; }
-  var role = currentUser.title || currentUser.role || 'FP';
+  /* 파일명 직급: role을 실제 명함 파일명 규칙에 맞게 매핑 (title은 화면표시용이라 사용 안 함) */
+  var roleMapCard = { '대표':'대표', '지점장':'지점장', '센터장':'센터장', '매니저':'매니저', 'manager':'매니저', 'FP':'FP' };
+  var role = roleMapCard[currentUser.role] || 'FP';
   var fname = '명함_' + branch + '_' + currentUser.name + '_' + role + '.png';
-  var url = UNICE_CARD_BASE + encodeURIComponent(fname);
+  var url = 'cards/' + encodeURIComponent(fname);
+  var absUrl = 'https://unice-vip.co.kr/unispace/' + url;
   var title = currentUser.name + ' ' + role + ' 전자명함';
   var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  /* 모바일: 이미지 파일 첨부 시도 -> 실패(CORS 등) 시 링크 공유로 폴백 */
+  /* 모바일: 이미지를 받아서 사진으로 첨부 (최우선) */
   if (isMobileDev && navigator.share && window.fetch) {
     fetch(url).then(function(res) {
       if (!res.ok) throw new Error('nofile');
@@ -11414,26 +11417,28 @@ function shareMyCard(ev) {
     }).then(function(blob) {
       var file = new File([blob], fname, { type: 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        return navigator.share({ files: [file], title: title });
+        return navigator.share({ files: [file] });
       }
-      /* 파일 공유 미지원 -> 링크 공유 */
-      return navigator.share({ title: title, url: url });
+      throw new Error('nofileshare');
+    }).then(function() {
+      if (typeof showToast === 'function') showToast('명함 공유창이 열렸어요 📤');
     }).catch(function(err) {
-      /* fetch/공유 실패 -> 링크만 공유로 폴백 (CORS 포함) */
-      navigator.share({ title: title, url: url }).catch(function(e2) {
-        if (String(e2).indexOf('AbortError') < 0) { _uniceCopy(url); }
-      });
+      /* 사진 첨부 실패 -> 링크 공유 (url만, title 없이: 인코딩 URL 노출 최소화) */
+      if (navigator.share) {
+        navigator.share({ url: absUrl }).catch(function(e2) {
+          if (String(e2).indexOf('AbortError') < 0) { _uniceCopy(absUrl); }
+        });
+      } else { _uniceCopy(absUrl); }
     });
     return false;
   }
-  /* PC 등: 링크 공유 또는 복사 */
   if (navigator.share) {
-    navigator.share({ title: title, url: url }).catch(function(e) {
-      if (String(e).indexOf('AbortError') < 0) { _uniceCopy(url); }
+    navigator.share({ url: absUrl }).catch(function(e) {
+      if (String(e).indexOf('AbortError') < 0) { _uniceCopy(absUrl); }
     });
     return false;
   }
-  _uniceCopy(url);
+  _uniceCopy(absUrl);
   return false;
 }
 
