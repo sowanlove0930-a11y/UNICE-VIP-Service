@@ -11342,7 +11342,7 @@ function _shareSender() {
 }
 
 // ---- 자료 보내기 아코디언 ----
-var UNICE_CARD_BASE = 'https://unice-vip.co.kr/supporters/cards/';
+var UNICE_CARD_BASE = 'cards/';
 var UNICE_OPENLAB_BASE = 'https://unice-vip.co.kr/openlab/';
 
 function toggleSendAcc() {
@@ -11405,7 +11405,9 @@ function shareMyCard(ev) {
   var fname = '명함_' + branch + '_' + currentUser.name + '_' + role + '.png';
   var url = UNICE_CARD_BASE + encodeURIComponent(fname);
   var title = currentUser.name + ' ' + role + ' 전자명함';
-  if (navigator.share && window.fetch) {
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  /* 모바일: 이미지 파일 첨부 시도 -> 실패(CORS 등) 시 링크 공유로 폴백 */
+  if (isMobileDev && navigator.share && window.fetch) {
     fetch(url).then(function(res) {
       if (!res.ok) throw new Error('nofile');
       return res.blob();
@@ -11414,13 +11416,20 @@ function shareMyCard(ev) {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         return navigator.share({ files: [file], title: title });
       }
+      /* 파일 공유 미지원 -> 링크 공유 */
       return navigator.share({ title: title, url: url });
     }).catch(function(err) {
-      if (String(err).indexOf('nofile') >= 0) {
-        if (typeof showToast === 'function') showToast('⚠️ 명함이 아직 등록되지 않았어요');
-      } else {
-        _uniceCopy(url);
-      }
+      /* fetch/공유 실패 -> 링크만 공유로 폴백 (CORS 포함) */
+      navigator.share({ title: title, url: url }).catch(function(e2) {
+        if (String(e2).indexOf('AbortError') < 0) { _uniceCopy(url); }
+      });
+    });
+    return false;
+  }
+  /* PC 등: 링크 공유 또는 복사 */
+  if (navigator.share) {
+    navigator.share({ title: title, url: url }).catch(function(e) {
+      if (String(e).indexOf('AbortError') < 0) { _uniceCopy(url); }
     });
     return false;
   }
