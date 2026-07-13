@@ -1327,14 +1327,18 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
   background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); color: #fff;
   font-size: 11px; font-weight: 700; padding: 7px 11px; border-radius: 9px; white-space: nowrap;
   cursor: pointer; font-family: inherit; transition: background .15s;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
-.sa-row .sa-vbtn:hover { background: rgba(255,255,255,.15); }
+@media (hover: hover) { .sa-row .sa-vbtn:hover { background: rgba(255,255,255,.15); } }
+.sa-row .sa-vbtn:active { background: rgba(255,255,255,.2); }
 .sa-row .sa-sbtn {
   background: linear-gradient(180deg, #e3c37e, #c9a96a); color: #17335c;
   font-size: 11.5px; font-weight: 800; padding: 7px 13px; border: none; border-radius: 9px; white-space: nowrap;
   cursor: pointer; font-family: inherit; box-shadow: 0 3px 10px rgba(201,169,106,.3); transition: transform .15s;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .sa-row .sa-sbtn:active { transform: scale(.96); }
+.send-acc-head { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 @media (max-width: 768px) {
   .send-acc { width: calc(100% - 28px); }
   .sa-row { padding: 10px; gap: 9px; }
@@ -11359,7 +11363,7 @@ function _shareSender() {
 }
 
 // ---- 자료 보내기 아코디언 ----
-var UNICE_CARD_BASE = 'https://unice-vip.co.kr/supporters/cards/';
+var UNICE_CARD_BASE = 'cards/';
 var UNICE_OPENLAB_BASE = 'https://unice-vip.co.kr/openlab/';
 
 function toggleSendAcc() {
@@ -11418,12 +11422,25 @@ function shareMyCard(ev) {
   if (!currentUser) { if (typeof showToast === 'function') showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
   var branch = (currentUser.branch || '').replace('지점', '');
   if (currentUser.role === '대표' || branch === '유니스지사' || branch === '유니스') { branch = '대표'; }
-  var role = currentUser.title || currentUser.role || 'FP';
-  var fname = '명함_' + branch + '_' + currentUser.name + '_' + role + '.png';
-  var url = UNICE_CARD_BASE + encodeURIComponent(fname);
+  /* 한글 조합형(NFD) -> 완성형(NFC) 정규화: GAS 데이터와 파일명 불일치 방지 (박꽃잎 등) */
+  var cardName = currentUser.name;
+  if (cardName && cardName.normalize) { cardName = cardName.normalize('NFC'); }
+  /* 명함 파일명 전용 직급/지점 (권한용 role과 별개, 실제 명함 규칙) */
+  var CARD_TITLE = {
+    '이강애':'매니저','김명옥':'매니저','문희영':'매니저','강현주':'매니저',
+    '허영민':'매니저','조윤서':'매니저','최영주':'매니저','고혜영':'매니저',
+    '강민경':'매니저','최성경':'지점장','김진영':'센터장'
+  };
+  var CARD_BRANCH = { '최성경':'교육' };
+  if (CARD_BRANCH[cardName]) { branch = CARD_BRANCH[cardName]; }
+  var roleMapCard = { '대표':'대표', '지점장':'지점장', '센터장':'센터장', '매니저':'매니저', 'manager':'매니저', 'FP':'FP' };
+  var role = CARD_TITLE[cardName] || roleMapCard[currentUser.role] || 'FP';
+  var fname = '명함_' + branch + '_' + cardName + '_' + role + '.png';
+  var url = 'cards/' + encodeURIComponent(fname);
+  var absUrl = 'https://unice-vip.co.kr/unispace/' + url;
   var title = currentUser.name + ' ' + role + ' 전자명함';
   var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  /* 모바일: 이미지 파일 첨부 시도 -> 실패(CORS 등) 시 링크 공유로 폴백 */
+  /* 모바일: 이미지를 받아서 사진으로 첨부 (최우선) */
   if (isMobileDev && navigator.share && window.fetch) {
     fetch(url).then(function(res) {
       if (!res.ok) throw new Error('nofile');
@@ -11431,26 +11448,28 @@ function shareMyCard(ev) {
     }).then(function(blob) {
       var file = new File([blob], fname, { type: 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        return navigator.share({ files: [file], title: title });
+        return navigator.share({ files: [file] });
       }
-      /* 파일 공유 미지원 -> 링크 공유 */
-      return navigator.share({ title: title, url: url });
+      throw new Error('nofileshare');
+    }).then(function() {
+      if (typeof showToast === 'function') showToast('명함 공유창이 열렸어요 📤');
     }).catch(function(err) {
-      /* fetch/공유 실패 -> 링크만 공유로 폴백 (CORS 포함) */
-      navigator.share({ title: title, url: url }).catch(function(e2) {
-        if (String(e2).indexOf('AbortError') < 0) { _uniceCopy(url); }
-      });
+      /* 사진 첨부 실패 -> 링크 공유 (url만, title 없이: 인코딩 URL 노출 최소화) */
+      if (navigator.share) {
+        navigator.share({ url: absUrl }).catch(function(e2) {
+          if (String(e2).indexOf('AbortError') < 0) { _uniceCopy(absUrl); }
+        });
+      } else { _uniceCopy(absUrl); }
     });
     return false;
   }
-  /* PC 등: 링크 공유 또는 복사 */
   if (navigator.share) {
-    navigator.share({ title: title, url: url }).catch(function(e) {
-      if (String(e).indexOf('AbortError') < 0) { _uniceCopy(url); }
+    navigator.share({ url: absUrl }).catch(function(e) {
+      if (String(e).indexOf('AbortError') < 0) { _uniceCopy(absUrl); }
     });
     return false;
   }
-  _uniceCopy(url);
+  _uniceCopy(absUrl);
   return false;
 }
 
