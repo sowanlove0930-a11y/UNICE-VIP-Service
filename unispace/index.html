@@ -11405,6 +11405,9 @@ function shareMyCard(ev) {
   if (!currentUser) { if (typeof showToast === 'function') showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
   var branch = (currentUser.branch || '').replace('지점', '');
   if (currentUser.role === '대표' || branch === '유니스지사' || branch === '유니스') { branch = '대표'; }
+  /* 한글 조합형(NFD) -> 완성형(NFC) 정규화: GAS 데이터와 파일명 불일치 방지 (박꽃잎 등) */
+  var cardName = currentUser.name;
+  if (cardName && cardName.normalize) { cardName = cardName.normalize('NFC'); }
   /* 명함 파일명 전용 직급/지점 (권한용 role과 별개, 실제 명함 규칙) */
   var CARD_TITLE = {
     '이강애':'매니저','김명옥':'매니저','문희영':'매니저','강현주':'매니저',
@@ -11412,10 +11415,10 @@ function shareMyCard(ev) {
     '강민경':'매니저','최성경':'지점장','김진영':'센터장'
   };
   var CARD_BRANCH = { '최성경':'교육' };
-  if (CARD_BRANCH[currentUser.name]) { branch = CARD_BRANCH[currentUser.name]; }
+  if (CARD_BRANCH[cardName]) { branch = CARD_BRANCH[cardName]; }
   var roleMapCard = { '대표':'대표', '지점장':'지점장', '센터장':'센터장', '매니저':'매니저', 'manager':'매니저', 'FP':'FP' };
-  var role = CARD_TITLE[currentUser.name] || roleMapCard[currentUser.role] || 'FP';
-  var fname = '명함_' + branch + '_' + currentUser.name + '_' + role + '.png';
+  var role = CARD_TITLE[cardName] || roleMapCard[currentUser.role] || 'FP';
+  var fname = '명함_' + branch + '_' + cardName + '_' + role + '.png';
   var url = 'cards/' + encodeURIComponent(fname);
   var absUrl = 'https://unice-vip.co.kr/unispace/' + url;
   var title = currentUser.name + ' ' + role + ' 전자명함';
