@@ -1327,21 +1327,25 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
   background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); color: #fff;
   font-size: 11px; font-weight: 700; padding: 7px 11px; border-radius: 9px; white-space: nowrap;
   cursor: pointer; font-family: inherit; transition: background .15s;
-  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
-@media (hover: hover) { .sa-row .sa-vbtn:hover { background: rgba(255,255,255,.15); } }
-.sa-row .sa-vbtn:active { background: rgba(255,255,255,.2); }
+.sa-row .sa-vbtn:hover { background: rgba(255,255,255,.15); }
 .sa-row .sa-sbtn {
   background: linear-gradient(180deg, #e3c37e, #c9a96a); color: #17335c;
   font-size: 11.5px; font-weight: 800; padding: 7px 13px; border: none; border-radius: 9px; white-space: nowrap;
   cursor: pointer; font-family: inherit; box-shadow: 0 3px 10px rgba(201,169,106,.3); transition: transform .15s;
-  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .sa-row .sa-sbtn:active { transform: scale(.96); }
-.sa-row .sa-sbtn.wv {
-  background: #FAE100; color: #3A1D1D; box-shadow: 0 3px 10px rgba(250,225,0,.3);
+.sa-row .sa-wbtn {
+  background: linear-gradient(180deg, #ffe14d, #f5c518); color: #17335c;
+  font-size: 11.5px; font-weight: 800; padding: 7px 13px; border: none; border-radius: 9px; white-space: nowrap;
+  cursor: pointer; font-family: inherit; box-shadow: 0 3px 10px rgba(245,197,24,.35); transition: transform .15s;
 }
-.send-acc-head { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.sa-row .sa-wbtn:active { transform: scale(.96); }
+.sa-new {
+  display: none; margin-left: 6px; padding: 2px 7px; border-radius: 7px;
+  background: #EF4444; color: #fff; font-size: 9.5px; font-weight: 900; letter-spacing: .5px;
+}
+.sa-new.show { display: inline-block; }
 @media (max-width: 768px) {
   .send-acc { width: calc(100% - 28px); }
   .sa-row { padding: 10px; gap: 9px; }
@@ -2624,7 +2628,6 @@ window.UNISPACE_FCM = {
 };
 // ▲▲▲ 여기까지 교체 ▲▲▲
 </script>
-<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4" crossorigin="anonymous"></script>
 </head>
 <body class="theme-light">
 <!-- 지문 등록 안내 배너 (로그인 직후 1회) -->
@@ -4820,7 +4823,8 @@ var TOOL_VIDEOS = {
   ugobi:   { id: '7Zg4ptPasCM', title: 'U-GOBI 소개 영상' },
   carefit: { id: 'jvSS1-bKHGc', title: '올라이프 케어핏 소개 영상' },
   nohupai: { id: 'KzIj5g6jrdM', title: '노후파이클래스 소개 영상' },
-  jenius:  { id: '', title: '제니스 케어맵 소개 영상' }
+  jenius:  { id: '', title: '제니스 케어맵 소개 영상' },
+  lifedesign: { id: '4f9O0yJcdXs', title: '유니스 라이프 디자인 홍보영상' }
 };
 var _ytPlayer = null;
 var _ytReady = false;
@@ -5790,26 +5794,9 @@ function toggleFpActive(id) {
   if (!fp) return;
   // 대표 계정은 비활성화 불가
   if (fp.role === '대표') { showToast('⚠️ 대표 계정은 비활성화할 수 없습니다'); return; }
-  var nextOn = (fp.active === false); // currently off -> turn on
-  var url = UNISPACE_GAS_URL + '?action=setFpActive&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
-  showToast('🔄 계정 상태 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
-    if (res && res.ok) {
-      fp.active = res.active;
-      saveFpOverride(id, 'active', res.active);
-      // GAS 명단 캐시도 갱신해 활동/출결/계획 화면에 즉시 반영
-      if (typeof loadAllFpsFromGas === 'function') {
-        loadAllFpsFromGas(function(){ renderFpMgmtTable(); });
-      } else {
-        renderFpMgmtTable();
-      }
-      showToast((res.active ? '✅ ' : '🚫 ') + fp.name + ' 계정을 ' + (res.active ? '활성화' : '비활성화') + '했습니다');
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
-  });
+  saveFpOverride(id, 'active', !fp.active);
+  renderFpMgmtTable();
+  showToast((fp.active ? '🚫 ' : '✅ ') + fp.name + ' 계정을 ' + (fp.active ? '비활성화' : '활성화') + '했습니다');
 }
 function toggleFpCarefit(id) {
   var list = getMergedFpList();
@@ -6970,7 +6957,7 @@ function openPerfModal() {
   _perfSetEditUI(false);
   // 선택 가능한 FP 목록 구성 (관리자: 전체/지점, FP: 본인)
   var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
-  var list = getMergedFpList().filter(function(fp){ return fp.role!=='대표'; }); // 업적입력은 비활성 FP도 포함 (실적 관리용)
+  var list = getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
   if(currentUser.role==='지점장') list = list.filter(function(fp){ return fp.branch===currentUser.branch; });
   if(!isAdmin) list = list.filter(function(fp){ return fp.id===currentUser.id; });
   _perfFpList = list;
@@ -7011,7 +6998,7 @@ function openPerfEdit(id){
 
   // FP 목록 구성(신규와 동일)
   var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장'||currentUser.level==='manager'||currentUser.level==='admin'||(currentUser.title||'').indexOf('매니저')>=0;
-  var list = getMergedFpList().filter(function(fp){ return fp.role!=='대표'; }); // 업적입력은 비활성 FP도 포함 (실적 관리용)
+  var list = getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
   if(currentUser.role==='지점장') list = list.filter(function(fp){ return fp.branch===currentUser.branch; });
   if(!isAdmin) list = list.filter(function(fp){ return fp.id===currentUser.id; });
   _perfFpList = list;
@@ -11367,7 +11354,7 @@ function _shareSender() {
 }
 
 // ---- 자료 보내기 아코디언 ----
-var UNICE_CARD_BASE = 'cards/';
+var UNICE_CARD_BASE = 'https://unice-vip.co.kr/supporters/cards/';
 var UNICE_OPENLAB_BASE = 'https://unice-vip.co.kr/openlab/';
 
 function toggleSendAcc() {
@@ -11381,35 +11368,42 @@ function openPanelVideo(ev) {
   return openToolVideo('panel', ev);
 }
 
-/* 소비자 패널 영상 공유 (카카오 카드 + 폴백) */
+/* 소비자 패널 영상 공유 (문구/링크 분리) */
 function sharePanelVideo(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var msg = '유니스 오픈랩 소비자 패널 안내 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)';
   var url = 'https://youtu.be/LChecM_Du1M';
-  var ok = false;
-  try {
-    if (window.Kakao) {
-      if (!window.Kakao.isInitialized()) { window.Kakao.init(WAVE_KAKAO_KEY); }
-      window.Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title: '📺 소비자 패널 안내 영상',
-          description: '1시간 참여하고 활동지원금 3만원! 영상으로 확인해보세요 :)',
-          imageUrl: 'https://img.youtube.com/vi/LChecM_Du1M/hqdefault.jpg',
-          imageWidth: 480,
-          imageHeight: 360,
-          link: { mobileWebUrl: url, webUrl: url }
-        },
-        buttons: [
-          { title: '영상 보러 가기', link: { mobileWebUrl: url, webUrl: url } }
-        ]
-      });
-      ok = true;
-    }
-  } catch (e) { ok = false; }
-  if (ok) return false;
-  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobileDev && navigator.share) {
+  if (navigator.share) {
+    navigator.share({ text: msg, url: url }).catch(function(){});
+    return false;
+  }
+  _uniceCopy(msg + '\n' + url);
+  return false;
+}
+
+/* 라이프디자인 홍보영상 공유 */
+function shareLifeDesign(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var msg = '유니스 라이프 디자인! 암부터 노후까지, 인생에서 꼭 알아야 할 다섯 번의 경험. 전 과정 무료에 수료지원금 15만원까지 드려요 :)';
+  var url = 'https://youtube.com/shorts/4f9O0yJcdXs';
+  if (navigator.share) {
+    navigator.share({ text: msg, url: url }).catch(function(){});
+    return false;
+  }
+  _uniceCopy(msg + '\n' + url);
+  return false;
+}
+
+/* 파도타기 이벤트 공유 (FP 링크 포함) */
+function shareWaveEvent(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var base = 'https://unice-vip.co.kr/wave/';
+  var url = base;
+  if (typeof currentUser !== 'undefined' && currentUser && currentUser.id) {
+    url = base + '?fp=' + encodeURIComponent(currentUser.id);
+  }
+  var msg = '영상 보고 파도 타면 시원한 선물이 콸콸! 유니스 썸머 파도타기 이벤트에 초대해요 :)';
+  if (navigator.share) {
     navigator.share({ text: msg, url: url }).catch(function(){});
     return false;
   }
@@ -11430,8 +11424,7 @@ function sharePanelCards(ev) {
     var files = blobs.map(function(b, idx) {
       return new File([b], '소비자패널_' + (idx + 1) + '.png', { type: 'image/png' });
     });
-    var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobileDev && navigator.canShare && navigator.canShare({ files: files }) && navigator.share) {
+    if (navigator.canShare && navigator.canShare({ files: files }) && navigator.share) {
       navigator.share({ files: files, text: msg }).catch(function(err) {
         if (String(err).indexOf('AbortError') < 0) { _uniceSaveImages(files); }
       });
@@ -11450,25 +11443,12 @@ function shareMyCard(ev) {
   if (!currentUser) { if (typeof showToast === 'function') showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
   var branch = (currentUser.branch || '').replace('지점', '');
   if (currentUser.role === '대표' || branch === '유니스지사' || branch === '유니스') { branch = '대표'; }
-  /* 한글 조합형(NFD) -> 완성형(NFC) 정규화: GAS 데이터와 파일명 불일치 방지 (박꽃잎 등) */
-  var cardName = currentUser.name;
-  if (cardName && cardName.normalize) { cardName = cardName.normalize('NFC'); }
-  /* 명함 파일명 전용 직급/지점 (권한용 role과 별개, 실제 명함 규칙) */
-  var CARD_TITLE = {
-    '이강애':'매니저','김명옥':'매니저','문희영':'매니저','강현주':'매니저',
-    '허영민':'매니저','조윤서':'매니저','최영주':'매니저','고혜영':'매니저',
-    '강민경':'매니저','최성경':'지점장','김진영':'센터장'
-  };
-  var CARD_BRANCH = { '최성경':'교육' };
-  if (CARD_BRANCH[cardName]) { branch = CARD_BRANCH[cardName]; }
-  var roleMapCard = { '대표':'대표', '지점장':'지점장', '센터장':'센터장', '매니저':'매니저', 'manager':'매니저', 'FP':'FP' };
-  var role = CARD_TITLE[cardName] || roleMapCard[currentUser.role] || 'FP';
-  var fname = '명함_' + branch + '_' + cardName + '_' + role + '.png';
-  var url = 'cards/' + encodeURIComponent(fname);
-  var absUrl = 'https://unice-vip.co.kr/unispace/' + url;
+  var role = currentUser.title || currentUser.role || 'FP';
+  var fname = '명함_' + branch + '_' + currentUser.name + '_' + role + '.png';
+  var url = UNICE_CARD_BASE + encodeURIComponent(fname);
   var title = currentUser.name + ' ' + role + ' 전자명함';
   var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  /* 모바일: 이미지를 받아서 사진으로 첨부 (최우선) */
+  /* 모바일: 이미지 파일 첨부 시도 -> 실패(CORS 등) 시 링크 공유로 폴백 */
   if (isMobileDev && navigator.share && window.fetch) {
     fetch(url).then(function(res) {
       if (!res.ok) throw new Error('nofile');
@@ -11476,23 +11456,26 @@ function shareMyCard(ev) {
     }).then(function(blob) {
       var file = new File([blob], fname, { type: 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        return navigator.share({ files: [file] });
+        return navigator.share({ files: [file], title: title });
       }
-      throw new Error('nofileshare');
-    }).then(function() {
-      if (typeof showToast === 'function') showToast('명함 공유창이 열렸어요 📤');
+      /* 파일 공유 미지원 -> 링크 공유 */
+      return navigator.share({ title: title, url: url });
     }).catch(function(err) {
-      /* 사진 첨부 실패 -> 링크 공유 (url만, title 없이: 인코딩 URL 노출 최소화) */
-      if (navigator.share) {
-        navigator.share({ url: absUrl }).catch(function(e2) {
-          if (String(e2).indexOf('AbortError') < 0) { _uniceCopy(absUrl); }
-        });
-      } else { _uniceCopy(absUrl); }
+      /* fetch/공유 실패 -> 링크만 공유로 폴백 (CORS 포함) */
+      navigator.share({ title: title, url: url }).catch(function(e2) {
+        if (String(e2).indexOf('AbortError') < 0) { _uniceCopy(url); }
+      });
     });
     return false;
   }
-  /* PC 등 비모바일: 공유창(navigator.share)이 불안정하므로 바로 링크 복사 */
-  _uniceCopy(absUrl);
+  /* PC 등: 링크 공유 또는 복사 */
+  if (navigator.share) {
+    navigator.share({ title: title, url: url }).catch(function(e) {
+      if (String(e).indexOf('AbortError') < 0) { _uniceCopy(url); }
+    });
+    return false;
+  }
+  _uniceCopy(url);
   return false;
 }
 
@@ -11524,71 +11507,12 @@ function _uniceCopyLegacy(txt) {
   document.body.removeChild(ta);
 }
 
-// ---- summer wave event kakao share (consult mode) ----
-var WAVE_KAKAO_KEY = 'cbfa60013e8c77c5a8c168d4d5862d51';
-var WAVE_SHARE_IMG = 'https://unice-vip.co.kr/wave/wave-share7.png';
-function shareWaveEvent(ev) {
-  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
-  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
-  var url = 'https://unice-vip.co.kr/wave/?fp=' + encodeURIComponent(String(currentUser.id));
-  var ok = false;
-  try {
-    if (window.Kakao) {
-      if (!window.Kakao.isInitialized()) { window.Kakao.init(WAVE_KAKAO_KEY); }
-      window.Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title: '🌊 유니스 썸머 파도타기 이벤트',
-          description: '영상 보고 파도 타면 시원한 선물이 콸콸! 소중한 분들과 함께 받아가세요 🎁',
-          imageUrl: WAVE_SHARE_IMG,
-          imageWidth: 800,
-          imageHeight: 420,
-          link: { mobileWebUrl: url, webUrl: url }
-        },
-        buttons: [
-          { title: '파도 타러 가기', link: { mobileWebUrl: url, webUrl: url } }
-        ]
-      });
-      ok = true;
-    }
-  } catch (e) { ok = false; }
-  if (!ok) {
-    var sender = _shareSender();
-    var msg = (sender ? sender + ' 보내드립니다.\n' : '')
-      + '무더위 시원하게 날릴 선물 이벤트!\n영상 보고 파도 타면 사은품이 도착해요 🌊\n' + url;
-    shareVipApplyLegacyCopy(msg);
-  }
-  return false;
-}
-
 // ---- VIP apply link share (consult mode banner) ----
 function shareVipApply(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
-  var url = 'https://unice-vip.co.kr/vip-apply.html?fp=' + encodeURIComponent(String(currentUser.id));
-  var ok = false;
-  try {
-    if (window.Kakao) {
-      if (!window.Kakao.isInitialized()) { window.Kakao.init(WAVE_KAKAO_KEY); }
-      window.Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title: '💎 UNICE VIP 고객지원 서비스',
-          description: '보험은 가입보다 관리! 영상 보고 신청하면 담당자가 바로 연결됩니다 :)',
-          imageUrl: 'https://img.youtube.com/vi/tC4_Ed7OJhk/hqdefault.jpg',
-          imageWidth: 480,
-          imageHeight: 360,
-          link: { mobileWebUrl: url, webUrl: url }
-        },
-        buttons: [
-          { title: '영상 보고 신청하기', link: { mobileWebUrl: url, webUrl: url } }
-        ]
-      });
-      ok = true;
-    }
-  } catch (e) { ok = false; }
-  if (ok) return false;
   var sender = _shareSender();
+  var url = 'https://unice-vip.co.kr/vip-apply.html?fp=' + encodeURIComponent(String(currentUser.id));
   var msg = (sender ? sender + ' 보내드립니다.\n' : '')
     + '보험은 가입보다 관리! 아래 영상 보시고\nVIP 고객지원 서비스를 신청해보세요 :)';
   var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -12490,9 +12414,7 @@ function rc2SwitchView(v, el) {
   var tabBar = document.getElementById('recruitTabBar');
   var _listAccess = (typeof _canSeeRecruitList==='function') ? _canSeeRecruitList() : false;
   if(v==='list'){
-    var _isRecAdmin2 = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01'
-      || currentUser.role==='교육지점장' || (currentUser.title||'')==='교육지점장'
-      || currentUser.id==='H2503162' || String(currentUser.branch||'').indexOf('교육')>=0);
+    var _isRecAdmin2 = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01');
     if(_isRecAdmin2){
       // 대표/관리자: 지점 칩 보여주고 현재 선택 지점 그대로 유지
       if(tabBar) tabBar.style.display = _listAccess ? '' : 'none';
@@ -13001,7 +12923,17 @@ function rc2SaveJoinEvt(){
   if(!label){ showToast('⚠️ 일정명을 입력해 주세요'); return; }
   if(!date){ showToast('⚠️ 날짜를 선택해 주세요'); return; }
   if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ showToast('⚠️ 로그인 정보 없음'); return; }
-  // 복수 입과일정 허용: 신규는 항상 새 일정으로 저장 (같은 달 자동 덮어쓰기 제거)
+  // 월 1개 규칙: 신규 저장 시 같은 달에 이미 입과일정이 있으면 그 id로 덮어쓰기 (자동 교체)
+  if(!id){
+    var _newYm=String(date).substr(0,7);
+    var _cache=rc2._joinCache||{};
+    if(_cache[_newYm] && _cache[_newYm].length){ id=_cache[_newYm][0].id; }
+    else if(rc2.joinEvents){
+      for(var _ji=0;_ji<rc2.joinEvents.length;_ji++){
+        if(String(rc2.joinEvents[_ji].date||'').substr(0,7)===_newYm){ id=rc2.joinEvents[_ji].id; break; }
+      }
+    }
+  }
   var url=UNISPACE_GAS_URL+'?action=saveJoinEvent&fp='+encodeURIComponent(currentUser.id)+
     '&id='+encodeURIComponent(id)+
     '&date='+encodeURIComponent(date)+
@@ -13940,9 +13872,7 @@ function rc2SaveCand() {
   var d = rc2GetMonthData(_saveYm);
   // 새 일정 지점: 대표/관리자는 상단에서 선택한 지점(rc2.branch) 그대로 사용,
   // 단일 지점 소속(지점장·FP)만 본인 지점으로 고정
-  var _isRecAdmin = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01'
-    || currentUser.role==='교육지점장' || (currentUser.title||'')==='교육지점장'
-    || currentUser.id==='H2503162' || String(currentUser.branch||'').indexOf('교육')>=0);
+  var _isRecAdmin = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01');
   var _saveBranch = rc2.branch;
   if(!_isRecAdmin && !rc2.editId && rc2.view==='cal' && typeof _recruitMyBranch==='function'){
     _saveBranch = _recruitMyBranch();
@@ -14551,8 +14481,8 @@ function rc2BuildKakaoText(){
     }
   }
   if(!anyDay) return '';
-  // ── 입과확보 현황 블록 (전체 후보자 풀 기준: 다른 달 입과확보자도 포함) ──
-  var dCur = rc2GetAllCandData();
+  // ── 입과확보 현황 블록 ──
+  var dCur = rc2GetMonthData(getCurrentYM());
   var okList = [];
   for(var li=0; li<dCur.list.length; li++){
     var c = dCur.list[li];
@@ -15189,20 +15119,7 @@ function renderActView() {
   });
 }
 
-function _inactiveFpIdSet() {
-  var set = {};
-  try {
-    var l = (typeof getMergedFpList === 'function') ? getMergedFpList() : [];
-    for (var i = 0; i < l.length; i++) {
-      if (l[i] && l[i].active === false) set[String(l[i].id).trim().toUpperCase()] = true;
-    }
-  } catch (e) {}
-  return set;
-}
 function actFilterMatch(a) {
-  // 비활성(유니스페이스 차단) FP 활동은 활동현황에서 제외 (로컬 캐시 잔존분 차단)
-  var _inact = _inactiveFpIdSet();
-  if (a && a.fpId && _inact[String(a.fpId).trim().toUpperCase()]) return false;
   if (weekBranchFilter !== 'all' && a.branch !== weekBranchFilter) return false;
   // 대표·지점장·교육지점장·매니저 = 전체 / 그 외 = 자기 지점만
   var u = currentUser;
@@ -18729,10 +18646,11 @@ function doCheckin() { doSmartCheckin(); }
         </div>
       </div>
       <div class="sa-row">
-        <div class="sa-ic">🌊</div>
-        <div class="sa-tx"><div class="a">썸머 파도타기 이벤트</div><div class="b">사은품 증정 · 내 링크로 확산</div></div>
+        <div class="sa-ic">🎓</div>
+        <div class="sa-tx"><div class="a">라이프 디자인<span class="sa-new" data-from="2026-07-20" data-until="2026-07-22">NEW</span></div><div class="b">5회 체험 교육 · 교육생 모집</div></div>
         <div class="sa-acts">
-          <button type="button" class="sa-sbtn wv" onclick="return shareWaveEvent(event)">🌊 파도 보내기</button>
+          <button type="button" class="sa-vbtn" onclick="return openToolVideo('lifedesign',event)">▶ 영상</button>
+          <button type="button" class="sa-sbtn" onclick="return shareLifeDesign(event)">보내기</button>
         </div>
       </div>
       <div class="sa-row">
@@ -18757,9 +18675,30 @@ function doCheckin() { doSmartCheckin(); }
           <button type="button" class="sa-sbtn" onclick="return shareMyCard(event)">보내기</button>
         </div>
       </div>
+      <div class="sa-row">
+        <div class="sa-ic">🌊</div>
+        <div class="sa-tx"><div class="a">썸머 파도타기 이벤트<span class="sa-new" data-from="2026-07-20" data-until="2026-07-22">NEW</span></div><div class="b">사은품 증정 · 내 링크로 확산</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-wbtn" onclick="return shareWaveEvent(event)">🌊 파도 보내기</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
+<script>
+(function(){
+  var els = document.querySelectorAll('.sa-new');
+  var now = new Date();
+  for (var i = 0; i < els.length; i++) {
+    var from = els[i].getAttribute('data-from');
+    var until = els[i].getAttribute('data-until');
+    var ok = true;
+    if (from) { ok = ok && (now >= new Date(from + 'T00:00:00')); }
+    if (until) { ok = ok && (now <= new Date(until + 'T23:59:59')); }
+    if (ok) { els[i].classList.add('show'); }
+  }
+})();
+</script>
 
 <!-- 도구 홍보영상 모달 -->
 <div class="vid-overlay" id="vidOverlay" onclick="if(event.target===this)closeToolVideo()">
