@@ -19156,6 +19156,7 @@ function _getPushPref(){
 // GAS에 토큰 저장 (3단계에서 GAS 함수 추가 예정)
 function _savePushToken(token){
   if(!currentUser || !currentUser.id) return;
+  try { localStorage.setItem('unispace_push_token_' + currentUser.id, token); } catch(e){}
   try {
     fetch(UNISPACE_GAS_URL + '?action=savePushToken&fp=' + encodeURIComponent(currentUser.id)
       + '&token=' + encodeURIComponent(token)
@@ -19167,8 +19168,12 @@ function _savePushToken(token){
 function _removePushToken(){
   if(!currentUser || !currentUser.id) return;
   try {
-    fetch(UNISPACE_GAS_URL + '?action=removePushToken&fp=' + encodeURIComponent(currentUser.id))
-      .catch(function(){});
+    var myTok = '';
+    try { myTok = localStorage.getItem('unispace_push_token_' + currentUser.id) || ''; } catch(e){}
+    var u = UNISPACE_GAS_URL + '?action=removePushToken&fp=' + encodeURIComponent(currentUser.id);
+    if (myTok) u = u + '&token=' + encodeURIComponent(myTok);
+    fetch(u).catch(function(){});
+    try { localStorage.removeItem('unispace_push_token_' + currentUser.id); } catch(e){}
   } catch(e){}
 }
 
@@ -19206,7 +19211,30 @@ function _initFcmForeground(){
   try {
     messaging.onMessage(function(payload){
       var n = (payload && payload.notification) || (payload && payload.data) || {};
-      if(typeof showToast === 'function') showToast('🔔 ' + (n.title || '새 알림') );
+      var d = (payload && payload.data) || {};
+      var title = n.title || d.title || '🔔 UNISPACE 알림';
+      var bodyTxt = n.body || d.body || '';
+      // show a real system notification even while the app is open
+      var shown = false;
+      try {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted'
+            && navigator.serviceWorker) {
+          navigator.serviceWorker.ready.then(function(reg){
+            reg.showNotification(title, {
+              body: bodyTxt,
+              icon: '/unispace/unispace-192.png',
+              badge: '/unispace/unispace-badge.png',
+              tag: d.tag || ('unispace-fg-' + new Date().getTime()),
+              data: { url: d.url || './index.html?open=today' },
+              requireInteraction: false
+            });
+          }).catch(function(){
+            if(typeof showToast === 'function') showToast('🔔 ' + title);
+          });
+          shown = true;
+        }
+      } catch(e){}
+      if (!shown && typeof showToast === 'function') showToast('🔔 ' + title);
     });
   } catch(e){}
 }
