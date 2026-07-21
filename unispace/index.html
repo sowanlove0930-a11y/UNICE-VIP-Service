@@ -1335,17 +1335,6 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
   cursor: pointer; font-family: inherit; box-shadow: 0 3px 10px rgba(201,169,106,.3); transition: transform .15s;
 }
 .sa-row .sa-sbtn:active { transform: scale(.96); }
-.sa-row .sa-wbtn {
-  background: linear-gradient(180deg, #ffe14d, #f5c518); color: #17335c;
-  font-size: 11.5px; font-weight: 800; padding: 7px 13px; border: none; border-radius: 9px; white-space: nowrap;
-  cursor: pointer; font-family: inherit; box-shadow: 0 3px 10px rgba(245,197,24,.35); transition: transform .15s;
-}
-.sa-row .sa-wbtn:active { transform: scale(.96); }
-.sa-new {
-  display: none; margin-left: 6px; padding: 2px 7px; border-radius: 7px;
-  background: #EF4444; color: #fff; font-size: 9.5px; font-weight: 900; letter-spacing: .5px;
-}
-.sa-new.show { display: inline-block; }
 @media (max-width: 768px) {
   .send-acc { width: calc(100% - 28px); }
   .sa-row { padding: 10px; gap: 9px; }
@@ -3398,7 +3387,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>케어핏</th><th>U고비</th><th>노후파이</th><th>제니스</th><th>비번초기화</th><th>삭제</th>
+          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>케어핏</th><th>U고비</th><th>노후파이</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -4215,7 +4204,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, jenius:f.jenius!==false };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, jenius:f.jenius!==false, team:f.team===true };
     });
   } else {
     baseList = FP_LIST;
@@ -4231,6 +4220,7 @@ function getMergedFpList() {
       ugobi: ov.ugobi !== undefined ? ov.ugobi : fp.ugobi,
       nohupai: ov.nohupai !== undefined ? ov.nohupai : fp.nohupai,
       jenius: ov.jenius !== undefined ? ov.jenius : fp.jenius,
+      team: ov.team !== undefined ? ov.team : fp.team,
     });
   });
   // 활동계획수립 등 다른 페이지에서 쓰도록 명단 저장 (pw 제외)
@@ -4823,8 +4813,7 @@ var TOOL_VIDEOS = {
   ugobi:   { id: '7Zg4ptPasCM', title: 'U-GOBI 소개 영상' },
   carefit: { id: 'jvSS1-bKHGc', title: '올라이프 케어핏 소개 영상' },
   nohupai: { id: 'KzIj5g6jrdM', title: '노후파이클래스 소개 영상' },
-  jenius:  { id: '', title: '제니스 케어맵 소개 영상' },
-  lifedesign: { id: 'K90ciIQR-aE', title: '유니스 라이프 디자인 홍보영상' }
+  jenius:  { id: '', title: '제니스 케어맵 소개 영상' }
 };
 var _ytPlayer = null;
 var _ytReady = false;
@@ -5783,6 +5772,9 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.jenius!==false?'on':'off') + '" onclick="toggleFpJenius(\'' + fp.id + '\')">' +
         (fp.jenius!==false ? '⚡ 사용' : '🚫 차단') +
       '</button></td>' +
+      '<td><button class="fp-active-toggle ' + (fp.team===true?'on':'off') + '" onclick="toggleFpTeam(\'' + fp.id + '\')">' +
+        (fp.team===true ? 'ON' : 'OFF') +
+      '</button></td>' +
       '<td><button class="fp-reset-pw" onclick="resetFpPw(\'' + fp.id + '\',\'' + fp.name + '\')">초기화</button></td>' +
       '<td>' + (fp.role==='대표' ? '' : '<button onclick="deleteFpAccount(\'' + fp.id + '\')" style="padding:5px 10px;border:1px solid rgba(192,57,49,.3);border-radius:7px;background:rgba(192,57,49,.06);color:#C0392B;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🗑️ 삭제</button>') + '</td>' +
     '</tr>';
@@ -5871,6 +5863,27 @@ function toggleFpJenius(id) {
       saveFpOverride(id, 'jenius', res.jenius);
       renderFpMgmtTable();
       showToast((res.jenius ? '⚡ ' : '🚫 ') + fp.name + ' 제니스 ' + (res.jenius ? '사용 허용' : '차단') + '했습니다');
+    } else {
+      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
+    }
+  }).catch(function(){
+    showToast('⚠️ 서버 연결 실패');
+  });
+}
+function toggleFpTeam(id) {
+  if (!currentUser || currentUser.role !== '대표') { showToast('⚠️ 대표만 변경할 수 있습니다'); return; }
+  var list = getMergedFpList();
+  var fp   = list.find(function(f){ return f.id === id; });
+  if (!fp) return;
+  var nextOn = (fp.team !== true); // currently off -> turn on
+  var url = UNISPACE_GAS_URL + '?action=setTeamFlag&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N') + '&by=' + encodeURIComponent(currentUser.id);
+  showToast('🔔 리쿨푸쉬 변경 중...');
+  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok) {
+      fp.team = res.team;
+      saveFpOverride(id, 'team', res.team);
+      renderFpMgmtTable();
+      showToast('🔔 ' + fp.name + ' 리쿨푸쉬 ' + (res.team ? 'ON' : 'OFF'));
     } else {
       showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
     }
@@ -11373,36 +11386,6 @@ function sharePanelVideo(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   var msg = '유니스 오픈랩 소비자 패널 안내 영상이에요! 1시간 참여하고 활동지원금 3만원 받아가세요 :)';
   var url = 'https://youtu.be/LChecM_Du1M';
-  if (navigator.share) {
-    navigator.share({ text: msg, url: url }).catch(function(){});
-    return false;
-  }
-  _uniceCopy(msg + '\n' + url);
-  return false;
-}
-
-/* 라이프디자인 홍보영상 공유 */
-function shareLifeDesign(ev) {
-  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
-  var msg = '유니스 라이프 디자인! 암부터 노후까지, 인생에서 꼭 알아야 할 다섯 번의 경험. 전 과정 무료에 수료지원금 15만원까지 드려요 :)';
-  var url = 'https://youtube.com/shorts/K90ciIQR-aE';
-  if (navigator.share) {
-    navigator.share({ text: msg, url: url }).catch(function(){});
-    return false;
-  }
-  _uniceCopy(msg + '\n' + url);
-  return false;
-}
-
-/* 파도타기 이벤트 공유 (FP 링크 포함) */
-function shareWaveEvent(ev) {
-  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
-  var base = 'https://unice-vip.co.kr/wave/';
-  var url = base;
-  if (typeof currentUser !== 'undefined' && currentUser && currentUser.id) {
-    url = base + '?fp=' + encodeURIComponent(currentUser.id);
-  }
-  var msg = '영상 보고 파도 타면 시원한 선물이 콸콸! 유니스 썸머 파도타기 이벤트에 초대해요 :)';
   if (navigator.share) {
     navigator.share({ text: msg, url: url }).catch(function(){});
     return false;
@@ -18646,14 +18629,6 @@ function doCheckin() { doSmartCheckin(); }
         </div>
       </div>
       <div class="sa-row">
-        <div class="sa-ic">🎓</div>
-        <div class="sa-tx"><div class="a">라이프 디자인<span class="sa-new" data-from="2026-07-20" data-until="2026-07-22">NEW</span></div><div class="b">5회 체험 교육 · 교육생 모집</div></div>
-        <div class="sa-acts">
-          <button type="button" class="sa-vbtn" onclick="return openToolVideo('lifedesign',event)">▶ 영상</button>
-          <button type="button" class="sa-sbtn" onclick="return shareLifeDesign(event)">보내기</button>
-        </div>
-      </div>
-      <div class="sa-row">
         <div class="sa-ic">📹</div>
         <div class="sa-tx"><div class="a">소비자 패널 영상</div><div class="b">1분 · 유튜브</div></div>
         <div class="sa-acts">
@@ -18675,30 +18650,9 @@ function doCheckin() { doSmartCheckin(); }
           <button type="button" class="sa-sbtn" onclick="return shareMyCard(event)">보내기</button>
         </div>
       </div>
-      <div class="sa-row">
-        <div class="sa-ic">🌊</div>
-        <div class="sa-tx"><div class="a">썸머 파도타기 이벤트<span class="sa-new" data-from="2026-07-20" data-until="2026-07-22">NEW</span></div><div class="b">사은품 증정 · 내 링크로 확산</div></div>
-        <div class="sa-acts">
-          <button type="button" class="sa-wbtn" onclick="return shareWaveEvent(event)">🌊 파도 보내기</button>
-        </div>
-      </div>
     </div>
   </div>
 </div>
-<script>
-(function(){
-  var els = document.querySelectorAll('.sa-new');
-  var now = new Date();
-  for (var i = 0; i < els.length; i++) {
-    var from = els[i].getAttribute('data-from');
-    var until = els[i].getAttribute('data-until');
-    var ok = true;
-    if (from) { ok = ok && (now >= new Date(from + 'T00:00:00')); }
-    if (until) { ok = ok && (now <= new Date(until + 'T23:59:59')); }
-    if (ok) { els[i].classList.add('show'); }
-  }
-})();
-</script>
 
 <!-- 도구 홍보영상 모달 -->
 <div class="vid-overlay" id="vidOverlay" onclick="if(event.target===this)closeToolVideo()">
