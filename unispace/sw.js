@@ -36,8 +36,10 @@ self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   var target = (event.notification.data && event.notification.data.url) || './index.html?open=today';
   var wantOpen = '';
-  if (target.indexOf('open=recruit') >= 0) wantOpen = 'recruit';
-  else if (target.indexOf('open=today') >= 0) wantOpen = 'today';
+  var opens = ['recruit', 'today', 'perf', 'bojtop', 'stdfp'];
+  for (var oi = 0; oi < opens.length; oi++) {
+    if (target.indexOf('open=' + opens[oi]) >= 0) { wantOpen = opens[oi]; break; }
+  }
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
       for (var i = 0; i < clientList.length; i++) {
@@ -54,7 +56,7 @@ self.addEventListener('notificationclick', function(event) {
 });
 
 // ===== PWA cache (network-first) =====
-var CACHE_NAME = 'unispace-v3';
+var CACHE_NAME = 'unispace-v4';
 var PRECACHE = [
   './manifest.json',
   './unispace-192.png',
