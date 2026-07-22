@@ -1306,7 +1306,7 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .send-acc-head .sah-tx .b { color: rgba(255,255,255,.5); font-size: 11px; margin-top: 2px; }
 .send-acc-head .sah-chev { color: #F0D98A; font-size: 15px; transition: transform .3s; flex: none; }
 .send-acc.open .send-acc-head .sah-chev { transform: rotate(180deg); }
-.send-acc-body { padding: 0 14px 14px; }
+.send-acc-body { padding: 0 14px 14px; max-height: 48vh; max-height: 48dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .send-acc:not(.open) .send-acc-body { display: none; }
 
 .sa-row {
@@ -11460,6 +11460,451 @@ function shareWaveEvent(ev) {
   return false;
 }
 
+/* checkup share: customer picker -> personal token link */
+var _ckpCustomers = null;
+var _ckpLoading = false;
+var _ckpAttr = '전체';
+var _ckpSelected = {};
+var _ckpQueue = [];
+var _ckpQIdx = 0;
+var _ckpQSent = 0;
+var _ckpTokens = {};
+var _CKP_ATTRS = ['전체','가족','지인','히든','DB','소개','기타'];
+var _CKP_ATTR_COLORS = {
+  '가족':'rgba(201,168,76,.18)|#E8C97A',
+  '지인':'rgba(16,185,129,.18)|#34d399',
+  '히든':'rgba(139,92,246,.2)|#a78bfa',
+  'DB':'rgba(59,130,246,.2)|#60a5fa',
+  '소개':'rgba(244,163,38,.18)|#fbbf24',
+  '기타':'rgba(148,163,184,.15)|#94a3b8'
+};
+
+function _ckpRenderChips() {
+  var box = document.getElementById('ckpChips');
+  if (!box) return;
+  var html = '';
+  for (var i = 0; i < _CKP_ATTRS.length; i++) {
+    var a = _CKP_ATTRS[i];
+    html += '<div class="ckp-chip' + (a === _ckpAttr ? ' on' : '') + '" onclick="_ckpSetAttr(\'' + a + '\')">' + a + '</div>';
+  }
+  box.innerHTML = html;
+}
+
+function _ckpSetAttr(a) {
+  _ckpAttr = a;
+  _ckpRenderChips();
+  _ckpRender();
+}
+
+function openCheckupPicker(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  var ov = document.getElementById('ckpOverlay');
+  ov.classList.add('on');
+  document.getElementById('ckpBox').classList.remove('queue-mode');
+  var inp = document.getElementById('ckpSearch');
+  if (inp) inp.value = '';
+  _ckpAttr = '전체';
+  _ckpSelected = {};
+  _ckpRenderChips();
+  _ckpUpdateFoot();
+  if (_ckpCustomers) { _ckpRender(); return false; }
+  // reuse dashboard-loaded customer cache first (instant open)
+  try {
+    var _lsRaw = localStorage.getItem('unispace_customers');
+    if (_lsRaw) {
+      var _lsArr = JSON.parse(_lsRaw);
+      if (_lsArr && _lsArr.length) {
+        _ckpCustomers = _lsArr;
+        _ckpRender();
+        return false;
+      }
+    }
+  } catch(e) {}
+  if (_ckpLoading) return false;
+  _ckpLoading = true;
+  document.getElementById('ckpList').innerHTML = '<div class="ckp-msg">고객 목록을 불러오는 중...<br>고객이 많으면 20~30초 정도 걸릴 수 있어요</div>';
+  fetch(UNISPACE_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(currentUser.id))
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      _ckpLoading = false;
+      if (!res || !res.ok) {
+        var emsg = (res && res.msg) ? res.msg : '';
+        document.getElementById('ckpList').innerHTML = '<div class="ckp-msg">고객 목록을 불러오지 못했어요.' + (emsg ? '<br>(' + emsg + ')' : '') + '<br>모달을 닫았다 다시 열면 재시도합니다.</div>';
+        return;
+      }
+      var got = res.customers || [];
+      if (!got.length) {
+        document.getElementById('ckpList').innerHTML = '<div class="ckp-msg">불러온 고객이 0명이에요.<br>모달을 닫았다 다시 열면 재시도합니다.</div>';
+        return;
+      }
+      _ckpCustomers = got;
+      _ckpRender();
+    })
+    .catch(function(){
+      _ckpLoading = false;
+      document.getElementById('ckpList').innerHTML = '<div class="ckp-msg">네트워크 오류입니다.<br>잠시 후 다시 시도해 주세요.</div>';
+    });
+  return false;
+}
+
+function closeCheckupPicker() {
+  var ov = document.getElementById('ckpOverlay');
+  if (ov) ov.classList.remove('on');
+  var box = document.getElementById('ckpBox');
+  if (box) box.classList.remove('queue-mode');
+}
+
+function _ckpFiltered() {
+  var q = '';
+  var inp = document.getElementById('ckpSearch');
+  if (inp) q = String(inp.value || '').trim().toLowerCase();
+  var arr = _ckpCustomers || [];
+  var out = [];
+  for (var i = 0; i < arr.length; i++) {
+    var c = arr[i];
+    if (!c || !c.name) continue;
+    if (_ckpAttr !== '전체') {
+      var ch = String(c.channel || '').trim() || '기타';
+      if (ch !== _ckpAttr) continue;
+    }
+    if (q) {
+      var hay = (String(c.name) + ' ' + String(c.phone || '')).toLowerCase();
+      if (hay.indexOf(q) < 0) continue;
+    }
+    out.push(c);
+  }
+  return out;
+}
+
+function _ckpRender() {
+  var list = document.getElementById('ckpList');
+  if (!list) return;
+  var out = _ckpFiltered();
+  if (!out.length) {
+    var inp = document.getElementById('ckpSearch');
+    var hasQ = inp && String(inp.value || '').trim();
+    list.innerHTML = '<div class="ckp-msg">' + (hasQ ? '검색 결과가 없어요' : '해당 고객이 없어요') + '</div>';
+    _ckpUpdateFoot();
+    return;
+  }
+  out.sort(function(a, b){ return String(a.name).localeCompare(String(b.name), 'ko'); });
+  var html = '';
+  var max = out.length > 300 ? 300 : out.length;
+  for (var j = 0; j < max; j++) {
+    var cc = out[j];
+    var cid = String(cc.id);
+    var initial = String(cc.name).charAt(0);
+    var contracts = (cc.contracts && cc.contracts.length) ? ('계약 ' + cc.contracts.length + '건') : '계약 정보 없음';
+    var sub = (cc.phone ? cc.phone + ' · ' : '') + contracts;
+    var chv = String(cc.channel || '').trim();
+    var badge = '';
+    if (chv && _CKP_ATTR_COLORS[chv]) {
+      var cp = _CKP_ATTR_COLORS[chv].split('|');
+      badge = '<span class="ckp-badge" style="background:' + cp[0] + ';color:' + cp[1] + '">' + chv + '</span>';
+    }
+    var checked = _ckpSelected[cid] ? ' checked' : '';
+    html += '<div class="ckp-item' + checked + '" id="ckpItem_' + cid.replace(/[^a-zA-Z0-9_]/g, '') + '" onclick="_ckpToggle(\'' + cid.replace(/'/g, '') + '\')">'
+      + '<div class="ckp-cb">✓</div>'
+      + '<div class="av">' + initial + '</div>'
+      + '<div class="info"><div class="nm">' + cc.name + badge + '</div><div class="sub">' + sub + '</div></div>'
+      + '<div class="go" onclick="event.stopPropagation();sendCheckupLink(\'' + cid.replace(/'/g, '') + '\',\'' + String(cc.name).replace(/'/g, '') + '\')">바로 보내기</div></div>';
+  }
+  if (out.length > max) {
+    html += '<div class="ckp-msg">' + (out.length - max) + '명 더 있어요. 검색으로 좁히거나 전체선택을 이용하세요.</div>';
+  }
+  list.innerHTML = html;
+  _ckpUpdateFoot();
+}
+
+function _ckpFindCust(cid) {
+  var arr = _ckpCustomers || [];
+  for (var i = 0; i < arr.length; i++) {
+    if (String(arr[i].id) === String(cid)) return arr[i];
+  }
+  return null;
+}
+
+function _ckpToggle(cid) {
+  if (_ckpSelected[cid]) { delete _ckpSelected[cid]; }
+  else {
+    var c = _ckpFindCust(cid);
+    if (c) _ckpSelected[cid] = c;
+  }
+  var el = document.getElementById('ckpItem_' + String(cid).replace(/[^a-zA-Z0-9_]/g, ''));
+  if (el) {
+    if (_ckpSelected[cid]) el.classList.add('checked');
+    else el.classList.remove('checked');
+  }
+  _ckpUpdateFoot();
+}
+
+function _ckpToggleAll() {
+  var out = _ckpFiltered();
+  var allSelected = out.length > 0;
+  for (var i = 0; i < out.length; i++) {
+    if (!_ckpSelected[String(out[i].id)]) { allSelected = false; break; }
+  }
+  if (allSelected) {
+    for (var j = 0; j < out.length; j++) { delete _ckpSelected[String(out[j].id)]; }
+  } else {
+    for (var k = 0; k < out.length; k++) { _ckpSelected[String(out[k].id)] = out[k]; }
+  }
+  _ckpRender();
+}
+
+function _ckpSelCount() {
+  var n = 0;
+  for (var k in _ckpSelected) { if (_ckpSelected.hasOwnProperty(k)) n++; }
+  return n;
+}
+
+function _ckpUpdateFoot() {
+  var n = _ckpSelCount();
+  var cnt = document.getElementById('ckpCount');
+  if (cnt) cnt.textContent = n + '명 선택';
+  var btn = document.getElementById('ckpSendBtn');
+  if (btn) {
+    btn.disabled = (n === 0);
+    btn.textContent = n > 0 ? (n + '명에게 보내기') : '선택 보내기';
+  }
+  var out = _ckpFiltered();
+  var all = out.length > 0;
+  for (var i = 0; i < out.length; i++) {
+    if (!_ckpSelected[String(out[i].id)]) { all = false; break; }
+  }
+  var allCb = document.getElementById('ckpAllCb');
+  if (allCb) {
+    if (all) { allCb.style.background = '#2dd4bf'; allCb.style.borderColor = '#2dd4bf'; allCb.style.color = '#06283c'; allCb.textContent = '✓'; }
+    else { allCb.style.background = 'transparent'; allCb.style.borderColor = 'rgba(148,163,184,.5)'; allCb.style.color = 'transparent'; allCb.textContent = '✓'; }
+  }
+}
+
+function _ckpBuildMsg(custName, url) {
+  var sender = _shareSender();
+  var senderLine = '';
+  if (sender) {
+    senderLine = '\n- ' + sender.replace(/가$/, '').replace(/이$/, '') + ' 드림';
+  }
+  return '[유니스 보장검진] '
+    + custName + ' 님은 2026년 정기 보장검진 대상자입니다.\n'
+    + '가입 권유 없는 검진으로, 미수령 환급금과 놓친 청구까지 확인해드려요.\n'
+    + '아래 링크에서 편한 시간만 선택해 주세요 :)'
+    + senderLine + '\n' + url;
+}
+
+/* single send (immediate) */
+function sendCheckupLink(custId, custName) {
+  if (!custId) return;
+  showToast('🔗 ' + custName + ' 님 안내 링크를 만드는 중...');
+  _ckpGetToken(custId, function(token, errMsg) {
+    if (!token) {
+      showToast('⚠️ ' + (errMsg || '링크 생성에 실패했습니다'));
+      return;
+    }
+    var url = 'https://unice-vip.co.kr/checkup.html?c=' + token;
+    var msg = _ckpBuildMsg(custName, url);
+    var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    closeCheckupPicker();
+    if (isMobileDev && navigator.share) {
+      navigator.share({ text: msg }).catch(function(e){});
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(msg).then(function() {
+        showToast('📋 안내문+링크가 복사되었습니다. 문자나 카톡에 붙여넣어 보내세요');
+      }).catch(function() { shareVipApplyLegacyCopy(msg); });
+    } else {
+      shareVipApplyLegacyCopy(msg);
+    }
+  });
+}
+
+/* token fetch with cache */
+function _ckpGetToken(custId, cb) {
+  if (_ckpTokens[custId]) { cb(_ckpTokens[custId], ''); return; }
+  fetch(UNISPACE_GAS_URL + '?action=makeCheckupToken&fp=' + encodeURIComponent(currentUser.id) + '&custId=' + encodeURIComponent(custId))
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if (res && res.ok && res.token) {
+        _ckpTokens[custId] = res.token;
+        cb(res.token, '');
+      } else {
+        cb('', (res && res.msg) ? res.msg : '링크 생성 실패');
+      }
+    })
+    .catch(function(){ cb('', '네트워크 오류'); });
+}
+
+/* kakao sdk lazy load + card share */
+var _CKP_KAKAO_KEY = 'cbfa60013e8c77c5a8c168d4d5862d51';
+var _ckpKakaoLoading = false;
+
+function _ckpKakaoReady(cb) {
+  if (window.Kakao && window.Kakao.isInitialized && window.Kakao.isInitialized()) { cb(true); return; }
+  if (window.Kakao && window.Kakao.init) {
+    try { window.Kakao.init(_CKP_KAKAO_KEY); cb(true); return; } catch(e) { cb(false); return; }
+  }
+  if (_ckpKakaoLoading) { setTimeout(function(){ _ckpKakaoReady(cb); }, 400); return; }
+  _ckpKakaoLoading = true;
+  var s = document.createElement('script');
+  s.src = 'https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js';
+  s.onload = function() {
+    _ckpKakaoLoading = false;
+    try { window.Kakao.init(_CKP_KAKAO_KEY); cb(true); } catch(e) { cb(false); }
+  };
+  s.onerror = function() { _ckpKakaoLoading = false; cb(false); };
+  document.head.appendChild(s);
+}
+
+function _ckpSendKakaoCard(custName, url, done) {
+  _ckpKakaoReady(function(ok) {
+    if (!ok) { showToast('⚠️ 카카오 공유를 불러오지 못했어요'); if (done) done(false); return; }
+    try {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: '2026년 정기 보장검진 대상자 안내',
+          description: custName + ' 님은 올해 보장검진 대상자입니다. 가입 권유 없는 검진으로 미수령 환급금과 놓친 청구까지 확인해드려요.',
+          imageUrl: 'https://unice-vip.co.kr/checkup/og.png',
+          link: { mobileWebUrl: url, webUrl: url }
+        },
+        buttons: [
+          { title: '검진 일정 접수하기', link: { mobileWebUrl: url, webUrl: url } }
+        ]
+      });
+      if (done) done(true);
+    } catch(e) {
+      showToast('⚠️ 카카오 공유 오류');
+      if (done) done(false);
+    }
+  });
+}
+
+/* ---- send queue ---- */
+function startCheckupQueue() {
+  var list = [];
+  for (var k in _ckpSelected) {
+    if (_ckpSelected.hasOwnProperty(k)) list.push(_ckpSelected[k]);
+  }
+  if (!list.length) return;
+  list.sort(function(a, b){ return String(a.name).localeCompare(String(b.name), 'ko'); });
+  _ckpQueue = list;
+  _ckpQIdx = 0;
+  _ckpQSent = 0;
+  document.getElementById('ckpBox').classList.add('queue-mode');
+  _ckpQShow();
+}
+
+function _ckpQShow() {
+  var q = document.getElementById('ckpQueue');
+  if (!q) return;
+  var total = _ckpQueue.length;
+  if (_ckpQIdx >= total) {
+    q.innerHTML = '<div class="ckp-qdone"><div class="big">🎉</div>'
+      + '<div class="t">' + _ckpQSent + '명 발송 완료!</div>'
+      + '<div class="s">접수가 들어오면 메일로 알려드려요.<br>접수 현황은 검진접수 시트에서 확인할 수 있어요.</div>'
+      + '<div class="ckp-qbtns" style="margin-top:26px">'
+      + '<button type="button" class="ckp-qsub" onclick="closeCheckupPicker()">닫기</button>'
+      + '</div></div>';
+    return;
+  }
+  var c = _ckpQueue[_ckpQIdx];
+  var pct = Math.round((_ckpQIdx / total) * 100);
+  q.innerHTML = '<div class="ckp-prog">' + (_ckpQIdx + 1) + ' / ' + total + '명</div>'
+    + '<div class="ckp-progbar"><div class="fill" style="width:' + pct + '%"></div></div>'
+    + '<div class="ckp-qname"><div class="n">' + c.name + ' 님</div>'
+    + '<div class="p">' + (c.phone || '전화번호 없음') + '</div></div>'
+    + '<div class="ckp-qstat" id="ckpQStat">개인 링크 준비 중...</div>'
+    + '<div class="ckp-qbtns">'
+    + '<button type="button" class="ckp-qmain" id="ckpQSms" disabled onclick="_ckpQSendSms()">📱 문자로 보내기</button>'
+    + '<button type="button" class="ckp-qsub" id="ckpQKakao" disabled onclick="_ckpQSendKakao()">💬 카톡 카드로 보내기</button>'
+    + '<button type="button" class="ckp-qsub" id="ckpQShare" disabled onclick="_ckpQSendShare()">다른 앱으로 공유</button>'
+    + '<button type="button" class="ckp-qsub" onclick="_ckpQSkip()">이 고객 건너뛰기</button>'
+    + '</div>'
+    + '<div class="ckp-qexit"><button type="button" onclick="_ckpQExit()">발송 그만하기 (' + _ckpQSent + '명 보냄)</button></div>';
+  _ckpGetToken(String(c.id), function(token, errMsg) {
+    var st = document.getElementById('ckpQStat');
+    if (!token) {
+      if (st) st.textContent = '⚠️ 링크 생성 실패: ' + errMsg + ' — 건너뛰기를 눌러주세요';
+      return;
+    }
+    if (st) st.textContent = '링크 준비 완료! 아래 버튼으로 보내세요';
+    var b1 = document.getElementById('ckpQSms');
+    var b2 = document.getElementById('ckpQShare');
+    var b3 = document.getElementById('ckpQKakao');
+    if (b1) b1.disabled = !(c.phone);
+    if (b1 && !c.phone) b1.textContent = '📱 전화번호가 없어요';
+    if (b2) b2.disabled = false;
+    if (b3) b3.disabled = false;
+  });
+  // prefetch next token while fp is sending this one
+  if (_ckpQIdx + 1 < total) {
+    _ckpGetToken(String(_ckpQueue[_ckpQIdx + 1].id), function(){});
+  }
+}
+
+function _ckpQCurrentMsg() {
+  var c = _ckpQueue[_ckpQIdx];
+  var token = _ckpTokens[String(c.id)] || '';
+  var url = 'https://unice-vip.co.kr/checkup.html?c=' + token;
+  return _ckpBuildMsg(c.name, url);
+}
+
+function _ckpQSendSms() {
+  var c = _ckpQueue[_ckpQIdx];
+  if (!c || !c.phone) return;
+  var num = String(c.phone).replace(/[^0-9]/g, '');
+  var msg = _ckpQCurrentMsg();
+  var isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  var href = 'sms:' + num + (isIos ? '&' : '?') + 'body=' + encodeURIComponent(msg);
+  window.location.href = href;
+  _ckpQSent++;
+  _ckpQIdx++;
+  setTimeout(_ckpQShow, 600);
+}
+
+function _ckpQSendShare() {
+  var msg = _ckpQCurrentMsg();
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share) {
+    navigator.share({ text: msg }).catch(function(e){});
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).then(function() {
+      showToast('📋 복사됨! 붙여넣어 보내세요');
+    }).catch(function() { shareVipApplyLegacyCopy(msg); });
+  } else {
+    shareVipApplyLegacyCopy(msg);
+  }
+  _ckpQSent++;
+  _ckpQIdx++;
+  setTimeout(_ckpQShow, 600);
+}
+
+function _ckpQSendKakao() {
+  var c = _ckpQueue[_ckpQIdx];
+  if (!c) return;
+  var token = _ckpTokens[String(c.id)] || '';
+  if (!token) return;
+  var url = 'https://unice-vip.co.kr/checkup.html?c=' + token;
+  _ckpSendKakaoCard(c.name, url, function(ok) {
+    if (!ok) return;
+    _ckpQSent++;
+    _ckpQIdx++;
+    setTimeout(_ckpQShow, 600);
+  });
+}
+
+function _ckpQSkip() {
+  _ckpQIdx++;
+  _ckpQShow();
+}
+
+function _ckpQExit() {
+  document.getElementById('ckpBox').classList.remove('queue-mode');
+  _ckpRender();
+}
+
 /* 소비자 패널 카드뉴스 사진 7장 공유 (안되면 저장) */
 function sharePanelCards(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
@@ -18681,7 +19126,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="sah-ic">📤</div>
       <div class="sah-tx">
         <div class="a">자료 보내기</div>
-        <div class="b" id="sahSub">VIP 영상 · 소비자 패널 · 내 명함</div>
+        <div class="b" id="sahSub">보장검진 · VIP 영상 · 내 명함</div>
       </div>
       <div class="sah-chev">▾</div>
     </div>
@@ -18731,6 +19176,13 @@ function doCheckin() { doSmartCheckin(); }
           <button type="button" class="sa-wbtn" onclick="return shareWaveEvent(event)">🌊 파도 보내기</button>
         </div>
       </div>
+      <div class="sa-row">
+        <div class="sa-ic">🩺</div>
+        <div class="sa-tx"><div class="a">보장검진 안내<span class="sa-new" data-from="2026-07-22" data-until="2026-07-26">NEW</span></div><div class="b">고객 선택 · 개인 링크 발송</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-sbtn" onclick="return openCheckupPicker(event)">보내기</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -18748,6 +19200,105 @@ function doCheckin() { doSmartCheckin(); }
   }
 })();
 </script>
+
+<!-- 보장검진 고객 선택 모달 -->
+<style>
+  .ckp-overlay { display:none; position:fixed; inset:0; background:rgba(4,16,30,.72);
+    z-index:100000; align-items:flex-end; justify-content:center; }
+  .ckp-overlay.on { display:flex; }
+  .ckp-box { width:100%; max-width:520px; height:82vh; height:82dvh;
+    background:#0e1c30; border:1px solid rgba(94,234,212,.35); border-radius:22px 22px 0 0;
+    display:flex; flex-direction:column; overflow:hidden; }
+  @media (min-width:640px){ .ckp-overlay{ align-items:center; } .ckp-box{ border-radius:22px; height:640px; max-height:86vh; } }
+  .ckp-head { padding:16px 18px 12px 18px; display:flex; align-items:center; gap:10px;
+    border-bottom:1px solid rgba(148,163,184,.18); }
+  .ckp-head .t { font-size:16px; font-weight:800; color:#e2e8f0; flex:1; }
+  .ckp-head .t .s { display:block; font-size:11.5px; font-weight:500; color:#7dd3c8; margin-top:2px; }
+  .ckp-close { background:none; border:none; color:#94a3b8; font-size:20px; cursor:pointer; padding:4px 8px; }
+  .ckp-search { padding:10px 14px; }
+  .ckp-search input { width:100%; background:#16283f; border:1px solid rgba(148,163,184,.3);
+    border-radius:12px; padding:11px 14px; font-size:14px; color:#f1f5f9; outline:none;
+    font-family:inherit; }
+  .ckp-chips { display:flex; gap:6px; padding:0 14px 10px 14px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .ckp-chip { flex:0 0 auto; font-size:12px; font-weight:700; color:#94a3b8;
+    background:#16283f; border:1px solid rgba(148,163,184,.28); border-radius:20px;
+    padding:6px 13px; cursor:pointer; white-space:nowrap; }
+  .ckp-chip.on { color:#06283c; background:#2dd4bf; border-color:#2dd4bf; }
+  .ckp-badge { font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:6px;
+    white-space:nowrap; margin-left:6px; vertical-align:1px; display:inline-block; }
+  .ckp-list { flex:1; overflow-y:auto; padding:0 10px 14px 10px; -webkit-overflow-scrolling:touch; }
+  .ckp-item { display:flex; align-items:center; gap:10px; padding:11px 8px;
+    border-bottom:1px solid rgba(148,163,184,.12); cursor:pointer; border-radius:10px; }
+  .ckp-item:active { background:rgba(45,212,191,.08); }
+  .ckp-cb { width:21px; height:21px; flex:0 0 21px; border-radius:6px;
+    border:2px solid rgba(148,163,184,.5); background:transparent;
+    display:flex; align-items:center; justify-content:center;
+    color:transparent; font-size:13px; font-weight:900; }
+  .ckp-item.checked .ckp-cb { background:#2dd4bf; border-color:#2dd4bf; color:#06283c; }
+  .ckp-item .av { width:34px; height:34px; flex:0 0 34px; border-radius:50%;
+    background:rgba(45,212,191,.15); color:#5eead4; font-size:14px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; }
+  .ckp-item .info { flex:1; min-width:0; }
+  .ckp-item .nm { font-size:14.5px; font-weight:700; color:#f1f5f9; }
+  .ckp-item .sub { font-size:11.5px; color:#94a3b8; margin-top:1px; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  .ckp-item .go { font-size:12px; font-weight:700; color:#5eead4; background:rgba(45,212,191,.12);
+    border:1px solid rgba(45,212,191,.4); padding:6px 11px; border-radius:9px; white-space:nowrap; }
+  .ckp-msg { text-align:center; color:#94a3b8; font-size:13px; padding:34px 20px; line-height:1.6; }
+  .ckp-foot { border-top:1px solid rgba(148,163,184,.18); padding:10px 14px;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom)); display:flex; align-items:center; gap:10px; }
+  .ckp-selall { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700;
+    color:#cbd5e1; cursor:pointer; flex:0 0 auto; }
+  .ckp-count { font-size:12.5px; color:#7dd3c8; font-weight:700; flex:1; }
+  .ckp-sendbtn { background:linear-gradient(90deg,#0d9488,#0891b2); color:#fff;
+    font-size:14px; font-weight:900; border:none; border-radius:11px; padding:11px 18px;
+    cursor:pointer; font-family:inherit; }
+  .ckp-sendbtn:disabled { opacity:.4; }
+  /* queue view */
+  .ckp-queue { display:none; flex:1; flex-direction:column; padding:18px 20px; overflow-y:auto; }
+  .ckp-box.queue-mode .ckp-search, .ckp-box.queue-mode .ckp-chips,
+  .ckp-box.queue-mode .ckp-list, .ckp-box.queue-mode .ckp-foot { display:none; }
+  .ckp-box.queue-mode .ckp-queue { display:flex; }
+  .ckp-prog { font-size:13px; font-weight:700; color:#7dd3c8; }
+  .ckp-progbar { height:7px; background:#16283f; border-radius:5px; margin-top:8px; overflow:hidden; }
+  .ckp-progbar .fill { height:100%; background:linear-gradient(90deg,#2dd4bf,#38bdf8); width:0%; border-radius:5px; }
+  .ckp-qname { margin-top:26px; text-align:center; }
+  .ckp-qname .n { font-size:24px; font-weight:900; color:#fff; }
+  .ckp-qname .p { font-size:14px; color:#94a3b8; margin-top:5px; }
+  .ckp-qstat { text-align:center; margin-top:10px; font-size:12.5px; color:#7dd3c8; min-height:18px; }
+  .ckp-qbtns { margin-top:22px; display:flex; flex-direction:column; gap:10px; }
+  .ckp-qmain { background:linear-gradient(90deg,#0d9488,#0891b2); color:#fff; font-size:16px;
+    font-weight:900; border:none; border-radius:13px; padding:15px; cursor:pointer; font-family:inherit; }
+  .ckp-qmain:disabled { opacity:.4; }
+  .ckp-qsub { background:#16283f; color:#cbd5e1; font-size:13.5px; font-weight:700;
+    border:1px solid rgba(148,163,184,.3); border-radius:11px; padding:12px; cursor:pointer; font-family:inherit; }
+  .ckp-qexit { margin-top:auto; padding-top:18px; text-align:center; }
+  .ckp-qexit button { background:none; border:none; color:#64748b; font-size:12.5px;
+    cursor:pointer; font-family:inherit; text-decoration:underline; }
+  .ckp-qdone { text-align:center; padding-top:50px; }
+  .ckp-qdone .big { font-size:46px; }
+  .ckp-qdone .t { margin-top:14px; font-size:20px; font-weight:900; color:#fff; }
+  .ckp-qdone .s { margin-top:8px; font-size:13.5px; color:#94a3b8; line-height:1.6; }
+</style>
+<div class="ckp-overlay" id="ckpOverlay" onclick="if(event.target===this)closeCheckupPicker()">
+  <div class="ckp-box" id="ckpBox">
+    <div class="ckp-head">
+      <div class="t">🩺 보장검진 안내 보내기<span class="s" id="ckpHeadSub">고객을 선택하면 개인 안내 링크가 만들어져요</span></div>
+      <button type="button" class="ckp-close" onclick="closeCheckupPicker()">✕</button>
+    </div>
+    <div class="ckp-search"><input type="text" id="ckpSearch" placeholder="고객명 또는 전화번호 검색" oninput="_ckpRender()"></div>
+    <div class="ckp-chips" id="ckpChips"></div>
+    <div class="ckp-list" id="ckpList"><div class="ckp-msg">고객 목록을 불러오는 중...</div></div>
+    <div class="ckp-foot">
+      <div class="ckp-selall" onclick="_ckpToggleAll()">
+        <div class="ckp-cb" id="ckpAllCb"></div>전체선택
+      </div>
+      <div class="ckp-count" id="ckpCount">0명 선택</div>
+      <button type="button" class="ckp-sendbtn" id="ckpSendBtn" onclick="startCheckupQueue()" disabled>선택 보내기</button>
+    </div>
+    <div class="ckp-queue" id="ckpQueue"></div>
+  </div>
+</div>
 
 <!-- 도구 홍보영상 모달 -->
 <div class="vid-overlay" id="vidOverlay" onclick="if(event.target===this)closeToolVideo()">
