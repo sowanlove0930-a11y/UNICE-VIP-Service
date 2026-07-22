@@ -11687,9 +11687,8 @@ function _ckpBuildMsg(custName, url) {
     senderLine = '\n- ' + sender.replace(/가$/, '').replace(/이$/, '') + ' 드림';
   }
   return '[유니스 보장검진] '
-    + custName + ' 님은 2026년 정기 보장검진 대상자입니다.\n'
-    + '가입 권유 없는 검진으로, 미수령 환급금과 놓친 청구까지 확인해드려요.\n'
-    + '아래 링크에서 편한 시간만 선택해 주세요 :)'
+    + custName + ' 님, 2026년 보장검진 대상자로 안내드립니다.\n'
+    + '아래에서 편한 시간만 선택해 주세요. (10초)'
     + senderLine + '\n' + url;
 }
 
@@ -11702,7 +11701,7 @@ function sendCheckupLink(custId, custName) {
       showToast('⚠️ ' + (errMsg || '링크 생성에 실패했습니다'));
       return;
     }
-    var url = 'https://unice-vip.co.kr/checkup.html?c=' + token;
+    var url = 'https://unice-vip.co.kr/checkup/?c=' + token;
     var msg = _ckpBuildMsg(custName, url);
     var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     closeCheckupPicker();
@@ -11817,7 +11816,9 @@ function _ckpQShow() {
     + '<div class="p">' + (c.phone || '전화번호 없음') + '</div></div>'
     + '<div class="ckp-qstat" id="ckpQStat">개인 링크 준비 중...</div>'
     + '<div class="ckp-qbtns">'
-    + '<button type="button" class="ckp-qmain" id="ckpQSms" disabled onclick="_ckpQSendSms()">📱 문자로 보내기</button>'
+    + (_ckpIsMobile()
+        ? '<button type="button" class="ckp-qmain" id="ckpQSms" disabled onclick="_ckpQSendSms()">📱 문자로 보내기</button>'
+        : '<button type="button" class="ckp-qmain" id="ckpQSms" disabled onclick="_ckpQCopySend()">📋 복사해서 보내기</button>')
     + '<button type="button" class="ckp-qsub" id="ckpQKakao" disabled onclick="_ckpQSendKakao()">💬 카톡 카드로 보내기</button>'
     + '<button type="button" class="ckp-qsub" id="ckpQShare" disabled onclick="_ckpQSendShare()">다른 앱으로 공유</button>'
     + '<button type="button" class="ckp-qsub" onclick="_ckpQSkip()">이 고객 건너뛰기</button>'
@@ -11833,8 +11834,14 @@ function _ckpQShow() {
     var b1 = document.getElementById('ckpQSms');
     var b2 = document.getElementById('ckpQShare');
     var b3 = document.getElementById('ckpQKakao');
-    if (b1) b1.disabled = !(c.phone);
-    if (b1 && !c.phone) b1.textContent = '📱 전화번호가 없어요';
+    if (b1) {
+      if (_ckpIsMobile()) {
+        b1.disabled = !(c.phone);
+        if (!c.phone) b1.textContent = '📱 전화번호가 없어요';
+      } else {
+        b1.disabled = false;
+      }
+    }
     if (b2) b2.disabled = false;
     if (b3) b3.disabled = false;
   });
@@ -11847,8 +11854,35 @@ function _ckpQShow() {
 function _ckpQCurrentMsg() {
   var c = _ckpQueue[_ckpQIdx];
   var token = _ckpTokens[String(c.id)] || '';
-  var url = 'https://unice-vip.co.kr/checkup.html?c=' + token;
+  var url = 'https://unice-vip.co.kr/checkup/?c=' + token;
   return _ckpBuildMsg(c.name, url);
+}
+
+function _ckpIsMobile() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function _ckpQCopySend() {
+  var msg = _ckpQCurrentMsg();
+  var advance = function() {
+    showToast('📋 복사됨! 문자나 PC카톡에 붙여넣어 보내세요');
+    _ckpQSent++;
+    _ckpQIdx++;
+    setTimeout(_ckpQShow, 600);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).then(advance).catch(function() {
+      shareVipApplyLegacyCopy(msg);
+      _ckpQSent++;
+      _ckpQIdx++;
+      setTimeout(_ckpQShow, 600);
+    });
+  } else {
+    shareVipApplyLegacyCopy(msg);
+    _ckpQSent++;
+    _ckpQIdx++;
+    setTimeout(_ckpQShow, 600);
+  }
 }
 
 function _ckpQSendSms() {
@@ -11886,7 +11920,7 @@ function _ckpQSendKakao() {
   if (!c) return;
   var token = _ckpTokens[String(c.id)] || '';
   if (!token) return;
-  var url = 'https://unice-vip.co.kr/checkup.html?c=' + token;
+  var url = 'https://unice-vip.co.kr/checkup/?c=' + token;
   _ckpSendKakaoCard(c.name, url, function(ok) {
     if (!ok) return;
     _ckpQSent++;
