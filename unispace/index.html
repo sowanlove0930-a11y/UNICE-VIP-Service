@@ -11939,6 +11939,352 @@ function _ckpQExit() {
   _ckpRender();
 }
 
+/* checkup admin: submissions dashboard + campaign config */
+var _ckaBranch = '전체';
+var _ckaRows = [];
+var _ckaCfg = null;
+var _ckaBusy = false;
+
+function _ckaIsMgr() {
+  if (!currentUser) return false;
+  if (currentUser.id === 'ktk01') return true;
+  if (currentUser.role === '대표' || currentUser.role === '지점장') return true;
+  if (currentUser.level === 'admin' || currentUser.level === 'manager') return true;
+  return false;
+}
+
+function _ckaIsAdmin() {
+  if (!currentUser) return false;
+  return (currentUser.id === 'ktk01' || currentUser.role === '대표' || currentUser.level === 'admin');
+}
+
+function _ckaPad(n) {
+  return (n < 10 ? '0' : '') + n;
+}
+
+function _ckaMonthRange() {
+  var d = new Date();
+  var y = d.getFullYear();
+  var m = d.getMonth();
+  var first = y + '-' + _ckaPad(m + 1) + '-01';
+  var last = new Date(y, m + 1, 0);
+  var lastStr = last.getFullYear() + '-' + _ckaPad(last.getMonth() + 1) + '-' + _ckaPad(last.getDate());
+  return { from: first, to: lastStr };
+}
+
+var _ckaCalTarget = null;
+var _ckaCalY = 0;
+var _ckaCalM = 0;
+
+function _ckaCal(el) {
+  _ckaCalTarget = el;
+  var v = el.value || '';
+  var d = new Date();
+  if (v.length === 10) {
+    var yy = parseInt(v.substring(0, 4), 10);
+    var mm = parseInt(v.substring(5, 7), 10) - 1;
+    if (!isNaN(yy) && !isNaN(mm)) { _ckaCalY = yy; _ckaCalM = mm; }
+    else { _ckaCalY = d.getFullYear(); _ckaCalM = d.getMonth(); }
+  } else {
+    _ckaCalY = d.getFullYear(); _ckaCalM = d.getMonth();
+  }
+  _ckaCalRender();
+  var ov = document.getElementById('ckcOverlay');
+  if (ov) ov.classList.add('on');
+}
+
+function _ckaCalClose() {
+  var ov = document.getElementById('ckcOverlay');
+  if (ov) ov.classList.remove('on');
+  _ckaCalTarget = null;
+}
+
+function _ckaCalMove(dir) {
+  _ckaCalM += dir;
+  if (_ckaCalM < 0) { _ckaCalM = 11; _ckaCalY--; }
+  if (_ckaCalM > 11) { _ckaCalM = 0; _ckaCalY++; }
+  _ckaCalRender();
+}
+
+function _ckaCalToday() {
+  var d = new Date();
+  _ckaCalPick(d.getFullYear() + '-' + _ckaPad(d.getMonth() + 1) + '-' + _ckaPad(d.getDate()));
+}
+
+function _ckaCalPick(val) {
+  if (_ckaCalTarget) {
+    _ckaCalTarget.value = val;
+    var id = _ckaCalTarget.id || '';
+    if (id === 'ckaFrom' || id === 'ckaTo') { _ckaLoad(); }
+  }
+  _ckaCalClose();
+}
+
+function _ckaCalRender() {
+  var ym = document.getElementById('ckcYm');
+  var grid = document.getElementById('ckcGrid');
+  if (!ym || !grid) return;
+  ym.textContent = _ckaCalY + '년 ' + (_ckaCalM + 1) + '월';
+
+  var dows = ['일', '월', '화', '수', '목', '금', '토'];
+  var html = '';
+  var i;
+  for (i = 0; i < 7; i++) { html += '<div class="ckc-dow">' + dows[i] + '</div>'; }
+
+  var first = new Date(_ckaCalY, _ckaCalM, 1);
+  var startDow = first.getDay();
+  var daysIn = new Date(_ckaCalY, _ckaCalM + 1, 0).getDate();
+  var d = new Date();
+  var todayStr = d.getFullYear() + '-' + _ckaPad(d.getMonth() + 1) + '-' + _ckaPad(d.getDate());
+  var selStr = (_ckaCalTarget && _ckaCalTarget.value) ? _ckaCalTarget.value : '';
+
+  for (i = 0; i < startDow; i++) { html += '<div class="ckc-day dim"></div>'; }
+  for (i = 1; i <= daysIn; i++) {
+    var vs = _ckaCalY + '-' + _ckaPad(_ckaCalM + 1) + '-' + _ckaPad(i);
+    var cls = 'ckc-day';
+    if (((startDow + i - 1) % 7) === 0) cls += ' sun';
+    if (vs === todayStr) cls += ' today';
+    if (vs === selStr) cls += ' sel';
+    html += '<div class="' + cls + '" onclick="_ckaCalPick(\'' + vs + '\')">' + i + '</div>';
+  }
+  grid.innerHTML = html;
+}
+
+function openCheckupAdmin(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  var ov = document.getElementById('ckaOverlay');
+  if (!ov) return false;
+  ov.classList.add('on');
+
+  var mgr = _ckaIsMgr();
+  var tabs = document.getElementById('ckaTabs');
+  if (tabs) tabs.style.display = mgr ? '' : 'none';
+  _ckaTab('sub');
+
+  var r = _ckaMonthRange();
+  var f = document.getElementById('ckaFrom');
+  var t = document.getElementById('ckaTo');
+  if (f && !f.value) { f.value = r.from; f.onchange = _ckaLoad; }
+  if (t && !t.value) { t.value = r.to; t.onchange = _ckaLoad; }
+
+  _ckaBranch = '전체';
+  _ckaLoad();
+  if (mgr) _ckaLoadConfig();
+  return false;
+}
+
+function closeCheckupAdmin() {
+  var ov = document.getElementById('ckaOverlay');
+  if (ov) ov.classList.remove('on');
+}
+
+function _ckaTab(which) {
+  var ps = document.getElementById('ckaPaneSub');
+  var pc = document.getElementById('ckaPaneCfg');
+  var ts = document.getElementById('ckaTabSub');
+  var tc = document.getElementById('ckaTabCfg');
+  var sub = document.getElementById('ckaHeadSub');
+  var cfg = (which === 'cfg');
+  if (ps) ps.className = 'cka-pane' + (cfg ? '' : ' on');
+  if (pc) pc.className = 'cka-pane' + (cfg ? ' on' : '');
+  if (ts) ts.className = 'cka-tab' + (cfg ? '' : ' on');
+  if (tc) tc.className = 'cka-tab' + (cfg ? ' on' : '');
+  if (sub) sub.textContent = cfg ? '캠페인 설정' : '접수현황';
+}
+
+function _ckaLoad() {
+  var box = document.getElementById('ckaList');
+  if (box) box.innerHTML = '<div class="cka-msg">불러오는 중...</div>';
+  var f = document.getElementById('ckaFrom');
+  var t = document.getElementById('ckaTo');
+  var from = f ? f.value : '';
+  var to = t ? t.value : '';
+  var url = UNISPACE_GAS_URL + '?action=getCheckupSubmissions&fp=' + encodeURIComponent(currentUser.id)
+    + '&start=' + encodeURIComponent(from) + '&end=' + encodeURIComponent(to);
+  fetch(url).then(function(r) { return r.json(); }).then(function(res) {
+    if (!res || !res.ok) {
+      if (box) box.innerHTML = '<div class="cka-msg">' + ((res && res.msg) ? res.msg : '조회에 실패했어요') + '</div>';
+      return;
+    }
+    _ckaRows = res.list || [];
+    _ckaRenderChips();
+    _ckaRender();
+  }).catch(function() {
+    if (box) box.innerHTML = '<div class="cka-msg">네트워크 오류가 발생했어요</div>';
+  });
+}
+
+function _ckaBranchList() {
+  var seen = {};
+  var out = [];
+  for (var i = 0; i < _ckaRows.length; i++) {
+    var b = _ckaRows[i].branch || '';
+    if (b && !seen[b]) { seen[b] = 1; out.push(b); }
+  }
+  out.sort();
+  return out;
+}
+
+function _ckaRenderChips() {
+  var box = document.getElementById('ckaChips');
+  if (!box) return;
+  if (!_ckaIsAdmin()) { box.innerHTML = ''; return; }
+  var list = _ckaBranchList();
+  if (list.length < 2) { box.innerHTML = ''; return; }
+  var html = '<div class="cka-chip' + (_ckaBranch === '전체' ? ' on' : '') + '" onclick="_ckaSetBranch(\'전체\')">전체</div>';
+  for (var i = 0; i < list.length; i++) {
+    var b = list[i];
+    html += '<div class="cka-chip' + (b === _ckaBranch ? ' on' : '') + '" onclick="_ckaSetBranch(\'' + b.replace(/'/g, '') + '\')">' + b + '</div>';
+  }
+  box.innerHTML = html;
+}
+
+function _ckaSetBranch(b) {
+  _ckaBranch = b;
+  _ckaRenderChips();
+  _ckaRender();
+}
+
+function _ckaEsc(v) {
+  return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function _ckaRender() {
+  var box = document.getElementById('ckaList');
+  if (!box) return;
+  var rows = [];
+  var i;
+  for (i = 0; i < _ckaRows.length; i++) {
+    if (_ckaBranch !== '전체' && _ckaRows[i].branch !== _ckaBranch) continue;
+    rows.push(_ckaRows[i]);
+  }
+
+  var done = 0;
+  for (i = 0; i < rows.length; i++) { if (rows[i].status === '완료') done++; }
+  var elT = document.getElementById('ckaStTotal');
+  var elD = document.getElementById('ckaStDone');
+  var elO = document.getElementById('ckaStTodo');
+  if (elT) elT.innerHTML = rows.length + '<small>건</small>';
+  if (elD) elD.innerHTML = done + '<small>건</small>';
+  if (elO) elO.innerHTML = (rows.length - done) + '<small>건</small>';
+
+  if (!rows.length) {
+    box.innerHTML = '<div class="cka-msg">해당 기간에 접수된 건이 없어요</div>';
+    return;
+  }
+
+  var html = '';
+  for (i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var isDone = (r.status === '완료');
+    var when = String(r.submittedAt || '');
+    if (when.length >= 16) when = when.substring(5, 16);
+    html += '<div class="cka-row">'
+      + '<div class="cka-r1"><div class="nm">' + _ckaEsc(r.custName) + '</div>'
+      + '<div class="dt">' + _ckaEsc(when) + '</div></div>'
+      + '<div class="cka-r2">담당 ' + _ckaEsc(r.fpName) + ' · ' + _ckaEsc(r.branch) + '</div>'
+      + '<div class="cka-r2">희망 ' + _ckaEsc(r.timeslot) + ' · 기념품 ' + _ckaEsc(r.gift) + '</div>'
+      + '<div class="cka-r3"><button type="button" class="cka-tg' + (isDone ? ' done' : '') + '" '
+      + 'onclick="_ckaToggle(\'' + String(r.token).replace(/'/g, '') + '\')">'
+      + (isDone ? '✔ 처리완료' : '미처리') + '</button></div>'
+      + '</div>';
+  }
+  box.innerHTML = html;
+}
+
+function _ckaToggle(token) {
+  if (_ckaBusy) return;
+  var idx = -1;
+  for (var i = 0; i < _ckaRows.length; i++) {
+    if (String(_ckaRows[i].token) === String(token)) { idx = i; break; }
+  }
+  if (idx < 0) return;
+  var next = (_ckaRows[idx].status === '완료') ? '접수' : '완료';
+  _ckaBusy = true;
+  var url = UNISPACE_GAS_URL + '?action=updateCheckupStatus&fp=' + encodeURIComponent(currentUser.id)
+    + '&token=' + encodeURIComponent(token) + '&status=' + encodeURIComponent(next);
+  fetch(url).then(function(r) { return r.json(); }).then(function(res) {
+    _ckaBusy = false;
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) ? res.msg : '변경에 실패했어요')); return; }
+    _ckaRows[idx].status = next;
+    _ckaRender();
+    showToast(next === '완료' ? '✅ 처리완료로 변경했어요' : '미처리로 되돌렸어요');
+  }).catch(function() {
+    _ckaBusy = false;
+    showToast('⚠️ 네트워크 오류가 발생했어요');
+  });
+}
+
+function _ckaLoadConfig() {
+  fetch(UNISPACE_GAS_URL + '?action=getCheckupConfig').then(function(r) { return r.json(); }).then(function(res) {
+    if (!res || !res.ok || !res.config) return;
+    _ckaCfg = res.config;
+    var t = document.getElementById('ckaTitle');
+    var s = document.getElementById('ckaStart');
+    var e = document.getElementById('ckaEnd');
+    if (t) t.value = res.config.title || '';
+    if (s) s.value = res.config.start || '';
+    if (e) e.value = res.config.end || '';
+    _ckaRenderGifts(res.config.gifts || []);
+  }).catch(function() {});
+}
+
+function _ckaRenderGifts(gifts) {
+  var box = document.getElementById('ckaGifts');
+  if (!box) return;
+  var html = '';
+  for (var i = 0; i < 4; i++) {
+    var g = gifts[i] || { name: '' };
+    html += '<div class="cka-gift"><div class="cka-gno">' + (i + 1) + '</div><div class="cka-gf">'
+      + '<input type="text" class="cka-in" id="ckaGn' + i + '" placeholder="기념품 이름" value="' + _ckaEsc(g.name) + '">'
+      + '</div></div>';
+  }
+  box.innerHTML = html
+    + '<div class="cka-r2" style="margin-top:2px">이미지는 깃허브 checkup 폴더의 gift1~4.png 파일을 같은 이름으로 교체하면 자동 반영돼요</div>';
+}
+
+function _ckaSaveConfig() {
+  if (_ckaBusy) return;
+  var t = document.getElementById('ckaTitle');
+  var s = document.getElementById('ckaStart');
+  var e = document.getElementById('ckaEnd');
+  var title = t ? t.value.trim() : '';
+  var start = s ? s.value : '';
+  var end = e ? e.value : '';
+  if (!title) { showToast('⚠️ 캠페인 제목을 입력해 주세요'); return; }
+  if (!start || !end) { showToast('⚠️ 접수 기간을 입력해 주세요'); return; }
+  if (start > end) { showToast('⚠️ 종료일이 시작일보다 빨라요'); return; }
+
+  var gifts = [];
+  for (var i = 0; i < 4; i++) {
+    var gn = document.getElementById('ckaGn' + i);
+    var nm = gn ? gn.value.trim() : '';
+    if (!nm) { showToast('⚠️ 기념품 ' + (i + 1) + '번 이름을 입력해 주세요'); return; }
+    gifts.push({ name: nm, img: 'https://unice-vip.co.kr/checkup/gift' + (i + 1) + '.png' });
+  }
+
+  var btn = document.getElementById('ckaSaveBtn');
+  _ckaBusy = true;
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+  var url = UNISPACE_GAS_URL + '?action=saveCheckupConfig&fp=' + encodeURIComponent(currentUser.id)
+    + '&title=' + encodeURIComponent(title)
+    + '&start=' + encodeURIComponent(start)
+    + '&end=' + encodeURIComponent(end)
+    + '&gifts=' + encodeURIComponent(JSON.stringify(gifts));
+  fetch(url).then(function(r) { return r.json(); }).then(function(res) {
+    _ckaBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = '설정 저장'; }
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) ? res.msg : '저장에 실패했어요')); return; }
+    _ckaCfg = res.config;
+    showToast('✅ 설정을 저장했어요');
+  }).catch(function() {
+    _ckaBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = '설정 저장'; }
+    showToast('⚠️ 네트워크 오류가 발생했어요');
+  });
+}
+
 /* 소비자 패널 카드뉴스 사진 7장 공유 (안되면 저장) */
 function sharePanelCards(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
@@ -11961,6 +12307,32 @@ function sharePanelCards(ev) {
     _uniceSaveImages(files);
   }).catch(function() {
     if (typeof showToast === 'function') { showToast('⚠️ 사진을 불러오지 못했어요'); }
+  });
+  return false;
+}
+
+/* checkup card news: share 4 photos (save on PC) */
+function shareCheckupCards(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var msg = '[유니스 보장검진] 2026년 정기 보장검진 안내입니다. 잠시 후 개별 안내 링크를 보내드릴게요.';
+  if (typeof showToast === 'function') { showToast('사진을 준비하고 있어요...'); }
+  var urls = [], i;
+  for (i = 1; i <= 4; i++) { urls.push('https://unice-vip.co.kr/checkup/card' + i + '.png'); }
+  Promise.all(urls.map(function(u) {
+    return fetch(u).then(function(r) { if (!r.ok) throw new Error('nofile'); return r.blob(); });
+  })).then(function(blobs) {
+    var files = blobs.map(function(b, idx) {
+      return new File([b], '보장검진_' + (idx + 1) + '.png', { type: 'image/png' });
+    });
+    if (navigator.canShare && navigator.canShare({ files: files }) && navigator.share) {
+      navigator.share({ files: files, text: msg }).catch(function(err) {
+        if (String(err).indexOf('AbortError') < 0) { _uniceSaveImages(files); }
+      });
+      return;
+    }
+    _uniceSaveImages(files);
+  }).catch(function() {
+    if (typeof showToast === 'function') { showToast('⚠️ 사진을 불러오지 못했어요. checkup 폴더에 card1~4.png가 있는지 확인해 주세요'); }
   });
   return false;
 }
@@ -19214,7 +19586,15 @@ function doCheckin() { doSmartCheckin(); }
         <div class="sa-ic">🩺</div>
         <div class="sa-tx"><div class="a">보장검진 안내<span class="sa-new" data-from="2026-07-22" data-until="2026-07-26">NEW</span></div><div class="b">고객 선택 · 개인 링크 발송</div></div>
         <div class="sa-acts">
+          <button type="button" class="sa-vbtn" onclick="return openCheckupAdmin(event)">접수현황</button>
           <button type="button" class="sa-sbtn" onclick="return openCheckupPicker(event)">보내기</button>
+        </div>
+      </div>
+      <div class="sa-row">
+        <div class="sa-ic">🗂️</div>
+        <div class="sa-tx"><div class="a">보장검진 카드뉴스<span class="sa-new" data-from="2026-07-23" data-until="2026-07-27">NEW</span></div><div class="b">사진 4장 · 링크 발송 전에</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-sbtn" onclick="return shareCheckupCards(event)">보내기</button>
         </div>
       </div>
     </div>
@@ -19331,6 +19711,140 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="ckp-sendbtn" id="ckpSendBtn" onclick="startCheckupQueue()" disabled>선택 보내기</button>
     </div>
     <div class="ckp-queue" id="ckpQueue"></div>
+  </div>
+</div>
+
+<!-- 보장검진 접수현황/설정 모달 -->
+<style>
+  .cka-overlay { display:none; position:fixed; inset:0; background:rgba(4,16,30,.72);
+    z-index:100000; align-items:flex-end; justify-content:center; }
+  .cka-overlay.on { display:flex; }
+  .cka-box { width:100%; max-width:520px; height:82vh; height:82dvh;
+    background:#0e1c30; border:1px solid rgba(94,234,212,.35); border-radius:22px 22px 0 0;
+    display:flex; flex-direction:column; overflow:hidden; }
+  @media (min-width:640px){ .cka-overlay{ align-items:center; } .cka-box{ border-radius:22px; height:640px; max-height:86vh; } }
+  .cka-head { padding:16px 18px 12px 18px; display:flex; align-items:flex-start; gap:10px;
+    border-bottom:1px solid rgba(148,163,184,.18); }
+  .cka-head .t { font-size:16px; font-weight:800; color:#e2e8f0; flex:1; }
+  .cka-head .t .s { display:block; font-size:11.5px; font-weight:500; color:#7dd3c8; margin-top:2px; }
+  .cka-close { background:none; border:none; color:#94a3b8; font-size:20px; cursor:pointer; padding:4px 8px; }
+  .cka-tabs { display:flex; border-bottom:1px solid rgba(148,163,184,.18); }
+  .cka-tab { flex:1; text-align:center; padding:11px 4px; font-size:12.5px; font-weight:700;
+    color:#94a3b8; cursor:pointer; border-bottom:2px solid transparent; }
+  .cka-tab.on { color:#5eead4; border-bottom-color:#5eead4; }
+  .cka-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px 14px 20px; }
+  .cka-pane { display:none; }
+  .cka-pane.on { display:block; }
+  .cka-lbl { font-size:11px; font-weight:700; color:#94a3b8; margin:12px 0 6px; }
+  .cka-in { width:100%; box-sizing:border-box; padding:10px 11px; border:1px solid rgba(148,163,184,.28);
+    border-radius:10px; font-size:13px; font-family:inherit; color:#e2e8f0; background:rgba(148,163,184,.08); }
+  .cka-in::placeholder { color:#64748b; }
+  .cka-in:focus { outline:none; border-color:rgba(94,234,212,.5); }
+  .cka-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .cka-gift { display:flex; gap:8px; align-items:flex-start; margin-bottom:9px; }
+  .cka-gno { width:32px; height:32px; flex:none; border-radius:9px; background:rgba(94,234,212,.12);
+    color:#5eead4; font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .cka-gf { flex:1; min-width:0; display:grid; gap:6px; }
+  .cka-btn { width:100%; padding:12px; border-radius:11px; border:none; background:#14b8a6; color:#04342c;
+    font-size:14px; font-weight:800; font-family:inherit; cursor:pointer; margin-top:14px; }
+  .cka-btn[disabled] { opacity:.5; cursor:default; }
+  .cka-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:4px; }
+  .cka-st { background:rgba(94,234,212,.07); border:1px solid rgba(94,234,212,.16); border-radius:11px;
+    padding:10px 6px; text-align:center; }
+  .cka-st .a { font-size:10.5px; font-weight:700; color:#94a3b8; }
+  .cka-st .b { font-size:20px; font-weight:800; color:#e2e8f0; margin-top:2px; }
+  .cka-st .b small { font-size:11px; font-weight:700; color:#94a3b8; margin-left:1px; }
+  .cka-chips { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 12px; }
+  .cka-chip { font-size:11px; font-weight:700; padding:6px 12px; border-radius:14px;
+    border:1px solid rgba(148,163,184,.28); color:#94a3b8; cursor:pointer; background:transparent; }
+  .cka-chip.on { background:rgba(94,234,212,.14); border-color:rgba(94,234,212,.5); color:#5eead4; }
+  .cka-row { border:1px solid rgba(148,163,184,.2); border-radius:12px; padding:11px 12px; margin-bottom:8px;
+    background:rgba(148,163,184,.05); }
+  .cka-r1 { display:flex; align-items:baseline; gap:7px; }
+  .cka-r1 .nm { font-size:14px; font-weight:800; color:#e2e8f0; }
+  .cka-r1 .dt { margin-left:auto; font-size:10.5px; color:#64748b; }
+  .cka-r2 { font-size:11.5px; color:#94a3b8; margin-top:4px; }
+  .cka-r3 { display:flex; align-items:center; gap:7px; margin-top:9px; }
+  .cka-tg { flex:none; padding:7px 13px; border-radius:9px; font-size:11.5px; font-weight:800;
+    border:1px solid rgba(148,163,184,.3); background:transparent; color:#94a3b8;
+    cursor:pointer; font-family:inherit; }
+  .cka-tg.done { background:rgba(94,234,212,.12); border-color:rgba(94,234,212,.45); color:#5eead4; }
+  .cka-msg { text-align:center; font-size:12.5px; color:#94a3b8; padding:30px 10px; }
+  .ckc-overlay { display:none; position:fixed; inset:0; background:rgba(4,16,30,.6);
+    z-index:100010; align-items:center; justify-content:center; }
+  .ckc-overlay.on { display:flex; }
+  .ckc-box { width:290px; background:#0e1c30; border:1px solid rgba(94,234,212,.4);
+    border-radius:16px; padding:14px; }
+  .ckc-head { display:flex; align-items:center; margin-bottom:10px; }
+  .ckc-head .ym { flex:1; font-size:14px; font-weight:800; color:#e2e8f0; text-align:center; }
+  .ckc-nav { width:32px; height:32px; border:none; background:rgba(148,163,184,.1); border-radius:9px;
+    color:#5eead4; font-size:15px; font-weight:800; cursor:pointer; font-family:inherit; }
+  .ckc-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .ckc-dow { text-align:center; font-size:10.5px; font-weight:700; color:#64748b; padding:4px 0; }
+  .ckc-day { text-align:center; font-size:12.5px; font-weight:600; color:#cbd5e1; padding:8px 0;
+    border-radius:8px; cursor:pointer; }
+  .ckc-day:hover { background:rgba(94,234,212,.1); }
+  .ckc-day.dim { color:#3b4a63; pointer-events:none; }
+  .ckc-day.today { border:1px solid rgba(94,234,212,.4); }
+  .ckc-day.sel { background:#14b8a6; color:#04342c; font-weight:800; }
+  .ckc-day.sun { color:#f0999b; }
+  .ckc-day.sun.dim { color:#4a2f36; }
+  .ckc-foot { display:flex; justify-content:space-between; margin-top:10px; }
+  .ckc-fbtn { border:none; background:transparent; color:#5eead4; font-size:12px; font-weight:700;
+    cursor:pointer; font-family:inherit; padding:4px 6px; }
+</style>
+<div class="ckc-overlay" id="ckcOverlay" onclick="if(event.target===this)_ckaCalClose()">
+  <div class="ckc-box">
+    <div class="ckc-head">
+      <button type="button" class="ckc-nav" onclick="_ckaCalMove(-1)">&#8249;</button>
+      <div class="ym" id="ckcYm">-</div>
+      <button type="button" class="ckc-nav" onclick="_ckaCalMove(1)">&#8250;</button>
+    </div>
+    <div class="ckc-grid" id="ckcGrid"></div>
+    <div class="ckc-foot">
+      <button type="button" class="ckc-fbtn" onclick="_ckaCalToday()">오늘</button>
+      <button type="button" class="ckc-fbtn" onclick="_ckaCalClose()">닫기</button>
+    </div>
+  </div>
+</div>
+<div class="cka-overlay" id="ckaOverlay" onclick="if(event.target===this)closeCheckupAdmin()">
+  <div class="cka-box">
+    <div class="cka-head">
+      <div class="t">🩺 보장검진<span class="s" id="ckaHeadSub">접수현황</span></div>
+      <button type="button" class="cka-close" onclick="closeCheckupAdmin()">✕</button>
+    </div>
+    <div class="cka-tabs" id="ckaTabs">
+      <div class="cka-tab on" id="ckaTabSub" onclick="_ckaTab('sub')">접수현황</div>
+      <div class="cka-tab" id="ckaTabCfg" onclick="_ckaTab('cfg')">설정</div>
+    </div>
+    <div class="cka-body">
+      <div class="cka-pane on" id="ckaPaneSub">
+        <div class="cka-stats">
+          <div class="cka-st"><div class="a">총 접수</div><div class="b" id="ckaStTotal">0<small>건</small></div></div>
+          <div class="cka-st"><div class="a">미처리</div><div class="b" id="ckaStTodo">0<small>건</small></div></div>
+          <div class="cka-st"><div class="a">완료</div><div class="b" id="ckaStDone">0<small>건</small></div></div>
+        </div>
+        <div class="cka-lbl">조회 기간</div>
+        <div class="cka-2">
+          <input type="text" class="cka-in" id="ckaFrom" readonly placeholder="시작일" onclick="_ckaCal(this)">
+          <input type="text" class="cka-in" id="ckaTo" readonly placeholder="종료일" onclick="_ckaCal(this)">
+        </div>
+        <div class="cka-chips" id="ckaChips"></div>
+        <div id="ckaList"><div class="cka-msg">불러오는 중...</div></div>
+      </div>
+      <div class="cka-pane" id="ckaPaneCfg">
+        <div class="cka-lbl">캠페인 제목</div>
+        <input type="text" class="cka-in" id="ckaTitle" placeholder="2026년 정기 보장검진">
+        <div class="cka-lbl">접수 기간</div>
+        <div class="cka-2">
+          <input type="text" class="cka-in" id="ckaStart" readonly placeholder="시작일" onclick="_ckaCal(this)">
+          <input type="text" class="cka-in" id="ckaEnd" readonly placeholder="종료일" onclick="_ckaCal(this)">
+        </div>
+        <div class="cka-lbl">검진 기념품 4종</div>
+        <div id="ckaGifts"></div>
+        <button type="button" class="cka-btn" id="ckaSaveBtn" onclick="_ckaSaveConfig()">설정 저장</button>
+      </div>
+    </div>
   </div>
 </div>
 
