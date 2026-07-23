@@ -36,7 +36,7 @@ self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   var target = (event.notification.data && event.notification.data.url) || './index.html?open=today';
   var wantOpen = '';
-  var opens = ['recruit', 'today', 'perf', 'bojtop', 'stdfp'];
+  var opens = ['recruit', 'today', 'perf', 'bojtop', 'stdfp', 'checkup'];
   for (var oi = 0; oi < opens.length; oi++) {
     if (target.indexOf('open=' + opens[oi]) >= 0) { wantOpen = opens[oi]; break; }
   }
@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', function(event) {
 });
 
 // ===== PWA cache (network-first) =====
-var CACHE_NAME = 'unispace-v9';
+var CACHE_NAME = 'unispace-v10';
 var PRECACHE = [
   './manifest.json',
   './unispace-192.png',
