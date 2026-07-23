@@ -11765,7 +11765,7 @@ function _ckpSendKakaoCard(custName, url, done) {
         objectType: 'feed',
         content: {
           title: '2026년 정기 보장검진 대상자 안내',
-          description: custName + ' 님은 올해 보장검진 대상자입니다. 가입 권유 없는 검진으로 미수령 환급금과 놓친 청구까지 확인해드려요.',
+          description: '한화생명금융서비스 유니스지사에서 2026년 정기 보장검진을 실시합니다. ' + custName + ' 님은 금년도 검진 대상자입니다.',
           imageUrl: 'https://unice-vip.co.kr/checkup/og.png',
           link: { mobileWebUrl: url, webUrl: url }
         },
@@ -12131,14 +12131,18 @@ function _ckaRenderChips() {
   var box = document.getElementById('ckaChips');
   if (!box) return;
   if (!_ckaIsAdmin()) { box.innerHTML = ''; return; }
-  var list = _ckaBranchList();
-  if (list.length < 2) { box.innerHTML = ''; return; }
-  var html = '<div class="cka-chip' + (_ckaBranch === '전체' ? ' on' : '') + '" onclick="_ckaSetBranch(\'전체\')">전체</div>';
-  for (var i = 0; i < list.length; i++) {
-    var b = list[i];
-    html += '<div class="cka-chip' + (b === _ckaBranch ? ' on' : '') + '" onclick="_ckaSetBranch(\'' + b.replace(/'/g, '') + '\')">' + b + '</div>';
+  var names = ['전체', '알파', '브라보'];
+  var html = '';
+  for (var i = 0; i < names.length; i++) {
+    var b = names[i];
+    html += '<div class="cka-chip' + (b === _ckaBranch ? ' on' : '') + '" onclick="_ckaSetBranch(\'' + b + '\')">' + b + '</div>';
   }
   box.innerHTML = html;
+}
+
+function _ckaBranchMatch(rowBranch) {
+  if (_ckaBranch === '전체') return true;
+  return String(rowBranch || '').indexOf(_ckaBranch) >= 0;
 }
 
 function _ckaSetBranch(b) {
@@ -12157,8 +12161,29 @@ function _ckaRender() {
   var rows = [];
   var i;
   for (i = 0; i < _ckaRows.length; i++) {
-    if (_ckaBranch !== '전체' && _ckaRows[i].branch !== _ckaBranch) continue;
+    if (!_ckaBranchMatch(_ckaRows[i].branch)) continue;
     rows.push(_ckaRows[i]);
+  }
+
+  var gmap = {};
+  var gorder = [];
+  for (i = 0; i < rows.length; i++) {
+    var gname = String(rows[i].gift || '').trim();
+    if (!gname) continue;
+    if (gmap[gname] === undefined) { gmap[gname] = 0; gorder.push(gname); }
+    gmap[gname]++;
+  }
+  var gbox = document.getElementById('ckaGiftSum');
+  if (gbox) {
+    if (!gorder.length) {
+      gbox.innerHTML = '<div class="cka-msg" style="padding:10px;grid-column:1/-1">아직 신청된 기념품이 없어요</div>';
+    } else {
+      var gh = '';
+      for (i = 0; i < gorder.length; i++) {
+        gh += '<div class="cka-gs"><span class="n">' + _ckaEsc(gorder[i]) + '</span><span class="c">' + gmap[gorder[i]] + '</span></div>';
+      }
+      gbox.innerHTML = gh;
+    }
   }
 
   var done = 0;
@@ -12188,7 +12213,7 @@ function _ckaRender() {
       + '<div class="cka-r2">희망 ' + _ckaEsc(r.timeslot) + ' · 기념품 ' + _ckaEsc(r.gift) + '</div>'
       + '<div class="cka-r3"><button type="button" class="cka-tg' + (isDone ? ' done' : '') + '" '
       + 'onclick="_ckaToggle(\'' + String(r.token).replace(/'/g, '') + '\')">'
-      + (isDone ? '✔ 처리완료' : '미처리') + '</button></div>'
+      + (isDone ? '✔ 배포완료' : '배포 전') + '</button></div>'
       + '</div>';
   }
   box.innerHTML = html;
@@ -19771,6 +19796,12 @@ function doCheckin() { doSmartCheckin(); }
     cursor:pointer; font-family:inherit; }
   .cka-tg.done { background:rgba(94,234,212,.12); border-color:rgba(94,234,212,.45); color:#5eead4; }
   .cka-msg { text-align:center; font-size:12.5px; color:#94a3b8; padding:30px 10px; }
+  .cka-gsum { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .cka-gs { display:flex; justify-content:space-between; align-items:center; gap:6px;
+    border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px 11px;
+    background:rgba(148,163,184,.05); }
+  .cka-gs .n { font-size:11.5px; color:#cbd5e1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cka-gs .c { font-size:13.5px; font-weight:800; color:#5eead4; flex:none; }
   .ckc-overlay { display:none; position:fixed; inset:0; background:rgba(4,16,30,.6);
     z-index:100010; align-items:center; justify-content:center; }
   .ckc-overlay.on { display:flex; }
@@ -19822,9 +19853,11 @@ function doCheckin() { doSmartCheckin(); }
       <div class="cka-pane on" id="ckaPaneSub">
         <div class="cka-stats">
           <div class="cka-st"><div class="a">총 접수</div><div class="b" id="ckaStTotal">0<small>건</small></div></div>
-          <div class="cka-st"><div class="a">미처리</div><div class="b" id="ckaStTodo">0<small>건</small></div></div>
-          <div class="cka-st"><div class="a">완료</div><div class="b" id="ckaStDone">0<small>건</small></div></div>
+          <div class="cka-st"><div class="a">배포 전</div><div class="b" id="ckaStTodo">0<small>건</small></div></div>
+          <div class="cka-st"><div class="a">배포완료</div><div class="b" id="ckaStDone">0<small>건</small></div></div>
         </div>
+        <div class="cka-lbl">기념품 신청 현황</div>
+        <div class="cka-gsum" id="ckaGiftSum"></div>
         <div class="cka-lbl">조회 기간</div>
         <div class="cka-2">
           <input type="text" class="cka-in" id="ckaFrom" readonly placeholder="시작일" onclick="_ckaCal(this)">
