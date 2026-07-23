@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', function(event) {
 });
 
 // ===== PWA cache (network-first) =====
-var CACHE_NAME = 'unispace-v21';
+var CACHE_NAME = 'unispace-v22';
 var PRECACHE = [
   './manifest.json',
   './unispace-192.png',
