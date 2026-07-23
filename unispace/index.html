@@ -12042,6 +12042,7 @@ function _ckpQExit() {
 
 /* checkup admin: submissions dashboard + campaign config */
 var _ckaBranch = '전체';
+var _ckaGift = '';
 var _ckaRows = [];
 var _ckaCfg = null;
 var _ckaBusy = false;
@@ -12170,6 +12171,7 @@ function openCheckupAdmin(ev) {
   if (t && !t.value) { t.value = r.to; t.onchange = _ckaLoad; }
 
   _ckaBranch = '전체';
+  _ckaGift = '';
   _ckaLoad();
   if (mgr) _ckaLoadConfig();
   return false;
@@ -12251,6 +12253,33 @@ function _ckaSetBranch(b) {
   _ckaRender();
 }
 
+function _ckaSetGift(el) {
+  var g = el ? el.getAttribute('data-g') : '';
+  _ckaGift = (_ckaGift === g) ? '' : g;
+  _ckaRender();
+}
+
+function _ckaDelete(token, name) {
+  if (_ckaBusy) return;
+  var ok = window.confirm(name + ' 고객님의 접수를 삭제할까요?\n삭제하면 되돌릴 수 없어요.');
+  if (!ok) return;
+  _ckaBusy = true;
+  var url = UNISPACE_GAS_URL + '?action=deleteCheckupSubmission&fp=' + encodeURIComponent(currentUser.id)
+    + '&token=' + encodeURIComponent(token);
+  fetch(url).then(function(r) { return r.json(); }).then(function(res) {
+    _ckaBusy = false;
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) ? res.msg : '삭제에 실패했어요')); return; }
+    for (var i = 0; i < _ckaRows.length; i++) {
+      if (String(_ckaRows[i].token) === String(token)) { _ckaRows.splice(i, 1); break; }
+    }
+    _ckaRender();
+    showToast('접수를 삭제했어요');
+  }).catch(function() {
+    _ckaBusy = false;
+    showToast('⚠️ 네트워크 오류가 발생했어요');
+  });
+}
+
 function _ckaEsc(v) {
   return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -12258,21 +12287,22 @@ function _ckaEsc(v) {
 function _ckaRender() {
   var box = document.getElementById('ckaList');
   if (!box) return;
-  var rows = [];
+  var base = [];
   var i;
   for (i = 0; i < _ckaRows.length; i++) {
     if (!_ckaBranchMatch(_ckaRows[i].branch)) continue;
-    rows.push(_ckaRows[i]);
+    base.push(_ckaRows[i]);
   }
 
   var gmap = {};
   var gorder = [];
-  for (i = 0; i < rows.length; i++) {
-    var gname = String(rows[i].gift || '').trim();
+  for (i = 0; i < base.length; i++) {
+    var gname = String(base[i].gift || '').trim();
     if (!gname) continue;
     if (gmap[gname] === undefined) { gmap[gname] = 0; gorder.push(gname); }
     gmap[gname]++;
   }
+  if (_ckaGift && gmap[_ckaGift] === undefined) { _ckaGift = ''; }
   var gbox = document.getElementById('ckaGiftSum');
   if (gbox) {
     if (!gorder.length) {
@@ -12280,10 +12310,18 @@ function _ckaRender() {
     } else {
       var gh = '';
       for (i = 0; i < gorder.length; i++) {
-        gh += '<div class="cka-gs"><span class="n">' + _ckaEsc(gorder[i]) + '</span><span class="c">' + gmap[gorder[i]] + '</span></div>';
+        var gsel = (gorder[i] === _ckaGift);
+        gh += '<div class="cka-gs' + (gsel ? ' on' : '') + '" onclick="_ckaSetGift(this)" data-g="' + _ckaEsc(gorder[i]) + '">'
+          + '<span class="n">' + _ckaEsc(gorder[i]) + '</span><span class="c">' + gmap[gorder[i]] + '</span></div>';
       }
       gbox.innerHTML = gh;
     }
+  }
+
+  var rows = [];
+  for (i = 0; i < base.length; i++) {
+    if (_ckaGift && String(base[i].gift || '').trim() !== _ckaGift) continue;
+    rows.push(base[i]);
   }
 
   var done = 0;
@@ -12313,7 +12351,9 @@ function _ckaRender() {
       + '<div class="cka-r2">희망 ' + _ckaEsc(r.timeslot) + ' · 기념품 ' + _ckaEsc(r.gift) + '</div>'
       + '<div class="cka-r3"><button type="button" class="cka-tg' + (isDone ? ' done' : '') + '" '
       + 'onclick="_ckaToggle(\'' + String(r.token).replace(/'/g, '') + '\')">'
-      + (isDone ? '✔ 배포완료' : '배포 전') + '</button></div>'
+      + (isDone ? '✔ 방문 완료' : '방문 전') + '</button>'
+      + (_ckaIsMgr() ? '<button type="button" class="cka-del" onclick="_ckaDelete(\'' + String(r.token).replace(/'/g, '') + '\',\'' + _ckaEsc(r.custName).replace(/'/g, '') + '\')">삭제</button>' : '')
+      + '</div>'
       + '</div>';
   }
   box.innerHTML = html;
@@ -19939,6 +19979,11 @@ function doCheckin() { doSmartCheckin(); }
     background:#ffffff; }
   .cka-gs .n { font-size:12px; color:#3A4256; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .cka-gs .c { font-size:14px; font-weight:800; color:#0d9488; flex:none; }
+  .cka-gs { cursor:pointer; }
+  .cka-gs.on { border-color:#0d9488; background:#EDF7F4; }
+  .cka-gs.on .n { color:#0F6E56; font-weight:700; }
+  .cka-del { margin-left:auto; flex:none; padding:7px 12px; border-radius:9px; font-size:11.5px; font-weight:700;
+    border:1px solid #ECC8C4; background:#FDF3F2; color:#A94442; cursor:pointer; font-family:inherit; }
   .ckc-overlay { display:none; position:fixed; inset:0; background:rgba(43,38,28,.4);
     z-index:100010; align-items:center; justify-content:center; }
   .ckc-overlay.on { display:flex; }
@@ -20000,16 +20045,16 @@ function doCheckin() { doSmartCheckin(); }
       <div class="cka-pane on" id="ckaPaneSub">
         <div class="cka-stats">
           <div class="cka-st"><div class="a">총 접수</div><div class="b" id="ckaStTotal">0<small>건</small></div></div>
-          <div class="cka-st"><div class="a">배포 전</div><div class="b" id="ckaStTodo">0<small>건</small></div></div>
-          <div class="cka-st"><div class="a">배포완료</div><div class="b" id="ckaStDone">0<small>건</small></div></div>
+          <div class="cka-st"><div class="a">방문 전</div><div class="b" id="ckaStTodo">0<small>건</small></div></div>
+          <div class="cka-st"><div class="a">방문 완료</div><div class="b" id="ckaStDone">0<small>건</small></div></div>
         </div>
-        <div class="cka-lbl">기념품 신청 현황</div>
-        <div class="cka-gsum" id="ckaGiftSum"></div>
         <div class="cka-lbl">조회 기간</div>
         <div class="cka-2">
           <input type="text" class="cka-in" id="ckaFrom" readonly placeholder="시작일" onclick="_ckaCal(this)">
           <input type="text" class="cka-in" id="ckaTo" readonly placeholder="종료일" onclick="_ckaCal(this)">
         </div>
+        <div class="cka-lbl">기념품 신청 현황 <span style="font-weight:500;color:#B3AC9B">· 눌러서 필터</span></div>
+        <div class="cka-gsum" id="ckaGiftSum"></div>
         <div class="cka-chips" id="ckaChips"></div>
         <div id="ckaList"><div class="cka-msg">불러오는 중...</div></div>
       </div>
