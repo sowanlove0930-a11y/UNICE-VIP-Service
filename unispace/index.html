@@ -3746,6 +3746,9 @@ window.UNISPACE_FCM = {
           </div>
         </div>
         <div style="padding:0 12px 16px">
+          <div id="unicornClub"></div>
+        </div>
+        <div style="padding:0 12px 16px">
           <div id="stdFpSection"></div>
         </div>
       </div>
@@ -6258,6 +6261,7 @@ function perfReloadForMonth(){
   }).catch(function(){});
   // 리크루팅: 주기 목록 + 선택 주기 TOP
   perfLoadRecruitCycles(ym);
+  if(typeof loadUnicornClub==='function') loadUnicornClub(ym);
 }
 
 // 지난달 보장월초 렌더 (topList)
@@ -6390,6 +6394,68 @@ function loadDashboardBundle(cb){
   _try(1);
 }
 
+/* ---- Unicorn Club (monthly premium tiers on bojang amounts) ---- */
+var UNICORN_MIN = 1000000;
+var WHOLIDAY_MIN = 700000;
+var _unicornRows = null;
+function loadUnicornClub(ym){
+  var el = document.getElementById('unicornClub');
+  if(!el) return;
+  if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id) return;
+  if(!ym) ym = (typeof _perfSelYm==='function') ? _perfSelYm() : getCurrentYM();
+  var url = UNISPACE_GAS_URL + '?action=getBojangTop&ym=' + encodeURIComponent(ym) + '&limit=10&_=' + Date.now();
+  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ok && res.rows){ _unicornRows = res.rows; _renderUnicornClub(res.rows, ym); }
+    else { _renderUnicornClub([], ym); }
+  }).catch(function(){ _renderUnicornClub([], ym); });
+}
+function _ucChip(fp, wh){
+  var _fb = String(fp.branch||'');
+  var isAlpha = _fb.indexOf('알파')>=0 || _fb==='alpha';
+  var brStyle = isAlpha ? 'background:var(--alpha-soft);color:var(--alpha-deep)' : 'background:var(--bravo-soft);color:var(--bravo-deep)';
+  var bd = wh ? '#cfe8f7' : '#e3d9f8';
+  return '<span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border-radius:18px;padding:5px 11px;font-size:12px;font-weight:800;color:#333;border:1px solid '+bd+';box-shadow:0 1px 3px rgba(0,0,0,.05)">'+
+    '<span style="font-size:9px;padding:2px 6px;border-radius:7px;font-weight:800;'+brStyle+'">'+(isAlpha?'알파':'브라보')+'</span>'+
+    fp.name+'<span style="font-size:10px;color:#999;font-weight:700">'+(parseInt(fp.amt)||0).toLocaleString()+'</span></span>';
+}
+function _ucTier(icon, tname, tcolor, cond, chips, bgGrad, bdColor){
+  var body = chips.length ? chips.join('') :
+    '<span style="font-size:12px;color:#aaa;font-weight:600;align-self:center">달성 시 이곳에 이름이 올라갑니다</span>';
+  return '<div style="display:flex;align-items:flex-start;gap:12px;border-radius:13px;padding:12px 16px;margin-bottom:10px;background:'+bgGrad+';border:1.5px solid '+bdColor+'">'+
+    '<div style="font-size:24px;line-height:1.2">'+icon+'</div>'+
+    '<div style="min-width:132px"><div style="font-size:14px;font-weight:900;color:'+tcolor+'">'+tname+'</div>'+
+    '<div style="font-size:11px;color:#999;font-weight:600;margin-top:1px">'+cond+'</div></div>'+
+    '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end">'+body+'</div></div>';
+}
+function _renderUnicornClub(rows, ym){
+  var el = document.getElementById('unicornClub');
+  if(!el) return;
+  var mn = parseInt(String(ym||'').substr(5,2),10);
+  if(isNaN(mn)) mn = (new Date()).getMonth()+1;
+  rows = rows || [];
+  var uni = [], wh = [], near = null;
+  for(var i=0;i<rows.length;i++){
+    var amt = parseInt(rows[i].amt)||0;
+    if(amt >= UNICORN_MIN) uni.push(rows[i]);
+    else if(amt >= WHOLIDAY_MIN) wh.push(rows[i]);
+    else if(!near && amt > 0) near = rows[i];
+  }
+  var uniChips = uni.map(function(fp){ return _ucChip(fp,false); });
+  var whChips = wh.map(function(fp){ return _ucChip(fp,true); });
+  var html = '<div style="background:linear-gradient(135deg,var(--bg3) 55%, rgba(150,110,220,.10) 100%);border:1.5px solid rgba(180,150,230,.35);border-radius:14px;padding:18px 20px">'+
+    '<div class="dash-card-title" style="text-align:center;margin-bottom:14px">🦄 '+mn+'월 유니콘즈 클럽</div>'+
+    _ucTier('🦄','유니콘즈클럽','#8B63E8','보장월초 100만 이상', uniChips,
+      'linear-gradient(90deg, rgba(150,110,220,.14) 0%, rgba(150,110,220,.04) 70%)','rgba(160,120,230,.45)')+
+    _ucTier('✈️','워킹홀리데이 달성','#3E97D1','보장월초 70만 이상', whChips,
+      'linear-gradient(90deg, rgba(62,151,209,.14) 0%, rgba(62,151,209,.04) 70%)','rgba(90,170,225,.45)');
+  if(near){
+    var remain = WHOLIDAY_MIN - (parseInt(near.amt)||0);
+    html += '<div style="text-align:center;font-size:11px;color:var(--gold);font-weight:700;margin-top:2px">🔥 '+near.name+' '+(parseInt(near.amt)||0).toLocaleString()+'원 — 워킹홀리데이까지 '+remain.toLocaleString()+'원 남았어요!</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 function renderTop10() {
   var _sb = document.getElementById('perfShareBtn');
   if (_sb) {
@@ -6451,6 +6517,7 @@ function renderTop10() {
 
   renderActTop4();
   renderRecruitTop4();
+  if(typeof loadUnicornClub==='function') loadUnicornClub(_selYm);
   if(typeof renderStdFp==='function') renderStdFp();
 }
 
@@ -11400,6 +11467,34 @@ function _perfShareText(){
   for (var i=0;i<boj.length;i++){
     var b0 = boj[i];
     out += (i+1) + '. ' + b0.name + ' ' + (parseInt(b0.amt)||0).toLocaleString() + '원(' + _perfBrAbbr(b0.branch) + ')\n';
+  }
+
+  // Unicorn Club tiers (from dedicated rows if loaded, else from top list)
+  var ucSrc = (_unicornRows && _unicornRows.length) ? _unicornRows : boj;
+  var ucU = [], ucW = [], ucNear = null;
+  for (var u=0;u<ucSrc.length;u++){
+    var ua = parseInt(ucSrc[u].amt)||0;
+    if (ua >= UNICORN_MIN) ucU.push(ucSrc[u]);
+    else if (ua >= WHOLIDAY_MIN) ucW.push(ucSrc[u]);
+    else if (!ucNear && ua > 0) ucNear = ucSrc[u];
+  }
+  if (ucU.length || ucW.length){
+    out += '\n[🦄 유니콘즈 클럽]\n';
+    if (ucU.length){
+      out += '🦄 유니콘즈클럽(100만↑)\n';
+      for (var u1=0;u1<ucU.length;u1++){
+        out += '· ' + ucU[u1].name + ' ' + (parseInt(ucU[u1].amt)||0).toLocaleString() + '원(' + _perfBrAbbr(ucU[u1].branch) + ')\n';
+      }
+    }
+    if (ucW.length){
+      out += '✈️ 워킹홀리데이(70만↑)\n';
+      for (var w1=0;w1<ucW.length;w1++){
+        out += '· ' + ucW[w1].name + ' ' + (parseInt(ucW[w1].amt)||0).toLocaleString() + '원(' + _perfBrAbbr(ucW[w1].branch) + ')\n';
+      }
+    }
+    if (ucNear){
+      out += '🔥 ' + ucNear.name + ' 워홀까지 ' + (WHOLIDAY_MIN - (parseInt(ucNear.amt)||0)).toLocaleString() + '원!\n';
+    }
   }
 
   // 리크루팅 TOP5
