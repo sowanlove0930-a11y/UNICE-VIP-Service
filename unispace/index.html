@@ -2919,6 +2919,13 @@ window.UNISPACE_FCM = {
         <div class="rc2-bl rc2-bl-itv"><div class="rc2-bl-lbl">지점장 인터뷰</div><div class="rc2-bl-val" id="rc2SumItv">0<small>명</small></div></div>
       </div>
 
+      <!-- 입과확보 (접기 · 기본 펼침) -->
+      <div class="rc2-mng-head" id="rc2OkHead" onclick="rc2ToggleOk()" style="border-color:rgba(46,158,107,.35)">
+        <div class="rc2-mng-cnt"><span id="rc2OkArrow">▾</span> ✅ 입과확보 <span id="rc2OkCount">(0)</span></div>
+        <div style="font-size:11px;color:var(--text3)" id="rc2OkHint">탭하여 접기</div>
+      </div>
+      <div class="rc2-mng-body open" id="rc2OkBody" style="margin-bottom:14px"></div>
+
       <!-- 추진 명단 -->
       <div class="rc2-sec-head">
         <div class="rc2-sec-title">🔥 추진 후보자 <span id="rc2GoCount" style="color:var(--text3)">(0)</span></div>
@@ -7174,9 +7181,12 @@ function openPerfModal() {
   _perfSetEditUI(false);
   // 선택 가능한 FP 목록 구성 (관리자: 전체/지점, FP: 본인)
   var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장';
-  var list = getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
+  // 유니스페이스 비활성(active=false) FP도 업적 입력 대상으로는 남겨둠.
+  // 로그인·출결·활동현황은 계속 차단되고, 명단에서 삭제해야 여기서도 사라짐.
+  var list = getMergedFpList().filter(function(fp){ return fp.role!=='대표'; });
   if(currentUser.role==='지점장') list = list.filter(function(fp){ return fp.branch===currentUser.branch; });
   if(!isAdmin) list = list.filter(function(fp){ return fp.id===currentUser.id; });
+  list.sort(function(a,b){ return (a.active===false?1:0)-(b.active===false?1:0); }); // 비활성은 아래로
   _perfFpList = list;
 
   var search=document.getElementById('perfFpSearch');
@@ -7215,9 +7225,10 @@ function openPerfEdit(id){
 
   // FP 목록 구성(신규와 동일)
   var isAdmin = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장'||currentUser.level==='manager'||currentUser.level==='admin'||(currentUser.title||'').indexOf('매니저')>=0;
-  var list = getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='대표'; });
+  var list = getMergedFpList().filter(function(fp){ return fp.role!=='대표'; }); // 비활성 포함 (입력과 동일)
   if(currentUser.role==='지점장') list = list.filter(function(fp){ return fp.branch===currentUser.branch; });
   if(!isAdmin) list = list.filter(function(fp){ return fp.id===currentUser.id; });
+  list.sort(function(a,b){ return (a.active===false?1:0)-(b.active===false?1:0); });
   _perfFpList = list;
 
   _editingPerfId = id;
@@ -7349,7 +7360,9 @@ function onPerfFpSearch(){
     var chip='<span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:5px;margin-right:6px;'+
       (isAlpha?'background:rgba(47,125,91,.14);color:#2F7D5B':'background:rgba(107,79,160,.14);color:#6B4FA0')+'">'+(isAlpha?'알':'브')+'</span>';
     var nm = q ? fp.name.split(q).join('<b style="color:var(--gold)">'+q+'</b>') : fp.name;
-    html+='<div onclick="_perfPickFp(\''+fp.id+'\',\''+fp.name+'\',\''+fp.branch+'\')" style="padding:10px 13px;font-size:13px;color:var(--text);border-bottom:1px solid var(--bdr);cursor:pointer;display:flex;align-items:center" onmouseover="this.style.background=\'rgba(201,168,76,.08)\'" onmouseout="this.style.background=\'\'">'+chip+nm+'</div>';
+    // 유니스페이스 비활성 FP 표시 (업적 입력은 가능)
+    var offTag = (fp.active===false) ? '<span style="margin-left:6px;font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(239,68,68,.12);color:#C0392B">비활성</span>' : '';
+    html+='<div onclick="_perfPickFp(\''+fp.id+'\',\''+fp.name+'\',\''+fp.branch+'\')" style="padding:10px 13px;font-size:13px;color:var(--text);border-bottom:1px solid var(--bdr);cursor:pointer;display:flex;align-items:center" onmouseover="this.style.background=\'rgba(201,168,76,.08)\'" onmouseout="this.style.background=\'\'">'+chip+nm+offTag+'</div>';
   });
   results.innerHTML=html;
   results.style.display='';
@@ -14244,11 +14257,11 @@ function rc2RenderList() {
   var d = rc2GetAllCandData(); // 전체 후보자 풀 (월 리셋 없음)
   rc2RenderSummary(d);
   var arr = rc2BranchList(d);
-  var go = [], mng = [];
+  var go = [], mng = [], okList = [];
   for (var i=0;i<arr.length;i++){
     if(arr[i].status==='관리') mng.push(arr[i]);
     else if(arr[i].status==='등록') continue; // 등록 완료자는 추진 목록에서 제외 (조회에서 확인)
-    else if(arr[i].status==='입과확보') continue; // 입과확보는 상단 '입과 확보'에만 (조회·⭐에서 확인)
+    else if(arr[i].status==='입과확보') okList.push(arr[i]); // 추진 후보자와 분리된 별도 섹션
     else go.push(arr[i]);
   }
   // 집중 추진 후보자 카운트 (⭐ 모달과 동일 기준: 관리 제외 / 입과확보 포함)
@@ -14268,18 +14281,30 @@ function rc2RenderList() {
   else { var h=''; for(var j=0;j<goView.length;j++) h+=rc2CardHtml(goView[j], j+1); goEl.innerHTML = h; }
   document.getElementById('rc2GoCount').textContent = '(' + goView.length + ')';
 
+  var okEl = document.getElementById('rc2OkBody');
+  if(okEl){
+    if(okList.length===0) okEl.innerHTML = '<div class="rc2-empty">입과확보 후보자가 없습니다.</div>';
+    else { var ho=''; for(var o=0;o<okList.length;o++) ho+=rc2CardHtml(okList[o], o+1); okEl.innerHTML = ho; }
+    var _okc=document.getElementById('rc2OkCount'); if(_okc) _okc.textContent='('+okList.length+')';
+    // 접힘 상태 유지 (기본 펼침)
+    if(rc2._okOpen===false){ okEl.classList.remove('open'); }
+    else { okEl.classList.add('open'); }
+    var _oka=document.getElementById('rc2OkArrow'); if(_oka) _oka.textContent=(rc2._okOpen===false)?'▸':'▾';
+    var _okh=document.getElementById('rc2OkHint'); if(_okh) _okh.textContent=(rc2._okOpen===false)?'탭하여 펼치기':'탭하여 접기';
+  }
+
   var mngEl = document.getElementById('rc2MngBody');
   if(mng.length===0) mngEl.innerHTML = '<div class="rc2-empty">관리 대상자가 없습니다.</div>';
   else { var hm=''; for(var k=0;k<mng.length;k++) hm+=rc2CardHtml(mng[k], k+1); mngEl.innerHTML = hm; }
   document.getElementById('rc2MngCount').textContent = '(' + mng.length + ')';
 
   // 별표 클릭 (카드 클릭보다 우선, 이벤트 전파 차단)
-  var stars = document.querySelectorAll('#rc2GoList .rc2-focus-star, #rc2MngBody .rc2-focus-star');
+  var stars = document.querySelectorAll('#rc2GoList .rc2-focus-star, #rc2OkBody .rc2-focus-star, #rc2MngBody .rc2-focus-star');
   for (var s=0;s<stars.length;s++){
     stars[s].addEventListener('click', function(e){ e.stopPropagation(); rc2ToggleCandFocus(this.getAttribute('data-fid')); });
   }
   // 카드 클릭 → 수정
-  var cards = document.querySelectorAll('#rc2GoList .rc2-card, #rc2MngBody .rc2-card');
+  var cards = document.querySelectorAll('#rc2GoList .rc2-card, #rc2OkBody .rc2-card, #rc2MngBody .rc2-card');
   for (var c=0;c<cards.length;c++){
     cards[c].addEventListener('click', function(){ rc2OpenAdd(this.getAttribute('data-id')); });
   }
@@ -14495,6 +14520,15 @@ function rc2ToggleCandFocus(id){
   }
 }
 
+// 입과확보 섹션 접기/펼치기 (기본 펼침, 상태는 rc2._okOpen 에 보관)
+function rc2ToggleOk() {
+  var body = document.getElementById('rc2OkBody');
+  if(!body) return;
+  var open = body.classList.toggle('open');
+  rc2._okOpen = open;
+  var a=document.getElementById('rc2OkArrow'); if(a) a.textContent = open ? '▾' : '▸';
+  var h=document.getElementById('rc2OkHint'); if(h) h.textContent = open ? '탭하여 접기' : '탭하여 펼치기';
+}
 function rc2ToggleMng() {
   var body = document.getElementById('rc2MngBody');
   var open = body.classList.toggle('open');
