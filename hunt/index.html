@@ -240,7 +240,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
   </div>
 
   <div class="sec">
-    <div class="sec-t"><span>🎯 개인 목표 보너스 룰렛</span><span style="font-size:10.5px;color:#999;font-weight:700;">달성 시 본인이 바로 돌려요</span></div>
+    <div class="sec-t"><span>🎯 개인 목표 보너스 룰렛</span><span id="goalHint" style="font-size:10.5px;color:#999;font-weight:700;">달성 시 본인이 바로 돌려요</span></div>
     <div class="goal-grid" id="goalGrid"><div class="empty">불러오는 중...</div></div>
     <div id="bonusAction"></div>
   </div>
@@ -340,6 +340,7 @@ var endingShown = false;
 function qs(id){ return document.getElementById(id); }
 function esc(s){ return String(s === null || s === undefined ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function man(v){ return Math.round((parseInt(v,10)||0)/10000); }
+function fpLbl(name, title){ return String(name || '') + ' ' + String(title || 'FP'); }
 
 /* ---------- login ---------- */
 function tryLogin(){
@@ -481,14 +482,14 @@ function render(d, prev, first){
     if (prev.pending && !d.pending && d.recent && d.recent.length) {
       var last = d.recent[0];
       if (last.kind === 'bonus') {
-        showToast('🎊 ' + last.winnerName + ' FP, ' + last.prize + ' 당첨!');
+        showToast('🎊 ' + fpLbl(last.winnerName, last.winnerTitle) + ', ' + last.prize + ' 당첨!');
       } else {
         showToast('🎊 ' + last.prize + ' 당첨! 브라보 전원 지급 🎁');
       }
       fireConfetti();
     }
     if (!prev.pending && d.pending && (!ME || d.pending.winnerFp !== ME.id)) {
-      showToast('🎯 ' + d.pending.winnerName + ' FP가 룰렛 주자! 곧 돌립니다');
+      showToast('🎯 ' + fpLbl(d.pending.winnerName, d.pending.winnerTitle) + '가 룰렛 주자! 곧 돌립니다');
     }
   }
 
@@ -506,11 +507,12 @@ function renderRouAction(d){
   var pending = d.pending;
   var out = '';
   if (pending) {
+    var pl = fpLbl(pending.winnerName, pending.winnerTitle);
     if (ME && pending.winnerFp === ME.id) {
-      out = '<div class="pending-banner">🎯 <b>' + esc(pending.winnerName) + ' FP님</b>이 룰렛 주자로 뽑혔어요!<br>당첨 상품은 <b>브라보 전원</b>에게 갑니다 🎁</div>'
+      out = '<div class="pending-banner">🎯 <b>' + esc(pl) + '님</b>이 룰렛 주자로 뽑혔어요!<br>당첨 상품은 <b>브라보 전원</b>에게 갑니다 🎁</div>'
           + '<button class="btn btn-spin" id="btnSpin">🎁 전원 선물 룰렛 돌리기 ▶</button>';
     } else {
-      out = '<div class="pending-banner">🎯 룰렛 주자: <b>' + esc(pending.winnerName) + ' FP</b>!<br>돌리는 순간 상품은 <b>브라보 전원 지급</b> 🎁</div>';
+      out = '<div class="pending-banner">🎯 룰렛 주자: <b>' + esc(pl) + '</b>!<br>돌리는 순간 상품은 <b>브라보 전원 지급</b> 🎁</div>';
       if (canDraw) {
         out += '<button class="btn btn-draw" id="btnProxy" style="margin-top:8px;font-size:13px;padding:10px;animation:none;">대신 돌려주기 (관리자)</button>';
       }
@@ -538,6 +540,8 @@ function renderRouAction(d){
 function renderGoals(d){
   var list = d.goals || [];
   if (!list.length) { qs('goalGrid').innerHTML = '<div class="empty">목표 정보 없음</div>'; return; }
+  var canEdit = d.canDraw === true;
+  qs('goalHint').textContent = canEdit ? '이름 탭 → 목표 수정 ✏️' : '달성 시 본인이 바로 돌려요';
   var html = '';
   var i;
   var myBonus = null;
@@ -545,14 +549,24 @@ function renderGoals(d){
     var g = list[i];
     var pct = g.target > 0 ? Math.min(100, Math.round(g.cum / g.target * 100)) : 0;
     var done = g.cum >= g.target && g.target > 0;
-    html += '<div class="gcell' + (done ? ' done' : '') + '">'
-      + '<div class="gname"><span>' + esc(g.name) + '</span><span class="chk">' + (done ? (g.claimed ? '🎁완료' : '🌟달성!') : pct + '%') + '</span></div>'
+    var ttl = String(g.title || 'FP');
+    html += '<div class="gcell' + (done ? ' done' : '') + '" data-fp="' + esc(g.fp) + '" data-name="' + esc(g.name) + '" data-target="' + g.target + '"' + (canEdit ? ' style="cursor:pointer;"' : '') + '>'
+      + '<div class="gname"><span>' + esc(g.name) + ' <span style="font-size:10px;opacity:.65;">' + esc(ttl) + '</span></span><span class="chk">' + (done ? (g.claimed ? '🎁완료' : '🌟달성!') : pct + '%') + '</span></div>'
       + '<div class="gbar"><div class="gfill" style="width:' + pct + '%"></div></div>'
       + '<div class="gsub">' + man(g.cum) + ' / ' + man(g.target) + '만</div>'
       + '</div>';
     if (ME && g.fp === ME.id && done && !g.claimed) myBonus = g;
   }
   qs('goalGrid').innerHTML = html;
+  if (canEdit) {
+    var cells = qs('goalGrid').querySelectorAll('.gcell');
+    var c;
+    for (c = 0; c < cells.length; c++) {
+      cells[c].addEventListener('click', function(){
+        editTarget(this.getAttribute('data-fp'), this.getAttribute('data-name'), parseInt(this.getAttribute('data-target'), 10) || 0);
+      });
+    }
+  }
   var ba = qs('bonusAction');
   if (myBonus) {
     ba.innerHTML = '<button class="btn btn-spin" id="btnBonus" style="margin-top:10px;">🌟 개인 목표 달성! 보너스 룰렛 돌리기 ▶</button>';
@@ -560,6 +574,22 @@ function renderGoals(d){
   } else {
     ba.innerHTML = '';
   }
+}
+
+function editTarget(fp, name, curWon){
+  var cur = Math.round(curWon / 10000);
+  var v = prompt(name + ' 목표 금액을 입력하세요 (만원)', cur);
+  if (v === null) return;
+  var n = parseInt(String(v).replace(/[^0-9]/g, ''), 10);
+  if (isNaN(n) || n <= 0) { showToast('⚠️ 숫자로 입력해주세요 (만원)'); return; }
+  fetch(GAS_URL + '?action=huntSetTarget&fp=' + encodeURIComponent(ME.id) + '&target=' + encodeURIComponent(fp) + '&value=' + (n * 10000))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) { showToast('⚠️ ' + (d.msg || '변경 실패')); return; }
+      showToast('✏️ ' + name + ' 목표 → ' + n + '만원 변경 완료');
+      loadState(false);
+    })
+    .catch(function(){ showToast('⚠️ 연결 실패'); });
 }
 
 function renderToday(d){
@@ -573,7 +603,7 @@ function renderToday(d){
   var i;
   for (i = 0; i < list.length && i < 6; i++) {
     var m = i < 3 ? medals[i] : '🎖️';
-    html += '<div class="trow"><span><span class="medal">' + m + '</span>' + esc(list[i].name) + ' FP</span><span class="amt">' + man(list[i].amt) + '만원</span></div>';
+    html += '<div class="trow"><span><span class="medal">' + m + '</span>' + esc(fpLbl(list[i].name, list[i].title)) + '</span><span class="amt">' + man(list[i].amt) + '만원</span></div>';
   }
   var sum = 0;
   for (i = 0; i < list.length; i++) sum += parseInt(list[i].amt, 10) || 0;
@@ -592,9 +622,9 @@ function renderWins(d){
   for (i = 0; i < list.length && i < 8; i++) {
     var w = list[i];
     if (w.kind === 'bonus') {
-      html += '<div class="win-row"><span class="tag b">개인</span><span style="flex:1;">' + esc(w.winnerName) + ' FP</span><span style="color:#d85a30;font-weight:800;">' + esc(w.prize || '대기중') + '</span></div>';
+      html += '<div class="win-row"><span class="tag b">개인</span><span style="flex:1;">' + esc(fpLbl(w.winnerName, w.winnerTitle)) + '</span><span style="color:#d85a30;font-weight:800;">' + esc(w.prize || '대기중') + '</span></div>';
     } else {
-      html += '<div class="win-row"><span class="tag">전원 지급</span><span style="flex:1;">' + esc(w.prize || '대기중') + ' <span style="color:#aaa;font-size:11px;">(' + esc(w.winnerName) + ' FP 스핀)</span></span><span style="color:#0a8a4a;font-weight:800;">🎁 ALL</span></div>';
+      html += '<div class="win-row"><span class="tag">전원 지급</span><span style="flex:1;">' + esc(w.prize || '대기중') + ' <span style="color:#aaa;font-size:11px;">(' + esc(fpLbl(w.winnerName, w.winnerTitle)) + ' 스핀)</span></span><span style="color:#0a8a4a;font-weight:800;">🎁 ALL</span></div>';
     }
   }
   qs('winList').innerHTML = html;
@@ -681,9 +711,10 @@ function doDraw(){
       wheelStopIdle();
       buildWheel(names);
       spinWheelTo(idx, names.length, function(){
+        var wl = fpLbl(d.winnerName, d.winnerTitle);
         qs('mresT').textContent = '🎯 룰렛 주자 결정!';
-        qs('mresB').textContent = d.winnerName + ' FP';
-        qs('mresS').textContent = d.winnerName + ' FP 폰에 룰렛 버튼이 켜집니다. 당첨 상품은 브라보 전원 지급! 🎁';
+        qs('mresB').textContent = wl;
+        qs('mresS').textContent = wl + ' 폰에 룰렛 버튼이 켜집니다. 당첨 상품은 브라보 전원 지급! 🎁';
         qs('mres').classList.add('show');
         fireConfetti();
         wheelBusy = false;
@@ -697,10 +728,10 @@ function doSpin(isProxy){
   if (wheelBusy || !STATE || !STATE.pending) return;
   wheelBusy = true;
   var pid = STATE.pending.id;
-  var winName = STATE.pending.winnerName;
+  var winName = fpLbl(STATE.pending.winnerName, STATE.pending.winnerTitle);
   var b = qs('btnSpin') || qs('btnProxy');
   if (b) { b.disabled = true; b.textContent = '⏳ 룰렛 준비 중...'; }
-  openModal(winName + ' FP가 돌립니다!', '당첨 상품은 브라보 전원에게! 꽝은 없어요', '🎁');
+  openModal(winName + '가 돌립니다!', '당첨 상품은 브라보 전원에게! 꽝은 없어요', '🎁');
   wheelLoading();
   fetch(GAS_URL + '?action=huntSpin&fp=' + encodeURIComponent(ME.id) + '&id=' + encodeURIComponent(pid))
     .then(function(r){ return r.json(); })
@@ -712,7 +743,7 @@ function doSpin(isProxy){
       spinWheelTo(d.prizeIdx, WHEEL_PRIZES.length, function(){
         qs('mresT').textContent = '🎊 브라보 전원 당첨!';
         qs('mresB').textContent = d.prize;
-        qs('mresS').textContent = '전원 지급으로 기록됐어요! (스핀: ' + winName + ' FP) 🎉';
+        qs('mresS').textContent = '전원 지급으로 기록됐어요! (스핀: ' + winName + ') 🎉';
         qs('mres').classList.add('show');
         fireConfetti();
         wheelBusy = false;
@@ -727,7 +758,8 @@ function doBonus(){
   wheelBusy = true;
   var b = qs('btnBonus');
   if (b) { b.disabled = true; b.textContent = '⏳ 룰렛 준비 중...'; }
-  openModal('🌟 개인 목표 달성 보너스!', ME.name + ' FP님만을 위한 단독 룰렛', '🌟');
+  var meLbl = fpLbl(ME.name, ME.title);
+  openModal('🌟 개인 목표 달성 보너스!', meLbl + '님만을 위한 단독 룰렛', '🌟');
   wheelLoading();
   fetch(GAS_URL + '?action=huntBonus&fp=' + encodeURIComponent(ME.id))
     .then(function(r){ return r.json(); })
@@ -737,9 +769,9 @@ function doBonus(){
       wheelStopIdle();
       buildWheel(WHEEL_PRIZES);
       spinWheelTo(d.prizeIdx, WHEEL_PRIZES.length, function(){
-        qs('mresT').textContent = '🎊 ' + ME.name + ' FP 당첨!';
+        qs('mresT').textContent = '🎊 ' + meLbl + ' 당첨!';
         qs('mresB').textContent = d.prize;
-        qs('mresS').textContent = '개인 목표 달성 보너스 · ' + ME.name + ' FP 단독 지급 🎉';
+        qs('mresS').textContent = '개인 목표 달성 보너스 · ' + meLbl + ' 단독 지급 🎉';
         qs('mres').classList.add('show');
         fireConfetti();
         wheelBusy = false;
