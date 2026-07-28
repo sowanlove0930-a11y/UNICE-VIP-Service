@@ -239,6 +239,18 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
     <div id="rouAction"></div>
   </div>
 
+  <div class="rou-card" style="background:linear-gradient(135deg,#0b5e8a,#1793c9); box-shadow:0 10px 26px rgba(10,80,130,.35);">
+    <div class="rou-top">
+      <div style="font-size:36px; animation:bob 2.4s ease-in-out infinite;">☀️</div>
+      <div class="rou-info">
+        <div class="rou-tt" style="color:#ffe98a;">오늘의 출근 럭키 룰렛</div>
+        <div class="rou-sub" style="color:#d6f1ff;">오늘 출근 체크인한 FP 중 1명 · 단독 지급</div>
+      </div>
+      <div class="rou-gift">🍀</div>
+    </div>
+    <div id="luckyAction"></div>
+  </div>
+
   <div class="sec">
     <div class="sec-t"><span>🎯 개인 목표 보너스 룰렛</span><span id="goalHint" style="font-size:10.5px;color:#999;font-weight:700;">달성 시 본인이 바로 돌려요</span></div>
     <div class="goal-grid" id="goalGrid"><div class="empty">불러오는 중...</div></div>
@@ -467,6 +479,7 @@ function render(d, prev, first){
 
   qs('queue').textContent = (d.queue || 0) + '회';
   renderRouAction(d);
+  renderLucky(d);
   renderGoals(d);
   renderToday(d);
   renderWins(d);
@@ -483,13 +496,23 @@ function render(d, prev, first){
       var last = d.recent[0];
       if (last.kind === 'bonus') {
         showToast('🎊 ' + fpLbl(last.winnerName, last.winnerTitle) + ', ' + last.prize + ' 당첨!');
+      } else if (last.kind === 'lucky') {
+        showToast('☀️ 출근 럭키! ' + fpLbl(last.winnerName, last.winnerTitle) + ', ' + last.prize + ' 당첨!');
       } else {
-        showToast('🎊 ' + last.prize + ' 당첨! 브라보 전원 지급 🎁');
+        var lc = last.rcount || 0;
+        showToast('🎊 ' + last.prize + ' 당첨! ' + (lc > 0 ? '지급 대상 ' + lc + '명' : '브라보 전원 지급') + ' 🎁');
       }
       fireConfetti();
     }
     if (!prev.pending && d.pending && (!ME || d.pending.winnerFp !== ME.id)) {
       showToast('🎯 ' + fpLbl(d.pending.winnerName, d.pending.winnerTitle) + '가 룰렛 주자! 곧 돌립니다');
+    }
+    if (!prev.pendingLucky && d.pendingLucky && (!ME || d.pendingLucky.winnerFp !== ME.id)) {
+      showToast('☀️ 오늘의 럭키: ' + fpLbl(d.pendingLucky.winnerName, d.pendingLucky.winnerTitle) + '! 곧 돌립니다');
+    }
+    if (prev.pendingLucky && !d.pendingLucky && d.recent && d.recent.length && d.recent[0].kind === 'lucky') {
+      showToast('☀️ 출근 럭키! ' + fpLbl(d.recent[0].winnerName, d.recent[0].winnerTitle) + ', ' + d.recent[0].prize + ' 당첨!');
+      fireConfetti();
     }
   }
 
@@ -509,10 +532,10 @@ function renderRouAction(d){
   if (pending) {
     var pl = fpLbl(pending.winnerName, pending.winnerTitle);
     if (ME && pending.winnerFp === ME.id) {
-      out = '<div class="pending-banner">🎯 <b>' + esc(pl) + '님</b>이 룰렛 주자로 뽑혔어요!<br>당첨 상품은 <b>브라보 전원</b>에게 갑니다 🎁</div>'
-          + '<button class="btn btn-spin" id="btnSpin">🎁 전원 선물 룰렛 돌리기 ▶</button>';
+      out = '<div class="pending-banner">🎯 <b>' + esc(pl) + '님</b>이 룰렛 주자로 뽑혔어요!<br>상품은 <b>구간 기여자 + 오늘 출근 FP</b>에게 🎁</div>'
+          + '<button class="btn btn-spin" id="btnSpin">🎁 선물 룰렛 돌리기 ▶</button>';
     } else {
-      out = '<div class="pending-banner">🎯 룰렛 주자: <b>' + esc(pl) + '</b>!<br>돌리는 순간 상품은 <b>브라보 전원 지급</b> 🎁</div>';
+      out = '<div class="pending-banner">🎯 룰렛 주자: <b>' + esc(pl) + '</b>!<br>상품은 <b>구간 기여자 + 오늘 출근 FP</b> 지급 🎁</div>';
       if (canDraw) {
         out += '<button class="btn btn-draw" id="btnProxy" style="margin-top:8px;font-size:13px;padding:10px;animation:none;">대신 돌려주기 (관리자)</button>';
       }
@@ -523,10 +546,10 @@ function renderRouAction(d){
     if ((d.queue || 0) <= 0) {
       out += '<div style="text-align:center;font-size:11.5px;color:#cbb8f0;margin-top:8px;font-weight:700;">다음 50만 구간을 사냥하면 룰렛이 충전됩니다</div>';
     } else {
-      out += '<div style="text-align:center;font-size:11.5px;color:#cbb8f0;margin-top:8px;font-weight:700;">뽑힌 사람이 돌리고, 상품은 브라보 전원에게! 🎁</div>';
+      out += '<div style="text-align:center;font-size:11.5px;color:#cbb8f0;margin-top:8px;font-weight:700;">상품은 구간 기여자 + 당일 출근 FP에게! 🎁</div>';
     }
   } else {
-    out = '<div style="text-align:center;font-size:12px;color:#cbb8f0;margin-top:10px;font-weight:700;">룰렛이 충전되면 돌릴 사람을 뽑습니다 · 상품은 전원 지급 🎁</div>';
+    out = '<div style="text-align:center;font-size:12px;color:#cbb8f0;margin-top:10px;font-weight:700;">룰렛이 충전되면 돌릴 사람을 뽑습니다 · 기여자+출근자 지급 🎁</div>';
   }
   box.innerHTML = out;
   var bd = qs('btnDraw');
@@ -535,6 +558,97 @@ function renderRouAction(d){
   if (bs) bs.addEventListener('click', function(){ doSpin(false); });
   var bp = qs('btnProxy');
   if (bp) bp.addEventListener('click', function(){ doSpin(true); });
+}
+
+function renderLucky(d){
+  var box = qs('luckyAction');
+  var pl = d.pendingLucky;
+  var canDraw = d.canDraw === true;
+  var out = '';
+  if (pl) {
+    var lbl = fpLbl(pl.winnerName, pl.winnerTitle);
+    if (ME && pl.winnerFp === ME.id) {
+      out = '<div class="pending-banner" style="border-color:rgba(180,240,255,.6);">☀️ <b>' + esc(lbl) + '님</b>이 오늘의 럭키!<br>선물 룰렛을 돌려주세요 🍀</div>'
+          + '<button class="btn btn-spin" id="btnLuckySpin" style="background:linear-gradient(135deg,#7ee8a2,#2ecc71);color:#0b3d20;">🍀 내 럭키 룰렛 돌리기 ▶</button>';
+    } else {
+      out = '<div class="pending-banner" style="border-color:rgba(180,240,255,.6);">☀️ 오늘의 럭키: <b>' + esc(lbl) + '</b>!<br>본인 폰에서 선물 룰렛 대기 중 🍀</div>';
+      if (canDraw) {
+        out += '<button class="btn btn-draw" id="btnLuckyProxy" style="margin-top:8px;font-size:13px;padding:10px;animation:none;">대신 돌려주기 (관리자)</button>';
+      }
+    }
+  } else if (d.luckyDone) {
+    out = '<div class="pending-banner" style="border-color:rgba(180,240,255,.6);">✅ 오늘의 럭키 완료!<br>내일 아침 출근 도장 찍고 노려보세요 🍀</div>';
+  } else if (canDraw) {
+    out = '<button class="btn btn-draw" id="btnLucky" style="background:linear-gradient(135deg,#7ee8a2,#2ecc71);color:#0b3d20;box-shadow:0 8px 24px rgba(46,204,113,.5);">☀️ 오늘의 럭키 뽑기 ▶</button>'
+        + '<div style="text-align:center;font-size:11.5px;color:#c9ecff;margin-top:8px;font-weight:700;">오늘 출근 체크인한 FP만 후보! 하루 1번 🍀</div>';
+  } else {
+    out = '<div style="text-align:center;font-size:12px;color:#c9ecff;margin-top:10px;font-weight:700;">매일 출근 체크인하면 자동 후보! ☀️ 하루 1명 단독 지급</div>';
+  }
+  box.innerHTML = out;
+  var bl = qs('btnLucky');
+  if (bl) bl.addEventListener('click', doLuckyDraw);
+  var bls = qs('btnLuckySpin');
+  if (bls) bls.addEventListener('click', doLuckySpin);
+  var blp = qs('btnLuckyProxy');
+  if (blp) blp.addEventListener('click', doLuckySpin);
+}
+
+function doLuckyDraw(){
+  if (wheelBusy) return;
+  wheelBusy = true;
+  var b = qs('btnLucky');
+  if (b) { b.disabled = true; b.textContent = '⏳ 추첨 준비 중...'; }
+  openModal('오늘의 출근 럭키는?', '오늘 출근 도장 찍은 FP만 후보!', '☀️');
+  wheelLoading();
+  fetch(GAS_URL + '?action=huntLuckyDraw&fp=' + encodeURIComponent(ME.id))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '추첨 실패')); return; }
+      var names = d.candidates || [];
+      var idx = d.winnerIdx || 0;
+      qs('mtitle').textContent = '오늘의 출근 럭키는?';
+      qs('msub').textContent = '두구두구두구...';
+      wheelStopIdle();
+      buildWheel(names);
+      spinWheelTo(idx, names.length, function(){
+        var wl = fpLbl(d.winnerName, d.winnerTitle);
+        qs('mresT').textContent = '☀️ 오늘의 럭키!';
+        qs('mresB').textContent = wl;
+        qs('mresS').textContent = wl + ' 폰에 럭키 룰렛 버튼이 켜집니다. 단독 지급! 🍀';
+        qs('mres').classList.add('show');
+        fireConfetti();
+        wheelBusy = false;
+      });
+    })
+    .catch(function(){ wheelBusy = false; closeModal(); showToast('⚠️ 연결 실패'); });
+}
+
+function doLuckySpin(){
+  if (wheelBusy || !STATE || !STATE.pendingLucky) return;
+  wheelBusy = true;
+  var pid = STATE.pendingLucky.id;
+  var winName = fpLbl(STATE.pendingLucky.winnerName, STATE.pendingLucky.winnerTitle);
+  var b = qs('btnLuckySpin') || qs('btnLuckyProxy');
+  if (b) { b.disabled = true; b.textContent = '⏳ 룰렛 준비 중...'; }
+  openModal('☀️ ' + winName + '의 럭키!', '오늘 출근의 행운 · 단독 지급 · 꽝은 없어요', '🍀');
+  wheelLoading();
+  fetch(GAS_URL + '?action=huntSpin&fp=' + encodeURIComponent(ME.id) + '&id=' + encodeURIComponent(pid))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '룰렛 실패')); return; }
+      qs('msub').textContent = '두구두구두구...';
+      wheelStopIdle();
+      buildWheel(WHEEL_PRIZES);
+      spinWheelTo(d.prizeIdx, WHEEL_PRIZES.length, function(){
+        qs('mresT').textContent = '🎊 ' + winName + ' 당첨!';
+        qs('mresB').textContent = d.prize;
+        qs('mresS').textContent = '오늘의 출근 럭키 · 단독 지급 🎉';
+        qs('mres').classList.add('show');
+        fireConfetti();
+        wheelBusy = false;
+      });
+    })
+    .catch(function(){ wheelBusy = false; closeModal(); showToast('⚠️ 연결 실패'); });
 }
 
 function renderGoals(d){
@@ -550,7 +664,7 @@ function renderGoals(d){
     var pct = g.target > 0 ? Math.min(100, Math.round(g.cum / g.target * 100)) : 0;
     var done = g.cum >= g.target && g.target > 0;
     var ttl = String(g.title || 'FP');
-    html += '<div class="gcell' + (done ? ' done' : '') + '" data-fp="' + esc(g.fp) + '" data-name="' + esc(g.name) + '" data-target="' + g.target + '"' + (canEdit ? ' style="cursor:pointer;"' : '') + '>'
+    html += '<div class="gcell' + (done ? ' done' : '') + '" data-fp="' + esc(g.fp) + '" data-name="' + esc(g.name) + '" data-target="' + g.target + '" data-claimed="' + (g.claimed ? '1' : '0') + '" data-title="' + esc(ttl) + '"' + (canEdit ? ' style="cursor:pointer;"' : '') + '>'
       + '<div class="gname"><span>' + esc(g.name) + ' <span style="font-size:10px;opacity:.65;">' + esc(ttl) + '</span></span><span class="chk">' + (done ? (g.claimed ? '🎁완료' : '🌟달성!') : pct + '%') + '</span></div>'
       + '<div class="gbar"><div class="gfill" style="width:' + pct + '%"></div></div>'
       + '<div class="gsub">' + man(g.cum) + ' / ' + man(g.target) + '만</div>'
@@ -563,7 +677,19 @@ function renderGoals(d){
     var c;
     for (c = 0; c < cells.length; c++) {
       cells[c].addEventListener('click', function(){
-        editTarget(this.getAttribute('data-fp'), this.getAttribute('data-name'), parseInt(this.getAttribute('data-target'), 10) || 0);
+        var cfp = this.getAttribute('data-fp');
+        var cname = this.getAttribute('data-name');
+        var ctgt = parseInt(this.getAttribute('data-target'), 10) || 0;
+        var cdone = this.classList.contains('done');
+        var cclaimed = this.getAttribute('data-claimed') === '1';
+        var cttl = this.getAttribute('data-title') || 'FP';
+        if (cdone && !cclaimed && ME && cfp !== ME.id) {
+          if (confirm(cname + ' ' + cttl + '의 보너스 룰렛을 대신 돌려줄까요?\n(취소를 누르면 목표 수정으로 갑니다)')) {
+            doBonusFor(cfp, cname, cttl);
+            return;
+          }
+        }
+        editTarget(cfp, cname, ctgt);
       });
     }
   }
@@ -574,6 +700,31 @@ function renderGoals(d){
   } else {
     ba.innerHTML = '';
   }
+}
+
+function doBonusFor(fp, name, title){
+  if (wheelBusy) return;
+  wheelBusy = true;
+  var lbl = fpLbl(name, title);
+  openModal('🌟 ' + lbl + ' 보너스 룰렛!', '개인 목표 달성 · ' + lbl + ' 단독 지급', '🌟');
+  wheelLoading();
+  fetch(GAS_URL + '?action=huntBonus&fp=' + encodeURIComponent(ME.id) + '&target=' + encodeURIComponent(fp))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '보너스 룰렛 실패')); return; }
+      qs('msub').textContent = '두구두구두구...';
+      wheelStopIdle();
+      buildWheel(WHEEL_PRIZES);
+      spinWheelTo(d.prizeIdx, WHEEL_PRIZES.length, function(){
+        qs('mresT').textContent = '🎊 ' + lbl + ' 당첨!';
+        qs('mresB').textContent = d.prize;
+        qs('mresS').textContent = '개인 목표 달성 보너스 · ' + lbl + ' 단독 지급 🎉';
+        qs('mres').classList.add('show');
+        fireConfetti();
+        wheelBusy = false;
+      });
+    })
+    .catch(function(){ wheelBusy = false; closeModal(); showToast('⚠️ 연결 실패'); });
 }
 
 function editTarget(fp, name, curWon){
@@ -623,8 +774,14 @@ function renderWins(d){
     var w = list[i];
     if (w.kind === 'bonus') {
       html += '<div class="win-row"><span class="tag b">개인</span><span style="flex:1;">' + esc(fpLbl(w.winnerName, w.winnerTitle)) + '</span><span style="color:#d85a30;font-weight:800;">' + esc(w.prize || '대기중') + '</span></div>';
+    } else if (w.kind === 'lucky') {
+      html += '<div class="win-row"><span class="tag" style="background:#e0f4ff;color:#0b6ea8;">출근럭키</span><span style="flex:1;">' + esc(fpLbl(w.winnerName, w.winnerTitle)) + '</span><span style="color:#0b6ea8;font-weight:800;">' + esc(w.prize || '대기중') + '</span></div>';
     } else {
-      html += '<div class="win-row"><span class="tag">전원 지급</span><span style="flex:1;">' + esc(w.prize || '대기중') + ' <span style="color:#aaa;font-size:11px;">(' + esc(fpLbl(w.winnerName, w.winnerTitle)) + ' 스핀)</span></span><span style="color:#0a8a4a;font-weight:800;">🎁 ALL</span></div>';
+      var rc = w.rcount || 0;
+      var tagTxt = rc > 0 ? rc + '명 지급' : '전원 지급';
+      var rightTxt = rc > 0 ? '🎁 ' + rc + '명' : '🎁 ALL';
+      var namesSm = rc > 0 ? esc(String(w.recipients || '')) : esc(fpLbl(w.winnerName, w.winnerTitle)) + ' 스핀';
+      html += '<div class="win-row"><span class="tag">' + tagTxt + '</span><span style="flex:1;">' + esc(w.prize || '대기중') + ' <span style="color:#aaa;font-size:10.5px;">' + namesSm + '</span></span><span style="color:#0a8a4a;font-weight:800;flex-shrink:0;">' + rightTxt + '</span></div>';
     }
   }
   qs('winList').innerHTML = html;
@@ -714,7 +871,7 @@ function doDraw(){
         var wl = fpLbl(d.winnerName, d.winnerTitle);
         qs('mresT').textContent = '🎯 룰렛 주자 결정!';
         qs('mresB').textContent = wl;
-        qs('mresS').textContent = wl + ' 폰에 룰렛 버튼이 켜집니다. 당첨 상품은 브라보 전원 지급! 🎁';
+        qs('mresS').textContent = wl + ' 폰에 룰렛 버튼이 켜집니다. 상품은 구간 기여자 + 오늘 출근 FP 지급! 🎁';
         qs('mres').classList.add('show');
         fireConfetti();
         wheelBusy = false;
@@ -731,7 +888,7 @@ function doSpin(isProxy){
   var winName = fpLbl(STATE.pending.winnerName, STATE.pending.winnerTitle);
   var b = qs('btnSpin') || qs('btnProxy');
   if (b) { b.disabled = true; b.textContent = '⏳ 룰렛 준비 중...'; }
-  openModal(winName + '가 돌립니다!', '당첨 상품은 브라보 전원에게! 꽝은 없어요', '🎁');
+  openModal(winName + '가 돌립니다!', '상품은 구간 기여자 + 오늘 출근 FP에게! 꽝은 없어요', '🎁');
   wheelLoading();
   fetch(GAS_URL + '?action=huntSpin&fp=' + encodeURIComponent(ME.id) + '&id=' + encodeURIComponent(pid))
     .then(function(r){ return r.json(); })
@@ -741,9 +898,11 @@ function doSpin(isProxy){
       wheelStopIdle();
       buildWheel(WHEEL_PRIZES);
       spinWheelTo(d.prizeIdx, WHEEL_PRIZES.length, function(){
-        qs('mresT').textContent = '🎊 브라보 전원 당첨!';
+        var n = d.count || 0;
+        var rl = d.recipients || [];
+        qs('mresT').textContent = '🎊 지급 대상 ' + n + '명 당첨!';
         qs('mresB').textContent = d.prize;
-        qs('mresS').textContent = '전원 지급으로 기록됐어요! (스핀: ' + winName + ') 🎉';
+        qs('mresS').textContent = (rl.length ? rl.join(', ') + ' · ' : '') + '(스핀: ' + winName + ') 🎉';
         qs('mres').classList.add('show');
         fireConfetti();
         wheelBusy = false;
@@ -872,7 +1031,7 @@ function shareKakao(){
       var w = recent[i];
       var p = String(w.prize || '').replace(/^\S+\s/, '');
       if (w.kind === 'bonus') parts.push(p + '(' + w.winnerName + ')');
-      else parts.push(p + '(전원)');
+      else parts.push(p + '(' + ((w.rcount || 0) > 0 ? w.rcount + '명' : '전원') + ')');
     }
     desc += ' 🎁 당첨: ' + parts.join(', ');
   } else {
