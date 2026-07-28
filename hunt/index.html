@@ -65,6 +65,9 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .stepgrid { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
 .chip { font-size:11.5px; font-weight:800; color:#a0a0a0; background:#f3f1ec; border-radius:100px; padding:6px 11px; }
 .chip.on { background:#e5f8ec; color:#0a8a4a; box-shadow:0 2px 6px rgba(10,138,74,.18); }
+.temprow { display:flex; gap:8px; margin-top:12px; }
+.tpill { flex:1; text-align:center; font-size:12.5px; font-weight:900; padding:9px 6px; border-radius:100px; background:#ffe9e0; color:#d33a1e; transition:background .8s, color .8s; }
+.tpill.cool { background:#e3f4ff; color:#0b6ea8; }
 .step { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700; padding:3px 0; color:#a5a5a5; }
 .step.on { color:#0a8a4a; }
 .step .em { width:18px; text-align:center; }
@@ -151,6 +154,19 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .lbox button { width:100%; margin-top:12px; padding:14px; font-size:15.5px; font-weight:900; color:#fff; background:linear-gradient(135deg,#ff512f,#ff7a00); border:none; border-radius:14px; cursor:pointer; font-family:inherit; }
 .lerr { font-size:12.5px; color:#e02424; margin-top:10px; font-weight:700; min-height:18px; }
 
+/* custom dialog */
+.cdlg { position:fixed; inset:0; z-index:85; background:rgba(15,8,40,.75); display:none; align-items:center; justify-content:center; padding:24px; }
+.cdlg.show { display:flex; }
+.cdlg-box { width:100%; max-width:330px; background:#fff; border-radius:22px; padding:22px 20px 18px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.45); animation:popIn .35s cubic-bezier(.2,1.4,.4,1); }
+.cdlg-t { font-size:18px; font-weight:900; color:#3b1d6e; }
+.cdlg-m { font-size:13.5px; color:#555; margin-top:8px; line-height:1.55; font-weight:600; }
+.cdlg-in { width:100%; margin-top:12px; padding:12px; font-size:19px; font-weight:800; text-align:center; border:2px solid #eee; border-radius:12px; outline:none; font-family:inherit; }
+.cdlg-in:focus { border-color:#ff7a00; }
+.cdlg-btns { display:flex; gap:8px; margin-top:14px; }
+.cdlg-ok { flex:1.4; padding:12px; border:none; border-radius:100px; font-weight:900; font-size:14.5px; color:#3a2000; background:linear-gradient(135deg,#ffe14d,#ffb400); cursor:pointer; font-family:inherit; box-shadow:0 6px 16px rgba(255,180,0,.4); }
+.cdlg-ok:active { transform:scale(.97); }
+.cdlg-no { flex:1; padding:12px; border:none; border-radius:100px; font-weight:800; font-size:13.5px; color:#666; background:#f1eee8; cursor:pointer; font-family:inherit; }
+
 /* effects */
 .fxlayer { position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; display:none; }
 .fxlayer.show { display:block; }
@@ -223,6 +239,10 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
         <div class="stepgrid" id="steps"></div>
       </div>
     </div>
+    <div class="temprow">
+      <div class="tpill" id="tempNow">🌡️ 브라보 -°C</div>
+      <div class="tpill cool" id="tempDrop">❄️ -°C 내려감</div>
+    </div>
     <div class="cheer" id="cheer">하루 70만 × 5일 = 350만 🔥 꼭 달성 가자!</div>
   </div>
 
@@ -291,6 +311,18 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
     </div>
     <button class="mbtn" id="mbtn">돌리기 ▶</button>
     <button class="mclose" id="mclose">닫기</button>
+  </div>
+</div>
+
+<div class="cdlg" id="cdlg">
+  <div class="cdlg-box">
+    <div class="cdlg-t" id="cdlgT"></div>
+    <div class="cdlg-m" id="cdlgM"></div>
+    <input class="cdlg-in" id="cdlgIn" type="tel" inputmode="numeric" style="display:none;">
+    <div class="cdlg-btns">
+      <button class="cdlg-no" id="cdlgNo">취소</button>
+      <button class="cdlg-ok" id="cdlgOk">확인</button>
+    </div>
   </div>
 </div>
 
@@ -477,6 +509,13 @@ function render(d, prev, first){
   }
   qs('nbFill').style.background = cold ? 'linear-gradient(90deg,#4dd0e1,#1565c0)' : 'linear-gradient(90deg,#ffb400,#ff512f)';
 
+  var tNow = (remainMan / 10).toFixed(1);
+  var tDrop = ((350 - remainMan) / 10).toFixed(1);
+  qs('tempNow').textContent = '🌡️ 지금 브라보 ' + tNow + '°C';
+  qs('tempDrop').textContent = (parseFloat(tDrop) > 0 ? '❄️ 벌써 ' + tDrop + '°C 내려감!' : '🔥 아직 그대로! 식혀봅시다');
+  if (cold) qs('tempNow').classList.add('cool');
+  else qs('tempNow').classList.remove('cool');
+
   qs('queue').textContent = (d.queue || 0) + '회';
   renderRouAction(d);
   renderLucky(d);
@@ -651,6 +690,41 @@ function doLuckySpin(){
     .catch(function(){ wheelBusy = false; closeModal(); showToast('⚠️ 연결 실패'); });
 }
 
+/* ---------- custom dialog ---------- */
+var DLGCB = null;
+function showDlg(o){
+  qs('cdlgT').textContent = o.title || '';
+  qs('cdlgM').innerHTML = o.msg || '';
+  var inp = qs('cdlgIn');
+  if (o.input !== undefined && o.input !== null) {
+    inp.style.display = 'block';
+    inp.value = String(o.input);
+  } else {
+    inp.style.display = 'none';
+    inp.value = '';
+  }
+  qs('cdlgOk').textContent = o.ok || '확인';
+  var no = qs('cdlgNo');
+  if (o.no) { no.style.display = 'block'; no.textContent = o.no; }
+  else { no.style.display = 'none'; }
+  DLGCB = o.cb || null;
+  qs('cdlg').classList.add('show');
+  if (o.input !== undefined && o.input !== null) {
+    setTimeout(function(){ inp.focus(); inp.select(); }, 120);
+  }
+}
+function dlgDone(which){
+  var cb = DLGCB;
+  DLGCB = null;
+  var val = qs('cdlgIn').value;
+  qs('cdlg').classList.remove('show');
+  if (cb) cb(which, val);
+}
+qs('cdlgOk').addEventListener('click', function(){ dlgDone('ok'); });
+qs('cdlgNo').addEventListener('click', function(){ dlgDone('no'); });
+qs('cdlg').addEventListener('click', function(e){ if (e.target === this) dlgDone(null); });
+qs('cdlgIn').addEventListener('keydown', function(e){ if (e.key === 'Enter') dlgDone('ok'); });
+
 function renderGoals(d){
   var list = d.goals || [];
   if (!list.length) { qs('goalGrid').innerHTML = '<div class="empty">목표 정보 없음</div>'; return; }
@@ -684,10 +758,17 @@ function renderGoals(d){
         var cclaimed = this.getAttribute('data-claimed') === '1';
         var cttl = this.getAttribute('data-title') || 'FP';
         if (cdone && !cclaimed && ME && cfp !== ME.id) {
-          if (confirm(cname + ' ' + cttl + '의 보너스 룰렛을 대신 돌려줄까요?\n(취소를 누르면 목표 수정으로 갑니다)')) {
-            doBonusFor(cfp, cname, cttl);
-            return;
-          }
+          showDlg({
+            title: '🌟 보너스 룰렛',
+            msg: '<b>' + esc(cname) + ' ' + esc(cttl) + '</b>이 개인 목표를 달성했어요!<br>어떻게 할까요?',
+            ok: '🎡 대신 돌려주기',
+            no: '✏️ 목표 수정',
+            cb: function(w){
+              if (w === 'ok') doBonusFor(cfp, cname, cttl);
+              else if (w === 'no') editTarget(cfp, cname, ctgt);
+            }
+          });
+          return;
         }
         editTarget(cfp, cname, ctgt);
       });
@@ -729,18 +810,26 @@ function doBonusFor(fp, name, title){
 
 function editTarget(fp, name, curWon){
   var cur = Math.round(curWon / 10000);
-  var v = prompt(name + ' 목표 금액을 입력하세요 (만원)', cur);
-  if (v === null) return;
-  var n = parseInt(String(v).replace(/[^0-9]/g, ''), 10);
-  if (isNaN(n) || n <= 0) { showToast('⚠️ 숫자로 입력해주세요 (만원)'); return; }
-  fetch(GAS_URL + '?action=huntSetTarget&fp=' + encodeURIComponent(ME.id) + '&target=' + encodeURIComponent(fp) + '&value=' + (n * 10000))
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      if (!d.ok) { showToast('⚠️ ' + (d.msg || '변경 실패')); return; }
-      showToast('✏️ ' + name + ' 목표 → ' + n + '만원 변경 완료');
-      loadState(false);
-    })
-    .catch(function(){ showToast('⚠️ 연결 실패'); });
+  showDlg({
+    title: '✏️ 목표 수정',
+    msg: '<b>' + esc(name) + '</b>의 목표 금액을 입력하세요 (만원)',
+    input: cur,
+    ok: '변경하기',
+    no: '취소',
+    cb: function(w, val){
+      if (w !== 'ok') return;
+      var n = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
+      if (isNaN(n) || n <= 0) { showToast('⚠️ 숫자로 입력해주세요 (만원)'); return; }
+      fetch(GAS_URL + '?action=huntSetTarget&fp=' + encodeURIComponent(ME.id) + '&target=' + encodeURIComponent(fp) + '&value=' + (n * 10000))
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (!d.ok) { showToast('⚠️ ' + (d.msg || '변경 실패')); return; }
+          showToast('✏️ ' + name + ' 목표 → ' + n + '만원 변경 완료');
+          loadState(false);
+        })
+        .catch(function(){ showToast('⚠️ 연결 실패'); });
+    }
+  });
 }
 
 function renderToday(d){
@@ -945,7 +1034,7 @@ function milestoneFx(stepNo){
   void qs('phone').offsetWidth;
   qs('phone').classList.add('shake');
   snowFall();
-  showToast('❄️ 50만 사냥 성공! 룰렛 1회 획득 🎡');
+  showToast('❄️ 50만 사냥 성공! 온도 5°C 하강, 룰렛 1회 획득 🎡');
 }
 
 function showToast(msg){
@@ -1022,7 +1111,7 @@ function shareKakao(){
   var rem = man(s.remain || 0);
   var cum = man(parseInt(s.totalCum, 10) || 0);
   var pct = Math.min(100, Math.round((parseInt(s.totalCum, 10) || 0) / 10000000 * 100));
-  var desc = '🔥 현재 업적 ' + cum.toLocaleString() + '만 · 잔여 ' + rem + '만 (' + pct + '%)';
+  var desc = '🌡️ ' + (rem / 10).toFixed(1) + '°C · 업적 ' + cum.toLocaleString() + '만 · 잔여 ' + rem + '만 (' + pct + '%)';
   var recent = s.recent || [];
   if (recent.length) {
     var parts = [];
