@@ -195,6 +195,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
     <input type="text" id="fpInput" placeholder="예시) H2502965" autocomplete="off">
     <button id="loginBtn">입장하기 🔥</button>
     <div class="lerr" id="lerr"></div>
+    <button id="extBtn" style="display:none; width:100%; margin-top:6px; padding:11px; font-size:13px; font-weight:800; color:#555; background:#f1eee8; border:none; border-radius:12px; cursor:pointer; font-family:inherit;">⚡ 카톡에서 안 열리면? 크롬·사파리로 열기</button>
   </div>
 </div>
 
@@ -387,12 +388,57 @@ function man(v){ return Math.round((parseInt(v,10)||0)/10000); }
 function fpLbl(name, title){ return String(name || '') + ' ' + String(title || 'FP'); }
 
 /* ---------- login ---------- */
+function fetchTimeout(url, ms){
+  return new Promise(function(resolve, reject){
+    var done = false;
+    var t = setTimeout(function(){ if (!done) { done = true; reject(new Error('timeout')); } }, ms);
+    fetch(url)
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (done) return; done = true; clearTimeout(t); resolve(d); })
+      .catch(function(e){ if (done) return; done = true; clearTimeout(t); reject(e); });
+  });
+}
+
+var JSONP_SEQ = 0;
+function jsonpGet(url, ms){
+  return new Promise(function(resolve, reject){
+    var name = '__hunt_cb' + (++JSONP_SEQ) + '_' + new Date().getTime();
+    var done = false;
+    var s = document.createElement('script');
+    var t = setTimeout(function(){ finish(); reject(new Error('timeout')); }, ms || 15000);
+    function finish(){
+      if (done) return true;
+      done = true;
+      clearTimeout(t);
+      try { window[name] = undefined; } catch(e) {}
+      if (s.parentNode) s.parentNode.removeChild(s);
+      return false;
+    }
+    window[name] = function(data){ if (done) return; finish(); resolve(data); };
+    s.onerror = function(){ if (done) return; finish(); reject(new Error('jsonp error')); };
+    s.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + name;
+    document.body.appendChild(s);
+  });
+}
+
+function gasGet(url, ms){
+  if (IS_KAKAO_INAPP) return jsonpGet(url, ms || 15000);
+  return fetchTimeout(url, ms || 15000).catch(function(){ return jsonpGet(url, ms || 15000); });
+}
+
+var IS_KAKAO_INAPP = (navigator.userAgent || '').indexOf('KAKAOTALK') >= 0;
+if (IS_KAKAO_INAPP) {
+  qs('extBtn').style.display = 'block';
+}
+qs('extBtn').addEventListener('click', function(){
+  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent('https://unice-vip.co.kr/hunt/');
+});
+
 function tryLogin(){
   var code = qs('fpInput').value.replace(/\s/g,'');
   if (!code) { qs('lerr').textContent = '사번을 입력해주세요'; return; }
   qs('lerr').textContent = '확인 중...';
-  fetch(GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(code))
-    .then(function(r){ return r.json(); })
+  gasGet(GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(code), 15000)
     .then(function(d){
       if (!d.ok) { qs('lerr').textContent = d.msg || '등록되지 않은 사번입니다'; return; }
       ME = d;
@@ -400,7 +446,12 @@ function tryLogin(){
       qs('login').style.display = 'none';
       startApp();
     })
-    .catch(function(){ qs('lerr').textContent = '연결 실패. 잠시 후 다시 시도해주세요'; });
+    .catch(function(){
+      qs('lerr').textContent = IS_KAKAO_INAPP
+        ? '연결이 느려요 ㅠㅠ 아래 버튼으로 크롬·사파리에서 열어주세요!'
+        : '연결이 느려요. 잠시 후 한 번 더 눌러주세요';
+      qs('extBtn').style.display = 'block';
+    });
 }
 qs('loginBtn').addEventListener('click', tryLogin);
 qs('fpInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') tryLogin(); });
@@ -409,8 +460,7 @@ qs('fpInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') tr
   var saved = '';
   try { saved = localStorage.getItem('hunt_fp') || ''; } catch(e) {}
   if (saved) {
-    fetch(GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(saved))
-      .then(function(r){ return r.json(); })
+    gasGet(GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(saved))
       .then(function(d){
         if (d.ok) { ME = d; qs('login').style.display = 'none'; startApp(); }
       })
@@ -436,8 +486,7 @@ function buildDday(){
 
 function loadState(first){
   var url = GAS_URL + '?action=huntState&fp=' + encodeURIComponent(ME ? ME.id : '');
-  fetch(url)
-    .then(function(r){ return r.json(); })
+  gasGet(url)
     .then(function(d){
       if (!d.ok) return;
       var prev = STATE;
@@ -639,8 +688,7 @@ function doLuckyDraw(){
   if (b) { b.disabled = true; b.textContent = '⏳ 추첨 준비 중...'; }
   openModal('오늘의 출근 럭키는?', '오늘 출근 도장 찍은 FP만 후보!', '☀️');
   wheelLoading();
-  fetch(GAS_URL + '?action=huntLuckyDraw&fp=' + encodeURIComponent(ME.id))
-    .then(function(r){ return r.json(); })
+  gasGet(GAS_URL + '?action=huntLuckyDraw&fp=' + encodeURIComponent(ME.id))
     .then(function(d){
       if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '추첨 실패')); return; }
       var names = d.candidates || [];
@@ -671,8 +719,7 @@ function doLuckySpin(){
   if (b) { b.disabled = true; b.textContent = '⏳ 룰렛 준비 중...'; }
   openModal('☀️ ' + winName + '의 럭키!', '오늘 출근의 행운 · 단독 지급 · 꽝은 없어요', '🍀');
   wheelLoading();
-  fetch(GAS_URL + '?action=huntSpin&fp=' + encodeURIComponent(ME.id) + '&id=' + encodeURIComponent(pid))
-    .then(function(r){ return r.json(); })
+  gasGet(GAS_URL + '?action=huntSpin&fp=' + encodeURIComponent(ME.id) + '&id=' + encodeURIComponent(pid))
     .then(function(d){
       if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '룰렛 실패')); return; }
       qs('msub').textContent = '두구두구두구...';
@@ -789,8 +836,7 @@ function doBonusFor(fp, name, title){
   var lbl = fpLbl(name, title);
   openModal('🌟 ' + lbl + ' 보너스 룰렛!', '개인 목표 달성 · ' + lbl + ' 단독 지급', '🌟');
   wheelLoading();
-  fetch(GAS_URL + '?action=huntBonus&fp=' + encodeURIComponent(ME.id) + '&target=' + encodeURIComponent(fp))
-    .then(function(r){ return r.json(); })
+  gasGet(GAS_URL + '?action=huntBonus&fp=' + encodeURIComponent(ME.id) + '&target=' + encodeURIComponent(fp))
     .then(function(d){
       if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '보너스 룰렛 실패')); return; }
       qs('msub').textContent = '두구두구두구...';
@@ -820,8 +866,7 @@ function editTarget(fp, name, curWon){
       if (w !== 'ok') return;
       var n = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
       if (isNaN(n) || n <= 0) { showToast('⚠️ 숫자로 입력해주세요 (만원)'); return; }
-      fetch(GAS_URL + '?action=huntSetTarget&fp=' + encodeURIComponent(ME.id) + '&target=' + encodeURIComponent(fp) + '&value=' + (n * 10000))
-        .then(function(r){ return r.json(); })
+      gasGet(GAS_URL + '?action=huntSetTarget&fp=' + encodeURIComponent(ME.id) + '&target=' + encodeURIComponent(fp) + '&value=' + (n * 10000))
         .then(function(d){
           if (!d.ok) { showToast('⚠️ ' + (d.msg || '변경 실패')); return; }
           showToast('✏️ ' + name + ' 목표 → ' + n + '만원 변경 완료');
@@ -946,8 +991,7 @@ function doDraw(){
   if (b) { b.disabled = true; b.textContent = '⏳ 추첨 준비 중...'; }
   openModal('룰렛 돌릴 사람 뽑는 중...', '오늘 출근한 브라보 FP 전원이 후보!', '🎲');
   wheelLoading();
-  fetch(GAS_URL + '?action=huntDraw&fp=' + encodeURIComponent(ME.id))
-    .then(function(r){ return r.json(); })
+  gasGet(GAS_URL + '?action=huntDraw&fp=' + encodeURIComponent(ME.id))
     .then(function(d){
       if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '추첨 실패')); return; }
       var names = d.candidates || [];
@@ -979,8 +1023,7 @@ function doSpin(isProxy){
   if (b) { b.disabled = true; b.textContent = '⏳ 룰렛 준비 중...'; }
   openModal(winName + '가 돌립니다!', '상품은 구간 기여자 + 오늘 출근 FP에게! 꽝은 없어요', '🎁');
   wheelLoading();
-  fetch(GAS_URL + '?action=huntSpin&fp=' + encodeURIComponent(ME.id) + '&id=' + encodeURIComponent(pid))
-    .then(function(r){ return r.json(); })
+  gasGet(GAS_URL + '?action=huntSpin&fp=' + encodeURIComponent(ME.id) + '&id=' + encodeURIComponent(pid))
     .then(function(d){
       if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '룰렛 실패')); return; }
       qs('msub').textContent = '두구두구두구...';
@@ -1009,8 +1052,7 @@ function doBonus(){
   var meLbl = fpLbl(ME.name, ME.title);
   openModal('🌟 개인 목표 달성 보너스!', meLbl + '님만을 위한 단독 룰렛', '🌟');
   wheelLoading();
-  fetch(GAS_URL + '?action=huntBonus&fp=' + encodeURIComponent(ME.id))
-    .then(function(r){ return r.json(); })
+  gasGet(GAS_URL + '?action=huntBonus&fp=' + encodeURIComponent(ME.id))
     .then(function(d){
       if (!d.ok) { wheelBusy = false; closeModal(); showToast('⚠️ ' + (d.msg || '보너스 룰렛 실패')); return; }
       qs('msub').textContent = '두구두구두구...';
