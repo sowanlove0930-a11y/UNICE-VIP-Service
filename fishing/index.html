@@ -108,7 +108,11 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 
 /* prize legend */
 .prow { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#333; padding:2.5px 0; }
-.prow .fe { width:34px; text-align:center; }
+.prow .fe { width:46px; text-align:center; }
+.pfish { display:inline-block; animation:pswim 3.2s ease-in-out infinite; transform-origin:50% 60%; vertical-align:middle; }
+@keyframes pswim { 0%,100%{transform:rotate(-6deg) translateY(0)} 50%{transform:rotate(6deg) translateY(-4px)} }
+.pfish.pbig { animation:pbigswim 2.4s ease-in-out infinite; filter:drop-shadow(0 0 9px rgba(255,200,60,.85)); }
+@keyframes pbigswim { 0%,100%{transform:rotate(-5deg) scale(1)} 50%{transform:rotate(6deg) scale(1.1) translateY(-5px)} }
 .prow .pn { flex:1; }
 .prow .pv { color:#d85a30; }
 .prow.big { font-size:12.5px; font-weight:900; color:#a5691f; background:linear-gradient(135deg,#fff3d0,#ffe6a0); border-radius:10px; padding:5px 8px; }
@@ -193,7 +197,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
         <div id="bAction"></div>
       </div>
     </div>
-    <div class="b-note">🌟 월척타임 = 지점장이 낚고, 경품은 그 지점 <u>전원</u>에게!</div>
+    <div class="b-note">🌟 월척타임 = 지점장이 낚고, 경품은 <u>구간 기여자 + 당일 출근 FP</u>에게!</div>
   </div>
 
   <div class="card dark">
@@ -210,7 +214,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
       <div style="text-align:right; font-size:10.5px; font-weight:800; color:#7a9ab0;" id="myNext">다음 찌까지 -만원</div>
     </div>
     <div class="scene" id="scene">
-      <img class="bgimg" src="/fishing/img/fish-bg.jpg" alt="" onerror="this.style.display='none'">
+      <video class="bgimg" id="seqVid" src="/fishing/img/cast.mp4" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline></video>
       <div class="nametag" id="nametag" style="left:5%; top:7%;">🎣 <span id="anglerName">낚시꾼</span></div>
       <svg style="position:absolute; inset:0; pointer-events:none; z-index:2;" width="100%" height="100%"><path id="line" d="" stroke="rgba(255,255,255,.9)" stroke-width="1.4" fill="none"/></svg>
       <div class="bobber" id="bobber"><div class="bt"></div><div class="bb"></div></div>
@@ -230,10 +234,10 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 
   <div class="card">
     <div class="sec-t"><span>🐟 조기 크기별 경품</span><span id="bigHint" style="font-size:10px;color:#bbb;font-weight:700;"></span></div>
-    <div class="prow"><span class="fe" style="font-size:19px;">🐠</span><span class="pn">잔챙이 조기</span><span class="pv" style="color:#888;">한강라면 쿠폰 2개 🍜</span></div>
-    <div class="prow"><span class="fe" style="font-size:23px;">🐟</span><span class="pn">소(小)조기</span><span class="pv">핑크소금 🧂</span></div>
-    <div class="prow"><span class="fe" style="font-size:27px;">🐟</span><span class="pn">중(中)조기</span><span class="pv">서큘레이터 🌀</span></div>
-    <div class="prow big" id="bigRow"><span class="fe" style="font-size:31px;">🐡</span><span class="pn">대(大)조기 <span style="font-size:9.5px;color:#c09040;">희귀!</span></span><span>서서갈비세트 🥩</span></div>
+    <div class="prow"><span class="fe"><img src="/fishing/img/fish-1.png" class="pfish" style="width:40px;" alt=""></span><span class="pn">잔챙이 조기</span><span class="pv" style="color:#888;">한강라면 쿠폰 2개 🍜</span></div>
+    <div class="prow"><span class="fe"><img src="/fishing/img/fish-2.png" class="pfish" style="height:40px;animation-delay:.4s;" alt=""></span><span class="pn">소(小)조기</span><span class="pv">핑크소금 🧂</span></div>
+    <div class="prow"><span class="fe"><img src="/fishing/img/fish-3.png" class="pfish" style="height:48px;animation-delay:.8s;" alt=""></span><span class="pn">중(中)조기</span><span class="pv">서큘레이터 🌀</span></div>
+    <div class="prow big" id="bigRow"><span class="fe"><img src="/fishing/img/fish-4.png" class="pfish pbig" style="height:58px;" alt=""></span><span class="pn">대(大)조기 <span style="font-size:9.5px;color:#c09040;">희귀!</span></span><span>서서갈비세트 🥩</span></div>
   </div>
 
   <div class="card">
@@ -430,7 +434,8 @@ function feedHtml(f){
     return '🪝 <b>' + esc(fpLbl(f.name, f.title)) + '</b> +' + man(f.amt) + '만 입력!';
   }
   if (f.type === 'mulcheok') {
-    return '🌟 <b>' + esc(f.branch) + ' 월척!</b> ' + esc(f.fishName) + ' → ' + esc(f.prize) + ' <b>' + esc(f.branch) + ' 전원</b> 🎁';
+    var rc = f.rcount || 0;
+    return '🌟 <b>' + esc(f.branch) + ' 월척!</b> ' + esc(f.fishName) + ' → ' + esc(f.prize) + ' <b>' + (rc > 0 ? rc + '명 지급' : '전원') + '</b> 🎁';
   }
   var big = f.tier === 3;
   return (big ? '🐡' : '🎣') + ' <b>' + esc(fpLbl(f.name, f.title)) + '</b> ' + esc(f.fishName) + ' 낚음! → ' + esc(f.prize);
@@ -458,7 +463,7 @@ function renderFeed(d, prev){
       var f = list[i];
       if (f.ep <= lastFeedEp) continue;
       if (f.type === 'mulcheok') {
-        showToast('🌟 ' + f.branch + ' 월척! ' + f.prize + ' 전원 지급 🎁');
+        showToast('🌟 ' + f.branch + ' 월척! ' + f.prize + ' ' + ((f.rcount || 0) > 0 ? f.rcount + '명 지급' : '지급') + ' 🎁');
         fireConfetti();
       } else if (f.type === 'catch' && f.tier === 3) {
         showToast('🐡 ' + f.name + ' 대조기!! ' + f.prize);
@@ -538,13 +543,97 @@ function sceneW(){ return scene.clientWidth || 336; }
 function sceneH(){ return scene.clientHeight || 225; }
 function imgPt(nx, ny){
   var W = sceneW(), H = sceneH();
-  var iw = 1000, ih = 670;
+  var iw = 960, ih = 536;
   var sc = Math.max(W / iw, H / ih);
   var dw = iw * sc, dh = ih * sc;
   return { x: Math.round((W - dw) / 2 + nx * dw), y: Math.round((H - dh) / 2 + ny * dh) };
 }
-function tipPt(){ return imgPt(0.662, 0.055); }
-function waterPt(){ return imgPt(0.78, 0.64); }
+function tipPt(){ return imgPt(0.60, 0.12); }
+function waterPt(){ return imgPt(0.78, 0.62); }
+
+/* ---------- video sequence ---------- */
+var VID = qs('seqVid');
+var VIDEO_OK = false;
+if (VID) {
+  VID.addEventListener('loadeddata', function(){ VIDEO_OK = true; });
+  VID.addEventListener('error', function(){ VIDEO_OK = false; });
+}
+var CAST_SRC = '/fishing/img/cast.mp4';
+var RESULT_SRC = ['/fishing/img/fish-r1.mp4', '/fishing/img/fish-r2.mp4', '/fishing/img/fish-r3.mp4', '/fishing/img/fish-r4.mp4'];
+var PRELOADED = {};
+function preloadClip(u){
+  if (PRELOADED[u]) return;
+  PRELOADED[u] = true;
+  var v = document.createElement('video');
+  v.preload = 'auto';
+  v.muted = true;
+  v.src = u;
+  v.style.display = 'none';
+  document.body.appendChild(v);
+}
+function vidReset(){
+  try { VID.pause(); } catch(e) {}
+  VID.onended = null;
+  VID.muted = true;
+  VID.src = CAST_SRC;
+  try { VID.load(); } catch(e) {}
+}
+function runFishingVideo(serverPromise, onDone, onFail){
+  var result = null, castEnded = false, finished = false, delegated = false;
+  qs('myres').classList.remove('show');
+  fishE.style.display = 'none';
+  fishE.classList.remove('landed');
+  smsg.textContent = '';
+  function fail(msg){
+    if (finished || delegated) return;
+    finished = true;
+    vidReset();
+    smsg.textContent = '';
+    if (onFail) onFail(msg);
+  }
+  function playResult(){
+    if (finished || delegated || !result) return;
+    smsg.textContent = '';
+    VID.onended = function(){
+      if (finished || delegated) return;
+      finished = true;
+      VID.onended = null;
+      if (onDone) onDone(result);
+      setTimeout(vidReset, 800);
+    };
+    VID.src = RESULT_SRC[result.tier] || RESULT_SRC[0];
+    VID.muted = false;
+    var p2 = VID.play();
+    if (p2 && p2.catch) p2.catch(function(){});
+  }
+  serverPromise.then(function(d){
+    if (delegated) return;
+    if (!d.ok) { fail(d.msg || '낚시 실패'); return; }
+    result = d;
+    preloadClip(RESULT_SRC[d.tier] || RESULT_SRC[0]);
+    if (castEnded) playResult();
+  }).catch(function(){ if (!delegated) fail('연결 실패'); });
+  VID.onended = function(){
+    castEnded = true;
+    if (result) playResult();
+    else if (!finished) smsg.textContent = '버티는 중...!! 💪';
+  };
+  VID.muted = false;
+  try { VID.currentTime = 0; } catch(e) {}
+  var pr = VID.play();
+  if (pr && pr.catch) {
+    pr.catch(function(){
+      delegated = true;
+      VID.onended = null;
+      VID.muted = true;
+      runFishing(serverPromise, onDone, onFail);
+    });
+  }
+}
+function runCatch(serverPromise, onDone, onFail){
+  if (VIDEO_OK) runFishingVideo(serverPromise, onDone, onFail);
+  else runFishing(serverPromise, onDone, onFail);
+}
 function drawLine(bx, by){
   var T = tipPt();
   lineEl.setAttribute('d', 'M' + T.x + ' ' + T.y + ' Q ' + Math.round((T.x + bx) / 2) + ' ' + (Math.min(T.y, by) - 24) + ' ' + bx + ' ' + by);
@@ -701,9 +790,9 @@ qs('castBtn').addEventListener('click', function(){
   qs('anglerName').textContent = fpLbl(ME.name, ME.title);
   var btn = qs('castBtn');
   btn.disabled = true;
-  btn.textContent = '휙~! 🎣';
+  btn.textContent = '낚시 중... 🎣';
   var sp = gasGet(GAS_URL + '?action=fishCast&fp=' + encodeURIComponent(ME.id));
-  runFishing(sp, function(d){
+  runCatch(sp, function(d){
     var big = d.tier === 3;
     qs('crT').textContent = big ? '🎉 대박!! 희귀 대(大)조기!!' : '🎣 잡았다!';
     qs('crB').textContent = (FISH_UI[d.tier] || FISH_UI[0]).e + ' ' + d.fishName;
@@ -724,7 +813,7 @@ function doMulcheok(branch){
   if (castBusy) return;
   showDlg({
     title: '🌟 ' + branch + ' 월척타임!',
-    msg: '<b>' + esc(branch) + ' 지점 전원</b>에게 갈 경품을 낚습니다.<br>지점장님, 출격하시겠어요?',
+    msg: '<b>' + esc(branch) + ' 구간 기여자 + 오늘 출근 FP</b>에게 갈 경품을 낚습니다.<br>지점장님, 출격하시겠어요?',
     ok: '🎣 월척 낚시 시작',
     no: '나중에',
     cb: function(w){
@@ -733,10 +822,10 @@ function doMulcheok(branch){
       qs('anglerName').textContent = '🌟 ' + (MGR_LABEL[branch] || branch + ' 지점장');
       var sp = gasGet(GAS_URL + '?action=fishMulcheok&fp=' + encodeURIComponent(ME.id) + '&branch=' + encodeURIComponent(branch));
       window.scrollTo({ top: qs('scene').offsetTop - 80, behavior: 'smooth' });
-      runFishing(sp, function(d){
-        qs('crT').textContent = '🌟 ' + branch + ' 월척!!';
-        qs('crB').textContent = (FISH_UI[d.tier] || FISH_UI[0]).e + ' ' + d.fishName;
-        qs('crS').textContent = d.prize + ' → ' + branch + ' 전원 지급 🎁 (기록 완료)';
+      runCatch(sp, function(d){
+        qs('crT').textContent = '🌟 ' + branch + ' 월척!! 지급 대상 ' + (d.count || 0) + '명';
+        qs('crB').textContent = d.fishName;
+        qs('crS').textContent = d.prize + ' · ' + ((d.recipients && d.recipients.length) ? d.recipients.join(', ') : '기록 완료') + ' 🎁';
         qs('myres').classList.add('show');
         fireConfetti();
         castBusy = false;
