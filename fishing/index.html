@@ -69,6 +69,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .scene { height:225px; border-radius:18px; position:relative; overflow:hidden; border:1.5px solid rgba(255,255,255,.4);
   background:linear-gradient(180deg,#ffd9a8 0%,#8fd0f0 22%,#2e8fc7 45%,#0d5a94 100%); }
 .scene .bgimg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; }
+.scene .vlayer { transition:opacity .35s ease; }
 .nametag { position:absolute; z-index:8; background:rgba(255,255,255,.95); border-radius:100px; padding:5px 12px; font-size:12px; font-weight:900; color:#0b5a8c; box-shadow:0 4px 12px rgba(0,40,80,.3); white-space:nowrap; }
 .nametag:after { content:''; position:absolute; bottom:-6px; left:22px; border:6px solid transparent; border-top-color:rgba(255,255,255,.95); border-bottom:0; }
 .fishimg { position:absolute; display:none; z-index:7; filter:drop-shadow(0 5px 9px rgba(0,30,60,.45)); }
@@ -214,7 +215,8 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
       <div style="text-align:right; font-size:10.5px; font-weight:800; color:#7a9ab0;" id="myNext">다음 찌까지 -만원</div>
     </div>
     <div class="scene" id="scene">
-      <video class="bgimg" id="seqVid" src="/fishing/img/cast.mp4" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline></video>
+      <video class="bgimg vlayer" id="seqVid" src="/fishing/img/cast.mp4" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline></video>
+      <video class="bgimg vlayer" id="seqVid2" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline style="opacity:0;"></video>
       <div class="nametag" id="nametag" style="left:5%; top:7%;">🎣 <span id="anglerName">낚시꾼</span></div>
       <svg style="position:absolute; inset:0; pointer-events:none; z-index:2;" width="100%" height="100%"><path id="line" d="" stroke="rgba(255,255,255,.9)" stroke-width="1.4" fill="none"/></svg>
       <div class="bobber" id="bobber"><div class="bt"></div><div class="bb"></div></div>
@@ -553,6 +555,7 @@ function waterPt(){ return imgPt(0.78, 0.62); }
 
 /* ---------- video sequence ---------- */
 var VID = qs('seqVid');
+var VID2 = qs('seqVid2');
 var VIDEO_OK = false;
 if (VID) {
   VID.addEventListener('loadeddata', function(){ VIDEO_OK = true; });
@@ -573,10 +576,16 @@ function preloadClip(u){
 }
 function vidReset(){
   try { VID.pause(); } catch(e) {}
+  try { VID2.pause(); } catch(e) {}
   VID.onended = null;
+  VID2.onended = null;
   VID.muted = true;
+  VID2.muted = true;
+  VID2.style.opacity = '0';
+  VID.style.opacity = '1';
   VID.src = CAST_SRC;
   try { VID.load(); } catch(e) {}
+  try { VID2.removeAttribute('src'); VID2.load(); } catch(e) {}
 }
 function runFishingVideo(serverPromise, onDone, onFail){
   var result = null, castEnded = false, finished = false, delegated = false;
@@ -594,17 +603,20 @@ function runFishingVideo(serverPromise, onDone, onFail){
   function playResult(){
     if (finished || delegated || !result) return;
     smsg.textContent = '';
-    VID.onended = function(){
+    VID2.onended = function(){
       if (finished || delegated) return;
       finished = true;
-      VID.onended = null;
+      VID2.onended = null;
       if (onDone) onDone(result);
-      setTimeout(vidReset, 800);
+      setTimeout(vidReset, 900);
     };
-    VID.src = RESULT_SRC[result.tier] || RESULT_SRC[0];
-    VID.muted = false;
-    var p2 = VID.play();
+    VID2.src = RESULT_SRC[result.tier] || RESULT_SRC[0];
+    VID2.muted = false;
+    VID.muted = true;
+    var p2 = VID2.play();
     if (p2 && p2.catch) p2.catch(function(){});
+    VID2.style.opacity = '1';
+    setTimeout(function(){ try { VID.pause(); } catch(e) {} }, 400);
   }
   serverPromise.then(function(d){
     if (delegated) return;
@@ -618,6 +630,8 @@ function runFishingVideo(serverPromise, onDone, onFail){
     if (result) playResult();
     else if (!finished) smsg.textContent = '버티는 중...!! 💪';
   };
+  VID2.style.opacity = '0';
+  VID.style.opacity = '1';
   VID.muted = false;
   try { VID.currentTime = 0; } catch(e) {}
   var pr = VID.play();
