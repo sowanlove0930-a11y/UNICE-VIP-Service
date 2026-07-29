@@ -11516,46 +11516,64 @@ function _perfBrAbbr(b){
   if (s.indexOf('브라보')>=0 || s==='bravo') return '브';
   return '';
 }
+// 지점별 이번달 보장월초 합계(원)
+function _perfBranchAmts(){
+  var o = { alpha:0, bravo:0 };
+  try{
+    var n = new Date();
+    var ym = n.getFullYear() + '-' + ('0'+(n.getMonth()+1)).slice(-2);
+    var log = (typeof getPerfLog==='function') ? getPerfLog() : [];
+    for (var i=0;i<log.length;i++){
+      var r = log[i];
+      if (!r) continue;
+      if (String(r.date||'').indexOf(ym) !== 0) continue;
+      var br = String(r.branch||'');
+      var amt = parseInt(r.total)||0;
+      if (br.indexOf('알파') >= 0) o.alpha += amt;
+      else if (br.indexOf('브라보') >= 0) o.bravo += amt;
+    }
+  }catch(e){}
+  return o;
+}
+// [지점별 목표달성 현황] 블록 (만원 단위)
+function _perfBranchGoalBlock(){
+  var amts = _perfBranchAmts();
+  var goals = (typeof getBranchMonthGoals==='function') ? getBranchMonthGoals() : { alpha:0, bravo:0 };
+  var rows = [
+    { nm:'알파',   amt:Math.round((amts.alpha||0)/10000), goal:parseInt(goals.alpha)||0 },
+    { nm:'브라보', amt:Math.round((amts.bravo||0)/10000), goal:parseInt(goals.bravo)||0 }
+  ];
+  var body = '';
+  for (var i=0;i<rows.length;i++){
+    var r = rows[i];
+    if (!r.amt && !r.goal) continue;
+    var tail = '';
+    if (r.goal > 0){
+      var rem = r.goal - r.amt;
+      tail = (rem > 0) ? ('(잔여 ' + rem.toLocaleString() + '만)') : '(목표달성)';
+    }
+    body += r.nm + ' ' + r.amt.toLocaleString() + '만' + tail + '\n';
+  }
+  if (!body) return '';
+  return '\n[지점별 목표달성 현황]\n' + body;
+}
 function _perfShareText(){
   var now = new Date();
   var mm = now.getMonth()+1, dd = now.getDate();
-  var hh = ('0'+now.getHours()).slice(-2), mi = ('0'+now.getMinutes()).slice(-2);
-  var out = '*업적 현황 공유(' + mm + '/' + dd + ' ' + hh + ':' + mi + ')\n';
+  var hh = now.getHours(), mi = ('0'+now.getMinutes()).slice(-2);
+  var out = '*업적 현황 공유(' + mm + '/' + dd + '일 ' + hh + ':' + mi + ' 기준)\n';
+
+  // 지점별 목표달성 현황
+  out += _perfBranchGoalBlock();
 
   // 보장월초 TOP5
   var boj = (_dashBundle && _dashBundle.bojangTop) ? _dashBundle.bojangTop
     : Object.entries(perfData).map(function(e){ return { name:e[0], branch:e[1].branch, amt:e[1].amt }; }).sort(function(a,b){ return b.amt-a.amt; }).slice(0,5);
-  out += '\n[보장월초 TOP 5]\n';
-  for (var i=0;i<boj.length;i++){
-    var b0 = boj[i];
-    out += (i+1) + '. ' + b0.name + ' ' + (parseInt(b0.amt)||0).toLocaleString() + '원(' + _perfBrAbbr(b0.branch) + ')\n';
-  }
-
-  // Unicorn Club tiers (from dedicated rows if loaded, else from top list)
-  var ucSrc = (_unicornRows && _unicornRows.length) ? _unicornRows : boj;
-  var ucU = [], ucW = [], ucNear = null;
-  for (var u=0;u<ucSrc.length;u++){
-    var ua = parseInt(ucSrc[u].amt)||0;
-    if (ua >= UNICORN_MIN) ucU.push(ucSrc[u]);
-    if (ua >= WHOLIDAY_MIN) ucW.push(ucSrc[u]);
-    else if (!ucNear && ua > 0) ucNear = ucSrc[u];
-  }
-  if (ucU.length || ucW.length){
-    out += '\n[🦄 유니콘즈 클럽]\n';
-    if (ucU.length){
-      out += '🦄 유니콘즈클럽(100만↑)\n';
-      for (var u1=0;u1<ucU.length;u1++){
-        out += '· ' + ucU[u1].name + ' ' + (parseInt(ucU[u1].amt)||0).toLocaleString() + '원(' + _perfBrAbbr(ucU[u1].branch) + ')\n';
-      }
-    }
-    if (ucW.length){
-      out += '✈️ 워킹홀리데이(70만↑)\n';
-      for (var w1=0;w1<ucW.length;w1++){
-        out += '· ' + ucW[w1].name + ' ' + (parseInt(ucW[w1].amt)||0).toLocaleString() + '원(' + _perfBrAbbr(ucW[w1].branch) + ')\n';
-      }
-    }
-    if (ucNear){
-      out += '🔥 ' + ucNear.name + ' 워홀까지 ' + (WHOLIDAY_MIN - (parseInt(ucNear.amt)||0)).toLocaleString() + '원!\n';
+  if (boj && boj.length){
+    out += '\n[보장월초 TOP 5]\n';
+    for (var i=0;i<boj.length;i++){
+      var b0 = boj[i];
+      out += (i+1) + '. ' + b0.name + ' ' + (parseInt(b0.amt)||0).toLocaleString() + '원(' + _perfBrAbbr(b0.branch) + ')\n';
     }
   }
 
@@ -11577,7 +11595,30 @@ function _perfShareText(){
     }
   }
 
-  // 스탠다드FP 달성 현황 (4개 달성=스탠다드 달성, 그외 개수 내림차순, 1개 이상만)
+  // 유니콘즈 클럽 / 워킹홀리데이
+  var ucSrc = (_unicornRows && _unicornRows.length) ? _unicornRows : boj;
+  var ucU = [], ucW = [];
+  for (var u=0;u<ucSrc.length;u++){
+    var ua = parseInt(ucSrc[u].amt)||0;
+    if (ua >= UNICORN_MIN) ucU.push(ucSrc[u]);
+    if (ua >= WHOLIDAY_MIN) ucW.push(ucSrc[u]);
+  }
+  ucU.sort(function(x,y){ return (parseInt(y.amt)||0) - (parseInt(x.amt)||0); });
+  ucW.sort(function(x,y){ return (parseInt(y.amt)||0) - (parseInt(x.amt)||0); });
+  if (ucU.length){
+    out += '\n[유니콘즈 클럽] 100만↑\n';
+    for (var u1=0;u1<ucU.length;u1++){
+      out += (u1+1) + '. ' + ucU[u1].name + ' ' + (parseInt(ucU[u1].amt)||0).toLocaleString() + '원(' + _perfBrAbbr(ucU[u1].branch) + ')\n';
+    }
+  }
+  if (ucW.length){
+    out += '\n[워킹홀리데이] 70만↑\n';
+    for (var w1=0;w1<ucW.length;w1++){
+      out += (w1+1) + '. ' + ucW[w1].name + ' ' + (parseInt(ucW[w1].amt)||0).toLocaleString() + '원(' + _perfBrAbbr(ucW[w1].branch) + ')\n';
+    }
+  }
+
+  // 스탠다드FP 달성 현황 (4개 달성=스탠다드 달성, 그외 개수 내림차순, 3개 이상만)
   var std = (typeof _stdFpCompute==='function') ? _stdFpCompute() : [];
   if (std && std.length){
     var ranked = std.filter(function(s){ return s.cnt>=3; }).sort(function(x,y){ return y.cnt - x.cnt; });
