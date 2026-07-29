@@ -66,6 +66,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .scene { height:225px; border-radius:18px; position:relative; overflow:hidden; border:1.5px solid rgba(255,255,255,.4);
   background:linear-gradient(180deg,#ffd9a8 0%,#8fd0f0 22%,#2e8fc7 45%,#0d5a94 100%); }
 .scene .bgimg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; }
+.scene .vlayer { transition:opacity .35s ease; }
 .nametag { position:absolute; z-index:8; background:rgba(255,255,255,.95); border-radius:100px; padding:5px 12px; font-size:12px; font-weight:900; color:#0b5a8c; box-shadow:0 4px 12px rgba(0,40,80,.3); white-space:nowrap; }
 .nametag:after { content:''; position:absolute; bottom:-6px; left:22px; border:6px solid transparent; border-top-color:rgba(255,255,255,.95); border-bottom:0; }
 .fishimg { position:absolute; display:none; z-index:7; filter:drop-shadow(0 5px 9px rgba(0,30,60,.45)); }
@@ -178,7 +179,8 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
       <div style="text-align:right; font-size:10.5px; font-weight:800; color:#7a9ab0;">본 게임에선 10만원당 1개!</div>
     </div>
     <div class="scene" id="scene">
-      <video class="bgimg" id="seqVid" src="/fishing/img/cast.mp4" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline></video>
+      <video class="bgimg vlayer" id="seqVid" src="/fishing/img/cast.mp4" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline></video>
+      <video class="bgimg vlayer" id="seqVid2" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline style="opacity:0;"></video>
       <div class="nametag" id="nametag" style="left:5%; top:7%;">🎣 <span id="anglerName">체험 낚시꾼</span></div>
       <svg style="position:absolute; inset:0; pointer-events:none; z-index:2;" width="100%" height="100%"><path id="line" d="" stroke="rgba(255,255,255,.9)" stroke-width="1.4" fill="none"/></svg>
       <div class="bobber" id="bobber"><div class="bt"></div><div class="bb"></div></div>
@@ -284,62 +286,6 @@ function imgPt(nx, ny){
 }
 function tipPt(){ return imgPt(0.60, 0.12); }
 function waterPt(){ return imgPt(0.78, 0.62); }
-
-/* ---------- video sequence ---------- */
-var VID = qs('seqVid');
-var VIDEO_OK = false;
-if (VID) {
-  VID.addEventListener('loadeddata', function(){ VIDEO_OK = true; });
-  VID.addEventListener('error', function(){ VIDEO_OK = false; });
-}
-var CAST_SRC = '/fishing/img/cast.mp4';
-var RESULT_SRC = ['/fishing/img/fish-r1.mp4', '/fishing/img/fish-r2.mp4', '/fishing/img/fish-r3.mp4', '/fishing/img/fish-r4.mp4'];
-var PRELOADED = {};
-function preloadClip(u){
-  if (PRELOADED[u]) return;
-  PRELOADED[u] = true;
-  var v = document.createElement('video');
-  v.preload = 'auto';
-  v.muted = true;
-  v.src = u;
-  v.style.display = 'none';
-  document.body.appendChild(v);
-}
-function vidReset(){
-  try { VID.pause(); } catch(e) {}
-  VID.onended = null;
-  VID.muted = true;
-  VID.src = CAST_SRC;
-  try { VID.load(); } catch(e) {}
-}
-function runFishingVideo(tier, onDone){
-  qs('myres').classList.remove('show');
-  fishE.style.display = 'none';
-  fishE.classList.remove('landed');
-  smsg.textContent = '';
-  preloadClip(RESULT_SRC[tier] || RESULT_SRC[0]);
-  VID.onended = function(){
-    VID.onended = function(){
-      VID.onended = null;
-      onDone(tier);
-      setTimeout(vidReset, 800);
-    };
-    VID.src = RESULT_SRC[tier] || RESULT_SRC[0];
-    VID.muted = false;
-    var p2 = VID.play();
-    if (p2 && p2.catch) p2.catch(function(){});
-  };
-  VID.muted = false;
-  try { VID.currentTime = 0; } catch(e) {}
-  var pr = VID.play();
-  if (pr && pr.catch) {
-    pr.catch(function(){
-      VID.onended = null;
-      VID.muted = true;
-      runFishing(onDone);
-    });
-  }
-}
 function drawLine(bx, by){
   var T = tipPt();
   lineEl.setAttribute('d', 'M' + T.x + ' ' + T.y + ' Q ' + Math.round((T.x + bx) / 2) + ' ' + (Math.min(T.y, by) - 24) + ' ' + bx + ' ' + by);
@@ -350,7 +296,6 @@ function setBob(x, y){
   bobber.style.top = (y - 9) + 'px';
   drawLine(x, y);
 }
-
 function pickTier(){
   var tot = 0, i, r;
   for (i = 0; i < FISH_UI.length; i++) tot += FISH_UI[i].wt;
@@ -359,15 +304,13 @@ function pickTier(){
   return 0;
 }
 
+/* ---------- fallback animation (no video) ---------- */
 function runFishing(onDone){
   var T = tipPt(), W = waterPt();
   qs('myres').classList.remove('show');
   fishE.style.display = 'none';
   fishE.classList.remove('landed');
   smsg.textContent = '';
-  rodTip.style.transform = 'rotate(-38deg)';
-  setTimeout(function(){ rodTip.style.transform = 'rotate(14deg)'; }, 220);
-
   bobber.style.display = 'block';
   var t0 = null, DUR = 650;
   function fly(ts){
@@ -381,7 +324,6 @@ function runFishing(onDone){
     else land();
   }
   requestAnimationFrame(fly);
-
   function land(){
     splash.textContent = '💦';
     splash.style.left = (W.x - 12) + 'px';
@@ -400,7 +342,6 @@ function runFishing(onDone){
     }, 30);
     setTimeout(function(){ splash.style.display = 'none'; }, 500);
     smsg.textContent = '기다리는 중... 🌊';
-    rodTip.style.transform = 'rotate(6deg)';
     var jig = 0;
     var iv = setInterval(function(){
       jig++;
@@ -417,14 +358,12 @@ function runFishing(onDone){
             clearInterval(iv2);
             smsg.textContent = '챔질!! ⚡';
             scene.classList.remove('shakeS'); void scene.offsetWidth; scene.classList.add('shakeS');
-            rodTip.style.transform = 'rotate(-30deg)';
             reveal();
           }
         }, 140);
       }
     }, 380);
   }
-
   function reveal(){
     var W2 = waterPt();
     var tier = pickTier();
@@ -465,11 +404,79 @@ function runFishing(onDone){
     function finish(){
       clearLine();
       splash.style.display = 'none';
-      rodTip.style.transform = 'rotate(0deg)';
       smsg.textContent = '';
       fishE.classList.add('landed');
       onDone(tier);
     }
+  }
+}
+
+/* ---------- video sequence ---------- */
+var VID = qs('seqVid');
+var VID2 = qs('seqVid2');
+var VIDEO_OK = false;
+if (VID) {
+  VID.addEventListener('loadeddata', function(){ VIDEO_OK = true; });
+  VID.addEventListener('error', function(){ VIDEO_OK = false; });
+}
+var CAST_SRC = '/fishing/img/cast.mp4';
+var RESULT_SRC = ['/fishing/img/fish-r1.mp4', '/fishing/img/fish-r2.mp4', '/fishing/img/fish-r3.mp4', '/fishing/img/fish-r4.mp4'];
+var PRELOADED = {};
+function preloadClip(u){
+  if (PRELOADED[u]) return;
+  PRELOADED[u] = true;
+  var v = document.createElement('video');
+  v.preload = 'auto';
+  v.muted = true;
+  v.src = u;
+  v.style.display = 'none';
+  document.body.appendChild(v);
+}
+function vidReset(){
+  try { VID.pause(); } catch(e) {}
+  try { VID2.pause(); } catch(e) {}
+  VID.onended = null;
+  VID2.onended = null;
+  VID.muted = true;
+  VID2.muted = true;
+  VID2.style.opacity = '0';
+  VID.style.opacity = '1';
+  VID.src = CAST_SRC;
+  try { VID.load(); } catch(e) {}
+  try { VID2.removeAttribute('src'); VID2.load(); } catch(e) {}
+}
+function runFishingVideo(tier, onDone){
+  qs('myres').classList.remove('show');
+  fishE.style.display = 'none';
+  fishE.classList.remove('landed');
+  smsg.textContent = '';
+  preloadClip(RESULT_SRC[tier] || RESULT_SRC[0]);
+  VID.onended = function(){
+    VID.onended = null;
+    VID2.onended = function(){
+      VID2.onended = null;
+      onDone(tier);
+      setTimeout(vidReset, 900);
+    };
+    VID2.src = RESULT_SRC[tier] || RESULT_SRC[0];
+    VID2.muted = false;
+    VID.muted = true;
+    var p2 = VID2.play();
+    if (p2 && p2.catch) p2.catch(function(){});
+    VID2.style.opacity = '1';
+    setTimeout(function(){ try { VID.pause(); } catch(e) {} }, 400);
+  };
+  VID2.style.opacity = '0';
+  VID.style.opacity = '1';
+  VID.muted = false;
+  try { VID.currentTime = 0; } catch(e) {}
+  var pr = VID.play();
+  if (pr && pr.catch) {
+    pr.catch(function(){
+      VID.onended = null;
+      VID.muted = true;
+      runFishing(onDone);
+    });
   }
 }
 
