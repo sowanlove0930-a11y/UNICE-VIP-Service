@@ -61,8 +61,13 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 @keyframes slidein { from{transform:translateY(-8px);opacity:0} to{transform:none;opacity:1} }
 
 /* fishing scene */
-.scene { height:205px; border-radius:18px; position:relative; overflow:hidden; border:1.5px solid rgba(255,255,255,.4);
+.scene { height:225px; border-radius:18px; position:relative; overflow:hidden; border:1.5px solid rgba(255,255,255,.4);
   background:linear-gradient(180deg,#ffd9a8 0%,#8fd0f0 22%,#2e8fc7 45%,#0d5a94 100%); }
+.scene .bgimg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; }
+.nametag { position:absolute; z-index:8; background:rgba(255,255,255,.95); border-radius:100px; padding:5px 12px; font-size:12px; font-weight:900; color:#0b5a8c; box-shadow:0 4px 12px rgba(0,40,80,.3); white-space:nowrap; }
+.nametag:after { content:''; position:absolute; bottom:-6px; left:22px; border:6px solid transparent; border-top-color:rgba(255,255,255,.95); border-bottom:0; }
+.fishimg { position:absolute; display:none; z-index:7; filter:drop-shadow(0 5px 9px rgba(0,30,60,.45)); }
+.fishimg.gold { filter:drop-shadow(0 0 12px rgba(255,215,90,.95)) drop-shadow(0 5px 9px rgba(0,30,60,.45)); }
 .angler { position:absolute; top:8px; left:10px; font-size:32px; }
 .rodtip { position:absolute; top:16px; left:42px; font-size:25px; transform-origin:10% 90%; transition:transform .28s; }
 .bobber { position:absolute; width:13px; height:19px; display:none; z-index:4; }
@@ -198,16 +203,14 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
       <div style="text-align:right; font-size:10.5px; font-weight:800; color:#7a9ab0;" id="myNext">다음 찌까지 -만원</div>
     </div>
     <div class="scene" id="scene">
-      <div class="angler">🧍‍♀️</div>
-      <div class="rodtip" id="rodTip">🎣</div>
-      <svg style="position:absolute; inset:0; pointer-events:none; z-index:2;" width="100%" height="205"><path id="line" d="" stroke="rgba(255,255,255,.8)" stroke-width="1.5" fill="none"/></svg>
+      <img class="bgimg" src="./img/fish-bg.png" alt="" onerror="this.style.display='none'">
+      <div class="nametag" id="nametag" style="left:5%; top:7%;">🎣 <span id="anglerName">낚시꾼</span></div>
+      <svg style="position:absolute; inset:0; pointer-events:none; z-index:2;" width="100%" height="100%"><path id="line" d="" stroke="rgba(255,255,255,.9)" stroke-width="1.4" fill="none"/></svg>
       <div class="bobber" id="bobber"><div class="bt"></div><div class="bb"></div></div>
       <div class="splash" id="splash">💦</div>
       <div class="ripple" id="ripple"></div>
-      <div class="fishE" id="fishE">🐟</div>
-      <div class="smsg" id="smsg">잔잔한 새벽 바다 🌅 찌를 던져보세요</div>
-      <div class="bgfish1">🐠</div>
-      <div class="bgfish2">🐟</div>
+      <img class="fishimg" id="fishImg" alt="">
+      <div class="smsg" id="smsg">잔잔한 바다 🌅 찌를 던져보세요</div>
     </div>
     <button class="btn btn-cast" id="castBtn">🎣 낚싯대 던지기 ▶</button>
     <div class="myres" id="myres">
@@ -258,8 +261,12 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 var POLL_MS = 25000;
 var FISH_UI = [
-  { e:'🐠', size:26 }, { e:'🐟', size:36 }, { e:'🐟', size:48 }, { e:'🐡', size:60 }
+  { src:'./img/fish-1.png', w:54 },
+  { src:'./img/fish-2.png', w:70 },
+  { src:'./img/fish-3.png', w:94 },
+  { src:'./img/fish-4.png', w:120 }
 ];
+var MGR_LABEL = { '알파':'전소영 지점장', '브라보':'이수아 지점장' };
 
 var ME = null;
 var STATE = null;
@@ -348,6 +355,7 @@ qs('fpInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') tr
 
 /* ---------- app ---------- */
 function startApp(){
+  if (ME) qs('anglerName').textContent = fpLbl(ME.name, ME.title);
   loadState(true);
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(function(){ if (!castBusy) loadState(false); }, POLL_MS);
@@ -515,13 +523,14 @@ function renderTop(d){
 /* ---------- fishing animation ---------- */
 var scene, rodTip, bobber, splash, ripple, fishE, smsg, lineEl;
 function sceneEls(){
-  scene = qs('scene'); rodTip = qs('rodTip'); bobber = qs('bobber'); splash = qs('splash');
-  ripple = qs('ripple'); fishE = qs('fishE'); smsg = qs('smsg'); lineEl = qs('line');
+  scene = qs('scene'); rodTip = qs('rodTip') || { style:{} }; bobber = qs('bobber'); splash = qs('splash');
+  ripple = qs('ripple'); fishE = qs('fishImg'); smsg = qs('smsg'); lineEl = qs('line');
 }
 sceneEls();
 function sceneW(){ return scene.clientWidth || 336; }
-function tipPt(){ return { x: 56, y: 26 }; }
-function waterPt(){ return { x: Math.round(sceneW() * 0.62), y: 98 }; }
+function sceneH(){ return scene.clientHeight || 225; }
+function tipPt(){ return { x: Math.round(sceneW() * 0.60), y: Math.round(sceneH() * 0.10) }; }
+function waterPt(){ return { x: Math.round(sceneW() * 0.72), y: Math.round(sceneH() * 0.62) }; }
 function drawLine(bx, by){
   var T = tipPt();
   lineEl.setAttribute('d', 'M' + T.x + ' ' + T.y + ' Q ' + Math.round((T.x + bx) / 2) + ' ' + (Math.min(T.y, by) - 24) + ' ' + bx + ' ' + by);
@@ -621,19 +630,20 @@ function runFishing(serverPromise, onDone, onFail){
     splash.style.top = (W2.y - 16) + 'px';
     splash.style.display = 'block';
     var ui = FISH_UI[result.tier] || FISH_UI[0];
-    fishE.textContent = ui.e;
-    fishE.style.fontSize = ui.size + 'px';
+    fishE.src = ui.src;
+    fishE.style.width = ui.w + 'px';
+    if (result.tier === 3) fishE.classList.add('gold'); else fishE.classList.remove('gold');
     fishE.style.display = 'block';
     var t1 = null, DUR2 = 800;
-    var startY = W2.y, peakY = 40, endX = Math.round(sceneW() * 0.32), endY = 72;
+    var startY = W2.y, peakY = Math.round(sceneH() * 0.16), endX = Math.round(sceneW() * 0.38), endY = Math.round(sceneH() * 0.40);
     function jump(ts){
       if (!t1) t1 = ts;
       var p = Math.min(1, (ts - t1) / DUR2);
       var x = W2.x + (endX - W2.x) * p;
       var arc = (startY - peakY) * 4 * p * (1 - p);
       var y = startY - arc - (startY - endY) * p;
-      fishE.style.left = (x - ui.size / 2) + 'px';
-      fishE.style.top = (y - ui.size / 2) + 'px';
+      fishE.style.left = (x - ui.w / 2) + 'px';
+      fishE.style.top = (y - ui.w / 2) + 'px';
       fishE.style.transform = 'rotate(' + (p * 300) + 'deg)';
       if (p < 1) requestAnimationFrame(jump);
       else finish();
@@ -663,6 +673,7 @@ qs('castBtn').addEventListener('click', function(){
   if (castBusy || !STATE) return;
   if (STATE.myQueue <= 0) return;
   castBusy = true;
+  qs('anglerName').textContent = fpLbl(ME.name, ME.title);
   var btn = qs('castBtn');
   btn.disabled = true;
   btn.textContent = '휙~! 🎣';
@@ -694,6 +705,7 @@ function doMulcheok(branch){
     cb: function(w){
       if (w !== 'ok') return;
       castBusy = true;
+      qs('anglerName').textContent = '🌟 ' + (MGR_LABEL[branch] || branch + ' 지점장');
       var sp = gasGet(GAS_URL + '?action=fishMulcheok&fp=' + encodeURIComponent(ME.id) + '&branch=' + encodeURIComponent(branch));
       window.scrollTo({ top: qs('scene').offsetTop - 80, behavior: 'smooth' });
       runFishing(sp, function(d){
