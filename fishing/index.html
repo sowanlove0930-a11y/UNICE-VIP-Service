@@ -73,6 +73,8 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .nametag:after { content:''; position:absolute; bottom:-6px; left:22px; border:6px solid transparent; border-top-color:rgba(255,255,255,.95); border-bottom:0; }
 .fishimg { position:absolute; display:none; z-index:7; filter:drop-shadow(0 5px 9px rgba(0,30,60,.45)); }
 .fishimg.gold { filter:drop-shadow(0 0 12px rgba(255,215,90,.95)) drop-shadow(0 5px 9px rgba(0,30,60,.45)); }
+@keyframes fishFloat { 0%,100%{margin-top:0} 50%{margin-top:-7px} }
+.fishimg.landed { animation:fishFloat 2.4s ease-in-out infinite; }
 .angler { position:absolute; top:8px; left:10px; font-size:32px; }
 .rodtip { position:absolute; top:16px; left:42px; font-size:25px; transform-origin:10% 90%; transition:transform .28s; }
 .bobber { position:absolute; width:13px; height:19px; display:none; z-index:4; }
@@ -266,10 +268,10 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 var POLL_MS = 25000;
 var FISH_UI = [
-  { src:'/fishing/img/fish-1.png', w:78 },
-  { src:'/fishing/img/fish-2.png', w:102 },
-  { src:'/fishing/img/fish-3.png', w:132 },
-  { src:'/fishing/img/fish-4.png', w:172 }
+  { src:'/fishing/img/fish-1.png', w:78, hf:0.48 },
+  { src:'/fishing/img/fish-2.png', w:96, hf:1.33 },
+  { src:'/fishing/img/fish-3.png', w:118, hf:1.33 },
+  { src:'/fishing/img/fish-4.png', w:146, hf:1.15 }
 ];
 var MGR_LABEL = { '알파':'전소영 지점장', '브라보':'이수아 지점장' };
 
@@ -534,8 +536,15 @@ function sceneEls(){
 sceneEls();
 function sceneW(){ return scene.clientWidth || 336; }
 function sceneH(){ return scene.clientHeight || 225; }
-function tipPt(){ return { x: Math.round(sceneW() * 0.60), y: Math.round(sceneH() * 0.10) }; }
-function waterPt(){ return { x: Math.round(sceneW() * 0.72), y: Math.round(sceneH() * 0.62) }; }
+function imgPt(nx, ny){
+  var W = sceneW(), H = sceneH();
+  var iw = 1000, ih = 670;
+  var sc = Math.max(W / iw, H / ih);
+  var dw = iw * sc, dh = ih * sc;
+  return { x: Math.round((W - dw) / 2 + nx * dw), y: Math.round((H - dh) / 2 + ny * dh) };
+}
+function tipPt(){ return imgPt(0.662, 0.055); }
+function waterPt(){ return imgPt(0.78, 0.64); }
 function drawLine(bx, by){
   var T = tipPt();
   lineEl.setAttribute('d', 'M' + T.x + ' ' + T.y + ' Q ' + Math.round((T.x + bx) / 2) + ' ' + (Math.min(T.y, by) - 24) + ' ' + bx + ' ' + by);
@@ -561,6 +570,7 @@ function runFishing(serverPromise, onDone, onFail){
 
   qs('myres').classList.remove('show');
   fishE.style.display = 'none';
+  fishE.classList.remove('landed');
   smsg.textContent = '';
   rodTip.style.transform = 'rotate(-38deg)';
   setTimeout(function(){ rodTip.style.transform = 'rotate(14deg)'; }, 220);
@@ -639,17 +649,26 @@ function runFishing(serverPromise, onDone, onFail){
     fishE.style.width = ui.w + 'px';
     if (result.tier === 3) fishE.classList.add('gold'); else fishE.classList.remove('gold');
     fishE.style.display = 'block';
-    var t1 = null, DUR2 = 800;
-    var startY = W2.y, peakY = Math.round(sceneH() * 0.16), endX = Math.round(sceneW() * 0.38), endY = Math.round(sceneH() * 0.40);
+    var t1 = null, DUR2 = 900;
+    var fw = ui.w, fh = Math.round(ui.w * (ui.hf || 1));
+    var H2 = sceneH();
+    var startY = W2.y;
+    var endX = imgPt(0.72, 0).x;
+    var endY = imgPt(0, 0.33).y;
+    var minY = Math.round(fh / 2) + 6;
+    var maxY = H2 - Math.round(fh / 2) - 6;
+    if (endY < minY) endY = minY;
+    if (endY > maxY) endY = maxY;
+    var peakY = Math.max(minY, endY - 18);
     function jump(ts){
       if (!t1) t1 = ts;
       var p = Math.min(1, (ts - t1) / DUR2);
       var x = W2.x + (endX - W2.x) * p;
       var arc = (startY - peakY) * 4 * p * (1 - p);
       var y = startY - arc - (startY - endY) * p;
-      fishE.style.left = (x - ui.w / 2) + 'px';
-      fishE.style.top = (y - ui.w / 2) + 'px';
-      fishE.style.transform = 'rotate(' + (p * 300) + 'deg)';
+      fishE.style.left = (x - fw / 2) + 'px';
+      fishE.style.top = (y - fh / 2) + 'px';
+      fishE.style.transform = 'rotate(' + Math.round(18 - 18 * p) + 'deg) scale(' + (0.5 + 0.5 * p).toFixed(2) + ')';
       if (p < 1) requestAnimationFrame(jump);
       else finish();
     }
@@ -659,6 +678,7 @@ function runFishing(serverPromise, onDone, onFail){
       splash.style.display = 'none';
       rodTip.style.transform = 'rotate(0deg)';
       smsg.textContent = '';
+      fishE.classList.add('landed');
       if (onDone) onDone(result);
     }
   }
