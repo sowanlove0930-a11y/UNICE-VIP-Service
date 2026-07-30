@@ -67,6 +67,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
   background:linear-gradient(180deg,#ffd9a8 0%,#8fd0f0 22%,#2e8fc7 45%,#0d5a94 100%); }
 .scene .bgimg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; }
 .scene .vlayer { transition:opacity .35s ease; }
+.vcap { position:absolute; bottom:32px; left:0; right:0; text-align:center; z-index:9; font-size:17px; font-weight:900; color:#fff; text-shadow:0 2px 5px rgba(0,30,60,.9), 0 0 14px rgba(0,70,130,.6); letter-spacing:.3px; pointer-events:none; }
 .nametag { position:absolute; z-index:8; background:rgba(255,255,255,.95); border-radius:100px; padding:5px 12px; font-size:12px; font-weight:900; color:#0b5a8c; box-shadow:0 4px 12px rgba(0,40,80,.3); white-space:nowrap; }
 .nametag:after { content:''; position:absolute; bottom:-6px; left:22px; border:6px solid transparent; border-top-color:rgba(255,255,255,.95); border-bottom:0; }
 .fishimg { position:absolute; display:none; z-index:7; filter:drop-shadow(0 5px 9px rgba(0,30,60,.45)); }
@@ -179,8 +180,10 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
       <div style="text-align:right; font-size:10.5px; font-weight:800; color:#7a9ab0;">본 게임에선 10만원당 1개!</div>
     </div>
     <div class="scene" id="scene">
-      <video class="bgimg vlayer" id="seqVid" src="/fishing/img/cast.mp4" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline></video>
-      <video class="bgimg vlayer" id="seqVid2" poster="/fishing/img/fish-bg.jpg" preload="auto" muted playsinline webkit-playsinline style="opacity:0;"></video>
+      <video class="bgimg vlayer" id="idleVid" src="/fishing/img/idle.mp4" poster="/fishing/img/fish-bg.jpg" autoplay muted loop playsinline webkit-playsinline></video>
+      <video class="bgimg vlayer" id="seqVid" src="/fishing/img/cast.mp4" preload="auto" muted playsinline webkit-playsinline style="opacity:0;"></video>
+      <video class="bgimg vlayer" id="seqVid2" preload="auto" muted playsinline webkit-playsinline style="opacity:0;"></video>
+      <div class="vcap" id="vcap"></div>
       <div class="nametag" id="nametag" style="left:5%; top:7%;">🎣 <span id="anglerName">체험 낚시꾼</span></div>
       <svg style="position:absolute; inset:0; pointer-events:none; z-index:2;" width="100%" height="100%"><path id="line" d="" stroke="rgba(255,255,255,.9)" stroke-width="1.4" fill="none"/></svg>
       <div class="bobber" id="bobber"><div class="bt"></div><div class="bb"></div></div>
@@ -414,6 +417,7 @@ function runFishing(onDone){
 /* ---------- video sequence ---------- */
 var VID = qs('seqVid');
 var VID2 = qs('seqVid2');
+var IDLE = qs('idleVid');
 var VIDEO_OK = false;
 if (VID) {
   VID.addEventListener('loadeddata', function(){ VIDEO_OK = true; });
@@ -421,6 +425,25 @@ if (VID) {
 }
 var CAST_SRC = '/fishing/img/cast.mp4';
 var RESULT_SRC = ['/fishing/img/fish-r1.mp4', '/fishing/img/fish-r2.mp4', '/fishing/img/fish-r3.mp4', '/fishing/img/fish-r4.mp4'];
+var CAPS_CAST = [[0, '힘차게 던진다~! 🎣'], [2600, '기다리는 중... 🌊'], [5200, '...움찔?'], [6800, '입질이다!! 🔥'], [8600, '버텨라!! 💪']];
+var CAPS_RESULT = [[0, '끌어올린다!! 💪'], [1900, '과연 무슨 조기?!']];
+var capTimers = [];
+function setCap(t){ var el = qs('vcap'); if (el) el.textContent = t || ''; }
+function clearCaps(){
+  var i;
+  for (i = 0; i < capTimers.length; i++) clearTimeout(capTimers[i]);
+  capTimers = [];
+  setCap('');
+}
+function playCaps(list){
+  clearCaps();
+  var i;
+  for (i = 0; i < list.length; i++) {
+    (function(ms, txt){
+      capTimers.push(setTimeout(function(){ setCap(txt); }, ms));
+    })(list[i][0], list[i][1]);
+  }
+}
 var PRELOADED = {};
 function preloadClip(u){
   if (PRELOADED[u]) return;
@@ -432,19 +455,6 @@ function preloadClip(u){
   v.style.display = 'none';
   document.body.appendChild(v);
 }
-function vidReset(){
-  try { VID.pause(); } catch(e) {}
-  try { VID2.pause(); } catch(e) {}
-  VID.onended = null;
-  VID2.onended = null;
-  VID.muted = true;
-  VID2.muted = true;
-  VID2.style.opacity = '0';
-  VID.style.opacity = '1';
-  VID.src = CAST_SRC;
-  try { VID.load(); } catch(e) {}
-  try { VID2.removeAttribute('src'); VID2.load(); } catch(e) {}
-}
 function runFishingVideo(tier, onDone){
   qs('myres').classList.remove('show');
   fishE.style.display = 'none';
@@ -455,26 +465,40 @@ function runFishingVideo(tier, onDone){
     VID.onended = null;
     VID2.onended = function(){
       VID2.onended = null;
+      clearCaps();
+      VID.style.opacity = '0';
+      VID.muted = true;
+      try { VID.pause(); } catch(e) {}
       onDone(tier);
-      setTimeout(vidReset, 900);
     };
     VID2.src = RESULT_SRC[tier] || RESULT_SRC[0];
     VID2.muted = false;
-    VID.muted = true;
     var p2 = VID2.play();
     if (p2 && p2.catch) p2.catch(function(){});
     VID2.style.opacity = '1';
-    setTimeout(function(){ try { VID.pause(); } catch(e) {} }, 400);
+    playCaps(CAPS_RESULT);
+    setTimeout(function(){
+      try { VID.pause(); } catch(e) {}
+      VID.muted = true;
+    }, 450);
   };
-  VID2.style.opacity = '0';
-  VID.style.opacity = '1';
+  VID.src = CAST_SRC;
   VID.muted = false;
   try { VID.currentTime = 0; } catch(e) {}
   var pr = VID.play();
+  VID.style.opacity = '1';
+  playCaps(CAPS_CAST);
+  setTimeout(function(){
+    VID2.style.opacity = '0';
+    try { VID2.pause(); } catch(e) {}
+    VID2.muted = true;
+  }, 420);
   if (pr && pr.catch) {
     pr.catch(function(){
+      clearCaps();
       VID.onended = null;
       VID.muted = true;
+      VID.style.opacity = '0';
       runFishing(onDone);
     });
   }
