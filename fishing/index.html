@@ -217,8 +217,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
     </div>
     <div class="scene" id="scene">
       <video class="bgimg vlayer" id="idleVid" src="/fishing/img/idle.mp4" poster="/fishing/img/fish-bg.jpg" autoplay muted loop playsinline webkit-playsinline></video>
-      <video class="bgimg vlayer" id="seqVid" src="/fishing/img/cast.mp4" preload="auto" muted playsinline webkit-playsinline style="opacity:0;"></video>
-      <video class="bgimg vlayer" id="seqVid2" preload="auto" muted playsinline webkit-playsinline style="opacity:0;"></video>
+      <video class="bgimg vlayer" id="seqVid" preload="auto" muted playsinline webkit-playsinline style="opacity:0;"></video>
       <div class="vcap" id="vcap"></div>
       <div class="nametag" id="nametag" style="left:5%; top:7%;">🎣 <span id="anglerName">낚시꾼</span></div>
       <svg style="position:absolute; inset:0; pointer-events:none; z-index:2;" width="100%" height="100%"><path id="line" d="" stroke="rgba(255,255,255,.9)" stroke-width="1.4" fill="none"/></svg>
@@ -372,6 +371,7 @@ qs('fpInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') tr
 /* ---------- app ---------- */
 function startApp(){
   if (ME) qs('anglerName').textContent = fpLbl(ME.name, ME.title);
+  preloadAllClips();
   loadState(true);
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(function(){ if (!castBusy) loadState(false); }, POLL_MS);
@@ -556,19 +556,24 @@ function imgPt(nx, ny){
 function tipPt(){ return imgPt(0.60, 0.12); }
 function waterPt(){ return imgPt(0.78, 0.62); }
 
-/* ---------- video sequence ---------- */
+/* ---------- video sequence (full clip per tier) ---------- */
 var VID = qs('seqVid');
-var VID2 = qs('seqVid2');
 var IDLE = qs('idleVid');
 var VIDEO_OK = false;
-if (VID) {
-  VID.addEventListener('loadeddata', function(){ VIDEO_OK = true; });
-  VID.addEventListener('error', function(){ VIDEO_OK = false; });
-}
-var CAST_SRC = '/fishing/img/cast.mp4';
-var RESULT_SRC = ['/fishing/img/fish-r1.mp4', '/fishing/img/fish-r2.mp4', '/fishing/img/fish-r3.mp4', '/fishing/img/fish-r4.mp4'];
-var CAPS_CAST = [[0, '힘차게 던진다~! 🎣'], [2600, '기다리는 중... 🌊'], [5200, '...움찔?'], [6800, '입질이다!! 🔥'], [8600, '버텨라!! 💪']];
-var CAPS_RESULT = [[0, '끌어올린다!! 💪'], [1900, '과연 무슨 조기?!']];
+var FULL_SRC = ['/fishing/img/fish-f1.mp4', '/fishing/img/fish-f2.mp4', '/fishing/img/fish-f3.mp4', '/fishing/img/fish-f4.mp4'];
+var CAPS_FULL = [
+  [0, '새벽 바다로 출근! 조기영업 개시 🎣'],
+  [2500, '일찍 나온 FP가 조기를 잡는 법 🌊'],
+  [4800, '입질!! 역시 새벽엔 조기가 문다!! 🔥'],
+  [6800, '버텨라!! 월초 실적이 걸렸다!! 💪'],
+  [9300, '조기영업은 배신하지 않는다~!! ✨']
+];
+var CAPS_TIER = [
+  '음... 5분만 더 일찍 나올 걸 😅',
+  '오~ 조기영업 감 잡았다! ✨',
+  '이게 바로 새벽 조기의 손맛!! 🔥',
+  '전설의 황금 대조기!! 조기영업의 왕!! 👑'
+];
 var capTimers = [];
 function setCap(t){ var el = qs('vcap'); if (el) el.textContent = t || ''; }
 function clearCaps(){
@@ -586,8 +591,11 @@ function playCaps(list){
     })(list[i][0], list[i][1]);
   }
 }
+function capsFor(tier){
+  return CAPS_FULL.concat([[10800, CAPS_TIER[tier] || CAPS_TIER[0]]]);
+}
 var PRELOADED = {};
-function preloadClip(u){
+function preloadClip(u, probe){
   if (PRELOADED[u]) return;
   PRELOADED[u] = true;
   var v = document.createElement('video');
@@ -595,85 +603,64 @@ function preloadClip(u){
   v.muted = true;
   v.src = u;
   v.style.display = 'none';
+  if (probe) {
+    v.addEventListener('loadeddata', function(){ VIDEO_OK = true; });
+  }
   document.body.appendChild(v);
 }
-function seqToIdle(){
-  try { VID.pause(); } catch(e) {}
-  try { VID2.pause(); } catch(e) {}
-  VID.onended = null;
-  VID2.onended = null;
-  VID.muted = true;
-  VID2.muted = true;
-  VID.style.opacity = '0';
-  VID2.style.opacity = '0';
-  clearCaps();
+function preloadAllClips(){
+  var i;
+  for (i = 0; i < FULL_SRC.length; i++) preloadClip(FULL_SRC[i], i === 0);
 }
 function runFishingVideo(serverPromise, onDone, onFail){
-  var result = null, castEnded = false, finished = false, delegated = false;
+  var finished = false, delegated = false;
   qs('myres').classList.remove('show');
   fishE.style.display = 'none';
   fishE.classList.remove('landed');
   smsg.textContent = '';
-  function fail(msg){
-    if (finished || delegated) return;
-    finished = true;
-    seqToIdle();
-    if (onFail) onFail(msg);
-  }
-  function playResult(){
-    if (finished || delegated || !result) return;
-    VID2.onended = function(){
-      if (finished || delegated) return;
+  VID.style.opacity = '0';
+  VID.muted = true;
+  setCap('조기 포인트 탐색 중... 🧭');
+  function startClip(d){
+    VID.onended = function(){
+      if (finished) return;
       finished = true;
-      VID2.onended = null;
+      VID.onended = null;
       clearCaps();
-      VID.style.opacity = '0';
-      VID.muted = true;
-      try { VID.pause(); } catch(e) {}
-      if (onDone) onDone(result);
+      setCap(CAPS_TIER[d.tier] || '');
+      if (onDone) onDone(d);
     };
-    VID2.src = RESULT_SRC[result.tier] || RESULT_SRC[0];
-    VID2.muted = false;
-    var p2 = VID2.play();
-    if (p2 && p2.catch) p2.catch(function(){});
-    VID2.style.opacity = '1';
-    playCaps(CAPS_RESULT);
-    setTimeout(function(){
-      try { VID.pause(); } catch(e) {}
-      VID.muted = true;
-    }, 450);
+    VID.src = FULL_SRC[d.tier] || FULL_SRC[0];
+    VID.muted = false;
+    try { VID.currentTime = 0; } catch(e) {}
+    var pr = VID.play();
+    VID.style.opacity = '1';
+    playCaps(capsFor(d.tier));
+    if (pr && pr.catch) {
+      pr.catch(function(){
+        delegated = true;
+        clearCaps();
+        VID.style.opacity = '0';
+        VID.muted = true;
+        runFishing(Promise.resolve(d), onDone, onFail);
+      });
+    }
   }
   serverPromise.then(function(d){
-    if (delegated) return;
-    if (!d.ok) { fail(d.msg || '낚시 실패'); return; }
-    result = d;
-    preloadClip(RESULT_SRC[d.tier] || RESULT_SRC[0]);
-    if (castEnded) playResult();
-  }).catch(function(){ if (!delegated) fail('연결 실패'); });
-  VID.onended = function(){
-    castEnded = true;
-    if (result) playResult();
-    else if (!finished) setCap('버티는 중...!! 💪');
-  };
-  // start cast over idle (fade out any frozen previous result)
-  VID.src = CAST_SRC;
-  VID.muted = false;
-  try { VID.currentTime = 0; } catch(e) {}
-  var pr = VID.play();
-  VID.style.opacity = '1';
-  playCaps(CAPS_CAST);
-  setTimeout(function(){
-    VID2.style.opacity = '0';
-    try { VID2.pause(); } catch(e) {}
-    VID2.muted = true;
-  }, 420);
-  if (pr && pr.catch) {
-    pr.catch(function(){
-      delegated = true;
-      seqToIdle();
-      runFishing(serverPromise, onDone, onFail);
-    });
-  }
+    if (delegated || finished) return;
+    if (!d.ok) {
+      finished = true;
+      clearCaps();
+      if (onFail) onFail(d.msg || '낚시 실패');
+      return;
+    }
+    startClip(d);
+  }).catch(function(){
+    if (delegated || finished) return;
+    finished = true;
+    clearCaps();
+    if (onFail) onFail('연결 실패');
+  });
 }
 function runCatch(serverPromise, onDone, onFail){
   if (VIDEO_OK) runFishingVideo(serverPromise, onDone, onFail);
