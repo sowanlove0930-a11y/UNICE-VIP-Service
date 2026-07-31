@@ -1019,7 +1019,7 @@ body.theme-light .pv-bf.on { background:#FAEEDA; border-color:#B8860B; color:#85
 .pv-kpi.dim { opacity:.4; }
 .pv-mode.on { background:linear-gradient(135deg,#C9A84C,#A87B1E) !important; color:#fff !important; border-color:transparent !important; }
 .pv-kpi.hi { box-shadow:0 0 0 2px var(--gold); }
-.pv-kpi { border-radius:12px; padding:13px; text-align:center; border:1px solid; min-width:0; }
+.pv-kpi { border-radius:12px; padding:13px; text-align:center; border:1px solid; min-width:0; overflow:hidden; }
 /* KPI 카드 가로 배치 강제 (세로로 쌓이지 않게) */
 #perfViewOverlay .pv-kpi-grid { display:grid !important; grid-template-columns:1fr 1fr 1fr !important; }
 #fpPerfOverlay .pv-kpi-grid { display:grid !important; grid-template-columns:repeat(4,1fr) !important; }
@@ -1045,6 +1045,8 @@ body.theme-light .pv-bf.on { background:#FAEEDA; border-color:#B8860B; color:#85
 .pv-bchip.br { background:rgba(107,79,160,.14); color:#5B3FA0; }
 .pv-amt { font-weight:800; color:var(--gold2); text-align:right; white-space:nowrap; }
 .pv-empty { text-align:center; padding:20px; color:var(--text3); font-size:12px; }
+/* 업적 목록 행 번호 (A안: 20px 고정폭 전용 칼럼) */
+.pv-tbl .pv-numcol { width:20px; padding-left:2px; padding-right:2px; text-align:right; color:#B4AE9E; font-weight:800; font-size:10px; font-variant-numeric:tabular-nums; }
 .pv-daysum { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:var(--surface); border:1px solid var(--bdr); border-radius:9px; margin-top:10px; font-size:12px; font-weight:700; color:var(--text2); }
 .pv-daysum b { color:var(--gold2); }
 .pv-trend { display:flex; align-items:flex-end; gap:2px; height:100px; padding:8px 0 0; }
@@ -1800,7 +1802,8 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   .pv-kpi-val { white-space: nowrap; font-size: 17px; letter-spacing: -0.5px; }
   .pv-kpi { padding-left: 4px !important; padding-right: 4px !important; }
   .pv-kpi-lbl { white-space: nowrap; }
-  .pv-kpi-sub { white-space: nowrap; }
+  /* sub 는 '생 1,708 · 손 326 · 기타 2' 처럼 길어질 수 있어 줄바꿈 허용 (nowrap 이면 옆 카드로 넘침) */
+  .pv-kpi-sub { white-space: normal; line-height: 1.4; word-break: keep-all; }
   .app { padding: 0 12px 12px; max-width: 100%; overflow-x: hidden; box-sizing: border-box; }
   .app * { max-width: 100%; box-sizing: border-box; }
   /* 헤더: 브랜드 위 / 버튼 줄 아래로 세로 배치 */
@@ -1851,9 +1854,8 @@ body.theme-light .cc-jenius  .cc-name { color: #2563EB; }
   .stat { padding: 12px 13px; border-radius: 14px; }
   /* 보장월초 카드: 내용이 많아 여유를 더 줌 */
   #st1-card { padding: 15px 18px 16px 15px; }
-  #st1-card .stat-lbl { margin-bottom: 8px; font-size: 11px; max-width: 70%; }
-  #st1-card #st1-goal-hint { top: 15px !important; right: 15px !important; }
-  #st1-lbl + div { margin-bottom: 9px; }
+  #st1-card .stat-lbl { font-size: 11px; }
+  #st1-lblrow + div { margin-bottom: 9px; }
   .stat-lbl { font-size: 10.5px; margin-bottom: 5px; }
   .stat-val { font-size: 16px; }
   .stat-unit { font-size: 10px; margin-top: 4px; }
@@ -3629,13 +3631,15 @@ window.UNISPACE_FCM = {
 
     <!-- 1번: 보장월초 -->
     <div class="stat s-gold" id="st1-card" onclick="onBojangCardClick()" style="cursor:pointer;position:relative">
-      <div class="stat-lbl" id="st1-lbl">이번 달 보장월초 및 건수</div>
+      <div id="st1-lblrow" style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
+        <div class="stat-lbl" id="st1-lbl" style="flex:1;min-width:0;margin-bottom:0">이번 달 보장월초 및 건수</div>
+        <div id="st1-goal-hint" style="display:none;flex-shrink:0;font-size:11px;font-weight:700;color:var(--gold2);opacity:.8;white-space:nowrap">🎯 목표 설정</div>
+      </div>
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:nowrap;white-space:nowrap">
         <div class="stat-val" id="st1" style="white-space:nowrap;min-width:0">—</div>
         <div id="st1-rate" style="flex-shrink:0;display:flex;align-items:baseline;gap:6px;white-space:nowrap"></div>
       </div>
       <div class="stat-unit" id="st1-unit"></div>
-      <div id="st1-goal-hint" style="display:none;position:absolute;top:12px;right:14px;font-size:11px;font-weight:700;color:var(--gold2);opacity:.8">🎯 목표 설정</div>
     </div>
 
     <!-- 2번: 신규 계약고객 (대표/지점장) / 내 고객 수 (FP) -->
@@ -5296,7 +5300,7 @@ function renderBojangCard() {
     bindBojangBarTooltip();
   }
   var _hint = document.getElementById('st1-goal-hint');
-  if(_hint) _hint.style.display = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? 'block' : 'none';
+  if(_hint) _hint.style.display = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? '' : 'none';
   var _card = document.getElementById('st1-card');
   if(_card) _card.style.cursor = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? 'pointer' : 'default';
 }
@@ -8300,7 +8304,7 @@ function renderPerfView(){
   } else {
     var rows='';
     var canDel = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장'||currentUser.level==='manager'||currentUser.level==='admin'||(currentUser.title||'').indexOf('매니저')>=0);
-    listRecs.forEach(function(r){
+    listRecs.forEach(function(r, _ri){
       var bk=_pvBranchKey(r.branch);
       var chip = bk==='al' ? '<span class="pv-bchip al">알</span>' : (bk==='br'?'<span class="pv-bchip br">브</span>':'');
       var cats = (r.products||[]).map(function(p){
@@ -8313,11 +8317,11 @@ function renderPerfView(){
       var isSelfRow = currentUser && (r.fpId === currentUser.id);
       var meBadge = isSelfRow ? '<span style="font-size:9px;color:#854F0B;background:rgba(201,168,76,.15);padding:1px 5px;border-radius:4px;margin-left:4px">나</span>' : '';
       var rowClick = canDel ? ' onclick="openPerfEdit(\''+r.id+'\')" style="cursor:pointer"' : '';
-      rows+='<tr'+rowClick+'>'+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td style="color:var(--text2)">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원</td>'+delCol+'</tr>';
+      rows+='<tr'+rowClick+'><td class="pv-numcol">'+(_ri+1)+'</td>'+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td style="color:var(--text2)">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원</td>'+delCol+'</tr>';
     });
     var dateHead = (_pvRange!=='today') ? '<th>날짜</th>' : '';
     var delHead = canDel ? '<th></th>' : '';
-    listEl.innerHTML = '<table class="pv-tbl"><thead><tr>'+dateHead+'<th>FP</th><th>상품</th><th style="text-align:right">금액</th>'+delHead+'</tr></thead><tbody>'+rows+'</tbody></table>'+
+    listEl.innerHTML = '<table class="pv-tbl"><thead><tr><th class="pv-numcol">#</th>'+dateHead+'<th>FP</th><th>상품</th><th style="text-align:right">금액</th>'+delHead+'</tr></thead><tbody>'+rows+'</tbody></table>'+
       '<div class="pv-daysum"><span>'+(_pvRange==='today'?'이 날':_pvRange==='week'?'이번 주':_pvRange==='range'?'기간':'이번 달')+' 합계'+brLabel+'</span><span><b>'+fSum.toLocaleString()+'원</b> · '+fCnt+'건</span></div>';
   }
 
@@ -8539,15 +8543,15 @@ function getHolidayName(d){
 }
 
 // 생보/손보 보험사 매핑
-var PERF_LIFE = ['한화생명','라이나','미래에셋','신한라이프','흥국생명','삼성생명','교보','동양생명','농협생명','메트라이프','DB생명'];
-var PERF_NONLIFE = ['한화손보','현대해상','DB손보','KB손보','메리츠','삼성화재','롯데손보','흥국화재','농협손보','MG손보'];
+var PERF_LIFE = ['한화생명','라이나','미래에셋','신한라이프','흥국생명','삼성생명','교보','동양생명','농협생명','메트라이프','DB생명','KDB생명','ABL생명','하나생명','푸본현대','AIA','처브','iM라이프','KB라이프','라이프플래닛','카디프'];
+var PERF_NONLIFE = ['한화손보','현대해상','DB손보','KB손보','메리츠','삼성화재','롯데손보','흥국화재','농협손보','MG손보','캐롯','하나손보','AIG','에이스','카카오페이손','신한EZ','서울보증','코리안리'];
 function _perfClassify(co){
   var c=(co||'').replace(/\s/g,'');
   for(var i=0;i<PERF_LIFE.length;i++){ if(c.indexOf(PERF_LIFE[i].replace(/\s/g,''))>=0) return 'life'; }
   for(var j=0;j<PERF_NONLIFE.length;j++){ if(c.indexOf(PERF_NONLIFE[j].replace(/\s/g,''))>=0) return 'non'; }
   // 키워드 보조 판별
   if(/생명|라이프|life/i.test(c)) return 'life';
-  if(/손보|화재|해상/i.test(c)) return 'non';
+  if(/손보|손해|화재|해상/i.test(c)) return 'non';
   return 'etc';
 }
 // ── 회사별 보기 헬퍼 ──
@@ -10724,6 +10728,7 @@ function _fpRangeRecs(){
   var mp=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
   return log.filter(function(r){ return (r.date||'').indexOf(mp)===0; });
 }
+var _fpEtcCoNames = []; // 생보/손보 어느 쪽에도 분류되지 않은 보험사명
 function renderFpPerf(){
   var recs=_fpRangeRecs();
   var goalDB=getFpGoalDB()[_fpSelYm()]||{};
@@ -10740,7 +10745,7 @@ function renderFpPerf(){
       _goalMan=_fpPlanGoalMan(fp.id);
     }
     byFp[fp.id]={ id:fp.id, name:fp.name, branch:fp.branch, mgr:g.mgr||'', goal:_goalMan||0,
-      life:0, non:0, lifeCnt:0, nonCnt:0, etc:0, etcCnt:0, cnt:0, total:0,
+      life:0, non:0, lifeCnt:0, nonCnt:0, etc:0, etcCnt:0, etcCos:{}, cnt:0, total:0,
       keep:(fp.active===false && fp.perfKeep===true) };
   });
   recs.forEach(function(r){
@@ -10750,7 +10755,7 @@ function renderFpPerf(){
       var amt=parseInt(p.amount)||0; var cls=_perfClassify(p.co);
       if(cls==='life'){ f.life+=amt; f.lifeCnt++; }
       else if(cls==='non'){ f.non+=amt; f.nonCnt++; }
-      else { f.etc+=amt; f.etcCnt++; }
+      else { f.etc+=amt; f.etcCnt++; f.etcCos[String(p.co||'').trim()||'(\uBBF8\uC785\uB825)'] = true; }
     });
   });
   var allRows=Object.keys(byFp).map(function(k){ return byFp[k]; });
@@ -10764,7 +10769,9 @@ function renderFpPerf(){
 
   // KPI \ud569\uacc4 (\ud0ed \ubc94\uc704)
   var sumGoal=0,sumTot=0,sumLife=0,sumNon=0,sumLifeCnt=0,sumNonCnt=0,sumCnt=0,sumEtc=0,sumEtcCnt=0;
-  scopeRows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumLifeCnt+=f.lifeCnt; sumNonCnt+=f.nonCnt; sumCnt+=f.cnt; sumEtc+=(f.etc||0); sumEtcCnt+=(f.etcCnt||0); });
+  var sumEtcCos={};
+  scopeRows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumLifeCnt+=f.lifeCnt; sumNonCnt+=f.nonCnt; sumCnt+=f.cnt; sumEtc+=(f.etc||0); sumEtcCnt+=(f.etcCnt||0);
+    if(f.etcCos){ for(var _ek in f.etcCos){ if(f.etcCos.hasOwnProperty(_ek)) sumEtcCos[_ek]=true; } } });
   var _branchGoal = 0;
   try {
     var _bgF = getBranchMonthGoals();
@@ -10780,9 +10787,28 @@ function renderFpPerf(){
   if(_fpTab!=='mgr'){
     if(_rateLbl) _rateLbl.textContent = '\ucd1d \ubcf4\uc7a5\uc6d4\ucd08';
     document.getElementById('fpKpiRate').textContent = Math.round(sumTot/10000).toLocaleString()+'\ub9cc';
-    var _lnSub = '\uc0dd '+Math.round(sumLife/10000).toLocaleString()+' \u00b7 \uc190 '+Math.round(sumNon/10000).toLocaleString();
-    if(sumEtc>0) _lnSub += ' \u00b7 \uae30\ud0c0 '+Math.round(sumEtc/10000).toLocaleString();
-    document.getElementById('fpKpiRateSub').textContent = _lnSub;
+    // 생/손/기타를 각각 색이 다른 nowrap 토큰으로 — 좁은 폰에서도 토큰 중간이 잘리지 않는다
+    function _lnTok(lbl, val, color){
+      return '<span style="display:inline-block;white-space:nowrap;color:'+color+';font-weight:700">'+lbl+' '+val.toLocaleString()+'</span>';
+    }
+    var _lnSub = _lnTok('\uc0dd', Math.round(sumLife/10000), '#2E6E8E') +
+                 _lnTok('\uc190', Math.round(sumNon/10000), '#A85532');
+    if(sumEtc>0){
+      var _etcList=[]; for(var _ek2 in sumEtcCos){ if(sumEtcCos.hasOwnProperty(_ek2)) _etcList.push(_ek2); }
+      _fpEtcCoNames = _etcList;
+      _lnSub += '<span id="fpKpiEtcTok" style="display:inline-block;white-space:nowrap;color:#8A8578;font-weight:700;text-decoration:underline dotted;cursor:pointer">'+
+        '\uae30\ud0c0 '+Math.round(sumEtc/10000).toLocaleString()+'</span>';
+    }
+    document.getElementById('fpKpiRateSub').innerHTML =
+      '<span style="display:flex;flex-wrap:wrap;justify-content:center;gap:2px 8px">'+_lnSub+'</span>';
+    var _etcTok = document.getElementById('fpKpiEtcTok');
+    if(_etcTok){
+      _etcTok.title = _fpEtcCoNames.join(', ');
+      _etcTok.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        showToast('\uBBF8\uBD84\uB958 \uBCF4\uD5D8\uC0AC: ' + _fpEtcCoNames.join(', '));
+      });
+    }
   } else {
     if(_rateLbl) _rateLbl.textContent = '\ub2ec\uc131\ub960';
     document.getElementById('fpKpiRate').textContent = _useGoal>0?rate+'%':'\u2014';
@@ -10793,7 +10819,8 @@ function renderFpPerf(){
   document.getElementById('fpKpiNon').textContent = Math.round(sumNon/10000).toLocaleString()+'\ub9cc';
   document.getElementById('fpKpiNonCnt').textContent = '\uc0c1\ud488 '+sumNonCnt+'\uac74';
   document.getElementById('fpKpiCnt').textContent = sumCnt+'\uac74';
-  document.getElementById('fpKpiAct').textContent = '\uc0c1\ud488 '+(sumLifeCnt+sumNonCnt+sumEtcCnt)+'\uac74';
+  var _actEl = document.getElementById('fpKpiAct');
+  if(_actEl){ _actEl.textContent = ''; _actEl.style.display = 'none'; }
 
   var wrap=document.getElementById('fpPerfTableWrap');
 
