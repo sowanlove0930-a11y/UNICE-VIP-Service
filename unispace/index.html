@@ -2098,10 +2098,8 @@ body.theme-light .confirm-cancel { background: var(--bg3); }
 .accordion-body.open { max-height: 20000px; }
 /* open animation finished -> release the cap so tall mobile content is never clipped */
 .accordion-body.acc-free { max-height: none !important; transition: none; }
-/* activity table: capped + contained on desktop, free-flowing on mobile so the
-   inner box never swallows the page scroll */
-.week-table-scroll { max-height: 340px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: rgba(201,168,76,.2) transparent; }
-@media (max-width: 768px) { .week-table-scroll { max-height: none; overflow-y: visible; } }
+/* activity table: fixed-height scroll box (original behaviour, all widths) */
+.week-table-scroll { max-height: 340px; overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: rgba(201,168,76,.2) transparent; }
 body.theme-light .accordion-header:hover { background: rgba(26,39,68,.02); }
 
 /* ── 섹션별 전체 컬러 테두리 (얇게) ── */
@@ -3543,7 +3541,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>케어핏</th><th>U고비</th><th>노후파이</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
+          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📊 업적유지</th><th>케어핏</th><th>U고비</th><th>노후파이</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -4403,7 +4401,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, jenius:f.jenius!==false, team:f.team===true };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true };
     });
   } else {
     baseList = FP_LIST;
@@ -4420,6 +4418,7 @@ function getMergedFpList() {
       nohupai: ov.nohupai !== undefined ? ov.nohupai : fp.nohupai,
       jenius: ov.jenius !== undefined ? ov.jenius : fp.jenius,
       team: ov.team !== undefined ? ov.team : fp.team,
+      perfKeep: ov.perfKeep !== undefined ? ov.perfKeep : fp.perfKeep,
     });
   });
   // 활동계획수립 등 다른 페이지에서 쓰도록 명단 저장 (pw 제외)
@@ -5217,7 +5216,8 @@ function renderBojangCard() {
       if (_d.indexOf(_ym) !== 0) continue;
       var _br = String(_r.branch || '');
       var _amt = parseInt(_r.total) || 0;
-      var _cnt = (_r.products && _r.products.length) ? _r.products.length : 1;
+      // 건수 기준 통일: 업적조회 / 일보와 동일하게 '계약(입력) 건수' 1건으로 센다
+      var _cnt = 1;
       var _isAlpha = _br.indexOf('알파') >= 0;
       var _isBravo = _br.indexOf('브라보') >= 0;
       if (_isAlpha) { AMT_ALPHA += _amt; CNT_ALPHA += _cnt; }
@@ -5985,6 +5985,9 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.active?'on':'off') + '" onclick="toggleFpActive(\'' + fp.id + '\')">' +
         (fp.active ? '✅ 활성' : '🚫 비활성') +
       '</button></td>' +
+      '<td><button class="fp-active-toggle ' + (fp.perfKeep===true?'on':'off') + '" onclick="toggleFpPerfKeep(\'' + fp.id + '\')">' +
+        (fp.perfKeep===true ? '📊 집계' : (fp.active ? '—' : '⛔ 제외')) +
+      '</button></td>' +
       '<td><button class="fp-active-toggle ' + (fp.carefit!==false?'on':'off') + '" onclick="toggleFpCarefit(\'' + fp.id + '\')">' +
         (fp.carefit!==false ? '🌿 사용' : '🚫 차단') +
       '</button></td>' +
@@ -6109,6 +6112,28 @@ function toggleFpTeam(id) {
       saveFpOverride(id, 'team', res.team);
       renderFpMgmtTable();
       showToast('🔔 ' + fp.name + ' 리쿨푸쉬 ' + (res.team ? 'ON' : 'OFF'));
+    } else {
+      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
+    }
+  }).catch(function(){
+    showToast('⚠️ 서버 연결 실패');
+  });
+}
+function toggleFpPerfKeep(id) {
+  if (!currentUser || currentUser.role !== '대표') { showToast('⚠️ 대표만 변경할 수 있습니다'); return; }
+  var list = getMergedFpList();
+  var fp   = list.find(function(f){ return f.id === id; });
+  if (!fp) return;
+  var nextOn = (fp.perfKeep !== true);
+  var url = UNISPACE_GAS_URL + '?action=setPerfKeep&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N') + '&by=' + encodeURIComponent(currentUser.id);
+  showToast('📊 업적유지 변경 중...');
+  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok) {
+      fp.perfKeep = res.perfKeep;
+      saveFpOverride(id, 'perfKeep', res.perfKeep);
+      renderFpMgmtTable();
+      if (typeof renderFpPerf === 'function') { try { renderFpPerf(); } catch(e){} }
+      showToast('📊 ' + fp.name + ' 업적유지 ' + (res.perfKeep ? 'ON — 일보·업적에 계속 집계됩니다' : 'OFF'));
     } else {
       showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
     }
@@ -7959,17 +7984,36 @@ function setPvMode(m, el){
     var _sb=document.getElementById('pvCoSelBar'); if(_sb) _sb.style.display='none';
     var _pk=document.getElementById('pvCoPicker'); if(_pk) _pk.style.display='';
     var _cs=document.getElementById('pvCoSearch'); if(_cs) _cs.value='';
+    // 회사별 집계는 월 단위가 기본. '오늘' 상태로 들어오면 이번 달로 맞춘다.
+    if(_pvRange==='today'){
+      _pvRange='month'; _pvMonth=null;
+      var _sgs=document.querySelectorAll('.pv-seg');
+      for(var _si=0;_si<_sgs.length;_si++){ _sgs[_si].classList.remove('on'); }
+      var _sgM=document.getElementById('pvSegMonth'); if(_sgM) _sgM.classList.add('on');
+    }
     renderPvCoList();
   }
   renderPerfView();
 }
+// 현재 선택 기간 라벨 (회사 목록 헤더용)
+function _pvRangeLabel(){
+  if(_pvRange==='today'){ var d=_pvDay||new Date(); return (d.getMonth()+1)+'/'+d.getDate(); }
+  if(_pvRange==='week') return '이번 주';
+  if(_pvRange==='range'){
+    if(_pvRangeStart && _pvRangeEnd) return _pvRangeStart+' ~ '+_pvRangeEnd;
+    return '전체 기간';
+  }
+  var mr=_pvMonth||new Date(); return (mr.getMonth()+1)+'월';
+}
 function renderPvCoList(){
   var el=document.getElementById('pvCoList'); if(!el) return;
   var q=((document.getElementById('pvCoSearch')||{}).value||'').trim();
-  var arr=_pvCoCandidates();
+  // 선택된 기간 기준으로 집계 (예전엔 전체 기간이라 이번 달 수치와 달랐음)
+  var arr=_pvCoCandidatesRanged();
   if(q) arr=arr.filter(function(c){ return (c.co||'').indexOf(q)>=0; });
-  if(!arr.length){ el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:14px;text-align:center">'+(q?'검색 결과가 없습니다':'판매된 회사가 없습니다')+'</div>'; return; }
-  var h='';
+  var lbl=_pvRangeLabel();
+  if(!arr.length){ el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:14px;text-align:center">'+(q?'검색 결과가 없습니다':lbl+'에 판매된 회사가 없습니다')+'</div>'; return; }
+  var h='<div style="font-size:11px;font-weight:800;color:var(--gold2);padding:0 12px 7px">'+lbl+' 기준</div>';
   arr.forEach(function(c){
     var sumMan=Math.round((c.life+c.non)/10000);
     h+='<div onclick="selectPvCo(\''+c.co.replace(/'/g,"")+'\')" style="display:flex;align-items:center;justify-content:space-between;font-size:14px;padding:11px 12px;border-radius:10px;cursor:pointer;margin-bottom:4px;border:1px solid transparent">'+
@@ -8569,6 +8613,8 @@ function _pvFpCoItems_removed(){ return []; }
 // 회사별 보기 메인 렌더 (3가지 상태)
 function _renderPvCompanyView(){
   var isAdminPv=_canSeeReport(currentUser);
+  // 기간 세그먼트/네비로 기간이 바뀌면 상단 회사 목록 수치도 다시 계산한다
+  if(!_pvCo && typeof renderPvCoList==='function') renderPvCoList();
   // 날짜/월/기간 네비
   var dayNav=document.getElementById('pvDayNav'), monthNav=document.getElementById('pvMonthNav'), rangeNav=document.getElementById('pvRangeNav');
   var weekNav2=document.getElementById('pvWeekNav');
@@ -10587,7 +10633,8 @@ function _fpRangeRecs(){
 function renderFpPerf(){
   var recs=_fpRangeRecs();
   var goalDB=getFpGoalDB()[_fpSelYm()]||{};
-  var fpList=getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='\ub300\ud45c'; });
+  // 집계 대상: 활성 FP + '업적유지' 지정된 비활성 FP
+  var fpList=getMergedFpList().filter(function(fp){ return (fp.active || fp.perfKeep===true) && fp.role!=='\ub300\ud45c'; });
 
   // \uc804\uccb4 FP \uc9d1\uacc4
   var byFp={};
@@ -10599,7 +10646,8 @@ function renderFpPerf(){
       _goalMan=_fpPlanGoalMan(fp.id);
     }
     byFp[fp.id]={ id:fp.id, name:fp.name, branch:fp.branch, mgr:g.mgr||'', goal:_goalMan||0,
-      life:0, non:0, lifeCnt:0, nonCnt:0, cnt:0, total:0 };
+      life:0, non:0, lifeCnt:0, nonCnt:0, etc:0, etcCnt:0, cnt:0, total:0,
+      keep:(fp.active===false && fp.perfKeep===true) };
   });
   recs.forEach(function(r){
     var f=byFp[r.fpId]; if(!f) return;
@@ -10608,6 +10656,7 @@ function renderFpPerf(){
       var amt=parseInt(p.amount)||0; var cls=_perfClassify(p.co);
       if(cls==='life'){ f.life+=amt; f.lifeCnt++; }
       else if(cls==='non'){ f.non+=amt; f.nonCnt++; }
+      else { f.etc+=amt; f.etcCnt++; }
     });
   });
   var allRows=Object.keys(byFp).map(function(k){ return byFp[k]; });
@@ -10620,8 +10669,8 @@ function renderFpPerf(){
   });
 
   // KPI \ud569\uacc4 (\ud0ed \ubc94\uc704)
-  var sumGoal=0,sumTot=0,sumLife=0,sumNon=0,sumLifeCnt=0,sumNonCnt=0,sumCnt=0;
-  scopeRows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumLifeCnt+=f.lifeCnt; sumNonCnt+=f.nonCnt; sumCnt+=f.cnt; });
+  var sumGoal=0,sumTot=0,sumLife=0,sumNon=0,sumLifeCnt=0,sumNonCnt=0,sumCnt=0,sumEtc=0,sumEtcCnt=0;
+  scopeRows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumLifeCnt+=f.lifeCnt; sumNonCnt+=f.nonCnt; sumCnt+=f.cnt; sumEtc+=(f.etc||0); sumEtcCnt+=(f.etcCnt||0); });
   var _branchGoal = 0;
   try {
     var _bgF = getBranchMonthGoals();
@@ -10635,21 +10684,22 @@ function renderFpPerf(){
   var rate=_useGoal>0?Math.round(sumTot/10000/_useGoal*100):0;
   var _rateLbl = document.getElementById('fpKpiRateLbl');
   if(_fpTab!=='mgr'){
-    if(_rateLbl) _rateLbl.textContent = '\uc0dd\uc190\ubcf4 \ud569\uc0b0';
-    var _sumLN = Math.round((sumLife+sumNon)/10000);
-    document.getElementById('fpKpiRate').textContent = _sumLN.toLocaleString()+'\ub9cc';
-    document.getElementById('fpKpiRateSub').textContent = '\uc0dd '+Math.round(sumLife/10000).toLocaleString()+' \u00b7 \uc190 '+Math.round(sumNon/10000).toLocaleString();
+    if(_rateLbl) _rateLbl.textContent = '\ucd1d \ubcf4\uc7a5\uc6d4\ucd08';
+    document.getElementById('fpKpiRate').textContent = Math.round(sumTot/10000).toLocaleString()+'\ub9cc';
+    var _lnSub = '\uc0dd '+Math.round(sumLife/10000).toLocaleString()+' \u00b7 \uc190 '+Math.round(sumNon/10000).toLocaleString();
+    if(sumEtc>0) _lnSub += ' \u00b7 \uae30\ud0c0 '+Math.round(sumEtc/10000).toLocaleString();
+    document.getElementById('fpKpiRateSub').textContent = _lnSub;
   } else {
     if(_rateLbl) _rateLbl.textContent = '\ub2ec\uc131\ub960';
     document.getElementById('fpKpiRate').textContent = _useGoal>0?rate+'%':'\u2014';
     document.getElementById('fpKpiRateSub').textContent = Math.round(sumTot/10000).toLocaleString()+' / '+(_useGoal?_useGoal.toLocaleString():'\u2014')+'\ub9cc';
   }
   document.getElementById('fpKpiLife').textContent = Math.round(sumLife/10000).toLocaleString()+'\ub9cc';
-  document.getElementById('fpKpiLifeCnt').textContent = sumLifeCnt+'\uac74';
+  document.getElementById('fpKpiLifeCnt').textContent = '\uc0c1\ud488 '+sumLifeCnt+'\uac74';
   document.getElementById('fpKpiNon').textContent = Math.round(sumNon/10000).toLocaleString()+'\ub9cc';
-  document.getElementById('fpKpiNonCnt').textContent = sumNonCnt+'\uac74';
+  document.getElementById('fpKpiNonCnt').textContent = '\uc0c1\ud488 '+sumNonCnt+'\uac74';
   document.getElementById('fpKpiCnt').textContent = sumCnt+'\uac74';
-  document.getElementById('fpKpiAct').textContent = '\ud65c\ub3d9 \u2014';
+  document.getElementById('fpKpiAct').textContent = '\uc0c1\ud488 '+(sumLifeCnt+sumNonCnt+sumEtcCnt)+'\uac74';
 
   var wrap=document.getElementById('fpPerfTableWrap');
 
@@ -10691,9 +10741,11 @@ function renderFpPerf(){
     var rankCell = (idx<3 && hasPerf) ? '<span style="font-size:15px">'+medals[idx]+'</span>' : '<span style="font-weight:700;color:'+(hasPerf?'var(--text2)':'var(--text3)')+'">'+(idx+1)+'</span>';
     var rowStyle = hasPerf ? '' : ' style="opacity:.55"';
     var _sumMan = Math.round((f.life+f.non)/10000);
+    // 비활성이지만 '업적유지'로 집계에 남겨둔 FP 표시
+    var keepBadge = f.keep ? '<span style="display:inline-block;font-size:8px;font-weight:800;color:#854F0B;background:#FAEEDA;padding:1px 5px;border-radius:5px;margin-left:4px">\uc720\uc9c0</span>' : '';
     h+='<tr'+rowStyle+'>'+
       '<td style="padding-left:12px;text-align:left">'+rankCell+'</td>'+
-      '<td style="text-align:left">'+chip+f.name+'</td>'+
+      '<td style="text-align:left">'+chip+f.name+keepBadge+'</td>'+
       '<td class="fp-col-opt" style="text-align:right;color:var(--text3)">'+(f.goal?f.goal.toLocaleString():'\u2014')+'</td>'+
       '<td class="fp-col-opt" style="text-align:right;font-weight:700">'+totMan.toLocaleString()+'</td>'+
       '<td style="text-align:right;font-weight:700;color:var(--gold2)">'+_sumMan.toLocaleString()+'</td>'+
@@ -11077,7 +11129,7 @@ function exportFpDailyReport(){
 function _fpAllRows(){
   var recs=_fpRangeRecs();
   var goalDB=getFpGoalDB()[_fpSelYm()]||{};
-  var fpList=getMergedFpList().filter(function(fp){ return fp.active && fp.role!=='\ub300\ud45c'; });
+  var fpList=getMergedFpList().filter(function(fp){ return (fp.active || fp.perfKeep===true) && fp.role!=='\ub300\ud45c'; });
   var byFp={};
   fpList.forEach(function(fp){
     var g=goalDB[fp.id]||{};
@@ -16728,15 +16780,13 @@ function renderMonthCal() {
     s += '<span style="font-size:11px;padding:3px 11px;border-radius:20px;background:rgba(31,146,104,.1);color:#1F9268;font-weight:700">● 완료 '+monDone+'</span>';
     s += '<span class="sum-rowbreak"></span>';
 
-    // 활동 통계 그룹 (PT예정 · 청약예정 · 합계)
+    // 활동 통계 그룹 (PT예정 · 청약예정)
     if(monPt||monCk){
       var _mManF = function(v){ var mn=Math.round(v/10000); return mn>=1?mn.toLocaleString()+'만':v.toLocaleString(); };
       var g='<span class="sum-grp" style="display:inline-flex;align-items:center;gap:9px;padding:6px 14px;border-radius:10px;background:var(--sur);border:1px solid var(--bdr);font-size:12px;font-weight:700">';
       g+='<span style="color:var(--text2)"><span class="dsum-full">'+label+' PT예정 '+monPt.toLocaleString()+'</span><span class="dsum-short">PT '+_mManF(monPt)+'</span></span>';
       g+='<span style="color:var(--bdr2)">·</span>';
       g+='<span style="color:#1F7A4D"><span class="dsum-full">청약예정 '+monCk.toLocaleString()+'</span><span class="dsum-short">청약 '+_mManF(monCk)+'</span></span>';
-      g+='<span style="color:var(--bdr2)">·</span>';
-      g+='<span style="color:var(--text2)"><span class="dsum-full">합계 '+(monPt+monCk).toLocaleString()+'</span><span class="dsum-short">합 '+_mManF(monPt+monCk)+'</span></span>';
       g+='</span>';
       s+=g;
     }
@@ -17335,14 +17385,12 @@ function renderWeekActTable() {
 
     // _wManF must be defined unconditionally; it is also used by the 주간보장 box below
     var _wManF = function(v){ var mn=Math.round(v/10000); return mn>=1?mn.toLocaleString()+'만':v.toLocaleString(); };
-    // 활동 통계 그룹 (PT · 청약 · 합계)
+    // 활동 통계 그룹 (PT예정 · 청약예정)
     if(weekPt||weekCk){
       var g='<span class="sum-grp" style="display:inline-flex;align-items:center;gap:9px;padding:6px 14px;border-radius:10px;background:var(--sur);border:1px solid var(--bdr);font-size:12px;font-weight:700">';
       g+='<span style="color:var(--text2)"><span class="dsum-full">'+label+' PT예정 '+weekPt.toLocaleString()+'</span><span class="dsum-short">PT '+_wManF(weekPt)+'</span></span>';
       g+='<span style="color:var(--bdr2)">·</span>';
       g+='<span style="color:#1F7A4D"><span class="dsum-full">청약예정 '+weekCk.toLocaleString()+'</span><span class="dsum-short">청약 '+_wManF(weekCk)+'</span></span>';
-      g+='<span style="color:var(--bdr2)">·</span>';
-      g+='<span style="color:var(--text2)"><span class="dsum-full">합계 '+(weekPt+weekCk).toLocaleString()+'</span><span class="dsum-short">합 '+_wManF(weekPt+weekCk)+'</span></span>';
       g+='</span>';
       s+=g;
     }
@@ -19759,7 +19807,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="pv-kpi pv-tot"><div class="pv-kpi-lbl" id="fpKpiRateLbl">달성률</div><div class="pv-kpi-val" id="fpKpiRate">—</div><div class="pv-kpi-sub" id="fpKpiRateSub">— / —</div></div>
       <div class="pv-kpi pv-al"><div class="pv-kpi-lbl">생보</div><div class="pv-kpi-val" id="fpKpiLife">0만</div><div class="pv-kpi-sub" id="fpKpiLifeCnt">0건</div></div>
       <div class="pv-kpi pv-br"><div class="pv-kpi-lbl">손보</div><div class="pv-kpi-val" id="fpKpiNon">0만</div><div class="pv-kpi-sub" id="fpKpiNonCnt">0건</div></div>
-      <div class="pv-kpi pv-tot"><div class="pv-kpi-lbl">총 건수</div><div class="pv-kpi-val" id="fpKpiCnt">0건</div><div class="pv-kpi-sub" id="fpKpiAct">활동 —</div></div>
+      <div class="pv-kpi pv-tot"><div class="pv-kpi-lbl">총 계약 건수</div><div class="pv-kpi-val" id="fpKpiCnt">0건</div><div class="pv-kpi-sub" id="fpKpiAct">상품 —</div></div>
     </div>
 
     <!-- FP별 표 -->
