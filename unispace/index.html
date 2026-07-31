@@ -1103,6 +1103,22 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
   cursor: pointer; transition: all 0.2s; white-space: nowrap;
 }
 .linksend-btn:hover { background: rgba(216,90,48,0.18); }
+.event-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,180,0,0.14); border: 1px solid rgba(255,180,0,0.5);
+  border-radius: 20px; padding: 7px 14px;
+  color: #c98a12; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  position: relative;
+}
+.event-btn:hover { background: rgba(255,180,0,0.26); }
+.event-btn .evdot {
+  position: absolute; top: 4px; right: 6px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #ff3b30; box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
+  animation: evPulse 1.6s ease-in-out infinite;
+}
+@keyframes evPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.82); } }
 .cust-view-btn {
   display: flex; align-items: center; gap: 6px;
   background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.35);
@@ -2079,7 +2095,13 @@ body.theme-light .confirm-cancel { background: var(--bg3); }
 .accordion-chevron { font-size: 16px; color: var(--text3); transition: transform .3s; }
 .accordion-chevron.open { transform: rotate(180deg); }
 .accordion-body { overflow: hidden; transition: max-height .35s cubic-bezier(.4,0,.2,1); max-height: 0; }
-.accordion-body.open { max-height: 2000px; }
+.accordion-body.open { max-height: 20000px; }
+/* open animation finished -> release the cap so tall mobile content is never clipped */
+.accordion-body.acc-free { max-height: none !important; transition: none; }
+/* activity table: capped + contained on desktop, free-flowing on mobile so the
+   inner box never swallows the page scroll */
+.week-table-scroll { max-height: 340px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: rgba(201,168,76,.2) transparent; }
+@media (max-width: 768px) { .week-table-scroll { max-height: none; overflow-y: visible; } }
 body.theme-light .accordion-header:hover { background: rgba(26,39,68,.02); }
 
 /* ── 섹션별 전체 컬러 테두리 (얇게) ── */
@@ -3447,6 +3469,19 @@ window.UNISPACE_FCM = {
       <button type="button" class="sched-view-btn" id="scheduleBtn" onclick="openScheduleModal()">📅 일정 조회</button>
       <button type="button" class="consult-btn" id="consultBtn" onclick="toggleConsultMode()">🎯 상담 모드</button>
       <button type="button" class="linksend-btn" id="linkSendBtn" onclick="openLinkSend()">📤 영상 및 링크전송</button>
+      <button type="button" class="event-btn" id="eventBtn" onclick="window.location.href='/event/'">🎪 워크플레이<span class="evdot" id="evDot"></span></button>
+<script>
+(function(){
+  var n = new Date();
+  var kst = new Date(n.getTime() + n.getTimezoneOffset() * 60000 + 9 * 3600000);
+  var m = kst.getMonth() + 1, d = kst.getDate();
+  var num = kst.getFullYear() * 10000 + m * 100 + d;
+  if (num > 20260810) {
+    var dot = document.getElementById('evDot');
+    if (dot) dot.style.display = 'none';
+  }
+})();
+</script>
       <div class="header-clock">
         <div class="clock-time" id="clockTime">00:00</div>
         <div class="clock-date" id="clockDate">-</div>
@@ -3723,7 +3758,7 @@ window.UNISPACE_FCM = {
         <div style="padding:0 12px 12px">
           <div id="weekViewWrap">
             <div style="overflow-x:auto">
-              <div style="max-height:340px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(201,168,76,.2) transparent;">
+              <div class="week-table-scroll">
                 <table class="week-table" id="weekActTable" style="min-width:600px"></table>
               </div>
             </div>
@@ -3880,6 +3915,46 @@ function toggleAccordion(id) {
     }, 120);
   }
 }
+
+// Accordion height guard.
+// CSS caps .accordion-body.open at 20000px only for the open animation.
+// Once the animation ends we add .acc-free (max-height:none) so tall content
+// on mobile (1-column TOP5 grid + unicorn club + standard FP) is never clipped.
+(function(){
+  function _accRelease(body){
+    if(body._accT) { clearTimeout(body._accT); body._accT = null; }
+    body._accT = setTimeout(function(){
+      if(body.classList.contains('open')) body.classList.add('acc-free');
+    }, 400);
+  }
+  function _accLock(body){
+    if(body._accT) { clearTimeout(body._accT); body._accT = null; }
+    if(body.classList.contains('acc-free')){
+      body.style.maxHeight = body.scrollHeight + 'px';
+      body.classList.remove('acc-free');
+      void body.offsetHeight;
+      body.style.maxHeight = '';
+    }
+  }
+  function _accWatch(body){
+    if(body._accWatched) return;
+    body._accWatched = true;
+    if(body.classList.contains('open')) _accRelease(body);
+    try {
+      var mo = new MutationObserver(function(){
+        if(body.classList.contains('open')) _accRelease(body);
+        else _accLock(body);
+      });
+      mo.observe(body, { attributes:true, attributeFilter:['class'] });
+    } catch(e){}
+  }
+  function _accInit(){
+    var list = document.querySelectorAll('.accordion-body');
+    for(var i=0;i<list.length;i++) _accWatch(list[i]);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _accInit);
+  else _accInit();
+})();
 
 // ── Toast ───────────────────────────────────────────
 function showToast(msg) {
@@ -6462,7 +6537,7 @@ function loadUnicornClub(ym){
   if(!el) return;
   if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id) return;
   if(!ym) ym = (typeof _perfSelYm==='function') ? _perfSelYm() : getCurrentYM();
-  var url = UNISPACE_GAS_URL + '?action=getBojangTop&ym=' + encodeURIComponent(ym) + '&limit=10&_=' + Date.now();
+  var url = UNISPACE_GAS_URL + '?action=getBojangTop&ym=' + encodeURIComponent(ym) + '&limit=500&_=' + Date.now();
   fetch(url).then(function(r){ return r.json(); }).then(function(res){
     if(res && res.ok && res.rows){ _unicornRows = res.rows; _renderUnicornClub(res.rows, ym); }
     else { _renderUnicornClub([], ym); }
@@ -7163,6 +7238,8 @@ function loadPerfFromGas(cb, force){
       if(_recentDeletedPerf && Object.keys(_recentDeletedPerf).length){
         arr = arr.filter(function(r){ return !_recentDeletedPerf[r.id]; });
       }
+      // records still waiting for server confirmation must survive this overwrite
+      if(typeof _perfReconcilePending==='function') arr = _perfReconcilePending(arr);
       savePerfLog(arr);
       rebuildPerfData();
     }
@@ -7537,18 +7614,30 @@ function confirmPerfInput() {
   savePerfLog(log);
   rebuildPerfData();
 
-  // GAS에 저장 (POST) — 같은 id면 덮어쓰기
-  fetch(UNISPACE_GAS_URL, {
-    method:'POST',
-    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action:'savePerf', data:{
-      id:perfId, date:date, fpCode:fpId, fpName:fpName, branch:branch,
-      products:products, total:total, note:''
-    }})
-  }).catch(function(){});
+  // queue first, then send. the record stays in the pending queue until the
+  // server confirms it, so a failed save can never vanish silently.
+  _perfPendingAdd(newPerf);
+  _perfLockSubmit(true);
+
+  var amtTxt = fpName+' '+total.toLocaleString()+'원 ('+products.length+'건)';
+
+  _perfSubmitToGas(newPerf, 1, function(okFlag, res){
+    _perfLockSubmit(false);
+    if(okFlag){
+      if(res && res.mode === 'dup-skip'){
+        showToast('ℹ️ 이미 동일한 건이 등록되어 있어 중복 저장을 막았습니다');
+      } else {
+        showToast((isEdit?'✏️ ':'✅ ')+amtTxt+(isEdit?' 수정 완료':' 업적 입력 완료'));
+      }
+    } else {
+      showToast('⚠️ '+amtTxt+' 서버 저장 확인 실패 — 대기열에 담아 자동 재전송합니다');
+    }
+    renderGoals();
+    renderTop10();
+    if(typeof loadUnicornClub==='function') loadUnicornClub();
+  });
 
   if(isEdit){
-    showToast('✏️ '+fpName+' '+total.toLocaleString()+'원 ('+products.length+'건) 수정 완료');
     _editingPerfId = null;
     _perfSetEditUI(false);
     closePerfModal();
@@ -7558,12 +7647,87 @@ function confirmPerfInput() {
     return;
   }
 
-  showToast('✅ '+fpName+' '+total.toLocaleString()+'원 ('+products.length+'건) 업적 입력 완료');
   // 모달 유지 + 다음 입력 위해 상품 내역만 초기화 (FP·날짜는 그대로)
   _perfProducts = [{co:'', cat:'', amount:''}];
   renderPerfProds();
   renderGoals();
   renderTop10();
+}
+
+// ── 업적 저장 대기열 (서버 확인 전까지 보관 · 자동 재전송) ──────────
+var PERF_PENDING_KEY = 'unispace_perf_pending';
+var _perfFlushing = false;
+function _perfPendingGet(){ try{ return JSON.parse(localStorage.getItem(PERF_PENDING_KEY)||'{}'); }catch(e){ return {}; } }
+function _perfPendingSet(o){ try{ localStorage.setItem(PERF_PENDING_KEY, JSON.stringify(o)); }catch(e){} }
+function _perfPendingAdd(rec){
+  var o = _perfPendingGet();
+  o[rec.id] = { rec: rec, at: Date.now() };
+  _perfPendingSet(o);
+}
+function _perfPendingDel(id){
+  var o = _perfPendingGet();
+  if(o[id]){ delete o[id]; _perfPendingSet(o); }
+}
+function _perfLockSubmit(on){
+  var b = document.getElementById('perfSubmitBtn');
+  if(!b) return;
+  b.disabled = !!on;
+  b.style.opacity = on ? '.55' : '';
+  b.style.pointerEvents = on ? 'none' : '';
+  if(on){
+    if(b._unlockT) clearTimeout(b._unlockT);
+    b._unlockT = setTimeout(function(){ _perfLockSubmit(false); }, 4000);
+  } else if(b._unlockT){ clearTimeout(b._unlockT); b._unlockT = null; }
+}
+function _perfSubmitToGas(rec, attempt, onDone){
+  var payload = JSON.stringify({ action:'savePerf', data:{
+    id: rec.id, date: rec.date, fpCode: rec.fpId, fpName: rec.fpName, branch: rec.branch,
+    products: rec.products, total: rec.total, note: rec.note || ''
+  }});
+  fetch(UNISPACE_GAS_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: payload
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ok){ _perfPendingDel(rec.id); if(onDone) onDone(true, res); return; }
+    if(attempt < 2){ setTimeout(function(){ _perfSubmitToGas(rec, attempt+1, onDone); }, 1200); return; }
+    if(onDone) onDone(false, res);
+  }).catch(function(){
+    if(attempt < 2){ setTimeout(function(){ _perfSubmitToGas(rec, attempt+1, onDone); }, 1200); return; }
+    if(onDone) onDone(false, null);
+  });
+}
+// reconcile the pending queue against the list the server just returned.
+// confirmed -> drop. missing -> keep visible on screen and re-send once.
+function _perfReconcilePending(arr){
+  var o = _perfPendingGet();
+  var ids = [];
+  for(var k in o){ if(o.hasOwnProperty(k)) ids.push(k); }
+  if(!ids.length) return arr;
+  var onServer = {};
+  for(var i=0;i<arr.length;i++) onServer[arr[i].id] = 1;
+  var DAY = 86400000;
+  var changed = false;
+  var resend = [];
+  for(var j=0;j<ids.length;j++){
+    var id = ids[j], ent = o[id];
+    if(!ent || !ent.rec){ delete o[id]; changed = true; continue; }
+    if(onServer[id]){ delete o[id]; changed = true; continue; }
+    if(Date.now() - (ent.at||0) > DAY){ delete o[id]; changed = true; continue; }
+    arr.push(ent.rec);
+    resend.push(ent.rec);
+  }
+  if(changed) _perfPendingSet(o);
+  if(resend.length && !_perfFlushing){
+    _perfFlushing = true;
+    for(var m=0;m<resend.length;m++){
+      (function(r, idx){
+        setTimeout(function(){ _perfSubmitToGas(r, 1, null); }, idx*800);
+      })(resend[m], m);
+    }
+    setTimeout(function(){ _perfFlushing = false; }, resend.length*800 + 4000);
+  }
+  return arr;
 }
 
 // ── 업적 조회 ───────────────────────────────────────
