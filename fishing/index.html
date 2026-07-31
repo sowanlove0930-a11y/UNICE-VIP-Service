@@ -125,6 +125,20 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .trow .br-a { font-size:9.5px; color:#c2185b; }
 .trow .br-b { font-size:9.5px; color:#1552b0; }
 
+.moreb { display:block; width:100%; margin-top:8px; padding:8px; border:none; border-radius:100px; font-family:inherit; font-size:11.5px; font-weight:800; color:#0b6ea8; background:#eaf5ff; cursor:pointer; }
+.dark .moreb { color:#cfeaff; background:rgba(255,255,255,.12); }
+.myrank { display:flex; justify-content:space-between; align-items:center; margin-top:7px; padding:7px 10px; background:linear-gradient(135deg,#fff3d0,#ffe6a0); border-radius:10px; font-size:11.5px; font-weight:900; color:#a5691f; }
+.pouchrow { display:flex; justify-content:space-between; align-items:center; font-size:11.5px; font-weight:700; color:#456; padding:3px 0; }
+.pouchrow .pd { font-size:10px; color:#9ab; font-weight:700; }
+.ovl { position:fixed; inset:0; z-index:90; background:rgba(3,25,50,.75); display:none; align-items:flex-end; justify-content:center; }
+.ovl.show { display:flex; }
+.ovl-box { width:100%; max-width:440px; max-height:78vh; background:#fff; border-radius:22px 22px 0 0; padding:16px 14px 20px; display:flex; flex-direction:column; animation:slideup .3s cubic-bezier(.2,1,.4,1); }
+@keyframes slideup { from{transform:translateY(60px);opacity:0} to{transform:none;opacity:1} }
+.ovl-t { font-size:16px; font-weight:900; color:#0b4d7c; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+.ovl-x { font-size:20px; color:#aab; cursor:pointer; line-height:1; padding:0 4px; }
+.ovl-list { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.ovl-row { font-size:12px; font-weight:700; color:#334; padding:7px 4px; border-bottom:1px solid #f0f4f8; line-height:1.5; }
+.ovl-row.gold { color:#a5691f; background:#fffaf0; }
 .foot { text-align:center; margin-top:14px; font-size:12px; font-weight:900; color:#fff; text-shadow:0 2px 8px rgba(0,40,80,.5); position:relative; z-index:3; }
 
 /* login */
@@ -206,6 +220,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
   <div class="card dark">
     <div class="feed-t">📡 실시간 조기 LIVE</div>
     <div id="feed"><div class="empty" style="color:#8ab;">새벽 바다 소식을 기다리는 중...</div></div>
+    <button class="moreb" id="feedMore" style="display:none;">📜 전체 당첨 내역 보기</button>
   </div>
 
   <div class="card">
@@ -249,6 +264,8 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
   <div class="card">
     <div class="sec-t"><span>🏆 8월 조기 TOP</span></div>
     <div id="topList"><div class="empty">첫 조기를 기다리는 중 🎣</div></div>
+    <div class="myrank" id="myRankRow" style="display:none;"></div>
+    <button class="moreb" id="topMore" style="display:none;">🏅 전체 순위 보기</button>
   </div>
 
   <div style="margin:13px 12px 0; position:relative; z-index:3;">
@@ -267,6 +284,13 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
       <button class="cdlg-no" id="cdlgNo">취소</button>
       <button class="cdlg-ok" id="cdlgOk">확인</button>
     </div>
+  </div>
+</div>
+
+<div class="ovl" id="ovl">
+  <div class="ovl-box">
+    <div class="ovl-t"><span id="ovlT">전체 내역</span><span class="ovl-x" id="ovlX">✕</span></div>
+    <div class="ovl-list" id="ovlList"></div>
   </div>
 </div>
 
@@ -407,6 +431,9 @@ function render(d, prev, first){
   renderFeed(d, prev);
   renderMy(d);
   renderTop(d);
+  renderRank(d);
+  qs('feedMore').style.display = ((d.feedAll || []).length > 5) ? 'block' : 'none';
+  qs('topMore').style.display = ((d.topAll || []).length > 10) ? 'block' : 'none';
 
   if (d.isAdmin) {
     qs('bigHint').textContent = d.bigTarget ? ('지정: ' + d.bigTarget.name) : '대조기 탭 → 지정';
@@ -502,7 +529,7 @@ function renderMy(d){
   }
   var mc = d.myCatches || [];
   if (!mc.length) {
-    qs('pouch').textContent = '🧺 내 어망: 아직 비어있음';
+    qs('pouch').innerHTML = '🧺 내 어망: 아직 비어있음';
   } else {
     var cnt = [0,0,0,0];
     var i;
@@ -512,7 +539,14 @@ function renderMy(d){
     if (cnt[2]) parts.push('🐟중 ' + cnt[2]);
     if (cnt[1]) parts.push('🐟소 ' + cnt[1]);
     if (cnt[0]) parts.push('🐠잔챙이 ' + cnt[0]);
-    qs('pouch').textContent = '🧺 내 어망: ' + parts.join(' · ') + ' (총 ' + mc.length + '마리)';
+    var ph = '<div style="font-weight:900; color:#0b6ea8; margin-bottom:5px;">🧺 내 어망 · ' + parts.join(' · ') + ' (총 ' + mc.length + '마리)</div>';
+    var mcs = mc.slice(0).sort(function(x, y){ return _fep(y.at) - _fep(x.at); });
+    var k;
+    for (k = 0; k < mcs.length && k < 6; k++) {
+      ph += '<div class="pouchrow"><span>' + TIER_EMO[mcs[k].tier] + ' ' + esc(mcs[k].fishName) + ' → ' + esc(mcs[k].prize) + '</span><span class="pd">' + esc(String(mcs[k].at || '').substring(5, 10)) + '</span></div>';
+    }
+    if (mcs.length > 6) ph += '<div class="pd" style="text-align:center; margin-top:3px;">외 ' + (mcs.length - 6) + '마리 더</div>';
+    qs('pouch').innerHTML = ph;
   }
 }
 
@@ -931,6 +965,55 @@ qs('cdlgOk').addEventListener('click', function(){ dlgDone('ok'); });
 qs('cdlgNo').addEventListener('click', function(){ dlgDone('no'); });
 qs('cdlg').addEventListener('click', function(e){ if (e.target === this) dlgDone(null); });
 qs('cdlgIn').addEventListener('keydown', function(e){ if (e.key === 'Enter') dlgDone('ok'); });
+
+/* ---------- lists: rank, full history ---------- */
+var TIER_EMO = ['🐠', '🐟', '🐟', '🐡'];
+function _fep(s){
+  var t = new Date(String(s || '').replace(' ', 'T') + '+09:00').getTime();
+  return isNaN(t) ? 0 : t;
+}
+function renderRank(d){
+  var row = qs('myRankRow');
+  if (!d.myRank || d.myRank <= 0) { row.style.display = 'none'; return; }
+  row.style.display = 'flex';
+  row.innerHTML = '<span>🙋‍♀️ 내 순위</span><span>' + d.myRank + '위 · ' + d.myTotal + '마리</span>';
+}
+function feedRowHtml(f){
+  var gold = (f.type === 'mulcheok') || (f.tier === 3);
+  return '<div class="ovl-row' + (gold ? ' gold' : '') + '">' + feedHtml(f) + '</div>';
+}
+function openOvl(kind){
+  var s = STATE || {};
+  var html = '', i;
+  if (kind === 'feed') {
+    var list = s.feedAll || s.feed || [];
+    qs('ovlT').textContent = '📜 전체 당첨 내역 (' + list.length + '건)';
+    if (!list.length) html = '<div class="empty">아직 기록이 없어요</div>';
+    for (i = 0; i < list.length; i++) html += feedRowHtml(list[i]);
+  } else {
+    var tl = s.topAll || s.top || [];
+    qs('ovlT').textContent = '🏅 전체 순위 (' + tl.length + '명)';
+    if (!tl.length) html = '<div class="empty">아직 기록이 없어요</div>';
+    for (i = 0; i < tl.length; i++) {
+      var t = tl[i];
+      var cstr = '';
+      if (t.cnt[3]) cstr += '🐡' + t.cnt[3] + ' ';
+      if (t.cnt[2]) cstr += '🐟중' + t.cnt[2] + ' ';
+      if (t.cnt[1]) cstr += '🐟소' + t.cnt[1] + ' ';
+      if (t.cnt[0]) cstr += '🐠' + t.cnt[0];
+      var mine = (ME && String(t.fp || '').toUpperCase() === String(ME.id).toUpperCase());
+      html += '<div class="ovl-row' + (mine ? ' gold' : '') + '"><b>' + (i + 1) + '위</b> ' + esc(fpLbl(t.name, t.title))
+           + ' <span style="color:#9ab;font-size:10.5px;">' + esc(t.branch) + '</span> · ' + cstr + '</div>';
+    }
+  }
+  qs('ovlList').innerHTML = html;
+  qs('ovlList').scrollTop = 0;
+  qs('ovl').classList.add('show');
+}
+qs('feedMore').addEventListener('click', function(){ openOvl('feed'); });
+qs('topMore').addEventListener('click', function(){ openOvl('top'); });
+qs('ovlX').addEventListener('click', function(){ qs('ovl').classList.remove('show'); });
+qs('ovl').addEventListener('click', function(e){ if (e.target === this) this.classList.remove('show'); });
 
 /* ---------- effects ---------- */
 function showToast(msg){
