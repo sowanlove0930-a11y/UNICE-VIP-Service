@@ -1046,7 +1046,9 @@ body.theme-light .pv-bf.on { background:#FAEEDA; border-color:#B8860B; color:#85
 .pv-amt { font-weight:800; color:var(--gold2); text-align:right; white-space:nowrap; }
 .pv-empty { text-align:center; padding:20px; color:var(--text3); font-size:12px; }
 /* 업적 목록 행 번호 (A안: 20px 고정폭 전용 칼럼) */
-.pv-tbl .pv-numcol { width:20px; padding-left:2px; padding-right:2px; text-align:right; color:#B4AE9E; font-weight:800; font-size:10px; font-variant-numeric:tabular-nums; }
+.pv-tbl .pv-numcol { width:22px; padding-left:2px; padding-right:2px; text-align:right; color:#B4AE9E; font-weight:800; font-size:10px; line-height:16px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* 상품 칸도 같은 줄높이 -> 상품이 2줄이면 번호도 2줄로 정확히 맞음 */
+.pv-tbl .pv-prodcol { line-height:16px; color:var(--text2); }
 .pv-daysum { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:var(--surface); border:1px solid var(--bdr); border-radius:9px; margin-top:10px; font-size:12px; font-weight:700; color:var(--text2); }
 .pv-daysum b { color:var(--gold2); }
 .pv-trend { display:flex; align-items:flex-end; gap:2px; height:100px; padding:8px 0 0; }
@@ -5241,8 +5243,8 @@ function renderBojangCard() {
       if (_d.indexOf(_ym) !== 0) continue;
       var _br = String(_r.branch || '');
       var _amt = parseInt(_r.total) || 0;
-      // 건수 기준 통일: 업적조회 / 일보와 동일하게 '계약(입력) 건수' 1건으로 센다
-      var _cnt = 1;
+      // 입력건 = 상품 입력 1줄. 상품이 2개면 2건 (업적조회 / 일보와 동일 기준)
+      var _cnt = (_r.products && _r.products.length) ? _r.products.length : 1;
       var _isAlpha = _br.indexOf('알파') >= 0;
       var _isBravo = _br.indexOf('브라보') >= 0;
       if (_isAlpha) { AMT_ALPHA += _amt; CNT_ALPHA += _cnt; }
@@ -8190,12 +8192,14 @@ function renderPerfView(){
   var self={amt:0,cnt:0,life:0,non:0};
   rangeRecs.forEach(function(r){
     var t=parseInt(r.total)||0;
-    tot.amt+=t; tot.cnt++;
+    // 입력건 = 상품 입력 1줄
+    var _n=(r.products && r.products.length) ? r.products.length : 1;
+    tot.amt+=t; tot.cnt+=_n;
     var bk=_pvBranchKey(r.branch);
     var tgt = (bk==='al') ? al : (bk==='br' ? br : null);
-    if(tgt){ tgt.amt+=t; tgt.cnt++; }
+    if(tgt){ tgt.amt+=t; tgt.cnt+=_n; }
     var isSelf = currentUser && (r.fpId === currentUser.id);
-    if(isSelf){ self.amt+=t; self.cnt++; }
+    if(isSelf){ self.amt+=t; self.cnt+=_n; }
     // 상품별 생보/손보 분류
     var recHasLife=false, recHasNon=false;
     (r.products||[]).forEach(function(p){
@@ -8295,7 +8299,7 @@ function renderPerfView(){
   }
   // 필터된 합계 (합계줄용)
   var fSum=0, fCnt=0;
-  listRecs.forEach(function(r){ fSum+=(parseInt(r.total)||0); fCnt++; });
+  listRecs.forEach(function(r){ fSum+=(parseInt(r.total)||0); fCnt+=((r.products&&r.products.length)?r.products.length:1); });
   var brLabel = _pvBranch==='al'?' · 알파':_pvBranch==='br'?' · 브라보':'';
 
   var listEl = document.getElementById('pvList');
@@ -8303,6 +8307,7 @@ function renderPerfView(){
     listEl.innerHTML = '<div class="pv-empty">등록된 업적이 없습니다</div>';
   } else {
     var rows='';
+    var _numAcc = 0; // 입력건 누적 번호 (상품 줄 단위)
     var canDel = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장'||currentUser.level==='manager'||currentUser.level==='admin'||(currentUser.title||'').indexOf('매니저')>=0);
     listRecs.forEach(function(r, _ri){
       var bk=_pvBranchKey(r.branch);
@@ -8317,7 +8322,12 @@ function renderPerfView(){
       var isSelfRow = currentUser && (r.fpId === currentUser.id);
       var meBadge = isSelfRow ? '<span style="font-size:9px;color:#854F0B;background:rgba(201,168,76,.15);padding:1px 5px;border-radius:4px;margin-left:4px">나</span>' : '';
       var rowClick = canDel ? ' onclick="openPerfEdit(\''+r.id+'\')" style="cursor:pointer"' : '';
-      rows+='<tr'+rowClick+'><td class="pv-numcol">'+(_ri+1)+'</td>'+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td style="color:var(--text2)">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원</td>'+delCol+'</tr>';
+      var _pLen = (r.products && r.products.length) ? r.products.length : 1;
+      var _nums = [];
+      for(var _nk=0; _nk<_pLen; _nk++) _nums.push(_numAcc + 1 + _nk);
+      _numAcc += _pLen;
+      var numCol = '<td class="pv-numcol">'+_nums.join('<br>')+'</td>';
+      rows+='<tr'+rowClick+'>'+numCol+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td class="pv-prodcol">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원</td>'+delCol+'</tr>';
     });
     var dateHead = (_pvRange!=='today') ? '<th>날짜</th>' : '';
     var delHead = canDel ? '<th></th>' : '';
@@ -10750,7 +10760,7 @@ function renderFpPerf(){
   });
   recs.forEach(function(r){
     var f=byFp[r.fpId]; if(!f) return;
-    f.cnt++; f.total += (parseInt(r.total)||0);
+    f.cnt += ((r.products && r.products.length) ? r.products.length : 1); f.total += (parseInt(r.total)||0);
     (r.products||[]).forEach(function(p){
       var amt=parseInt(p.amount)||0; var cls=_perfClassify(p.co);
       if(cls==='life'){ f.life+=amt; f.lifeCnt++; }
@@ -10815,9 +10825,9 @@ function renderFpPerf(){
     document.getElementById('fpKpiRateSub').textContent = Math.round(sumTot/10000).toLocaleString()+' / '+(_useGoal?_useGoal.toLocaleString():'\u2014')+'\ub9cc';
   }
   document.getElementById('fpKpiLife').textContent = Math.round(sumLife/10000).toLocaleString()+'\ub9cc';
-  document.getElementById('fpKpiLifeCnt').textContent = '\uc0c1\ud488 '+sumLifeCnt+'\uac74';
+  document.getElementById('fpKpiLifeCnt').textContent = '\uc785\ub825 '+sumLifeCnt+'\uac74';
   document.getElementById('fpKpiNon').textContent = Math.round(sumNon/10000).toLocaleString()+'\ub9cc';
-  document.getElementById('fpKpiNonCnt').textContent = '\uc0c1\ud488 '+sumNonCnt+'\uac74';
+  document.getElementById('fpKpiNonCnt').textContent = '\uc785\ub825 '+sumNonCnt+'\uac74';
   document.getElementById('fpKpiCnt').textContent = sumCnt+'\uac74';
   var _actEl = document.getElementById('fpKpiAct');
   if(_actEl){ _actEl.textContent = ''; _actEl.style.display = 'none'; }
@@ -11264,7 +11274,7 @@ function _fpAllRows(){
   });
   recs.forEach(function(r){
     var f=byFp[r.fpId]; if(!f) return;
-    f.cnt++; f.total += (parseInt(r.total)||0);
+    f.cnt += ((r.products && r.products.length) ? r.products.length : 1); f.total += (parseInt(r.total)||0);
     (r.products||[]).forEach(function(p){
       var amt=parseInt(p.amount)||0; var cls=_perfClassify(p.co);
       if(cls==='life') f.life+=amt; else if(cls==='non') f.non+=amt;
@@ -19928,7 +19938,7 @@ function doCheckin() { doSmartCheckin(); }
       <div class="pv-kpi pv-tot"><div class="pv-kpi-lbl" id="fpKpiRateLbl">달성률</div><div class="pv-kpi-val" id="fpKpiRate">—</div><div class="pv-kpi-sub" id="fpKpiRateSub">— / —</div></div>
       <div class="pv-kpi pv-al"><div class="pv-kpi-lbl">생보</div><div class="pv-kpi-val" id="fpKpiLife">0만</div><div class="pv-kpi-sub" id="fpKpiLifeCnt">0건</div></div>
       <div class="pv-kpi pv-br"><div class="pv-kpi-lbl">손보</div><div class="pv-kpi-val" id="fpKpiNon">0만</div><div class="pv-kpi-sub" id="fpKpiNonCnt">0건</div></div>
-      <div class="pv-kpi pv-tot"><div class="pv-kpi-lbl">총 계약 건수</div><div class="pv-kpi-val" id="fpKpiCnt">0건</div><div class="pv-kpi-sub" id="fpKpiAct">상품 —</div></div>
+      <div class="pv-kpi pv-tot"><div class="pv-kpi-lbl">총 입력 건수</div><div class="pv-kpi-val" id="fpKpiCnt">0건</div><div class="pv-kpi-sub" id="fpKpiAct"></div></div>
     </div>
 
     <!-- FP별 표 -->
