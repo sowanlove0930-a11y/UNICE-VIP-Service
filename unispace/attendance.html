@@ -127,6 +127,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .prcal-day.today{border-color:var(--gold);border-width:2px;}
 .prcal-day.sun{color:var(--red);}
 .prcal-day.sat{color:var(--blue);}
+.prcal-day.hol{background:rgba(220,38,38,.07);border-radius:8px;}
+
 .prcal-day.sel.sun,.prcal-day.sel.sat{color:#fff;}
 .prcal-dot{width:6px;height:6px;border-radius:50%;position:absolute;bottom:5px;}
 .prcal-dot.pend{background:var(--orange);}
@@ -419,7 +421,7 @@ textarea.prm-input{resize:vertical;}
       </div>
     </div>
     <div class="att-summary">
-      <div class="att-sum-card"><div class="att-sum-val" style="color:#34D399" id="sumAttRate">—</div><div class="att-sum-label">이번달 출근율</div></div>
+      <div class="att-sum-card"><div class="att-sum-val" style="color:#34D399" id="sumAttRate">—</div><div class="att-sum-label">이번달 출근율<span id="sumWorkDays" style="display:block;font-size:10px;color:var(--text3);margin-top:2px"></span></div></div>
       <div class="att-sum-card"><div class="att-sum-val" style="color:#FCA5A5" id="sumLateFp">—</div><div class="att-sum-label" id="sumNormalLabel">지각 FP</div></div>
       <div class="att-sum-card"><div class="att-sum-val" style="color:var(--text3)" id="sumAbsentFp">—</div><div class="att-sum-label">미출결 FP</div></div>
       <div class="att-sum-card"><div class="att-sum-val" style="color:var(--orange)" id="sumDemerit">—</div><div class="att-sum-label" id="sumDemeritLabel">디메리트 대상</div></div>
@@ -761,9 +763,52 @@ function getTomorrowStr(){
   return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
 }
 function getYMStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+// 2026 legal holidays incl. substitute days. update once a year
+var UNICE_HOLIDAYS = [
+  '2026-01-01',
+  '2026-02-16','2026-02-17','2026-02-18',
+  '2026-03-01','2026-03-02',
+  '2026-05-05',
+  '2026-05-24','2026-05-25',
+  '2026-06-03',
+  '2026-06-06',
+  '2026-08-15','2026-08-17',
+  '2026-09-24','2026-09-25','2026-09-26','2026-09-28',
+  '2026-10-03','2026-10-05',
+  '2026-10-09',
+  '2026-12-25'
+];
+var UNICE_HOLIDAY_NAME = {
+  '2026-01-01':'신정',
+  '2026-02-16':'설날','2026-02-17':'설날','2026-02-18':'설날',
+  '2026-03-01':'삼일절','2026-03-02':'대체공휴일',
+  '2026-05-05':'어린이날',
+  '2026-05-24':'부처님오신날','2026-05-25':'대체공휴일',
+  '2026-06-03':'지방선거',
+  '2026-06-06':'현충일',
+  '2026-08-15':'광복절','2026-08-17':'대체공휴일',
+  '2026-09-24':'추석','2026-09-25':'추석','2026-09-26':'추석','2026-09-28':'대체공휴일',
+  '2026-10-03':'개천절','2026-10-05':'대체공휴일',
+  '2026-10-09':'한글날',
+  '2026-12-25':'성탄절'
+};
+var _UNICE_HOL_SET = (function(){
+  var o = {};
+  for (var i = 0; i < UNICE_HOLIDAYS.length; i++) o[UNICE_HOLIDAYS[i]] = true;
+  return o;
+})();
+function _p2(n){ var s = String(n); return s.length < 2 ? '0' + s : s; }
+function isHoliday(y, m1, d){ return !!_UNICE_HOL_SET[y + '-' + _p2(m1) + '-' + _p2(d)]; }
+function holidayName(y, m1, d){ return UNICE_HOLIDAY_NAME[y + '-' + _p2(m1) + '-' + _p2(d)] || ''; }
+// m is 0-based month
+function isWorkday(y, m, d){
+  var dow = new Date(y, m, d).getDay();
+  if (dow === 0 || dow === 6) return false;
+  return !isHoliday(y, m + 1, d);
+}
 function getWorkdaysInMonth(y,m){
   var days=[],last=new Date(y,m+1,0).getDate();
-  for(var d=1;d<=last;d++){var dow=new Date(y,m,d).getDay();if(dow!==0&&dow!==6)days.push(d);}
+  for(var d=1;d<=last;d++){ if(isWorkday(y,m,d)) days.push(d); }
   return days;
 }
 
@@ -941,7 +986,7 @@ function renderCheckinTab(){
   var recentDays=[];
   for(var i=0;i<7;i++){
     var d2=new Date(); d2.setDate(d2.getDate()-i);
-    if(d2.getDay()===0||d2.getDay()===6) continue;
+    if(!isWorkday(d2.getFullYear(),d2.getMonth(),d2.getDate())) continue;
     recentDays.push(d2);
   }
   recentEl.innerHTML=recentDays.map(function(d2){
@@ -1046,7 +1091,9 @@ function renderPrCalendar(){
     var ds=_ymd(y,m+1,d);
     var dow=new Date(y,m,d).getDay();
     var cls='prcal-day';
-    if(dow===0) cls+=' sun'; else if(dow===6) cls+=' sat';
+    var _hol=isHoliday(y,m+1,d);
+    if(dow===0||_hol) cls+=' sun'; else if(dow===6) cls+=' sat';
+    if(_hol) cls+=' hol';
     var isPast = ds<today;
     var isToday = ds===today;
     if(isToday) cls+=' today';
@@ -1944,8 +1991,7 @@ function updateDayOptions(){
   var lastDay = new Date(year, month, 0).getDate();
   var maxDay  = (year===now.getFullYear()&&month===now.getMonth()+1) ? now.getDate() : lastDay;
   for(var d=1; d<=maxDay; d++){
-    var dow = new Date(year, month-1, d).getDay();
-    if(dow===0||dow===6) continue; // 주말 제외
+    if(!isWorkday(year, month-1, d)) continue; // 주말·공휴일 제외
     var ds = String(d)+'일';
     daySel.innerHTML += '<option value="'+d+'"'+(String(curDay)===String(d)?' selected':'')+'>'+ds+'</option>';
   }
@@ -2042,7 +2088,7 @@ function renderStatus(){
     var dayAbsent  = rows.filter(function(r){ return r.absentCnt>0; }).length;
     var dayPr      = rows.filter(function(r){ return r.prCnt>0; }).length;
     document.getElementById('sumAttRate').textContent  = dayNormal+'명';
-    document.getElementById('sumAttRate').closest('.att-sum-card').querySelector('.att-sum-label').textContent = '정상 출근';
+    document.getElementById('sumAttRate').closest('.att-sum-card').querySelector('.att-sum-label').innerHTML = '정상 출근';
     document.getElementById('sumLateFp').textContent   = dayLate+'명';
     document.getElementById('sumNormalLabel').textContent = '지각';
     document.getElementById('sumAbsentFp').textContent = dayAbsent+'명';
@@ -2051,7 +2097,8 @@ function renderStatus(){
   } else {
     // 월간 모드
     document.getElementById('sumAttRate').textContent  = attRate+'%';
-    document.getElementById('sumAttRate').closest('.att-sum-card').querySelector('.att-sum-label').textContent = '이번달 출근율';
+    var _lb = document.getElementById('sumAttRate').closest('.att-sum-card').querySelector('.att-sum-label');
+    _lb.innerHTML = '이번달 출근율<span id="sumWorkDays" style="display:block;font-size:10px;color:var(--text3);margin-top:2px">근무일 ' + targetDays.length + '일</span>';
     document.getElementById('sumLateFp').textContent   = lateFpCount+'명';
     document.getElementById('sumNormalLabel').textContent = '지각 FP';
     document.getElementById('sumAbsentFp').textContent = absentFpCount+'명';
