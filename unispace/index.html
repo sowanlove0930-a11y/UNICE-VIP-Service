@@ -3872,7 +3872,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📊 업적유지</th><th>케어핏</th><th>U고비</th><th>노후파이</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
+          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📊 업적유지</th><th>케어핏</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -4786,7 +4786,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true };
     });
   } else {
     baseList = FP_LIST;
@@ -4801,6 +4801,7 @@ function getMergedFpList() {
       carefit: ov.carefit !== undefined ? ov.carefit : fp.carefit,
       ugobi: ov.ugobi !== undefined ? ov.ugobi : fp.ugobi,
       nohupai: ov.nohupai !== undefined ? ov.nohupai : fp.nohupai,
+      nohupai2: ov.nohupai2 !== undefined ? ov.nohupai2 : fp.nohupai2,
       jenius: ov.jenius !== undefined ? ov.jenius : fp.jenius,
       team: ov.team !== undefined ? ov.team : fp.team,
       perfKeep: ov.perfKeep !== undefined ? ov.perfKeep : fp.perfKeep,
@@ -6383,6 +6384,9 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.nohupai!==false?'on':'off') + '" onclick="toggleFpNohupai(\'' + fp.id + '\')">' +
         (fp.nohupai!==false ? '🌙 사용' : '🚫 차단') +
       '</button></td>' +
+      '<td><button class="fp-active-toggle ' + (fp.nohupai2!==false?'on':'off') + '" onclick="toggleFpNohupai2(\'' + fp.id + '\')">' +
+        (fp.nohupai2!==false ? '🥧 사용' : '🚫 차단') +
+      '</button></td>' +
       '<td><button class="fp-active-toggle ' + (fp.jenius!==false?'on':'off') + '" onclick="toggleFpJenius(\'' + fp.id + '\')">' +
         (fp.jenius!==false ? '⚡ 사용' : '🚫 차단') +
       '</button></td>' +
@@ -6457,6 +6461,26 @@ function toggleFpNohupai(id) {
       saveFpOverride(id, 'nohupai', res.nohupai);
       renderFpMgmtTable();
       showToast((res.nohupai ? '🌙 ' : '🚫 ') + fp.name + ' 노후파이 ' + (res.nohupai ? '사용 허용' : '차단') + '했습니다');
+    } else {
+      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
+    }
+  }).catch(function(){
+    showToast('⚠️ 서버 연결 실패');
+  });
+}
+function toggleFpNohupai2(id) {
+  var list = getMergedFpList();
+  var fp   = list.find(function(f){ return f.id === id; });
+  if (!fp) return;
+  var nextOn = (fp.nohupai2 === false); // currently off -> turn on
+  var url = UNISPACE_GAS_URL + '?action=setNohupai2Access&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  showToast('🥧 노후파이 2.0 권한 변경 중...');
+  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok) {
+      fp.nohupai2 = res.nohupai2;
+      saveFpOverride(id, 'nohupai2', res.nohupai2);
+      renderFpMgmtTable();
+      showToast((res.nohupai2 ? '🥧 ' : '🚫 ') + fp.name + ' 노후파이 2.0 ' + (res.nohupai2 ? '사용 허용' : '차단') + '했습니다');
     } else {
       showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
     }
@@ -14311,16 +14335,57 @@ function openUgobiConsult(e) {
   return false;
 }
 // open nohupai with logged-in fp code so it skips its own login
+// -> 버전 선택 모달 (V1.0 / V2.0)
 function openNohupaiConsult(e) {
   if (e && e.preventDefault) e.preventDefault();
   if (_isPhoneWidth()) return _pcOnlyToolBlocked();
-  var base = 'https://unice-vip.co.kr/노후파이/index.html';
+  showNohupaiVersionPicker();
+  return false;
+}
+function _openNohupaiUrl(base) {
   var url = base;
   if (currentUser && currentUser.id) {
     url = base + '?fp=' + encodeURIComponent(currentUser.id) + '&from=unispace';
   }
   window.open(url, '_blank');
-  return false;
+}
+function showNohupaiVersionPicker() {
+  var old = document.getElementById('nopaVerOverlay');
+  if (old) old.remove();
+  var v1ok = !currentUser || currentUser.nohupai !== false;
+  var v2ok = !currentUser || currentUser.nohupai2 !== false;
+  var overlay = document.createElement('div');
+  overlay.id = 'nopaVerOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:linear-gradient(160deg,#1c2230,#141925);border:1px solid rgba(155,126,240,0.35);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-width:380px;width:100%;padding:28px 24px 22px;text-align:center;';
+  var btn = function(id, emoji, title, desc, ok){
+    return '<button id="' + id + '" type="button" ' + (ok ? '' : 'disabled ')
+      + 'style="width:100%;display:flex;align-items:center;gap:14px;text-align:left;padding:16px 18px;border-radius:14px;margin-bottom:10px;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';'
+      + 'border:1.5px solid rgba(255,255,255,' + (ok ? '0.15' : '0.06') + ');background:rgba(255,255,255,' + (ok ? '0.05' : '0.02') + ');opacity:' + (ok ? '1' : '0.45') + ';font-family:inherit;">'
+      + '<span style="font-size:28px;">' + emoji + '</span>'
+      + '<span style="flex:1;"><span style="display:block;font-size:15.5px;font-weight:800;color:#fff;">' + title + '</span>'
+      + '<span style="display:block;font-size:12px;color:rgba(255,255,255,0.5);margin-top:2px;">' + (ok ? desc : '사용 권한이 없습니다 · 관리자 문의') + '</span></span>'
+      + '<span style="color:rgba(255,255,255,0.35);font-size:16px;">›</span>'
+      + '</button>';
+  };
+  box.innerHTML =
+    '<div style="font-size:34px;margin-bottom:10px;">🌙</div>'
+    + '<div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:4px;">노후파이클래스</div>'
+    + '<div style="font-size:12.5px;color:rgba(255,255,255,0.45);margin-bottom:20px;">사용할 버전을 선택해 주세요</div>'
+    + btn('nopaVer1', '🌙', '노후파이클래스 V1.0', '노후 준비 심층 분석 · 기존 버전', v1ok)
+    + btn('nopaVer2', '🥧', '노후파이클래스 V2.0', '사망보험금 유동화 · 하나로H 상담 특화', v2ok)
+    + '<button id="nopaVerCancel" type="button" style="width:100%;padding:12px;border-radius:12px;border:none;background:transparent;color:rgba(255,255,255,0.5);font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-top:4px;">닫기</button>';
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  var close = function(){ var ov = document.getElementById('nopaVerOverlay'); if (ov) ov.remove(); };
+  overlay.addEventListener('click', function(ev){ if (ev.target === overlay) close(); });
+  var b1 = document.getElementById('nopaVer1');
+  var b2 = document.getElementById('nopaVer2');
+  if (b1 && v1ok) b1.addEventListener('click', function(){ close(); _openNohupaiUrl('https://unice-vip.co.kr/노후파이/index.html'); });
+  if (b2 && v2ok) b2.addEventListener('click', function(){ close(); _openNohupaiUrl('https://unice-vip.co.kr/노후파이2/index.html'); });
+  var bc = document.getElementById('nopaVerCancel');
+  if (bc) bc.addEventListener('click', close);
 }
 // open jenius (제니스 케어맵) with logged-in fp code so it auto-logs-in
 function openJeniusConsult(e) {
