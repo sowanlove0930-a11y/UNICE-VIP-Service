@@ -9,7 +9,7 @@
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="유니스와 친구추가">
-<meta property="og:description" content="가입하신 보험에 어떤 혜택이 들어 있는지 찾아드립니다 · 비용 0원 · 가입 의무 없음">
+<meta property="og:description" content="대학병원 예약 대행 · 명의 찾기 · 손해사정사 무료 자문 · 비용 0원 · 가입 의무 없음">
 <meta property="og:url" content="https://unice-vip.co.kr/unispace/healthcare.html">
 <meta property="og:image" content="https://unice-vip.co.kr/unispace/healthcare_og.jpg">
 <meta property="og:image:width" content="800">
@@ -246,7 +246,7 @@ input,select,button{font-family:inherit;color:inherit}
       <input type="tel" id="fPhone" placeholder="010 0000 0000" inputmode="numeric" autocomplete="tel" maxlength="13">
     </div>
     <div class="fld">
-      <label>가입하신 보험사 (선택)</label>
+      <label>가입하신 보험사 (여러 개 선택 가능)</label>
       <div class="chips" id="insPicks"></div>
     </div>
     <div class="agree" id="agreeBox" onclick="toggleAgree()">
@@ -283,7 +283,7 @@ var MOCK = (GAS_URL.indexOf("script.google.com") < 0);
 var INSURERS = ["삼성생명","한화생명","교보생명","신한라이프","KB라이프",
                 "삼성화재","현대해상","DB손보","KB손보","메리츠화재","잘 모르겠어요"];
 
-var pickedIns = "";
+var pickedIns = [];
 var agreed = false;
 var sending = false;
 
@@ -307,16 +307,32 @@ function say(t, cls){
   m.className = cls ? ("msg " + cls) : "msg";
 }
 
+function hasIns(v){
+  for (var i=0;i<pickedIns.length;i++){ if (pickedIns[i] === v) return true; }
+  return false;
+}
 function renderIns(){
   var h = "";
   for (var i=0;i<INSURERS.length;i++){
-    h += '<button type="button" class="chip' + (pickedIns === INSURERS[i] ? " on" : "") +
+    h += '<button type="button" class="chip' + (hasIns(INSURERS[i]) ? " on" : "") +
          '" onclick="pickIns(' + i + ')">' + esc(INSURERS[i]) + '</button>';
   }
   $("insPicks").innerHTML = h;
 }
 function pickIns(i){
-  pickedIns = (pickedIns === INSURERS[i]) ? "" : INSURERS[i];
+  var v = INSURERS[i];
+  var last = INSURERS[INSURERS.length - 1];
+  var out = [];
+  if (hasIns(v)){
+    for (var k=0;k<pickedIns.length;k++){ if (pickedIns[k] !== v) out.push(pickedIns[k]); }
+    pickedIns = out;
+  } else if (v === last){
+    pickedIns = [v];
+  } else {
+    for (var m=0;m<pickedIns.length;m++){ if (pickedIns[m] !== last) out.push(pickedIns[m]); }
+    out.push(v);
+    pickedIns = out;
+  }
   renderIns();
 }
 function toggleAgree(){
@@ -353,7 +369,7 @@ function submitApply(){
 
   var params = {
     action:"webApply", custName:name, custPhone:phone,
-    insurer:pickedIns, agree:"1", pt:qp("pt"), fp:qp("fp")
+    insurer:pickedIns.join(","), agree:"1", pt:qp("pt"), fp:qp("fp")
   };
 
   if (MOCK){
