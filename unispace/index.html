@@ -7055,6 +7055,34 @@ function loadAwardStatus() {
   host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오는 중...</div></div>';
   var url = UNISPACE_GAS_URL + '?action=getAwardStatus&fp=' + encodeURIComponent(currentUser.id)
           + '&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
+  // 20초 안에 응답 없으면 1회 자동 재시도 — 서버 큐 밀림으로 '불러오는 중' 고착 방지
+  var _awTried = false;
+  function _awFetch(){
+    var settled = false;
+    var tmr = setTimeout(function(){
+      if(settled) return;
+      settled = true;
+      if(!_awTried){ _awTried = true; _awFetch(); }
+      else { host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">서버 응답이 지연되고 있습니다. 잠시 후 새로고침해 주세요</div></div>'; }
+    }, 20000);
+    fetch(url + '&r=' + (_awTried?1:0)).then(function(r) { return r.json(); }).then(function(res) {
+      if(settled) return;
+      settled = true; clearTimeout(tmr);
+      _awDone(res);
+    }).catch(function(){
+      if(settled) return;
+      settled = true; clearTimeout(tmr);
+      if(!_awTried){ _awTried = true; setTimeout(_awFetch, 1000); }
+      else { host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오지 못했습니다</div></div>'; }
+    });
+  }
+  function _awDone(res){
+    if (res && res.ok) { _awlData = res; _renderAwardLadder(res); }
+    else { host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오지 못했습니다</div></div>'; }
+  }
+  _awFetch();
+  return;
+  // (아래 기존 체인은 도달하지 않음)
   fetch(url).then(function(r) { return r.json(); }).then(function(res) {
     if (res && res.ok) { _awlData = res; _renderAwardLadder(res); }
     else { host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오지 못했습니다</div></div>'; }
