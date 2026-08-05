@@ -3144,6 +3144,40 @@ function playCover(){
 buildToc();
 setScreen(1);
 playCover();
+
+/* ═══════════ 사용 권한 검증 (노후파이 2.0 차단 FP 접근 방지) ═══════════
+   유니스페이스에서 대표가 노후파이2.0 권한을 차단한 FP는
+   URL 을 직접 입력해 들어와도 여기서 막힌다.
+   - fp 사번이 있는 경우에만 검증 (fp 없는 일반 접근은 기존 동작 유지)
+   - 네트워크 오류 시에는 차단하지 않음 (가용성 우선)                    */
+(function(){
+  var fp = getActiveFpCode();
+  if (!fp) return;
+  fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(fp) + '&_=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if (!res) return;
+      var blocked = false;
+      var msg = '';
+      if (res.ok && res.nohupai2 === false) {
+        blocked = true;
+        msg = '노후파이클래스 2.0 사용 권한이 없습니다.<br>지사 관리자에게 문의해 주세요.';
+      } else if (!res.ok && String(res.msg||'').indexOf('중지') >= 0) {
+        blocked = true;
+        msg = '사용이 중지된 계정입니다.<br>지사 관리자에게 문의해 주세요.';
+      }
+      if (!blocked) return;
+      try { localStorage.removeItem(FP2_KEY); } catch(e) {}
+      var ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:99999999;background:#141925;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;';
+      ov.innerHTML = '<div style="max-width:340px">'
+        + '<div style="font-size:40px;margin-bottom:14px">\uD83D\uDEAB</div>'
+        + '<div style="font-size:17px;font-weight:800;color:#fff;line-height:1.6">' + msg + '</div>'
+        + '</div>';
+      document.body.appendChild(ov);
+      document.body.style.overflow = 'hidden';
+    })['catch'](function(){});
+})();
 </script>
 </body>
 </html>
