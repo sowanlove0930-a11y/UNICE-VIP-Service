@@ -4706,7 +4706,13 @@ function _adaptGasUser(g) {
   var _u = {
     id: g.id, name: _nm, role: role, branch: branch,
     phone: g.phone || '', email: g.email || '',
-    title: g.title || '', level: g.level || 'fp', active: true
+    title: g.title || '', level: g.level || 'fp', active: true,
+    // 앱 사용권한 — GAS login 응답에 있으면 담는다 (재로그인 시 차단 상태가 즉시 반영됨)
+    carefit: (g.carefit !== undefined) ? (g.carefit !== false) : undefined,
+    ugobi: (g.ugobi !== undefined) ? (g.ugobi !== false) : undefined,
+    nohupai: (g.nohupai !== undefined) ? (g.nohupai !== false) : undefined,
+    nohupai2: (g.nohupai2 !== undefined) ? (g.nohupai2 !== false) : undefined,
+    jenius: (g.jenius !== undefined) ? (g.jenius !== false) : undefined
   };
   // 지점장 사번 안전망: GAS level 매핑이 어긋나도 강제 보정
   var _MGR = { 'H2502969':'알파지점', 'H2502965':'브라보지점' };
@@ -22297,6 +22303,50 @@ function doCheckin() { doSmartCheckin(); }
   </div>
 </div>
 <script>
+// ═══════════ 자동 업데이트 감지 ═══════════
+// 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
+// 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
+var APP_BUILD = 31;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+(function(){
+  var _updNotified = false;
+  function _showUpdateBanner(){
+    if (_updNotified || document.getElementById('updBanner')) return;
+    _updNotified = true;
+    var b = document.createElement('div');
+    b.id = 'updBanner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999998;'
+      + 'background:linear-gradient(135deg,#C9A84C,#BA7517);color:#fff;'
+      + 'font:800 13px "Noto Sans KR",sans-serif;text-align:center;'
+      + 'padding:11px 40px 11px 14px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.25)';
+    b.innerHTML = '\uD83D\uDD04 \uC0C8 \uBC84\uC804\uC774 \uB098\uC654\uC2B5\uB2C8\uB2E4 \u2014 \uC5EC\uAE30\uB97C \ub20c\ub7ec \uc5c5\ub370\uc774\ud2b8'
+      + '<span onclick="event.stopPropagation();this.parentNode.remove();" '
+      + 'style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:16px;opacity:.85">\u2715</span>';
+    b.addEventListener('click', function(){ location.reload(); });
+    document.body.appendChild(b);
+  }
+  function _checkVersion(){
+    fetch('version.json?_=' + Date.now(), { cache:'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        if (!v || !v.v) return;
+        if (parseInt(v.v) <= APP_BUILD) return;
+        var loginVisible = false;
+        try {
+          // 로그인 오버레이가 열려 있으면 (hidden 클래스 없음) 작성 중 데이터가 없다고 판단
+          var ls = document.getElementById('loginOverlay');
+          loginVisible = !!(ls && ls.className.indexOf('hidden') < 0);
+        } catch(e) {}
+        if (loginVisible) { location.reload(); return; }
+        _showUpdateBanner();
+      })['catch'](function(){});
+  }
+  setInterval(_checkVersion, 1800000);   // 30분마다
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible') _checkVersion();
+  });
+  setTimeout(_checkVersion, 20000);      // 켠 지 20초 후 1회 (시작 트래픽과 분리)
+})();
+
 // PWA: Service Worker 등록 (앱 설치 지원)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
