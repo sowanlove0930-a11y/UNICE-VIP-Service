@@ -14448,6 +14448,22 @@ function showNohupaiVersionPicker() {
   if (old) old.remove();
   var v1ok = !currentUser || currentUser.nohupai !== false;
   var v2ok = !currentUser || currentUser.nohupai2 !== false;
+  // 서버에서 최신 권한을 즉시 재확인 — 대표가 방금 차단했으면 로컬 스냅샷과 무관하게 반영
+  if (currentUser && currentUser.id && typeof UNISPACE_GAS_URL !== 'undefined') {
+    fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if (!res || !res.ok) return;
+        // currentUser 스냅샷도 갱신해 다음번엔 처음부터 맞게 뜨도록
+        currentUser.nohupai = (res.nohupai !== false);
+        currentUser.nohupai2 = (res.nohupai2 !== false);
+        try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch(e) {}
+        var _b1 = document.getElementById('nopaVer1');
+        var _b2 = document.getElementById('nopaVer2');
+        if (_b1 && res.nohupai === false) { _b1.disabled = true; _b1.style.opacity = '0.45'; _b1.style.cursor = 'not-allowed'; _b1.dataset.blocked = '1'; }
+        if (_b2 && res.nohupai2 === false) { _b2.disabled = true; _b2.style.opacity = '0.45'; _b2.style.cursor = 'not-allowed'; _b2.dataset.blocked = '1'; }
+      }).catch(function(){});
+  }
   var overlay = document.createElement('div');
   overlay.id = 'nopaVerOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -14476,8 +14492,8 @@ function showNohupaiVersionPicker() {
   overlay.addEventListener('click', function(ev){ if (ev.target === overlay) close(); });
   var b1 = document.getElementById('nopaVer1');
   var b2 = document.getElementById('nopaVer2');
-  if (b1 && v1ok) b1.addEventListener('click', function(){ close(); _openNohupaiUrl('https://unice-vip.co.kr/노후파이/index.html'); });
-  if (b2 && v2ok) b2.addEventListener('click', function(){ close(); _openNohupaiUrl('https://unice-vip.co.kr/노후파이2/index.html'); });
+  if (b1 && v1ok) b1.addEventListener('click', function(){ if(b1.dataset.blocked==='1'){ showToast('🚫 사용 권한이 없습니다'); return; } close(); _openNohupaiUrl('https://unice-vip.co.kr/노후파이/index.html'); });
+  if (b2 && v2ok) b2.addEventListener('click', function(){ if(b2.dataset.blocked==='1'){ showToast('🚫 사용 권한이 없습니다'); return; } close(); _openNohupaiUrl('https://unice-vip.co.kr/노후파이2/index.html'); });
   var bc = document.getElementById('nopaVerCancel');
   if (bc) bc.addEventListener('click', close);
 }
