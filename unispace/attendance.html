@@ -701,6 +701,40 @@ function attGasGet(params){
   }
   return _attempt(1);
 }
+// 체크인 전용: 15초 타임아웃 + 최대 3회 자동 재시도.
+// sentAt(최초 클릭 시각)을 고정해서 보내므로, 재시도로 저장돼도 판정 시각은 처음 누른 그 시각.
+function attGasGetTimeout(params, timeoutMs, maxTry){
+  var qs = Object.keys(params).map(function(k){
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
+  }).join('&');
+  var url = ATT_GAS_URL + '?' + qs;
+  function _attempt(n){
+    return new Promise(function(resolve){
+      var done = false;
+      var timer = setTimeout(function(){
+        if(done) return;
+        done = true;
+        if(n < maxTry) resolve(_attempt(n+1));
+        else resolve({ ok:false, msg:'서버 응답 지연' });
+      }, timeoutMs);
+      fetch(url).then(function(r){ return r.text(); }).then(function(txt){
+        if(done) return;
+        done = true; clearTimeout(timer);
+        try { resolve(JSON.parse(txt)); }
+        catch(e){
+          if(n < maxTry) resolve(_attempt(n+1));
+          else resolve({ ok:false, msg:'파싱실패' });
+        }
+      }).catch(function(){
+        if(done) return;
+        done = true; clearTimeout(timer);
+        if(n < maxTry) setTimeout(function(){ resolve(_attempt(n+1)); }, 800);
+        else resolve({ ok:false, msg:'네트워크오류' });
+      });
+    });
+  }
+  return _attempt(1);
+}
 // 이번 달 출결+사전보고 GAS에서 로드 -> 로컬 캐시
 function loadAttFromGas(){
   var fp = _myFpCode();
@@ -1033,7 +1067,9 @@ function doCheckin(){
   var rec={ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch };
 
   // GAS에 먼저 저장 시도 -> 이미 체크인됐으면 서버가 막음
-  attGasGet({ action:'checkin', date:today, fp:currentUser.id, name:currentUser.name, branch:currentUser.branch }).then(function(res){
+  // sentAt = 버튼 누른 시각. 서버가 큐 지연으로 늦게 실행돼도 이 시각으로 지각 판정 (2분 한도)
+  var _sentAt = Date.now();
+  attGasGetTimeout({ action:'checkin', date:today, fp:currentUser.id, name:currentUser.name, branch:currentUser.branch, sentAt:_sentAt }, 15000, 3).then(function(res){
     if(res && res.ok===false && res.msg && res.msg.indexOf('이미')>=0){
       // 서버에 이미 있음 -> 로컬도 동기화하고 차단
       if(!db[today]) db[today]={};
@@ -1058,7 +1094,7 @@ function doCheckin(){
     }
     // 그 외 응답 -> 실패로 간주
     if(btn){ btn.disabled=false; btn.textContent='📍 출근 체크인'; btn.className='checkin-btn'; }
-    showToast('⚠️ 저장에 실패했습니다. 잠시 후 다시 시도해 주세요');
+    showToast('⚠️ 저장에 실패했습니다. 다시 눌러주세요 (지각 판정은 처음 누른 시각 기준으로 보정됩니다)');
   }).catch(function(){
     // 네트워크/요청 실패 -> 로컬 저장 안 함, 실패 안내 (시트와 불일치 방지)
     if(btn){ btn.disabled=false; btn.textContent='📍 출근 체크인'; btn.className='checkin-btn'; }

@@ -5947,14 +5947,14 @@ function showDashboard() {
       });
     }
 
+    // TOP 4종 묶음은 getPerf 를 기다리지 않고 즉시 병렬 호출 — 직렬 대기 제거로 첫 화면 반영 단축
+    if(typeof loadDashboardBundle==='function') loadDashboardBundle();
     // 업적을 GAS에서 로드 후 카드 갱신
     loadPerfFromGas(function(){
       skOff(['st1','st1-rate']);
       renderBojangCard();
       if(typeof renderGoals==='function') renderGoals();
       if(typeof renderTop10==='function') renderTop10();
-      // TOP 4종을 한 번의 GAS 호출(묶음)로 즉시 로드 — 개별 호출 폭주/깜빡임 방지
-      if(typeof loadDashboardBundle==='function') loadDashboardBundle();
       if(typeof _stdLoadConfirmsFromGas==='function') _stdLoadConfirmsFromGas(function(){ if(typeof renderStdFp==='function') renderStdFp(); });
     });
 
@@ -6696,7 +6696,13 @@ function closeSubmenu() {
 
 // ── 목표 달성률 & TOP 3 ────────────────────────────
 var GOALS = { total: 2500, alpha: 1500, bravo: 1000 };
-var perfData = JSON.parse(localStorage.getItem('unispace_perf') || '{}');
+var perfData = (function(){
+  // 저장 시점의 달이 이번 달과 다르면 버린다 — 월 초 첫 화면에 지난달 TOP5 가 뜨는 것 방지
+  var _ymNow=(new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2);
+  var _savedYm=localStorage.getItem('unispace_perf_ym')||'';
+  if(_savedYm && _savedYm!==_ymNow){ return {}; }
+  try { return JSON.parse(localStorage.getItem('unispace_perf') || '{}'); } catch(e){ return {}; }
+})();
 // perfData 구조: { "전소영": { branch:"알파지점", amt:850 }, ... }
 
 function submitGoal() {
@@ -8142,7 +8148,12 @@ function savePerfLog(arr){ localStorage.setItem(PERF_LOG_KEY, JSON.stringify(arr
 function rebuildPerfData(){
   var log=getPerfLog();
   var agg={};
+  // perfData 는 '이번 달 누계' 로 통일한다.
+  // 로그에는 전 기간이 있어도 여기서 이번 달만 합산해야
+  // 첫 화면 TOP5 (번들 도착 전 로컬 렌더)가 지난달과 섞인 수치를 보여주지 않는다.
+  var _ym=(new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2);
   log.forEach(function(r){
+    if(String(r.date||'').indexOf(_ym)!==0) return;
     var key=r.fpName;
     if(!agg[key]) agg[key]={branch:r.branch, amt:0};
     agg[key].amt += (parseInt(r.total)||0);
@@ -8150,6 +8161,7 @@ function rebuildPerfData(){
   });
   perfData = agg;
   localStorage.setItem('unispace_perf', JSON.stringify(perfData));
+  localStorage.setItem('unispace_perf_ym', _ym);
 }
 
 var _perfProducts = [];
