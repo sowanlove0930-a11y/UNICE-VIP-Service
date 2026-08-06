@@ -14227,7 +14227,77 @@ function _ptaApply(res) {
 
   var tabs = document.getElementById('ptaTabs');
   if (tabs) tabs.style.display = res.canPickBranch ? 'flex' : 'none';
+
+  // 카톡 공유: 대표(all)·지점장(branch)만 노출, FP(self)는 숨김
+  var shareBtn = document.getElementById('ptaShareBtn');
+  if (shareBtn) shareBtn.style.display = (res.scope === 'all' || res.scope === 'branch') ? 'inline-block' : 'none';
+
   _ptaRender();
+}
+
+// ── 파트너스 현황 카톡 공유 (대표/지점장 전용) ──
+function _ptaBuildShareText() {
+  var now = new Date();
+  var stamp = (now.getMonth() + 1) + '/' + now.getDate() + ' '
+    + (now.getHours() < 10 ? '0' : '') + now.getHours() + ':'
+    + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+
+  // 현재 조회된 목록을 지점별로 그룹핑
+  var groups = { alpha: [], bravo: [], etc: [] };
+  var list = _ptnApplies || [];
+  for (var i = 0; i < list.length; i++) {
+    var it = list[i];
+    if (String(it.status || '') === '취소') continue;
+    var br = String(it.branch || '');
+    var fpName = String(it.fpName || '') || '직접신청';
+    var line = fpName + ' / ' + String(it.name || '');
+    if (br.indexOf('알파') >= 0) groups.alpha.push(line);
+    else if (br.indexOf('브라보') >= 0) groups.bravo.push(line);
+    else groups.etc.push(line);
+  }
+
+  function section(title, arr) {
+    if (!arr.length) return '';
+    var out = '[' + title + '] ' + arr.length + '명\n';
+    for (var j = 0; j < arr.length; j++) out += (j + 1) + '.' + arr[j] + '\n';
+    return out + '\n';
+  }
+
+  var txt = '*유니스 파트너스 현황(' + stamp + '기준)\n\n'
+    + section('알파', groups.alpha)
+    + section('브라보', groups.bravo)
+    + section('기타', groups.etc);
+  return txt.replace(/\n+$/, '');
+}
+
+function _ptaShare() {
+  var txt = _ptaBuildShareText();
+  if (!txt || txt.indexOf('[') < 0) { showToast('공유할 신청 내역이 없습니다'); return; }
+  // 모바일: 공유 시트(카톡 선택 -> 전문 전송) / PC: 클립보드 복사
+  if (navigator.share) {
+    navigator.share({ text: txt }).catch(function () {});
+    return;
+  }
+  _ptaCopyText(txt);
+}
+
+function _ptaCopyText(txt) {
+  function done() { showToast('📋 복사 완료! 카카오톡에 붙여넣어 주세요'); }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(done).catch(function () { _ptaCopyFallback(txt); done(); });
+  } else {
+    _ptaCopyFallback(txt); done();
+  }
+}
+
+function _ptaCopyFallback(txt) {
+  var ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
 }
 
 function _ptaPhone(v) {
@@ -21748,7 +21818,9 @@ function doCheckin() { doSmartCheckin(); }
         <button type="button" class="pta-tab on" data-br="" onclick="_ptaSetBranch('')">전체</button>
         <button type="button" class="pta-tab" data-br="알파지점" onclick="_ptaSetBranch('알파지점')">알파</button>
         <button type="button" class="pta-tab" data-br="브라보지점" onclick="_ptaSetBranch('브라보지점')">브라보</button>
+        <button type="button" class="pta-tab" data-br="기타" onclick="_ptaSetBranch('기타')">기타</button>
       </div>
+      <button type="button" id="ptaShareBtn" onclick="_ptaShare()" style="display:none; border:1.5px solid #F7E600; background:#FEE500; color:#191919; border-radius:10px; padding:8px 14px; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer; white-space:nowrap;">💬 카톡 공유</button>
       <div class="pta-dt">
         <input type="date" id="ptaFrom" onchange="_ptaLoad()">
         <span class="sep">~</span>
