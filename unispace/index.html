@@ -14155,9 +14155,31 @@ function _ptaSetBranch(br) {
   _ptaLoad();
 }
 
+var _ptaSeq = 0;       // 요청 순서 가드 — 늦게 도착한 이전 응답이 최신 결과를 덮어쓰지 않게
+var _ptaCache = null;  // 마지막 성공 결과 캐시
+
 function _ptaLoad() {
   var box = document.getElementById('ptaList');
-  if (box) box.innerHTML = '<div class="pta-empty">불러오는 중...</div>';
+  var mySeq = ++_ptaSeq;
+
+  // 캐시가 있으면 즉시 표시하고 백그라운드 갱신 (로딩 체감속도 개선)
+  if (_ptaCache && _ptaCache.key === _ptaKey()) {
+    _ptaApply(_ptaCache.res);
+  } else if (box) {
+    box.innerHTML = '<div class="pta-empty">불러오는 중...</div>';
+  }
+
+  _ptaFetch(mySeq, 0);
+}
+
+function _ptaKey() {
+  var f = document.getElementById('ptaFrom');
+  var t = document.getElementById('ptaTo');
+  return (f ? f.value : '') + '|' + (t ? t.value : '') + '|' + _ptaBranch;
+}
+
+function _ptaFetch(mySeq, attempt) {
+  var box = document.getElementById('ptaList');
   var f = document.getElementById('ptaFrom');
   var t = document.getElementById('ptaTo');
   var url = UNISPACE_GAS_URL + '?action=getPartnerApplies'
@@ -14166,26 +14188,41 @@ function _ptaLoad() {
     + '&end=' + encodeURIComponent(t ? t.value : '')
     + '&branch=' + encodeURIComponent(_ptaBranch)
     + '&_=' + Date.now();
-  fetch(url).then(function(r) { return r.json(); }).then(function(res) {
+
+  // 20초 타임아웃 — 초과 시 1회 자동 재시도
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var timer = setTimeout(function() { if (ctrl) ctrl.abort(); }, 20000);
+
+  fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(function(r) { return r.json(); }).then(function(res) {
+    clearTimeout(timer);
+    if (mySeq !== _ptaSeq) return; // 더 최신 요청이 있으면 이 응답은 버림
     if (!res || !res.ok) {
       if (box) box.innerHTML = '<div class="pta-empty">' + ((res && res.msg) || '불러오지 못했습니다') + '</div>';
       return;
     }
-    _ptnApplies = res.list || [];
-    _ptaMeta = res;
-    var k1 = document.getElementById('ptaKpi1');
-    var k2 = document.getElementById('ptaKpi2');
-    var k3 = document.getElementById('ptaKpi3');
-    if (k1) k1.textContent = res.used + '명';
-    if (k2) k2.textContent = res.left + '명';
-    if (k3) k3.textContent = res.count + '명';
-
-    var tabs = document.getElementById('ptaTabs');
-    if (tabs) tabs.style.display = res.canPickBranch ? 'flex' : 'none';
-    _ptaRender();
+    _ptaCache = { key: _ptaKey(), res: res };
+    _ptaApply(res);
   }).catch(function() {
-    if (box) box.innerHTML = '<div class="pta-empty">네트워크 오류</div>';
+    clearTimeout(timer);
+    if (mySeq !== _ptaSeq) return;
+    if (attempt < 1) { _ptaFetch(mySeq, attempt + 1); return; } // 1회 자동 재시도
+    if (box) box.innerHTML = '<div class="pta-empty">네트워크 오류 — 잠시 후 다시 열어주세요</div>';
   });
+}
+
+function _ptaApply(res) {
+  _ptnApplies = res.list || [];
+  _ptaMeta = res;
+  var k1 = document.getElementById('ptaKpi1');
+  var k2 = document.getElementById('ptaKpi2');
+  var k3 = document.getElementById('ptaKpi3');
+  if (k1) k1.textContent = res.used + '명';
+  if (k2) k2.textContent = res.left + '명';
+  if (k3) k3.textContent = res.count + '명';
+
+  var tabs = document.getElementById('ptaTabs');
+  if (tabs) tabs.style.display = res.canPickBranch ? 'flex' : 'none';
+  _ptaRender();
 }
 
 function _ptaPhone(v) {
