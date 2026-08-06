@@ -1653,6 +1653,7 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .pta-i-br { font-size: 10px; font-weight: 800; border-radius: 5px; padding: 3px 8px; }
 .pta-i-br.a { background: #EDE7FA; color: #5B3FB0; }
 .pta-i-br.b { background: #DFF3EC; color: #177A55; }
+.pta-i-br.e { background: #F0EDE6; color: #6B655A; }
 .pta-i-del { margin-left: auto; background: none; border: 1px solid #EADFDF; color: #C0736A;
   border-radius: 8px; font-size: 11px; font-weight: 700; padding: 5px 10px; cursor: pointer; font-family: inherit; }
 .pta-i-meta { font-size: 11.5px; color: #6B6558; margin-top: 7px; line-height: 1.6; }
@@ -14219,8 +14220,7 @@ function _ptaApply(res) {
   if (k1) k1.textContent = res.used + '명';
   var k1l = document.getElementById('ptaKpi1Label');
   if (k1l && res.byBranch) {
-    k1l.textContent = '전체 신청 (알파 ' + res.byBranch.alpha + ' · 브라보 ' + res.byBranch.bravo
-      + (res.byBranch.none ? ' · 직접 ' + res.byBranch.none : '') + ')';
+    k1l.innerHTML = '전체 신청<br><span style="font-size:11px; opacity:0.75; white-space:nowrap;">알파 ' + res.byBranch.alpha + ' · 브라보 ' + res.byBranch.bravo + ' · 기타 ' + res.byBranch.none + '</span>';
   }
   if (k2) k2.textContent = res.left + '명';
   if (k3) k3.textContent = res.count + '명';
@@ -14249,7 +14249,7 @@ function _ptaBuildShareText() {
     var it = list[i];
     if (String(it.status || '') === '취소') continue;
     var br = String(it.branch || '');
-    var fpName = String(it.fpName || '') || '직접신청';
+    var fpName = String(it.fpName || '') || '기타';
     var line = fpName + ' / ' + String(it.name || '');
     if (br.indexOf('알파') >= 0) groups.alpha.push(line);
     else if (br.indexOf('브라보') >= 0) groups.bravo.push(line);
@@ -14258,12 +14258,17 @@ function _ptaBuildShareText() {
 
   function section(title, arr) {
     if (!arr.length) return '';
+    // FP 이름 가나다순 정렬
+    arr.sort(function (x, y) { return x.localeCompare(y, 'ko'); });
     var out = '[' + title + '] ' + arr.length + '명\n';
     for (var j = 0; j < arr.length; j++) out += (j + 1) + '.' + arr[j] + '\n';
     return out + '\n';
   }
 
+  var total = groups.alpha.length + groups.bravo.length + groups.etc.length;
   var txt = '*유니스 파트너스 현황(' + stamp + '기준)\n\n'
+    + '총 ' + total + '명\n'
+    + '(알파 ' + groups.alpha.length + ' /브라보 ' + groups.bravo.length + ' /기타 ' + groups.etc.length + ')\n\n'
     + section('알파', groups.alpha)
     + section('브라보', groups.bravo)
     + section('기타', groups.etc);
@@ -14332,8 +14337,11 @@ function _ptaRender() {
   var h = '';
   for (var i = 0; i < _ptnApplies.length; i++) {
     var a = _ptnApplies[i];
-    var brCls = String(a.branch).indexOf('알파') >= 0 ? 'a' : 'b';
-    var brTxt = String(a.branch).indexOf('알파') >= 0 ? '알파' : '브라보';
+    var brStr = String(a.branch || '');
+    var brCls, brTxt;
+    if (brStr.indexOf('알파') >= 0) { brCls = 'a'; brTxt = '알파'; }
+    else if (brStr.indexOf('브라보') >= 0) { brCls = 'b'; brTxt = '브라보'; }
+    else { brCls = 'e'; brTxt = '기타'; }
     var meta = [];
     if (a.area) meta.push(_ptaEsc(a.area));
     if (a.age) meta.push(_ptaEsc(a.age));
@@ -14342,7 +14350,7 @@ function _ptaRender() {
 
     h += '<div class="pta-item" id="pti-' + _ptaEsc(a.id) + '">'
       + '<div class="pta-i-h"><span class="pta-i-nm">' + _ptaEsc(a.name) + '</span>'
-      + (a.branch ? '<span class="pta-i-br ' + brCls + '">' + brTxt + '</span>' : '')
+      + '<span class="pta-i-br ' + brCls + '">' + brTxt + '</span>'
       + (canDel ? '<button type="button" class="pta-i-del" onclick="_ptaDel(\'' + _ptaEsc(a.id) + '\')">삭제</button>' : '')
       + '</div>'
       + '<div class="pta-i-meta"><span class="ph">' + _ptaEsc(_ptaPhone(a.phone)) + '</span><br>'
