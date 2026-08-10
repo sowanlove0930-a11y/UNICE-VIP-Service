@@ -75,6 +75,37 @@ body.theme-light {
   --text2:    #5C6678;
   --text3:    #97A0B0;
 }
+
+/* ── 도구 버전 선택 모달 (대시보드 토큰 사용) ───────────── */
+.verpick-ov { position:fixed; inset:0; z-index:9999999; background:rgba(8,14,28,0.55);
+  backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:20px;
+  animation:verpickFade .18s ease both; }
+body.theme-light .verpick-ov { background:rgba(26,39,68,0.32); }
+@keyframes verpickFade { from{opacity:0} to{opacity:1} }
+.verpick-box { background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-xl);
+  box-shadow:0 24px 64px rgba(0,0,0,0.35); max-width:392px; width:100%; padding:30px 24px 20px;
+  text-align:center; animation:verpickIn .22s cubic-bezier(.22,.61,.36,1) both; }
+body.theme-light .verpick-box { box-shadow:0 20px 52px rgba(26,39,68,0.16); }
+@keyframes verpickIn { from{opacity:0;transform:translateY(14px) scale(.97)} to{opacity:1;transform:none} }
+.verpick-ic { width:60px; height:60px; margin:0 auto 14px; border-radius:18px;
+  display:flex; align-items:center; justify-content:center; font-size:30px; }
+.verpick-tt { font-size:17px; font-weight:800; color:var(--text); letter-spacing:-0.02em; }
+.verpick-sb { font-size:12.5px; color:var(--text2); margin-top:5px; margin-bottom:20px; }
+.verpick-btn { width:100%; display:flex; align-items:center; gap:13px; text-align:left;
+  padding:15px 16px; border-radius:var(--r-lg); margin-bottom:9px; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface); font-family:inherit;
+  transition:border-color .16s, background .16s, transform .16s; }
+.verpick-btn:hover { border-color:var(--vp-accent); background:var(--surface2); transform:translateY(-1px); }
+.verpick-btn:disabled { opacity:.42; cursor:not-allowed; transform:none; }
+.verpick-btn:disabled:hover { border-color:var(--border); background:var(--surface); }
+.verpick-btn .vb-ic { width:38px; height:38px; border-radius:11px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:20px; }
+.verpick-btn .vb-nm { display:block; font-size:14.5px; font-weight:700; color:var(--text); letter-spacing:-0.01em; }
+.verpick-btn .vb-ds { display:block; font-size:11.5px; color:var(--text2); margin-top:2px; }
+.verpick-btn .vb-ar { color:var(--text3); font-size:15px; }
+.verpick-x { width:100%; padding:11px; border-radius:var(--r-md); border:none; background:transparent;
+  color:var(--text2); font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; margin-top:3px; }
+.verpick-x:hover { color:var(--text); }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: 'Noto Sans KR', sans-serif;
@@ -14574,58 +14605,82 @@ function _openCarefitUrl(base) {
   }
   window.open(url, '_blank');
 }
-function showCarefitVersionPicker() {
-  var old = document.getElementById('cfitVerOverlay');
+
+/* ── 버전 선택 모달 공용 렌더러 ───────────────────────── */
+function renderVersionPicker(cfg) {
+  var old = document.getElementById(cfg.id);
   if (old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = cfg.id;
+  ov.className = 'verpick-ov';
+  var rows = cfg.items.map(function (it, i) {
+    return '<button id="' + cfg.id + '-b' + i + '" type="button" class="verpick-btn"' + (it.ok ? '' : ' disabled') + '>'
+      + '<span class="vb-ic" style="background:' + it.tint + '">' + it.emoji + '</span>'
+      + '<span style="flex:1;"><span class="vb-nm">' + it.name + '</span>'
+      + '<span class="vb-ds">' + (it.ok ? it.desc : '사용 권한이 없습니다 · 관리자 문의') + '</span></span>'
+      + '<span class="vb-ar">\u203A</span></button>';
+  }).join('');
+  ov.innerHTML = '<div class="verpick-box" style="--vp-accent:' + cfg.accent + '">'
+    + '<div class="verpick-ic" style="background:' + cfg.tint + '">' + cfg.emoji + '</div>'
+    + '<div class="verpick-tt">' + cfg.title + '</div>'
+    + '<div class="verpick-sb">사용할 버전을 선택해 주세요</div>'
+    + rows
+    + '<button id="' + cfg.id + '-x" type="button" class="verpick-x">닫기</button></div>';
+  document.body.appendChild(ov);
+  var close = function () { var e = document.getElementById(cfg.id); if (e) e.remove(); };
+  ov.addEventListener('click', function (ev) { if (ev.target === ov) close(); });
+  document.getElementById(cfg.id + '-x').addEventListener('click', close);
+  cfg.items.forEach(function (it, i) {
+    var b = document.getElementById(cfg.id + '-b' + i);
+    if (!b || !it.ok) { return; }
+    b.addEventListener('click', function () {
+      if (b.dataset.blocked === '1') { showToast('🚫 사용 권한이 없습니다'); return; }
+      close();
+      it.go();
+    });
+  });
+  return ov;
+}
+function showCarefitVersionPicker() {
   var v1ok = !currentUser || currentUser.carefit !== false;
   var v2ok = !currentUser || currentUser.carefit2 !== false;
-  // 서버에서 최신 권한을 즉시 재확인 — 대표가 방금 차단했으면 로컬 스냅샷과 무관하게 반영
-  if (currentUser && currentUser.id && typeof UNISPACE_GAS_URL !== 'undefined') {
-    fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now())
-      .then(function(r){ return r.json(); })
-      .then(function(res){
-        if (!res || !res.ok) return;
-        currentUser.carefit = (res.carefit !== false);
-        currentUser.carefit2 = (res.carefit2 !== false);
-        try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch(e) {}
-        var _b1 = document.getElementById('cfitVer1');
-        var _b2 = document.getElementById('cfitVer2');
-        if (_b1 && res.carefit === false) { _b1.disabled = true; _b1.style.opacity = '0.45'; _b1.style.cursor = 'not-allowed'; _b1.dataset.blocked = '1'; }
-        if (_b2 && res.carefit2 === false) { _b2.disabled = true; _b2.style.opacity = '0.45'; _b2.style.cursor = 'not-allowed'; _b2.dataset.blocked = '1'; }
-      }).catch(function(){});
-  }
-  var overlay = document.createElement('div');
-  overlay.id = 'cfitVerOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
-  var box = document.createElement('div');
-  box.style.cssText = 'background:linear-gradient(160deg,#1c2230,#141925);border:1px solid rgba(52,211,153,0.35);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-width:380px;width:100%;padding:28px 24px 22px;text-align:center;';
-  var btn = function(id, emoji, title, desc, ok){
-    return '<button id="' + id + '" type="button" ' + (ok ? '' : 'disabled ')
-      + 'style="width:100%;display:flex;align-items:center;gap:14px;text-align:left;padding:16px 18px;border-radius:14px;margin-bottom:10px;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';'
-      + 'border:1.5px solid rgba(255,255,255,' + (ok ? '0.15' : '0.06') + ');background:rgba(255,255,255,' + (ok ? '0.05' : '0.02') + ');opacity:' + (ok ? '1' : '0.45') + ';font-family:inherit;">'
-      + '<span style="font-size:28px;">' + emoji + '</span>'
-      + '<span style="flex:1;"><span style="display:block;font-size:15.5px;font-weight:800;color:#fff;">' + title + '</span>'
-      + '<span style="display:block;font-size:12px;color:rgba(255,255,255,0.5);margin-top:2px;">' + (ok ? desc : '사용 권한이 없습니다 · 관리자 문의') + '</span></span>'
-      + '<span style="color:rgba(255,255,255,0.35);font-size:16px;">›</span>'
-      + '</button>';
-  };
-  box.innerHTML =
-    '<div style="font-size:34px;margin-bottom:10px;">🌿</div>'
-    + '<div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:4px;">올라이프 케어핏</div>'
-    + '<div style="font-size:12.5px;color:rgba(255,255,255,0.45);margin-bottom:20px;">사용할 버전을 선택해 주세요</div>'
-    + btn('cfitVer1', '🌿', '올라이프 케어핏 V1.0', '보장 준비도 진단 · 기존 버전', v1ok)
-    + btn('cfitVer2', '🩺', '케어핏 V2.0', '치료여정 시뮬레이션 · 암 · 뇌 · 심장', v2ok)
-    + '<button id="cfitVerCancel" type="button" style="width:100%;padding:12px;border-radius:12px;border:none;background:transparent;color:rgba(255,255,255,0.5);font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-top:4px;">닫기</button>';
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-  var close = function(){ var ov = document.getElementById('cfitVerOverlay'); if (ov) ov.remove(); };
-  overlay.addEventListener('click', function(ev){ if (ev.target === overlay) close(); });
-  var b1 = document.getElementById('cfitVer1');
-  var b2 = document.getElementById('cfitVer2');
-  if (b1 && v1ok) b1.addEventListener('click', function(){ if(b1.dataset.blocked==='1'){ showToast('🚫 사용 권한이 없습니다'); return; } close(); _openCarefitUrl('https://unice-vip.co.kr/올라이프_케어핏/carefit.html'); });
-  if (b2 && v2ok) b2.addEventListener('click', function(){ if(b2.dataset.blocked==='1'){ showToast('🚫 사용 권한이 없습니다'); return; } close(); _openCarefitUrl('https://unice-vip.co.kr/케어핏2/index.html'); });
-  var bc = document.getElementById('cfitVerCancel');
-  if (bc) bc.addEventListener('click', close);
+  renderVersionPicker({
+    id: 'cfitVerOverlay',
+    emoji: '\uD83C\uDF3F',
+    title: '올라이프 케어핏',
+    accent: 'var(--green)',
+    tint: 'rgba(16,185,129,0.12)',
+    items: [
+      { emoji: '\uD83C\uDF3F', tint: 'rgba(16,185,129,0.12)', name: '올라이프 케어핏 V1.0',
+        desc: '보장 준비도 진단 · 기존 버전', ok: v1ok,
+        go: function () { _openCarefitUrl('https://unice-vip.co.kr/올라이프_케어핏/carefit.html'); } },
+      { emoji: '\uD83E\uDE7A', tint: 'rgba(16,185,129,0.12)', name: '케어핏 V2.0',
+        desc: '치료여정 시뮬레이션 · 암 · 뇌 · 심장', ok: v2ok,
+        go: function () { _openCarefitUrl('https://unice-vip.co.kr/케어핏2/index.html'); } }
+    ]
+  });
+  _refreshToolPerm(['carefit', 'carefit2'], 'cfitVerOverlay');
+}
+
+/* 서버에서 최신 권한을 즉시 재확인 — 대표가 방금 차단했으면 로컬 스냅샷과 무관하게 반영 */
+function _refreshToolPerm(keys, overlayId) {
+  if (!currentUser || !currentUser.id || typeof UNISPACE_GAS_URL === 'undefined') { return; }
+  fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (res) {
+      if (!res || !res.ok) { return; }
+      keys.forEach(function (k, i) {
+        currentUser[k] = (res[k] !== false);
+        var btn = document.getElementById(overlayId + '-b' + i);
+        if (btn && res[k] === false) {
+          btn.disabled = true;
+          btn.dataset.blocked = '1';
+          var ds = btn.querySelector('.vb-ds');
+          if (ds) { ds.textContent = '사용 권한이 없습니다 · 관리자 문의'; }
+        }
+      });
+      try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch (e) {}
+    })['catch'](function () {});
 }
 // open ugobi with logged-in fp code so it skips its own login
 function openUgobiConsult(e) {
@@ -14655,58 +14710,24 @@ function _openNohupaiUrl(base) {
   window.open(url, '_blank');
 }
 function showNohupaiVersionPicker() {
-  var old = document.getElementById('nopaVerOverlay');
-  if (old) old.remove();
   var v1ok = !currentUser || currentUser.nohupai !== false;
   var v2ok = !currentUser || currentUser.nohupai2 !== false;
-  // 서버에서 최신 권한을 즉시 재확인 — 대표가 방금 차단했으면 로컬 스냅샷과 무관하게 반영
-  if (currentUser && currentUser.id && typeof UNISPACE_GAS_URL !== 'undefined') {
-    fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now())
-      .then(function(r){ return r.json(); })
-      .then(function(res){
-        if (!res || !res.ok) return;
-        // currentUser 스냅샷도 갱신해 다음번엔 처음부터 맞게 뜨도록
-        currentUser.nohupai = (res.nohupai !== false);
-        currentUser.nohupai2 = (res.nohupai2 !== false);
-        try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch(e) {}
-        var _b1 = document.getElementById('nopaVer1');
-        var _b2 = document.getElementById('nopaVer2');
-        if (_b1 && res.nohupai === false) { _b1.disabled = true; _b1.style.opacity = '0.45'; _b1.style.cursor = 'not-allowed'; _b1.dataset.blocked = '1'; }
-        if (_b2 && res.nohupai2 === false) { _b2.disabled = true; _b2.style.opacity = '0.45'; _b2.style.cursor = 'not-allowed'; _b2.dataset.blocked = '1'; }
-      }).catch(function(){});
-  }
-  var overlay = document.createElement('div');
-  overlay.id = 'nopaVerOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
-  var box = document.createElement('div');
-  box.style.cssText = 'background:linear-gradient(160deg,#1c2230,#141925);border:1px solid rgba(155,126,240,0.35);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-width:380px;width:100%;padding:28px 24px 22px;text-align:center;';
-  var btn = function(id, emoji, title, desc, ok){
-    return '<button id="' + id + '" type="button" ' + (ok ? '' : 'disabled ')
-      + 'style="width:100%;display:flex;align-items:center;gap:14px;text-align:left;padding:16px 18px;border-radius:14px;margin-bottom:10px;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';'
-      + 'border:1.5px solid rgba(255,255,255,' + (ok ? '0.15' : '0.06') + ');background:rgba(255,255,255,' + (ok ? '0.05' : '0.02') + ');opacity:' + (ok ? '1' : '0.45') + ';font-family:inherit;">'
-      + '<span style="font-size:28px;">' + emoji + '</span>'
-      + '<span style="flex:1;"><span style="display:block;font-size:15.5px;font-weight:800;color:#fff;">' + title + '</span>'
-      + '<span style="display:block;font-size:12px;color:rgba(255,255,255,0.5);margin-top:2px;">' + (ok ? desc : '사용 권한이 없습니다 · 관리자 문의') + '</span></span>'
-      + '<span style="color:rgba(255,255,255,0.35);font-size:16px;">›</span>'
-      + '</button>';
-  };
-  box.innerHTML =
-    '<div style="font-size:34px;margin-bottom:10px;">🌙</div>'
-    + '<div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:4px;">노후파이클래스</div>'
-    + '<div style="font-size:12.5px;color:rgba(255,255,255,0.45);margin-bottom:20px;">사용할 버전을 선택해 주세요</div>'
-    + btn('nopaVer1', '🌙', '노후파이클래스 V1.0', '노후 준비 심층 분석 · 기존 버전', v1ok)
-    + btn('nopaVer2', '🥧', '노후파이클래스 V2.0', '사망보험금 유동화 · 하나로H 상담 특화', v2ok)
-    + '<button id="nopaVerCancel" type="button" style="width:100%;padding:12px;border-radius:12px;border:none;background:transparent;color:rgba(255,255,255,0.5);font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-top:4px;">닫기</button>';
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-  var close = function(){ var ov = document.getElementById('nopaVerOverlay'); if (ov) ov.remove(); };
-  overlay.addEventListener('click', function(ev){ if (ev.target === overlay) close(); });
-  var b1 = document.getElementById('nopaVer1');
-  var b2 = document.getElementById('nopaVer2');
-  if (b1 && v1ok) b1.addEventListener('click', function(){ if(b1.dataset.blocked==='1'){ showToast('🚫 사용 권한이 없습니다'); return; } close(); _openNohupaiUrl('https://unice-vip.co.kr/노후파이/index.html'); });
-  if (b2 && v2ok) b2.addEventListener('click', function(){ if(b2.dataset.blocked==='1'){ showToast('🚫 사용 권한이 없습니다'); return; } close(); _openNohupaiUrl('https://unice-vip.co.kr/노후파이2/index.html'); });
-  var bc = document.getElementById('nopaVerCancel');
-  if (bc) bc.addEventListener('click', close);
+  renderVersionPicker({
+    id: 'nopaVerOverlay',
+    emoji: '\uD83C\uDF19',
+    title: '노후파이클래스',
+    accent: 'var(--purple)',
+    tint: 'rgba(139,92,246,0.14)',
+    items: [
+      { emoji: '\uD83C\uDF19', tint: 'rgba(139,92,246,0.14)', name: '노후파이클래스 V1.0',
+        desc: '노후 준비 심층 분석 · 기존 버전', ok: v1ok,
+        go: function () { _openNohupaiUrl('https://unice-vip.co.kr/노후파이/index.html'); } },
+      { emoji: '\uD83E\uDD67', tint: 'rgba(139,92,246,0.14)', name: '노후파이클래스 V2.0',
+        desc: '사망보험금 유동화 · 하나로H 상담 특화', ok: v2ok,
+        go: function () { _openNohupaiUrl('https://unice-vip.co.kr/노후파이2/index.html'); } }
+    ]
+  });
+  _refreshToolPerm(['nohupai', 'nohupai2'], 'nopaVerOverlay');
 }
 // open jenius (제니스 케어맵) with logged-in fp code so it auto-logs-in
 function openJeniusConsult(e) {
