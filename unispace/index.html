@@ -1653,6 +1653,33 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .pta-kpi .n { font-size: 19px; font-weight: 800; color: #16294A; font-variant-numeric: tabular-nums; }
 .pta-kpi .l { font-size: 10.5px; color: #8B8574; margin-top: 3px; font-weight: 700; }
 .pta-list { flex: 1; overflow-y: auto; padding: 10px 12px 16px; -webkit-overflow-scrolling: touch; }
+/* 소개 고객 탭 */
+.pta-kpi.hot { background: #FFF6F0; border-color: #F3A87A; }
+.pta-kpi.hot .n { color: #C4520E; }
+.pta-cnt { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
+  padding: 0 5px; margin-left: 5px; border-radius: 9px; background: #EF4444; color: #fff;
+  font-size: 10.5px; font-weight: 900; vertical-align: middle; }
+.ptl-item { background: #fff; border: 1px solid #E9E1CE; border-radius: 12px; padding: 13px 14px; margin-bottom: 9px; }
+.ptl-item.urgent { border-color: #F3A87A; background: #FFFCFA; }
+.ptl-r1 { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.ptl-nm { font-size: 15.5px; font-weight: 800; color: #22314A; }
+.ptl-tag { font-size: 10.5px; font-weight: 800; border-radius: 20px; padding: 3px 9px; }
+.ptl-tag.s0 { background: #FFEDE2; color: #C4520E; }
+.ptl-tag.s1 { background: #E6F0FF; color: #2563EB; }
+.ptl-tag.s2 { background: #E8F7EE; color: #15803D; }
+.ptl-tag.s3 { background: #F3E8FF; color: #7C3AED; }
+.ptl-tag.day { background: #FEE2E2; color: #B91C1C; }
+.ptl-ph { font-size: 14.5px; font-weight: 800; color: #16294A; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.ptl-meta { font-size: 12px; color: #6B6455; margin-top: 5px; line-height: 1.6; }
+.ptl-memo { font-size: 12px; color: #3A4358; background: #F7F4EC; border-radius: 8px; padding: 8px 11px; margin-top: 8px; line-height: 1.6; }
+.ptl-from { font-size: 11.5px; color: #8B8574; margin-top: 9px; padding-top: 8px; border-top: 1px dashed #E9E1CE; }
+.ptl-from b { color: #C4520E; font-weight: 800; }
+.ptl-acts { display: flex; gap: 7px; margin-top: 10px; }
+.ptl-ab { flex: 1; text-align: center; font-size: 12.5px; font-weight: 800; padding: 9px; border-radius: 9px;
+  border: 1px solid #DDD5C2; background: #fff; color: #3A4358; cursor: pointer; font-family: inherit;
+  text-decoration: none; display: block; }
+.ptl-ab.call { background: #F37321; border-color: #F37321; color: #fff; }
+.ptl-ab.pri { background: #16294A; border-color: #16294A; color: #fff; }
 .pta-item { background: #fff; border: 1px solid #E9E1CE; border-radius: 12px; padding: 12px 13px; margin-bottom: 8px; }
 .pta-r1 { display: flex; align-items: center; gap: 8px; }
 .pta-nm { font-size: 14.5px; font-weight: 800; color: #22314A; }
@@ -3023,6 +3050,14 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 }
 .transfer-item-info { flex: 1; min-width: 0; }
 .transfer-item-name { font-size: 14px; font-weight: 700; }
+.sub-item { position: relative; }
+.sub-badge {
+  position: absolute; top: 10px; right: 10px;
+  min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px;
+  background: #EF4444; color: #fff; font-size: 11.5px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(239,68,68,.45); z-index: 2;
+}
 .transfer-item-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
 .transfer-item-badge {
   font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
@@ -5882,6 +5917,7 @@ function showDashboard() {
   renderSmartCheckinBtn();
   renderAttToday();
   renderRecruitStat();
+  if (typeof refreshPartnerLeadBadge === 'function') setTimeout(refreshPartnerLeadBadge, 1200);
   if(typeof _ivLoadFromGas==='function') _ivLoadFromGas();
   if (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) {
     rc2LoadFromGas(getCurrentYM(), function(ok){ if(ok) renderRecruitStat(); });
@@ -6664,6 +6700,9 @@ function buildMenuHtml(data) {
     html += '<div class="sub-name">' + item.name + '</div>';
     html += '<div class="sub-desc">' + item.desc + '</div>';
     html += '</div>';
+    if (action === 'partners_admin') {
+      html += '<span class="sub-badge" id="ptnLeadBadge" style="display:none">0</span>';
+    }
     html += '<div class="sub-item-arrow">↗</div>';
     html += '</a>';
   });
@@ -6684,6 +6723,7 @@ function _scrollToSubmenu() {
 }
 
 function openSubmenu(key) {
+  if (key === 'customer' && typeof refreshPartnerLeadBadge === 'function') setTimeout(refreshPartnerLeadBadge, 60);
   var data    = SUBMENUS[key];
   var panel   = document.getElementById('dropdownPanel');
   var isSame  = activeKey === key && panel.classList.contains('open');
@@ -14299,6 +14339,146 @@ function loadPartnerSlots() { return; }
 var _ptaBranch = '';
 var _ptaMeta = null;
 
+// ── 파트너 소개 고객 탭 ─────────────────────────────
+var _ptaMode = 'apply';        // 'apply' | 'lead'
+var _ptlList = [];
+var _ptlData = null;
+
+function _ptaSetMode(mode) {
+  _ptaMode = (mode === 'lead') ? 'lead' : 'apply';
+  var ma = document.getElementById('ptaModeApply');
+  var ml = document.getElementById('ptaModeLead');
+  if (ma) ma.className = (_ptaMode === 'apply') ? 'pta-tab on' : 'pta-tab';
+  if (ml) ml.className = (_ptaMode === 'lead') ? 'pta-tab on' : 'pta-tab';
+
+  var isLead = (_ptaMode === 'lead');
+  var el;
+  el = document.getElementById('ptaSumApply'); if (el) el.style.display = isLead ? 'none' : 'flex';
+  el = document.getElementById('ptaSumLead');  if (el) el.style.display = isLead ? 'flex' : 'none';
+  el = document.getElementById('ptaList');     if (el) el.style.display = isLead ? 'none' : 'block';
+  el = document.getElementById('ptlList');     if (el) el.style.display = isLead ? 'block' : 'none';
+  // 지점 필터·기간·카톡공유는 신청자 명단 전용
+  el = document.getElementById('ptaTabs');     if (el) el.style.display = isLead ? 'none' : (_ptaMeta && _ptaMeta.canPickBranch ? 'flex' : 'none');
+  el = document.querySelector('.pta-dt');      if (el) el.style.display = isLead ? 'none' : 'flex';
+  el = document.getElementById('ptaShareBtn');
+  if (el) el.style.display = isLead ? 'none' : ((_ptaMeta && (_ptaMeta.scope === 'all' || _ptaMeta.scope === 'branch')) ? 'inline-block' : 'none');
+
+  if (isLead) _ptlLoad();
+}
+
+function _ptlLoad() {
+  var box = document.getElementById('ptlList');
+  if (box && !_ptlList.length) box.innerHTML = '<div class="pta-empty">불러오는 중...</div>';
+  fetch(UNISPACE_GAS_URL + '?action=getPartnerLeads&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now())
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res || !res.ok) {
+        if (box) box.innerHTML = '<div class="pta-empty">' + ((res && res.msg) || '불러오지 못했습니다') + '</div>';
+        return;
+      }
+      _ptlData = res;
+      _ptlList = res.list || [];
+      _ptlRenderKpi();
+      _ptlRender();
+      _ptnSetBadge(res.waiting || 0);
+    })
+    .catch(function() {
+      if (box) box.innerHTML = '<div class="pta-empty">네트워크 오류 — 잠시 후 다시 시도해주세요</div>';
+    });
+}
+
+function _ptlRenderKpi() {
+  if (!_ptlData) return;
+  var e1 = document.getElementById('ptlKpi1');
+  var e2 = document.getElementById('ptlKpi2');
+  var e3 = document.getElementById('ptlKpi3');
+  if (e1) e1.textContent = (_ptlData.waiting || 0) + '건';
+  if (e2) e2.textContent = (_ptlData.progress || 0) + '건';
+  if (e3) e3.textContent = (_ptlData.dealt || 0) + '건';
+  // 가장 오래된 미처리 경과일
+  var oldest = 0;
+  for (var i = 0; i < _ptlList.length; i++) {
+    if (_ptlList[i].status === 0 && _ptlList[i].days > oldest) oldest = _ptlList[i].days;
+  }
+  var l1 = document.getElementById('ptlKpi1L');
+  if (l1) l1.innerHTML = '연락 대기' + (oldest > 0 ? '<br><span style="font-size:10px;opacity:.8">가장 오래된 건 ' + oldest + '일 경과</span>' : '');
+  var l3 = document.getElementById('ptlKpi3L');
+  if (l3) {
+    var pay = _ptlData.payout || 0;
+    l3.innerHTML = '청약 완료' + (pay > 0 ? '<br><span style="font-size:10px;opacity:.8">지원금 ' + Math.round(pay / 10000) + '만원</span>' : '');
+  }
+}
+
+function _ptlRender() {
+  var box = document.getElementById('ptlList');
+  if (!box) return;
+  if (!_ptlList.length) {
+    box.innerHTML = '<div class="pta-empty">아직 파트너가 소개한 고객이 없습니다</div>';
+    return;
+  }
+  var isAll = (_ptlData && _ptlData.scope !== 'self');
+  var h = '';
+  for (var i = 0; i < _ptlList.length; i++) {
+    var r = _ptlList[i];
+    var st = r.status;
+    var urgent = (st === 0 && r.days >= 2);
+    h += '<div class="ptl-item' + (urgent ? ' urgent' : '') + '">';
+    h += '<div class="ptl-r1"><span class="ptl-nm">' + _ptaEsc(r.custName) + '</span>';
+    h += '<span class="ptl-tag s' + (st > 3 ? 3 : st) + '">' + _ptaEsc(r.statusName) + '</span>';
+    if (urgent) h += '<span class="ptl-tag day">' + r.days + '일 경과</span>';
+    h += '</div>';
+    h += '<div class="ptl-ph">' + _ptaEsc(_ptaPhone(r.custPhone)) + '</div>';
+    var meta = [];
+    if (r.callTime) meta.push('연락 가능 시간 <b>' + _ptaEsc(r.callTime) + '</b>');
+    if (r.createdAt) meta.push('소개일 ' + _ptaEsc(r.createdAt));
+    if (st >= 3 && r.payout) meta.push('지원금 ' + Number(r.payout).toLocaleString() + '원');
+    h += '<div class="ptl-meta">' + meta.join(' · ') + '</div>';
+    if (r.memo) h += '<div class="ptl-memo">' + _ptaEsc(r.memo) + '</div>';
+    h += '<div class="ptl-from">🤝 <b>' + _ptaEsc(r.partnerName) + '</b> 파트너가 소개';
+    if (isAll && r.fpName) h += ' · 담당 ' + _ptaEsc(r.fpName) + (r.branch ? ' (' + _ptaEsc(r.branch) + ')' : '');
+    h += '</div>';
+
+    h += '<div class="ptl-acts">';
+    var tel = String(r.custPhone || '').replace(/[^0-9]/g, '');
+    if (tel) h += '<a class="ptl-ab call" href="tel:' + tel + '">📞 전화 걸기</a>';
+    if (st === 0) h += '<button type="button" class="ptl-ab pri" onclick="_ptlSetStatus(\'' + _ptaEsc(r.id) + '\',1)">연락 완료로 변경</button>';
+    else if (st === 1) h += '<button type="button" class="ptl-ab pri" onclick="_ptlSetStatus(\'' + _ptaEsc(r.id) + '\',2)">상담 완료로 변경</button>';
+    else if (st === 2) h += '<button type="button" class="ptl-ab" onclick="_ptlSetStatus(\'' + _ptaEsc(r.id) + '\',1)">연락 완료로 되돌리기</button>';
+    else h += '<span class="ptl-ab" style="opacity:.6">업적 입력으로 확정된 건</span>';
+    h += '</div>';
+    h += '</div>';
+  }
+  box.innerHTML = h;
+}
+
+function _ptlSetStatus(leadId, status) {
+  var url = UNISPACE_GAS_URL + '?action=setPartnerLeadStatus'
+    + '&leadId=' + encodeURIComponent(leadId)
+    + '&status=' + encodeURIComponent(status)
+    + '&fp=' + encodeURIComponent(currentUser.id)
+    + '&_=' + Date.now();
+  fetch(url).then(function(r) { return r.json(); }).then(function(res) {
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '변경하지 못했습니다')); return; }
+    showToast('✅ ' + res.statusName + '로 변경했습니다');
+    _ptlLoad();
+  }).catch(function() { showToast('⚠️ 네트워크 오류'); });
+}
+
+// ── 홈 카드 배지 ─────────────────────────────────
+function _ptnSetBadge(n) {
+  var b = document.getElementById('ptnLeadBadge');
+  if (!b) return;
+  if (n > 0) { b.textContent = (n > 99 ? '99+' : n); b.style.display = 'flex'; }
+  else b.style.display = 'none';
+}
+function refreshPartnerLeadBadge() {
+  if (!currentUser || !currentUser.id) return;
+  fetch(UNISPACE_GAS_URL + '?action=getPartnerLeadCount&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now())
+    .then(function(r) { return r.json(); })
+    .then(function(res) { if (res && res.ok) _ptnSetBadge(res.n || 0); })
+    .catch(function() {});
+}
+
 function _ptaMonthRange() {
   var n = new Date();
   var y = n.getFullYear(), m = n.getMonth();
@@ -14321,6 +14501,13 @@ function openPartnersAdmin(ev) {
   if (t && !t.value) t.value = r.to;
   _ptaBranch = '';
   _ptaLoad();
+  // 푸시 딥링크(?open=partners&tab=leads)로 들어오면 소개 고객 탭부터
+  var wantLead = false;
+  try {
+    var qs = String(window.location.search || '');
+    if (qs.indexOf('tab=leads') >= 0) wantLead = true;
+  } catch(e) {}
+  _ptaSetMode(wantLead ? 'lead' : 'apply');
   return false;
 }
 
@@ -22063,6 +22250,10 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="pta-close" onclick="closePartnersAdmin()">✕</button>
     </div>
     <div class="pta-ftr">
+      <div class="pta-tabs" id="ptaModeTabs" style="margin-right:6px">
+        <button type="button" class="pta-tab on" id="ptaModeApply" onclick="_ptaSetMode('apply')">신청자 명단</button>
+        <button type="button" class="pta-tab" id="ptaModeLead" onclick="_ptaSetMode('lead')">소개 고객<span id="ptaLeadCnt" class="pta-cnt" style="display:none">0</span></button>
+      </div>
       <div class="pta-tabs" id="ptaTabs">
         <button type="button" class="pta-tab on" data-br="" onclick="_ptaSetBranch('')">전체</button>
         <button type="button" class="pta-tab" data-br="알파지점" onclick="_ptaSetBranch('알파지점')">알파</button>
@@ -22076,12 +22267,18 @@ function doCheckin() { doSmartCheckin(); }
         <input type="date" id="ptaTo" onchange="_ptaLoad()">
       </div>
     </div>
-    <div class="pta-sum">
+    <div class="pta-sum" id="ptaSumApply">
       <div class="pta-kpi"><div class="n" id="ptaKpi1">-</div><div class="l" id="ptaKpi1Label">전체 신청</div></div>
       <div class="pta-kpi"><div class="n" id="ptaKpi2">-</div><div class="l">남은 자리</div></div>
       <div class="pta-kpi"><div class="n" id="ptaKpi3">-</div><div class="l">조회 결과</div></div>
     </div>
+    <div class="pta-sum" id="ptaSumLead" style="display:none">
+      <div class="pta-kpi hot"><div class="n" id="ptlKpi1">-</div><div class="l" id="ptlKpi1L">연락 대기</div></div>
+      <div class="pta-kpi"><div class="n" id="ptlKpi2">-</div><div class="l">상담 진행 중</div></div>
+      <div class="pta-kpi"><div class="n" id="ptlKpi3">-</div><div class="l" id="ptlKpi3L">청약 완료</div></div>
+    </div>
     <div class="pta-list" id="ptaList"></div>
+    <div class="pta-list" id="ptlList" style="display:none"></div>
   </div>
 </div>
 
@@ -22673,7 +22870,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 33;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 34;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
