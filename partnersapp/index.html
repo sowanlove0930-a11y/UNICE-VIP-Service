@@ -492,6 +492,8 @@ input,select,textarea,button{font-family:inherit;color:inherit}
   </div>
   <div class="sec">
     <div class="secT"><h3>파트너별 현황</h3><div class="rt">지원금 많은 순</div></div>
+    <button class="btn ghost" type="button" style="margin-bottom:12px" onclick="admSyncApplicants()">🔄 신청자 → 명단 동기화</button>
+    <div class="hintline" style="margin:-4px 0 12px">파트너스 신청접수에 새로 들어온 분들을 명단에 등록합니다. 파트너가 U아이디로 처음 로그인하면 자동으로도 등록됩니다.</div>
     <div id="admPtnList"></div>
   </div>
   <div class="sec">
@@ -847,6 +849,7 @@ function mockApi(p, cb){
     MK.notices = kn;
     res = { ok:true, notices:MK.notices.slice(0) };
   }
+  else if (a === "syncApplicants") res = { ok:true, added:0 };
   else if (a === "saveSettings"){
     var dd = parseInt(p.settleDay) || 0;
     if (dd < 1 || dd > 28) res = { ok:false, msg:"\uC815\uC0B0\uC77C\uC740 1~28 \uC0AC\uC774\uB85C \uC785\uB825\uD574\uC8FC\uC138\uC694." };
@@ -1084,6 +1087,17 @@ function admDelNotice(id){
       showToast("삭제했습니다");
     }, "삭제 중...");
   }, { icon:"🗑️", title:"공지 삭제", ok:"삭제", okCls:"del" });
+}
+function admSyncApplicants(){
+  api({ action:"syncApplicants", authId:SESS.id, authPw:SESS.pw }, function(j){
+    if (!j.ok){ uiAlert(j.msg || "동기화하지 못했습니다."); return; }
+    if (j.added > 0){
+      showToast("신청자 " + j.added + "명을 명단에 등록했습니다");
+      loadAdmin();
+    } else {
+      showToast("새로 등록할 신청자가 없습니다");
+    }
+  }, "동기화 중...");
 }
 function admSaveSettle(){
   var d = parseInt($("admSettleDay").value) || 0;
