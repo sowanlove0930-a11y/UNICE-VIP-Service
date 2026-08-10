@@ -8263,6 +8263,110 @@ var _perfProducts = [];
 function _perfPad(){ return _perfProducts.length ? '' : ''; }
 var _perfFpList = [];
 var _editingPerfId = null; // 수정 중인 업적 레코드 id (없으면 신규 입력)
+
+// ── 업적입력 파트너 소개 연동 ─────────────────────
+var _perfPtnOn = false;       // 파트너스 소개건 토글
+var _perfPtnPid = '';         // 선택한 파트너 id
+var _perfPtnLeadId = '';      // 선택한 소개건 id ('' = 새 소개건 자동 생성)
+var _ptnPickCache = null;     // { at:ms, partners:[...] }
+function _perfPtnReset(){
+  _perfPtnOn = false; _perfPtnPid = ''; _perfPtnLeadId = '';
+  var chip=document.getElementById('perfPtnChip');
+  if(chip) chip.className='perf-co';
+  var box=document.getElementById('perfPtnBox');
+  if(box) box.style.display='none';
+  var s=document.getElementById('perfPtnSel');
+  if(s) s.value='';
+  var ls=document.getElementById('perfPtnLeadSel');
+  if(ls){ ls.style.display='none'; ls.innerHTML='<option value="">고객 미지정 (새 소개건으로 기록)</option>'; }
+  var pay=document.getElementById('perfPtnPay');
+  if(pay) pay.value='';
+}
+function onPerfPtnPayInput(){
+  var el=document.getElementById('perfPtnPay');
+  if(!el) return;
+  var num=(el.value||'').replace(/[^0-9]/g,'');
+  el.value = num ? Number(num).toLocaleString() : '';
+}
+function _perfPtnPayVal(){
+  var el=document.getElementById('perfPtnPay');
+  if(!el) return 0;
+  return parseInt((el.value||'').replace(/[^0-9]/g,''))||0;
+}
+function _perfPtnName(pid){
+  if(!_ptnPickCache || !_ptnPickCache.partners) return '';
+  for(var i=0;i<_ptnPickCache.partners.length;i++){
+    if(String(_ptnPickCache.partners[i].id)===String(pid)) return _ptnPickCache.partners[i].name||'';
+  }
+  return '';
+}
+function _perfPtnLoad(cb){
+  if(_ptnPickCache && (Date.now()-_ptnPickCache.at) < 300000){ if(cb) cb(true); return; }
+  fetch(UNISPACE_GAS_URL + '?action=getPartnerPick')
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(j && j.ok){ _ptnPickCache = { at:Date.now(), partners:(j.partners||[]) }; if(cb) cb(true); }
+      else { if(cb) cb(false); }
+    })['catch'](function(){ if(cb) cb(false); });
+}
+function _perfPtnFillSel(){
+  var s=document.getElementById('perfPtnSel');
+  if(!s) return;
+  var list = (_ptnPickCache && _ptnPickCache.partners) || [];
+  var h='<option value="">파트너 선택</option>';
+  for(var i=0;i<list.length;i++){
+    var p=list[i];
+    var lbl = (p.name||'') + (p.fpName ? (' \u00B7 \uB2F4\uB2F9 '+p.fpName) : '') + (p.branch ? (' \u00B7 '+p.branch) : '');
+    h += '<option value="'+String(p.id).replace(/"/g,'&quot;')+'">'+lbl.replace(/</g,'&lt;')+'</option>';
+  }
+  s.innerHTML=h;
+  if(_perfPtnPid) s.value=_perfPtnPid;
+  _perfPtnFillLeads();
+}
+function _perfPtnFillLeads(){
+  var ls=document.getElementById('perfPtnLeadSel');
+  if(!ls) return;
+  if(!_perfPtnPid){ ls.style.display='none'; return; }
+  var list = (_ptnPickCache && _ptnPickCache.partners) || [];
+  var leads=[];
+  for(var i=0;i<list.length;i++){
+    if(String(list[i].id)===String(_perfPtnPid)) leads = list[i].leads||[];
+  }
+  var h='<option value="">고객 미지정 (새 소개건으로 기록)</option>';
+  for(var k=0;k<leads.length;k++){
+    var nm=(leads[k].custName||'').replace(/</g,'&lt;');
+    h += '<option value="'+String(leads[k].id).replace(/"/g,'&quot;')+'">'+nm+' (소개 '+String(leads[k].createdAt||'').slice(5,10)+')</option>';
+  }
+  ls.innerHTML=h;
+  if(_perfPtnLeadId) ls.value=_perfPtnLeadId;
+  ls.style.display='';
+}
+function togglePerfPartner(){
+  _perfPtnOn = !_perfPtnOn;
+  var chip=document.getElementById('perfPtnChip');
+  if(chip) chip.className = _perfPtnOn ? 'perf-co perf-co-on' : 'perf-co';
+  var box=document.getElementById('perfPtnBox');
+  if(box) box.style.display = _perfPtnOn ? '' : 'none';
+  if(!_perfPtnOn){ _perfPtnPid=''; _perfPtnLeadId=''; return; }
+  var s=document.getElementById('perfPtnSel');
+  if(s && s.options.length<=1){
+    s.innerHTML='<option value="">\uBD88\uB7EC\uC624\uB294 \uC911...</option>';
+    _perfPtnLoad(function(ok){
+      if(ok) _perfPtnFillSel();
+      else { s.innerHTML='<option value="">\uD30C\uD2B8\uB108 \uBAA9\uB85D \uB85C\uB4DC \uC2E4\uD328 - \uB2E4\uC2DC \uC5F4\uC5B4\uC8FC\uC138\uC694</option>'; }
+    });
+  } else { _perfPtnFillSel(); }
+}
+function onPerfPtnSel(){
+  var s=document.getElementById('perfPtnSel');
+  _perfPtnPid = s ? s.value : '';
+  _perfPtnLeadId = '';
+  _perfPtnFillLeads();
+}
+function onPerfPtnLeadSel(){
+  var ls=document.getElementById('perfPtnLeadSel');
+  _perfPtnLeadId = ls ? ls.value : '';
+}
 function openPerfModal() {
   if (!currentUser) { showToast('로그인이 필요합니다'); return; }
   _editingPerfId = null;
@@ -8291,6 +8395,7 @@ function openPerfModal() {
   _perfSetDate(getTodayStr());
   var pc=document.getElementById('perfCal'); if(pc) pc.classList.remove('open');
   _perfProducts = [{co:'', cat:'', amount:''}];
+  _perfPtnReset();
   renderPerfProds();
   document.getElementById('perfModalOverlay').classList.add('open');
 }
@@ -8340,6 +8445,20 @@ function openPerfEdit(id){
     });
   } else {
     _perfProducts = [{co:'', cat:'', amount:''}];
+  }
+  // 파트너 소개 정보 복원
+  _perfPtnReset();
+  if(rec.partnerId){
+    _perfPtnOn = true;
+    _perfPtnPid = rec.partnerId;
+    _perfPtnLeadId = rec.partnerLeadId || '';
+    var pchip=document.getElementById('perfPtnChip');
+    if(pchip) pchip.className='perf-co perf-co-on';
+    var pbox=document.getElementById('perfPtnBox');
+    if(pbox) pbox.style.display='';
+    var ppay=document.getElementById('perfPtnPay');
+    if(ppay) ppay.value = (parseInt(rec.partnerPayout)||0) > 0 ? Number(rec.partnerPayout).toLocaleString() : '';
+    _perfPtnLoad(function(ok){ if(ok) _perfPtnFillSel(); });
   }
   renderPerfProds();
   document.getElementById('perfModalOverlay').classList.add('open');
@@ -8583,6 +8702,7 @@ function confirmPerfInput() {
     products.push({co:co, cat:p.cat, amount:amt});
   }
   if(!products.length){ showToast('⚠️ 상품 내역을 입력해 주세요'); return; }
+  if(_perfPtnOn && !_perfPtnPid){ showToast('⚠️ 파트너를 선택해 주세요 (또는 파트너스 칩을 해제)'); return; }
   var total=products.reduce(function(s,x){ return s+x.amount; },0);
 
   var log=getPerfLog();
@@ -8593,6 +8713,10 @@ function confirmPerfInput() {
     date:date, fpId:fpId, fpName:fpName, branch:branch,
     products:products, total:total,
     note:'',
+    partnerId: (_perfPtnOn ? _perfPtnPid : ''),
+    partnerLeadId: (_perfPtnOn ? _perfPtnLeadId : ''),
+    partnerName: (_perfPtnOn ? _perfPtnName(_perfPtnPid) : ''),
+    partnerPayout: (_perfPtnOn ? _perfPtnPayVal() : 0),
     createdAt:new Date().toISOString()
   };
   if(isEdit){
@@ -8646,6 +8770,7 @@ function confirmPerfInput() {
 
   // 모달 유지 + 다음 입력 위해 상품 내역만 초기화 (FP·날짜는 그대로)
   _perfProducts = [{co:'', cat:'', amount:''}];
+  _perfPtnReset();
   renderPerfProds();
   renderGoals();
   renderTop10();
@@ -8679,7 +8804,9 @@ function _perfLockSubmit(on){
 function _perfSubmitToGas(rec, attempt, onDone){
   var payload = JSON.stringify({ action:'savePerf', data:{
     id: rec.id, date: rec.date, fpCode: rec.fpId, fpName: rec.fpName, branch: rec.branch,
-    products: rec.products, total: rec.total, note: rec.note || ''
+    products: rec.products, total: rec.total, note: rec.note || '',
+    partnerId: rec.partnerId || '', partnerLeadId: rec.partnerLeadId || '', partnerName: rec.partnerName || '',
+    partnerPayout: parseInt(rec.partnerPayout)||0
   }});
   fetch(UNISPACE_GAS_URL, {
     method:'POST',
@@ -21198,6 +21325,18 @@ function doCheckin() { doSmartCheckin(); }
         <button type="button" id="perfAddProd" onclick="addPerfProd()" style="width:100%;font-size:12px;padding:9px;border-radius:10px;border:1px dashed var(--gold);background:rgba(201,168,76,.06);color:var(--gold2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-weight:700">+ 상품 추가</button>
         <div id="perfProdSum" style="font-size:13px;font-weight:800;color:#854F0B;background:#FAEEDA;border-radius:9px;margin-top:9px;padding:8px 12px;text-align:center;display:none"></div>
       </div>
+      <div class="perf-form-group">
+        <label class="perf-label">파트너 소개 <span style="font-size:10px;color:var(--text3);font-weight:400">(파트너스 소개로 성사된 계약일 때만)</span></label>
+        <div class="perf-co-wrap">
+          <span class="perf-co" id="perfPtnChip" onclick="togglePerfPartner()">🤝 파트너스 소개건</span>
+        </div>
+        <div id="perfPtnBox" style="display:none;margin-top:8px">
+          <select class="perf-input" id="perfPtnSel" onchange="onPerfPtnSel()" style="width:100%"><option value="">파트너 선택</option></select>
+          <select class="perf-input" id="perfPtnLeadSel" onchange="onPerfPtnLeadSel()" style="width:100%;margin-top:6px;display:none"><option value="">고객 미지정 (새 소개건으로 기록)</option></select>
+          <input type="text" inputmode="numeric" class="perf-input" id="perfPtnPay" placeholder="지원금 직접 입력 (원)" oninput="onPerfPtnPayInput()" style="width:100%;margin-top:6px">
+          <div id="perfPtnHint" style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">지원금을 비워두면 보장월초 2배로 자동 계산됩니다. 상품별로 배수가 다르면 여기에 실제 지원금을 입력하세요 — 파트너 앱에 이 금액이 그대로 표시됩니다</div>
+        </div>
+      </div>
     </div>
 
     <div class="perf-modal-actions">
@@ -22534,7 +22673,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 31;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 33;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
