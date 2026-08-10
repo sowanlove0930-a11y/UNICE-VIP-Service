@@ -826,7 +826,7 @@ button { font-family:inherit; cursor:pointer; }
       <div class="lead-head">
         <div class="eyebrow">Apply</div>
         <h2>케어핏 분석 <b>신청</b></h2>
-        <p>아래 정보만 남겨 주시면, 지금 갖고 계신 보장을 이 치료여정 위에 올려 표로 정리해 드립니다.</p>
+        <p id="cfLeadSub">아래 정보만 남겨 주시면, 지금 갖고 계신 보장을 이 치료여정 위에 올려 표로 정리해 드립니다.</p>
       </div>
       <div class="lf-grid">
         <div class="lf-field"><div class="f-k">이름</div><input type="text" id="cfName" placeholder="홍길동"></div>
@@ -1906,16 +1906,20 @@ function deckShow(n) {
     if (el) { el.className = (i === n) ? ('dpage on' + (back ? ' back' : '')) : 'dpage'; }
   }
   var dots = '';
-  for (var d = 0; d < DECK_N; d++) {
-    dots += '<i class="' + (d === n ? 'on' : '') + '" onclick="deckShow(' + d + ')"></i>';
+  if (!applyOnly) {
+    for (var d = 0; d < DECK_N; d++) {
+      dots += '<i class="' + (d === n ? 'on' : '') + '" onclick="deckShow(' + d + ')"></i>';
+    }
   }
   document.getElementById('dbDots').innerHTML = dots;
   document.getElementById('dbLabel').textContent = DECK_LB[n];
   var pv = document.getElementById('dbPrev');
   pv.disabled = false;
-  pv.innerHTML = (n === 0) ? '&larr; 여정 다시 보기' : '&larr; 이전';
+  if (applyOnly) { pv.innerHTML = '&larr; 처음으로'; }
+  else { pv.innerHTML = (n === 0) ? '&larr; 여정 다시 보기' : '&larr; 이전'; }
   var nx = document.getElementById('dbNext');
   nx.disabled = false;
+  nx.style.display = applyOnly ? 'none' : '';
   nx.innerHTML = (n === DECK_N - 1) ? '처음으로 &uarr;' : '다음 단계 &rarr;';
   var inner = document.getElementById('dp' + (n + 1)).querySelector('.dp-inner');
   if (inner) { inner.scrollTop = 0; }
@@ -1932,6 +1936,7 @@ function deckNext() {
   deckShow(deckIdx + 1);
 }
 function deckPrev() {
+  if (applyOnly) { restart(); return; }
   if (deckIdx === 0) { backToJourney(); return; }
   deckShow(deckIdx - 1);
 }
@@ -2347,12 +2352,23 @@ function finishJourney() {
   deckShow(0);
 }
 
+var applyOnly = false;
+
 function goCta() {
-  if (deckLive()) { deckShow(DECK_N - 1); }
-  else { document.querySelector('.hero').scrollIntoView({ behavior:'smooth' }); }
+  if (deckLive()) { deckShow(DECK_N - 1); return; }
+  /* 여정을 아직 안 봤다면 신청서만 단독으로 연다 */
+  applyOnly = true;
+  document.querySelector('.hero').style.display = 'none';
+  var ft = document.querySelector('.foot');
+  if (ft) { ft.style.display = 'none'; }
+  document.getElementById('journey').className = '';
+  document.getElementById('odo').className = '';
+  document.getElementById('deck').className = 'open';
+  deckShow(DECK_N - 1);
 }
 
 function restart() {
+  applyOnly = false;
   var fw = document.getElementById('cfFormWrap');
   if (fw) { fw.className = 'lead-wrap'; }
   var dw = document.getElementById('cfDoneWrap');
