@@ -1027,7 +1027,7 @@ function renderFp(){
   $("fpNumMonth").textContent = d.totals.month;
   $("fpNumDeal").textContent = d.totals.deal;
   $("fpWait").textContent = won(d.totals.wait);
-  $("fpWaitD").innerHTML = "지급 완료 " + won(d.totals.paid) + "<br>다음 정산일 <b>" + esc(d.settleAt) + "</b>";
+  $("fpWaitD").innerHTML = "지급 완료 " + won(d.totals.paid) + (kdateFull(d.settleAt) ? "<br>다음 정산일 <b>" + esc(kdateFull(d.settleAt)) + "</b>" : "");
   $("fpPtnList").innerHTML = ptnCards(d.partners, "fpc");
 }
 
@@ -1039,7 +1039,7 @@ function renderAdmin(){
   $("admNumMonth").textContent = d.totals.month;
   $("admNumDeal").textContent = d.totals.deal;
   $("admWait").textContent = won(d.totals.wait);
-  $("admWaitD").innerHTML = "지급 완료 " + won(d.totals.paid) + "<br>다음 정산일 <b>" + esc(d.settleAt) + "</b>";
+  $("admWaitD").innerHTML = "지급 완료 " + won(d.totals.paid) + (kdateFull(d.settleAt) ? "<br>다음 정산일 <b>" + esc(kdateFull(d.settleAt)) + "</b>" : "");
   $("admSettleDay").value = (ADMST.settings && ADMST.settings.settleDay) || 25;
   renderAdmNotices();
   $("admPtnList").innerHTML = ptnCards(d.partners, "adc");
@@ -1203,7 +1203,7 @@ function renderHome(){
   $("stTotal").textContent = s.total;
   $("stSum").textContent = won(s.sum);
   var d = "지급 완료 " + won(s.paid) + " · 지급 예정 " + won(s.wait);
-  if (ST.settleAt) d += "<br>다음 정산일 <b>" + esc(ST.settleAt) + "</b>";
+  if (kdateFull(ST.settleAt)) d += "<br>다음 정산일 <b>" + esc(kdateFull(ST.settleAt)) + "</b>";
   $("stSumD").innerHTML = d;
 
   var list = ST.leads.slice(0, 3);
@@ -1221,6 +1221,31 @@ function renderHome(){
   $("ntcList").innerHTML = h || '<div class="empty">등록된 공지가 없습니다.</div>';
 }
 
+/* 날짜를 한국식으로 표기. 서버에서 이미 yyyy-MM-dd로 정규화되지만
+   구형 데이터가 영문 Date 문자열일 수 있어 여기서도 방어한다. */
+function kdate(v){
+  var s = String(v || "");
+  if (!s) return "";
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m){
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return "";
+    m = [null, String(d.getFullYear()), String(d.getMonth()+1), String(d.getDate())];
+  }
+  return Number(m[2]) + "월 " + Number(m[3]) + "일";
+}
+function kdateFull(v){
+  var s = String(v || "");
+  if (!s) return "";
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m){
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return "";
+    m = [null, String(d.getFullYear()), String(d.getMonth()+1), String(d.getDate())];
+  }
+  return m[1] + "년 " + Number(m[2]) + "월 " + Number(m[3]) + "일";
+}
+
 function leadRows(list, withActs){
   var h = "";
   for (var i=0;i<list.length;i++){
@@ -1233,9 +1258,11 @@ function leadRows(list, withActs){
     h += '</div>';
     h += '<div class="ph">' + esc(r.custPhone) + '</div>';
     if (r.memo) h += '<div class="mm">' + esc(r.memo) + '</div>';
-    h += '<div class="mt"><span>' + esc(r.createdAt) + '</span>';
+    var cd = kdate(r.createdAt);
+    h += '<div class="mt">' + (cd ? '<span>' + esc(cd) + ' 소개</span>' : '');
     if (r.callTime) h += '<span>연락 ' + esc(r.callTime) + '</span>';
-    if (st >= 3 && r.settleAt) h += '<span>정산 ' + esc(r.settleAt) + '</span>';
+    var sa = kdate(r.settleAt);
+    if (st >= 3 && sa) h += '<span>정산 ' + esc(sa) + '</span>';
     h += '</div>';
     if (withActs && st === 0){
       h += '<div class="acts">' +
