@@ -3874,7 +3874,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📊 업적유지</th><th>케어핏</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
+          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📊 업적유지</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -4714,6 +4714,7 @@ function _adaptGasUser(g) {
     ugobi: (g.ugobi !== undefined) ? (g.ugobi !== false) : undefined,
     nohupai: (g.nohupai !== undefined) ? (g.nohupai !== false) : undefined,
     nohupai2: (g.nohupai2 !== undefined) ? (g.nohupai2 !== false) : undefined,
+    carefit2: (g.carefit2 !== undefined) ? (g.carefit2 !== false) : undefined,
     jenius: (g.jenius !== undefined) ? (g.jenius !== false) : undefined
   };
   // 지점장 사번 안전망: GAS level 매핑이 어긋나도 강제 보정
@@ -4794,7 +4795,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true };
     });
   } else {
     baseList = FP_LIST;
@@ -4810,6 +4811,7 @@ function getMergedFpList() {
       ugobi: ov.ugobi !== undefined ? ov.ugobi : fp.ugobi,
       nohupai: ov.nohupai !== undefined ? ov.nohupai : fp.nohupai,
       nohupai2: ov.nohupai2 !== undefined ? ov.nohupai2 : fp.nohupai2,
+      carefit2: ov.carefit2 !== undefined ? ov.carefit2 : fp.carefit2,
       jenius: ov.jenius !== undefined ? ov.jenius : fp.jenius,
       team: ov.team !== undefined ? ov.team : fp.team,
       perfKeep: ov.perfKeep !== undefined ? ov.perfKeep : fp.perfKeep,
@@ -6386,6 +6388,9 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.carefit!==false?'on':'off') + '" onclick="toggleFpCarefit(\'' + fp.id + '\')">' +
         (fp.carefit!==false ? '🌿 사용' : '🚫 차단') +
       '</button></td>' +
+      '<td><button class="fp-active-toggle ' + (fp.carefit2!==false?'on':'off') + '" onclick="toggleFpCarefit2(\'' + fp.id + '\')">' +
+        (fp.carefit2!==false ? '🩺 사용' : '🚫 차단') +
+      '</button></td>' +
       '<td><button class="fp-active-toggle ' + (fp.ugobi!==false?'on':'off') + '" onclick="toggleFpUgobi(\'' + fp.id + '\')">' +
         (fp.ugobi!==false ? '💎 사용' : '🚫 차단') +
       '</button></td>' +
@@ -6429,6 +6434,26 @@ function toggleFpCarefit(id) {
       saveFpOverride(id, 'carefit', res.carefit);
       renderFpMgmtTable();
       showToast((res.carefit ? '🌿 ' : '🚫 ') + fp.name + ' 케어핏 ' + (res.carefit ? '사용 허용' : '차단') + '했습니다');
+    } else {
+      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
+    }
+  }).catch(function(){
+    showToast('⚠️ 서버 연결 실패');
+  });
+}
+function toggleFpCarefit2(id) {
+  var list = getMergedFpList();
+  var fp   = list.find(function(f){ return f.id === id; });
+  if (!fp) return;
+  var nextOn = (fp.carefit2 === false); // currently off -> turn on
+  var url = UNISPACE_GAS_URL + '?action=setCarefit2Access&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  showToast('🩺 케어핏 2.0 권한 변경 중...');
+  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.ok) {
+      fp.carefit2 = res.carefit2;
+      saveFpOverride(id, 'carefit2', res.carefit2);
+      renderFpMgmtTable();
+      showToast((res.carefit2 ? '🩺 ' : '🚫 ') + fp.name + ' 케어핏 2.0 ' + (res.carefit2 ? '사용 허용' : '차단') + '했습니다');
     } else {
       showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
     }
@@ -14527,24 +14552,72 @@ function toggleConsultMode() {
   }
 }
 // open carefit with logged-in fp code so it skips its own login
-// 폰(좁은 화면) 여부 — 태블릿/PC(769px 이상)에서는 false
-function _isPhoneWidth() { return window.innerWidth <= 768; }
-// PC 전용 상담 도구를 폰에서 눌렀을 때 안내
-function _pcOnlyToolBlocked() {
-  showToast('💻 이 도구는 PC·태블릿에서 이용해 주세요');
-  return false;
-}
-
+// -> 버전 선택 모달 (V1.0 / V2.0)
 function openCarefitConsult(e) {
   if (e && e.preventDefault) e.preventDefault();
   if (_isPhoneWidth()) return _pcOnlyToolBlocked();
-  var base = 'https://unice-vip.co.kr/올라이프_케어핏/carefit.html';
+  showCarefitVersionPicker();
+  return false;
+}
+function _openCarefitUrl(base) {
   var url = base;
   if (currentUser && currentUser.id) {
     url = base + '?fp=' + encodeURIComponent(currentUser.id) + '&from=unispace';
   }
   window.open(url, '_blank');
-  return false;
+}
+function showCarefitVersionPicker() {
+  var old = document.getElementById('cfitVerOverlay');
+  if (old) old.remove();
+  var v1ok = !currentUser || currentUser.carefit !== false;
+  var v2ok = !currentUser || currentUser.carefit2 !== false;
+  // 서버에서 최신 권한을 즉시 재확인 — 대표가 방금 차단했으면 로컬 스냅샷과 무관하게 반영
+  if (currentUser && currentUser.id && typeof UNISPACE_GAS_URL !== 'undefined') {
+    fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if (!res || !res.ok) return;
+        currentUser.carefit = (res.carefit !== false);
+        currentUser.carefit2 = (res.carefit2 !== false);
+        try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch(e) {}
+        var _b1 = document.getElementById('cfitVer1');
+        var _b2 = document.getElementById('cfitVer2');
+        if (_b1 && res.carefit === false) { _b1.disabled = true; _b1.style.opacity = '0.45'; _b1.style.cursor = 'not-allowed'; _b1.dataset.blocked = '1'; }
+        if (_b2 && res.carefit2 === false) { _b2.disabled = true; _b2.style.opacity = '0.45'; _b2.style.cursor = 'not-allowed'; _b2.dataset.blocked = '1'; }
+      }).catch(function(){});
+  }
+  var overlay = document.createElement('div');
+  overlay.id = 'cfitVerOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:linear-gradient(160deg,#1c2230,#141925);border:1px solid rgba(52,211,153,0.35);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-width:380px;width:100%;padding:28px 24px 22px;text-align:center;';
+  var btn = function(id, emoji, title, desc, ok){
+    return '<button id="' + id + '" type="button" ' + (ok ? '' : 'disabled ')
+      + 'style="width:100%;display:flex;align-items:center;gap:14px;text-align:left;padding:16px 18px;border-radius:14px;margin-bottom:10px;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';'
+      + 'border:1.5px solid rgba(255,255,255,' + (ok ? '0.15' : '0.06') + ');background:rgba(255,255,255,' + (ok ? '0.05' : '0.02') + ');opacity:' + (ok ? '1' : '0.45') + ';font-family:inherit;">'
+      + '<span style="font-size:28px;">' + emoji + '</span>'
+      + '<span style="flex:1;"><span style="display:block;font-size:15.5px;font-weight:800;color:#fff;">' + title + '</span>'
+      + '<span style="display:block;font-size:12px;color:rgba(255,255,255,0.5);margin-top:2px;">' + (ok ? desc : '사용 권한이 없습니다 · 관리자 문의') + '</span></span>'
+      + '<span style="color:rgba(255,255,255,0.35);font-size:16px;">›</span>'
+      + '</button>';
+  };
+  box.innerHTML =
+    '<div style="font-size:34px;margin-bottom:10px;">🌿</div>'
+    + '<div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:4px;">올라이프 케어핏</div>'
+    + '<div style="font-size:12.5px;color:rgba(255,255,255,0.45);margin-bottom:20px;">사용할 버전을 선택해 주세요</div>'
+    + btn('cfitVer1', '🌿', '올라이프 케어핏 V1.0', '보장 준비도 진단 · 기존 버전', v1ok)
+    + btn('cfitVer2', '🩺', '케어핏 V2.0', '치료여정 시뮬레이션 · 암 · 뇌 · 심장', v2ok)
+    + '<button id="cfitVerCancel" type="button" style="width:100%;padding:12px;border-radius:12px;border:none;background:transparent;color:rgba(255,255,255,0.5);font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-top:4px;">닫기</button>';
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  var close = function(){ var ov = document.getElementById('cfitVerOverlay'); if (ov) ov.remove(); };
+  overlay.addEventListener('click', function(ev){ if (ev.target === overlay) close(); });
+  var b1 = document.getElementById('cfitVer1');
+  var b2 = document.getElementById('cfitVer2');
+  if (b1 && v1ok) b1.addEventListener('click', function(){ if(b1.dataset.blocked==='1'){ showToast('🚫 사용 권한이 없습니다'); return; } close(); _openCarefitUrl('https://unice-vip.co.kr/올라이프_케어핏/carefit.html'); });
+  if (b2 && v2ok) b2.addEventListener('click', function(){ if(b2.dataset.blocked==='1'){ showToast('🚫 사용 권한이 없습니다'); return; } close(); _openCarefitUrl('https://unice-vip.co.kr/케어핏2/index.html'); });
+  var bc = document.getElementById('cfitVerCancel');
+  if (bc) bc.addEventListener('click', close);
 }
 // open ugobi with logged-in fp code so it skips its own login
 function openUgobiConsult(e) {
