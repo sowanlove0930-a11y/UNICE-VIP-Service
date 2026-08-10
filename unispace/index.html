@@ -8321,6 +8321,16 @@ function _perfPtnReset(){
   if(ls){ ls.style.display='none'; ls.innerHTML='<option value="">고객 미지정 (새 소개건으로 기록)</option>'; }
   var pay=document.getElementById('perfPtnPay');
   if(pay) pay.value='';
+  _perfPtnBr=''; _perfPtnQ='';
+  var q=document.getElementById('perfPtnQ');
+  if(q) q.value='';
+  var wrap=document.getElementById('perfPtnBrTabs');
+  if(wrap){
+    var chips=wrap.getElementsByTagName('span');
+    for(var ci=0;ci<chips.length;ci++){
+      chips[ci].className = (chips[ci].getAttribute('data-br')==='') ? 'perf-co perf-co-on' : 'perf-co';
+    }
+  }
 }
 function onPerfPtnPayInput(){
   var el=document.getElementById('perfPtnPay');
@@ -8333,6 +8343,17 @@ function _perfPtnPayVal(){
   if(!el) return 0;
   return parseInt((el.value||'').replace(/[^0-9]/g,''))||0;
 }
+function _perfKDate(v){
+  var s=String(v||'');
+  if(!s) return '';
+  var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(!m){
+    var d=new Date(s);
+    if(isNaN(d.getTime())) return '';
+    m=[null,String(d.getFullYear()),String(d.getMonth()+1),String(d.getDate())];
+  }
+  return Number(m[2])+'\uC6D4 '+Number(m[3])+'\uC77C';
+}
 function _perfPtnName(pid){
   if(!_ptnPickCache || !_ptnPickCache.partners) return '';
   for(var i=0;i<_ptnPickCache.partners.length;i++){
@@ -8342,23 +8363,69 @@ function _perfPtnName(pid){
 }
 function _perfPtnLoad(cb){
   if(_ptnPickCache && (Date.now()-_ptnPickCache.at) < 300000){ if(cb) cb(true); return; }
-  fetch(UNISPACE_GAS_URL + '?action=getPartnerPick')
+  fetch(UNISPACE_GAS_URL + '?action=getPartnerPick&fp=' + encodeURIComponent((currentUser && currentUser.id) || ''))
     .then(function(r){ return r.json(); })
     .then(function(j){
-      if(j && j.ok){ _ptnPickCache = { at:Date.now(), partners:(j.partners||[]) }; if(cb) cb(true); }
+      if(j && j.ok){ _ptnPickCache = { at:Date.now(), partners:(j.partners||[]), scope:(j.scope||'all') }; if(cb) cb(true); }
       else { if(cb) cb(false); }
     })['catch'](function(){ if(cb) cb(false); });
 }
+var _perfPtnBr = '';   // 지점 필터
+var _perfPtnQ  = '';   // 이름/담당FP 검색어
+
+function _perfPtnMatch(p){
+  if(_perfPtnBr){
+    var br=String(p.branch||'');
+    if(_perfPtnBr==='기타'){
+      if(br.indexOf('\uC54C\uD30C')>=0 || br.indexOf('\uBE0C\uB77C\uBCF4')>=0) return false;
+    } else if(br.indexOf(_perfPtnBr)<0) return false;
+  }
+  if(_perfPtnQ){
+    var q=_perfPtnQ.toLowerCase();
+    var hay=(String(p.name||'')+' '+String(p.fpName||'')+' '+String(p.area||'')).toLowerCase();
+    if(hay.indexOf(q)<0) return false;
+  }
+  return true;
+}
+function onPerfPtnBranch(br){
+  _perfPtnBr = br || '';
+  var wrap=document.getElementById('perfPtnBrTabs');
+  if(wrap){
+    var chips=wrap.getElementsByTagName('span');
+    for(var i=0;i<chips.length;i++){
+      chips[i].className = (chips[i].getAttribute('data-br')===_perfPtnBr) ? 'perf-co perf-co-on' : 'perf-co';
+    }
+  }
+  _perfPtnFillSel();
+}
+function onPerfPtnQuery(){
+  var el=document.getElementById('perfPtnQ');
+  _perfPtnQ = el ? String(el.value||'').replace(/^\s+|\s+$/g,'') : '';
+  _perfPtnFillSel();
+}
+
 function _perfPtnFillSel(){
   var s=document.getElementById('perfPtnSel');
   if(!s) return;
   var list = (_ptnPickCache && _ptnPickCache.partners) || [];
-  var h='<option value="">파트너 선택</option>';
-  for(var i=0;i<list.length;i++){
-    var p=list[i];
-    var lbl = (p.name||'') + (p.fpName ? (' \u00B7 \uB2F4\uB2F9 '+p.fpName) : '') + (p.branch ? (' \u00B7 '+p.branch) : '');
+  // FP 계정은 본인 담당 파트너만 내려오므로 지점 탭을 숨긴다
+  var brTabs=document.getElementById('perfPtnBrTabs');
+  if(brTabs) brTabs.style.display = (_ptnPickCache && _ptnPickCache.scope==='self') ? 'none' : '';
+  var shown=[];
+  for(var i=0;i<list.length;i++){ if(_perfPtnMatch(list[i])) shown.push(list[i]); }
+  // 가나다순 (서버에서도 정렬되지만 필터 후 재보장)
+  shown.sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||''), 'ko'); });
+
+  var h='<option value="">파트너 선택 ('+shown.length+'\uBA85)</option>';
+  for(var k=0;k<shown.length;k++){
+    var p=shown[k];
+    var lbl = (p.name||'');
+    if(p.fpName) lbl += ' \u00B7 \uB2F4\uB2F9 '+p.fpName;
+    if(p.branch) lbl += ' \u00B7 '+p.branch;
+    if(p.leads && p.leads.length) lbl += ' \u00B7 \uC18C\uAC1C '+p.leads.length;
     h += '<option value="'+String(p.id).replace(/"/g,'&quot;')+'">'+lbl.replace(/</g,'&lt;')+'</option>';
   }
+  if(!shown.length) h='<option value="">\uAC80\uC0C9 \uACB0\uACFC \uC5C6\uC74C</option>';
   s.innerHTML=h;
   if(_perfPtnPid) s.value=_perfPtnPid;
   _perfPtnFillLeads();
@@ -8375,7 +8442,10 @@ function _perfPtnFillLeads(){
   var h='<option value="">고객 미지정 (새 소개건으로 기록)</option>';
   for(var k=0;k<leads.length;k++){
     var nm=(leads[k].custName||'').replace(/</g,'&lt;');
-    h += '<option value="'+String(leads[k].id).replace(/"/g,'&quot;')+'">'+nm+' (소개 '+String(leads[k].createdAt||'').slice(5,10)+')</option>';
+    var ph=String(leads[k].custPhone||'');
+    var tail = ph ? (' '+ph.slice(-4)) : '';
+    var lbl = nm + tail + ' \u00B7 ' + _perfKDate(leads[k].createdAt) + ' \uC18C\uAC1C';
+    h += '<option value="'+String(leads[k].id).replace(/"/g,'&quot;')+'">'+lbl.replace(/</g,'&lt;')+'</option>';
   }
   ls.innerHTML=h;
   if(_perfPtnLeadId) ls.value=_perfPtnLeadId;
@@ -21518,6 +21588,13 @@ function doCheckin() { doSmartCheckin(); }
           <span class="perf-co" id="perfPtnChip" onclick="togglePerfPartner()">🤝 파트너스 소개건</span>
         </div>
         <div id="perfPtnBox" style="display:none;margin-top:8px">
+          <div class="perf-co-wrap" id="perfPtnBrTabs" style="margin-bottom:6px">
+            <span class="perf-co perf-co-on" data-br="" onclick="onPerfPtnBranch('')">전체</span>
+            <span class="perf-co" data-br="알파" onclick="onPerfPtnBranch('알파')">알파</span>
+            <span class="perf-co" data-br="브라보" onclick="onPerfPtnBranch('브라보')">브라보</span>
+            <span class="perf-co" data-br="기타" onclick="onPerfPtnBranch('기타')">기타</span>
+          </div>
+          <input type="text" class="perf-input" id="perfPtnQ" placeholder="🔍 파트너명 또는 담당 FP명 검색" oninput="onPerfPtnQuery()" style="width:100%;margin-bottom:6px">
           <select class="perf-input" id="perfPtnSel" onchange="onPerfPtnSel()" style="width:100%"><option value="">파트너 선택</option></select>
           <select class="perf-input" id="perfPtnLeadSel" onchange="onPerfPtnLeadSel()" style="width:100%;margin-top:6px;display:none"><option value="">고객 미지정 (새 소개건으로 기록)</option></select>
           <input type="text" inputmode="numeric" class="perf-input" id="perfPtnPay" placeholder="지원금 직접 입력 (원)" oninput="onPerfPtnPayInput()" style="width:100%;margin-top:6px">
@@ -22870,7 +22947,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 34;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 35;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
