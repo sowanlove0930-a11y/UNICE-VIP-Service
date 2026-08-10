@@ -290,7 +290,7 @@ input,select,textarea,button{font-family:inherit;color:inherit}
     <div class="sec">
       <div class="stats">
         <div class="stat"><div class="v" id="stMonth">0</div><div class="l">이번 달 소개</div></div>
-        <div class="stat"><div class="v" id="stDeal">0</div><div class="l">계약 성사</div></div>
+        <div class="stat"><div class="v" id="stDeal">0</div><div class="l">청약 현황</div></div>
         <div class="stat"><div class="v" id="stTotal">0</div><div class="l">누적 소개</div></div>
       </div>
       <div class="money">
@@ -371,10 +371,6 @@ input,select,textarea,button{font-family:inherit;color:inherit}
       <div class="secT"><h3>보낼 자료</h3></div>
       <div id="kitList"></div>
     </div>
-    <div class="sec">
-      <div class="secT"><h3>이렇게 말해보세요</h3></div>
-      <div id="scriptList"></div>
-    </div>
   </div>
 
   <!-- ME -->
@@ -391,7 +387,7 @@ input,select,textarea,button{font-family:inherit;color:inherit}
           <div class="mt"><span id="meFp"></span></div>
         </div>
         <div class="lead">
-          <div class="mm">활동지원금은 기본적으로 보장월초의 <b id="meRate">2</b>배로 적립되며, 상품에 따라 적립 배수가 달라질 수 있습니다. 계약 확정 월의 <b>익월 25일</b>에 정산되고, 25일이 공휴일이면 그 전 영업일에 지급됩니다.</div>
+          <div class="mm">활동지원금은 보장월초의 <b>1배~2배</b>로 적립됩니다(상품에 따라 다르며, 확정 금액은 앱에 표시됩니다). 계약 확정 월의 <b>다음 달 정산일</b>에 지급되고, 정산일이 공휴일이면 그 전 영업일에 지급됩니다.</div>
         </div>
         <div class="lead" style="padding-bottom:0">
           <div class="mm">본인이 계약자 또는 피보험자인 계약은 소개 건수와 활동지원금에서 제외됩니다.</div>
@@ -563,12 +559,6 @@ var KIT = [
     ct:"유니스와 친구추가" }
 ];
 
-var SCRIPTS = [
-  { t:"보험료가 부담된다는 분께", b:"보험료 비교해주는 데가 있는데, 32개사를 한 번에 봐줘. 돈 안 들고 가입 안 해도 되니까 한 번 받아봐." },
-  { t:"병원비 청구를 어려워하는 분께", b:"청구 서류 어떻게 내는지 다 정리해주는 곳이 있어. 손해사정사도 붙여주는데 비용은 없어." },
-  { t:"노후가 걱정이라는 분께", b:"국민연금이랑 퇴직연금 합쳐서 노후에 얼마 부족한지 계산해주더라. 한 번 받아보면 감이 와." }
-];
-
 var ME = null, ST = null, ADM = null;
 var curTab = "home";
 var ldTime = "";
@@ -666,7 +656,7 @@ function mkInit(){
       { id:"L7", partnerId:"P003", custName:"신유진", custPhone:"010-3345-9987", memo:"노후 상담", callTime:"오전", status:0, premium:0, selfExcl:0, createdAt:d1, settleYm:"" }
     ],
     notices: [
-      { id:"n1", tag:"info", title:"활동지원금 안내", body:"계약이 확정되면 보장월초의 2배가 적립됩니다. 정산은 익월 25일입니다.", date:d1 },
+      { id:"n1", tag:"info", title:"활동지원금 안내", body:"계약이 확정되면 보장월초의 1배~2배가 적립됩니다(상품별 상이). 정산은 익월 정산일에 진행됩니다.", date:d1 },
       { id:"n2", tag:"info", title:"1기 모집 진행 중", body:"선착순 100명까지 신청받습니다. 주변에 함께하실 분이 있으면 알려주세요.", date:d1 }
     ],
     ym: ym
@@ -1204,7 +1194,9 @@ function renderHome(){
   } else {
     g.className = "grade";
     var left = (ST.activeMin || 2) - s.month;
-    g.textContent = left > 0 ? ("액티브까지 " + left + "분 남았어요") : "이번 달 소개 " + s.month + "건";
+    var knum = ["", "한", "두", "세", "네", "다섯"];
+    var leftTxt = knum[left] ? (knum[left] + " 분") : (left + "분");
+    g.textContent = left > 0 ? ("액티브까지 " + leftTxt + " 남았어요") : "이번 달 소개 " + s.month + "건";
   }
   $("stMonth").textContent = s.month;
   $("stDeal").textContent = s.deal;
@@ -1311,22 +1303,12 @@ function renderKit(){
          '</div>';
   }
   $("kitList").innerHTML = h;
-
-  var s = "";
-  for (var m=0;m<SCRIPTS.length;m++){
-    s += '<div class="ntc"><div class="t">' + esc(SCRIPTS[m].t) + '</div>' +
-         '<div class="b">' + esc(SCRIPTS[m].b) + '</div>' +
-         '<div style="margin-top:10px"><button type="button" class="btn ghost sm" onclick="copyScript(' + m + ')">문구 복사</button></div>' +
-         '</div>';
-  }
-  $("scriptList").innerHTML = s;
 }
 
 function renderMe(){
   $("meName").textContent = ME.name;
   $("mePhone").textContent = ME.phone;
   $("meFp").textContent = (ME.branch ? ME.branch + " · " : "") + "담당 " + (ME.fpName || "-");
-  $("meRate").textContent = ST.rate || 2;
 }
 
 /* ---------- actions ---------- */
@@ -1411,10 +1393,12 @@ function copyText(txt, okMsg){
 
 function shareKit(i){
   var k = KIT[i];
+  /* 추천인 표시(ptn)는 파트너 본인이 아니라 담당 FP 이름으로 나간다.
+     파트너 유입 추적은 pt(파트너 id)로 유지된다. */
   var url = k.url + (k.url.indexOf("?") >= 0 ? "&" : "?")
           + "fp=" + encodeURIComponent(ME.fpCode || "")
           + "&pt=" + encodeURIComponent(ME.id || "")
-          + "&ptn=" + encodeURIComponent(ME.name || "");
+          + "&ptn=" + encodeURIComponent(ME.fpName || ME.name || "");
   var msg = "[유니스와 친구추가]\n"
           + "매달 내고 계신 보험, 다 쓰고 계신가요?\n"
           + "대학병원 예약 대행 · 명의 찾기 · 손해사정사 무료 자문\n"
@@ -1440,8 +1424,6 @@ function shareKit(i){
     copyText(msg, "링크를 복사했습니다");
   }
 }
-
-function copyScript(i){ copyText(SCRIPTS[i].b, "문구를 복사했습니다"); }
 
 function go(tab){
   curTab = tab;
