@@ -4,8 +4,8 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="🏹 늦더위사냥 · 알파 vs 브라보">
 <meta property="og:description" content="구간(알파 300만·브라보 250만) 채우면 기여 1~7위 상품! 총량 목표 100%까지 🏹">
-<meta property="og:image" content="https://unice-vip.co.kr/hunt/hunt-share.png">
-<meta property="og:url" content="https://unice-vip.co.kr/hunt/">
+<meta property="og:image" content="https://unice-vip.co.kr/event/event-share.png">
+<meta property="og:url" content="https://unice-vip.co.kr/event/">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html { height:100%; }
@@ -309,7 +309,7 @@ function gasGet(url, ms){
 
 if (IS_KAKAO_INAPP) qs('extBtn').style.display = 'block';
 qs('extBtn').addEventListener('click', function(){
-  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent('https://unice-vip.co.kr/hunt/');
+  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent('https://unice-vip.co.kr/event/');
 });
 
 /* ---------- login ---------- */
@@ -334,14 +334,38 @@ function tryLogin(){
 }
 qs('loginBtn').addEventListener('click', tryLogin);
 qs('fpInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') tryLogin(); });
+/* instant entry: if we already know the fp (workplay ?fp= or saved id),
+   skip the login screen entirely and verify in the background. */
+function showLoginBack(msg){
+  if (pollTimer) clearInterval(pollTimer);
+  ME = null;
+  qs('login').style.display = 'flex';
+  qs('lerr').textContent = msg || '';
+}
 (function(){
   var saved = '';
-  try { saved = localStorage.getItem('latehunt_fp') || localStorage.getItem('hunt_fp') || ''; } catch(e) {}
-  if (saved) {
-    gasGet(GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(saved))
-      .then(function(d){ if (d.ok) { ME = d; qs('login').style.display = 'none'; startApp(); } })
-      .catch(function(){});
+  var m = /[?&]fp=([^&]*)/.exec(location.search);
+  if (m) {
+    try { saved = decodeURIComponent(m[1]).replace(/\s/g, ''); } catch(e) { saved = ''; }
   }
+  if (!saved) {
+    try { saved = localStorage.getItem('latehunt_fp') || localStorage.getItem('hunt_fp') || localStorage.getItem('fish_fp') || ''; } catch(e) {}
+  }
+  if (!saved) return;
+  ME = { id: String(saved).toUpperCase(), name: '', title: '' };
+  qs('login').style.display = 'none';
+  startApp();
+  gasGet(GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(saved))
+    .then(function(d){
+      if (d.ok) {
+        ME = d;
+        try { localStorage.setItem('latehunt_fp', d.id); } catch(e) {}
+        loadState();
+      } else {
+        showLoginBack('등록되지 않은 사번이에요. 사번을 입력해주세요');
+      }
+    })
+    .catch(function(){});
 })();
 
 /* ---------- app ---------- */
@@ -619,8 +643,8 @@ function fireConfetti(){
 
 /* ---------- kakao share ---------- */
 var KAKAO_JS_KEY = 'cbfa60013e8c77c5a8c168d4d5862d51';
-var HUNT_URL = 'https://unice-vip.co.kr/hunt/';
-var SHARE_IMG = 'https://unice-vip.co.kr/hunt/hunt-share.png';
+var HUNT_URL = 'https://unice-vip.co.kr/event/';
+var SHARE_IMG = 'https://unice-vip.co.kr/event/event-share.png';
 function initKakao(){
   try {
     if (window.Kakao && !window.Kakao.isInitialized()) window.Kakao.init(KAKAO_JS_KEY);
