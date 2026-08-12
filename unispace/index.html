@@ -8270,6 +8270,17 @@ function loadPerfFromGas(cb, force){
       }
       // records still waiting for server confirmation must survive this overwrite
       if(typeof _perfReconcilePending==='function') arr = _perfReconcilePending(arr);
+      // 저장 확인 직후(5분) 건은 서버 캐시 지연으로 목록에 빠져도 화면·누계에서 유지
+      var _rs=_perfRecentSavedGet(), _rsChanged=false, _srvIdx={};
+      for(var _oi=0;_oi<arr.length;_oi++) _srvIdx[arr[_oi].id]=_oi;
+      for(var _rk in _rs){ if(!_rs.hasOwnProperty(_rk)) continue;
+        var _re=_rs[_rk];
+        if(!_re || !_re.rec || (Date.now()-(_re.at||0)) > 300000){ delete _rs[_rk]; _rsChanged=true; continue; }
+        if(_recentDeletedPerf && _recentDeletedPerf[_rk]){ delete _rs[_rk]; _rsChanged=true; continue; }
+        if(_srvIdx[_rk]!==undefined){ arr[_srvIdx[_rk]]=_re.rec; } // 수정 직후 옛 값 회귀 방지
+        else { arr.push(_re.rec); } // 캐시 지연으로 누락된 건 복원
+      }
+      if(_rsChanged) _perfRecentSavedSet(_rs);
       savePerfLog(arr);
       rebuildPerfData();
     }
@@ -8278,6 +8289,12 @@ function loadPerfFromGas(cb, force){
 }
 // 최근 삭제한 업적 id (서버 반영 지연 동안 재로드 시 부활 방지)
 var _recentDeletedPerf = {};
+// 최근 저장 확인된 업적 (서버 캐시/반영 지연 동안 목록에서 사라짐 방지 - 삭제 보호와 대칭)
+var PERF_RECENT_SAVED_KEY = 'unispace_perf_recent_saved';
+function _perfRecentSavedGet(){ try{ return JSON.parse(localStorage.getItem(PERF_RECENT_SAVED_KEY)||'{}'); }catch(e){ return {}; } }
+function _perfRecentSavedSet(o){ try{ localStorage.setItem(PERF_RECENT_SAVED_KEY, JSON.stringify(o)); }catch(e){} }
+function _perfRecentSavedAdd(rec){ if(!rec || !rec.id) return; var o=_perfRecentSavedGet(); o[rec.id]={rec:rec, at:Date.now()}; _perfRecentSavedSet(o); }
+function _perfRecentSavedDel(id){ var o=_perfRecentSavedGet(); if(o[id]){ delete o[id]; _perfRecentSavedSet(o); } }
 function savePerfLog(arr){ localStorage.setItem(PERF_LOG_KEY, JSON.stringify(arr)); }
 // 로그에서 FP별 누계 재계산 → 기존 perfData 형식으로 동기화 (TOP10 등 호환)
 function rebuildPerfData(){
@@ -8923,7 +8940,7 @@ function _perfSubmitToGas(rec, attempt, onDone){
     headers:{ 'Content-Type':'text/plain;charset=utf-8' },
     body: payload
   }).then(function(r){ return r.json(); }).then(function(res){
-    if(res && res.ok){ _perfPendingDel(rec.id); if(onDone) onDone(true, res); return; }
+    if(res && res.ok){ _perfPendingDel(rec.id); _perfRecentSavedAdd(rec); if(onDone) onDone(true, res); return; }
     if(attempt < 2){ setTimeout(function(){ _perfSubmitToGas(rec, attempt+1, onDone); }, 1200); return; }
     if(onDone) onDone(false, res);
   }).catch(function(){
@@ -9493,6 +9510,7 @@ function deletePerfRec(id){
   }).then(function(ok){
     if(!ok) return;
     _recentDeletedPerf[id] = Date.now(); // 재로드 부활 방지용 등록
+    _perfRecentSavedDel(id); // 저장 보호가 삭제 건을 되살리지 않도록 해제
     var _before = getPerfLog();
     var arr=_before.filter(function(r){ return r.id!==id; });
     savePerfLog(arr);
@@ -22947,7 +22965,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 35;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 36;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
