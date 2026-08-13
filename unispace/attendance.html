@@ -300,6 +300,9 @@ textarea.prm-input{resize:vertical;}
 .proof-confirm-btn{padding:11px 20px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#fff;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;white-space:nowrap;}
 .proof-confirm-btn:hover{box-shadow:0 4px 16px rgba(201,168,76,.35);}
 
+.ov-btn { font-size:11px; font-weight:700; border:1px solid rgba(46,158,107,.4); background:rgba(46,158,107,.1);
+  color:#1E7A50; border-radius:7px; padding:5px 9px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.ov-btn:active { opacity:.7; }
 /* GAS 배너 */
 .gas-todo-banner{display:flex;align-items:center;gap:10px;background:rgba(244,163,38,.06);border:1px solid rgba(244,163,38,.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--orange);}
 
@@ -736,35 +739,35 @@ function attGasGetTimeout(params, timeoutMs, maxTry){
   return _attempt(1);
 }
 // 이번 달 출결+사전보고 GAS에서 로드 -> 로컬 캐시
-function loadAttFromGas(){
+var _attLoadedYm = {}; // months already pulled from GAS this session
+function loadAttFromGas(ymArg){
   var fp = _myFpCode();
   if(!fp) return Promise.resolve(false);
-  var ym = getYMStr(new Date());
-  return attGasGet({ action:'getAttendance', fp:fp, ym:ym }).then(function(res){
+  var ym = ymArg || getYMStr(new Date());
+  // 15s timeout + auto retry, so the page never hangs on one slow request
+  return attGasGetTimeout({ action:'getAttendance', fp:fp, ym:ym }, 15000, 2).then(function(res){
     if(res && res.ok){
-      // merge self records into existing store; do NOT replace the whole map,
-      // otherwise the dashboard's branch-wide attendance gets wiped out
-      var today = getTodayStr();
+      _attLoadedYm[ym] = true;
+      // merge EVERY record the server sent (admin/manager scope covers the
+      // whole branch or agency) — the old code kept only self records, which
+      // left the status table empty for admins.
       var localDb = getAttDB();
       var srcAtt = res.attendance || {};
       Object.keys(srcAtt).forEach(function(d){
         if(!localDb[d]) localDb[d] = {};
-        var rec = srcAtt[d][fp];
-        if(rec) localDb[d][fp] = rec;
+        Object.keys(srcAtt[d]).forEach(function(fid){
+          localDb[d][fid] = srcAtt[d][fid];
+        });
       });
-      var myLocalToday = localDb[today] && localDb[today][fp];
-      if(myLocalToday){
-        if(!localDb[today]) localDb[today] = {};
-        localDb[today][fp] = myLocalToday;
-      }
       saveAttDB(localDb);
       if(res.prereport){
         var localPr = getPrDB();
         var srcPr = res.prereport;
         Object.keys(srcPr).forEach(function(d){
           if(!localPr[d]) localPr[d] = {};
-          var prr = srcPr[d][fp];
-          if(prr) localPr[d][fp] = prr;
+          Object.keys(srcPr[d]).forEach(function(fid){
+            localPr[d][fid] = srcPr[d][fid];
+          });
         });
         savePrDB(localPr);
       }
@@ -2070,6 +2073,13 @@ function initFilters(){
 function onYearMonthChange(){
   updateDayOptions();
   renderStatus();
+  // pull the selected month from GAS once, then re-render with fresh data
+  var y = parseInt(document.getElementById('statusYear').value);
+  var m = parseInt(document.getElementById('statusMonth').value);
+  var ym = y + '-' + (m < 10 ? '0' : '') + m;
+  if(!_attLoadedYm[ym]){
+    loadAttFromGas(ym).then(function(ok){ if(ok) renderStatus(); });
+  }
 }
 
 function updateDayOptions(){
@@ -2106,6 +2116,24 @@ function setStatusBranch(val, el){
   for(var i=0;i<chips.length;i++) chips[i].classList.remove('on');
   if(el) el.classList.add('on');
   renderStatus();
+}
+// admin/manager: force one FP's day to normal (server validates permission again)
+var _ovPending = {};
+function adminOverrideAtt(fpId, fpName, ds){
+  var pk = fpId + '|' + ds;
+  if(_ovPending[pk]) return;
+  if(!confirm(fpName + '님의 ' + ds + ' 출결을 직권으로 정상 처리할까요?')) return;
+  _ovPending[pk] = true;
+  attGasGetTimeout({ action:'adminSetAttendance', by: currentUser.id, target: fpId, date: ds }, 15000, 2).then(function(res){
+    delete _ovPending[pk];
+    if(!res || !res.ok){ alert('처리 실패: ' + ((res && res.msg) || '서버 오류')); return; }
+    var db = getAttDB();
+    if(!db[ds]) db[ds] = {};
+    var prev = db[ds][fpId] || {};
+    db[ds][fpId] = { name: fpName, branch: prev.branch || '', time: res.time || prev.time || '직권', status: '정상' };
+    saveAttDB(db);
+    renderStatus();
+  });
 }
 function renderStatus(){
   var year   = parseInt(document.getElementById('statusYear').value);
@@ -2199,8 +2227,9 @@ function renderStatus(){
 
   // 테이블 헤더 — 일별 모드 시 체크인 시간 컬럼 추가
   var head = document.getElementById('statusTableHead');
+  var canOverride = _isAdminUser();
   if(isDayMode){
-    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>';
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>'+(canOverride?'<th>직권</th>':'');
   } else {
     head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(3회 기준)</span></th>';
   }
@@ -2236,6 +2265,18 @@ function renderStatus(){
       else if(r.lateCnt>0){ statusHtml='<span style="color:#FCA5A5;font-weight:700">⚠️ 지각</span>'; }
       else if(r.prCnt>0){ statusHtml='<span style="color:var(--orange);font-weight:700">📋 사전보고</span>'; }
       else { statusHtml='<span style="color:#94A3B8;font-weight:600">❌ 미출결</span>'; }
+      var ovTd = '';
+      if(canOverride){
+        var needOv = (r.lateCnt>0 && r.normalCnt===0) || (r.absentCnt>0);
+        var dsOv = year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0');
+        // manager can only override own-branch FPs (server enforces this too)
+        var brOk = (currentUser.role!=='지점장') || (String(r.fp.branch||'').indexOf(String(currentUser.branch||'').replace('지점',''))>=0);
+        if(needOv && brOk){
+          ovTd = '<td><button type="button" class="ov-btn" onclick="adminOverrideAtt(\''+r.fp.id+'\',\''+r.fp.name+'\',\''+dsOv+'\')">✔ 직권 출결</button></td>';
+        } else {
+          ovTd = '<td><span style="color:var(--text3)">—</span></td>';
+        }
+      }
       return '<tr>'+
         '<td>'+brLabelHtml+'</td>'+
         '<td style="font-weight:700">'+r.fp.name+'</td>'+
@@ -2243,6 +2284,7 @@ function renderStatus(){
         '<td>'+statusHtml+'</td>'+
         '<td style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums">'+(r.timeStr?r.timeStr.slice(0,5):'—')+'</td>'+
         '<td class="att-col-opt" style="color:var(--orange)">'+(r.prCnt?'📋 있음':'—')+'</td>'+
+        ovTd+
       '</tr>';
     } else {
       var demeritHtml;

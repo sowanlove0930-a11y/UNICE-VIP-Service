@@ -21576,7 +21576,14 @@ function renderSmartCheckinBtn() {
   try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
   var rec    = db[today] && db[today][currentUser.id];
 
-  if (!rec) {
+  var pend = (typeof _checkinPendingGet === 'function') ? _checkinPendingGet() : null;
+  if (!rec && pend && pend.date === today && pend.fp === currentUser.id) {
+    btn.className = 'checkin-smart-btn state-ready';
+    btn.innerHTML = '⏳ ' + String(pend.time).slice(0,5) + ' 접수됨 · 저장 중';
+    btn.disabled  = true;
+    // resume the background flush (also fires from the 60s refresh loop)
+    if (typeof _checkinFlush === 'function') setTimeout(_checkinFlush, 400);
+  } else if (!rec) {
     btn.className   = 'checkin-smart-btn state-ready';
     btn.textContent = '📍 출근 체크인';
     btn.disabled    = false;
@@ -21591,6 +21598,87 @@ function renderSmartCheckinBtn() {
   }
 }
 
+// ── checkin queue: press once, we keep retrying in the background. ──
+// the very first press pins sentAt, and the server judges lateness by that
+// timestamp (<=2min skew), so retries can never turn an on-time press late.
+var CHECKIN_PENDING_KEY = 'unispace_checkin_pending';
+var _checkinInFlight = false;
+function _checkinPendingGet() {
+  try { return JSON.parse(localStorage.getItem(CHECKIN_PENDING_KEY) || 'null'); } catch (e) { return null; }
+}
+function _checkinPendingSet(o) {
+  try {
+    if (o) localStorage.setItem(CHECKIN_PENDING_KEY, JSON.stringify(o));
+    else localStorage.removeItem(CHECKIN_PENDING_KEY);
+  } catch (e) {}
+}
+function _checkinComplete(pend, srvTime, srvStatus, toastMsg) {
+  var db = {};
+  try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch (e) {}
+  if (!db[pend.date]) db[pend.date] = {};
+  db[pend.date][currentUser.id] = {
+    name: currentUser.name, branch: currentUser.branch, role: currentUser.role,
+    time: srvTime || pend.time, status: srvStatus || pend.status
+  };
+  localStorage.setItem('unispace_attendance', JSON.stringify(db));
+  _checkinPendingSet(null);
+  renderSmartCheckinBtn();
+  if (typeof renderAttToday === 'function') renderAttToday();
+  if (toastMsg) showToast(toastMsg);
+}
+function _checkinFlush() {
+  if (_checkinInFlight) return;
+  var pend = _checkinPendingGet();
+  if (!pend || !currentUser || pend.fp !== currentUser.id) return;
+  if (pend.date !== getTodayStr()) { _checkinPendingSet(null); renderSmartCheckinBtn(); return; }
+  _checkinInFlight = true;
+  var url = UNISPACE_GAS_URL + '?action=checkin'
+    + '&date=' + encodeURIComponent(pend.date)
+    + '&fp=' + encodeURIComponent(currentUser.id)
+    + '&name=' + encodeURIComponent(currentUser.name)
+    + '&branch=' + encodeURIComponent(currentUser.branch || '')
+    + '&time=' + encodeURIComponent(pend.time)
+    + '&status=' + encodeURIComponent(pend.status)
+    + '&sentAt=' + encodeURIComponent(pend.sentAt);
+  function run(attempt) {
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+    var opt = { cache: 'no-store' };
+    if (ctrl) opt.signal = ctrl.signal;
+    fetch(url + '&_=' + Date.now() + '&r=' + attempt, opt)
+      .then(function (r) { return r.text(); })
+      .then(function (txt) {
+        clearTimeout(timer);
+        var res = null;
+        try { res = JSON.parse(txt); } catch (e) {}
+        if (res && res.ok === true) {
+          _checkinInFlight = false;
+          var lateNow = (res.status || pend.status) === '지각';
+          _checkinComplete(pend, res.time, res.status,
+            lateNow ? ('⚠️ ' + String(res.time || pend.time).slice(0, 5) + ' 지각 처리되었습니다')
+                    : ('✅ ' + String(res.time || pend.time).slice(0, 5) + ' 정상 출근 완료!'));
+          return;
+        }
+        if (res && res.ok === false && res.msg && res.msg.indexOf('이미') >= 0) {
+          _checkinInFlight = false;
+          _checkinComplete(pend, res.time, res.status, '⏰ 오늘 이미 체크인되어 있습니다 (' + String(res.time || pend.time).slice(0, 5) + ')');
+          return;
+        }
+        if (attempt < 3) { run(attempt + 1); return; }
+        _checkinInFlight = false;
+        showToast('📶 서버가 혼잡합니다 — 접수는 완료됐고 자동으로 계속 재시도합니다');
+        setTimeout(_checkinFlush, 45000);
+      })
+      .catch(function () {
+        clearTimeout(timer);
+        if (attempt < 3) { setTimeout(function () { run(attempt + 1); }, 800); return; }
+        _checkinInFlight = false;
+        showToast('📶 네트워크 불안 — 접수는 완료됐고 자동으로 계속 재시도합니다');
+        setTimeout(_checkinFlush, 45000);
+      });
+  }
+  run(1);
+}
 function doSmartCheckin() {
   if (_isCheckinExempt(currentUser)) {
     showToast('출근 체크인 대상이 아닙니다');
@@ -21600,55 +21688,28 @@ function doSmartCheckin() {
   var db    = {};
   try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
   var rec   = db[today] && db[today][currentUser.id];
-
-  // B안: 이미 체크인된 경우 토스트
   if (rec) {
     showToast('⏰ ' + rec.time.slice(0,5) + '에 이미 체크인했습니다');
     return;
   }
-
-  var now     = new Date();
-  var h       = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+  var pend = _checkinPendingGet();
+  if (pend && pend.date === today && pend.fp === currentUser.id) {
+    showToast('⏳ ' + String(pend.time).slice(0,5) + ' 접수됨 — 서버 확인 중입니다. 다시 누르지 않아도 됩니다');
+    _checkinFlush();
+    return;
+  }
+  // pin the press moment: this exact time is what the server will judge by
+  var sentAt = Date.now();
+  var now    = new Date(sentAt);
+  var h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
   function _p2(n){ return (n<10?'0':'')+n; }
   var timeStr = _p2(h) + ':' + _p2(m) + ':' + _p2(s);
   var isLate  = (h > LATE_HOUR) || (h === LATE_HOUR && m >= LATE_MIN);
   var status  = isLate ? '지각' : '정상';
-
-  var btn = document.getElementById('checkinSmartBtn');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner purple"></span>처리 중'; }
-
-  // GAS에 먼저 저장 (GET 방식) -> 성공 확인 후에만 완료 처리
-  var qs = 'action=checkin&date=' + encodeURIComponent(today)
-         + '&fp=' + encodeURIComponent(currentUser.id)
-         + '&name=' + encodeURIComponent(currentUser.name)
-         + '&branch=' + encodeURIComponent(currentUser.branch || '')
-         + '&time=' + encodeURIComponent(timeStr)
-         + '&status=' + encodeURIComponent(status);
-  fetch(UNISPACE_GAS_URL + '?' + qs).then(function(r){ return r.text(); }).then(function(txt){
-    var res = null;
-    try { res = JSON.parse(txt); } catch(e) {}
-    if (res && res.ok === false && res.msg && res.msg.indexOf('이미') >= 0) {
-      if (!db[today]) db[today] = {};
-      db[today][currentUser.id] = { name:currentUser.name, branch:currentUser.branch, role:currentUser.role, time:timeStr, status:status };
-      localStorage.setItem('unispace_attendance', JSON.stringify(db));
-      renderSmartCheckinBtn(); renderAttToday();
-      showToast('⏰ 오늘 이미 체크인했습니다');
-      return;
-    }
-    if (res && res.ok === true) {
-      if (!db[today]) db[today] = {};
-      db[today][currentUser.id] = { name:currentUser.name, branch:currentUser.branch, role:currentUser.role, time:timeStr, status:status };
-      localStorage.setItem('unispace_attendance', JSON.stringify(db));
-      renderSmartCheckinBtn(); renderAttToday();
-      showToast(isLate ? '⚠️ ' + timeStr.slice(0,5) + ' 지각 처리되었습니다' : '✅ ' + timeStr.slice(0,5) + ' 정상 출근 완료!');
-      return;
-    }
-    if (btn) { btn.disabled = false; renderSmartCheckinBtn(); }
-    showToast('⚠️ 저장에 실패했습니다. 잠시 후 다시 시도해 주세요');
-  }).catch(function(){
-    if (btn) { btn.disabled = false; renderSmartCheckinBtn(); }
-    showToast('⚠️ 네트워크 오류로 체크인이 저장되지 않았습니다');
-  });
+  _checkinPendingSet({ date: today, fp: currentUser.id, sentAt: sentAt, time: timeStr, status: status });
+  renderSmartCheckinBtn();
+  showToast('📍 ' + timeStr.slice(0,5) + ' 출근 접수 완료 — 서버에 저장하고 있습니다');
+  _checkinFlush();
 }
 
 function doCheckin() { doSmartCheckin(); }
@@ -23207,7 +23268,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 42;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 43;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
