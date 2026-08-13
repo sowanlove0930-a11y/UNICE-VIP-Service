@@ -14941,15 +14941,36 @@ function _ptaFetch(mySeq, attempt) {
     + '&branch='
     + '&_=' + Date.now();
 
-  // 20초 타임아웃 — 초과 시 1회 자동 재시도
+  // 20s timeout, up to 3 tries with backoff. a failed refresh must NEVER wipe
+  // the cached list that is already on screen — keep it and note it quietly.
   var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   var timer = setTimeout(function() { if (ctrl) ctrl.abort(); }, 20000);
 
-  fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(function(r) { return r.json(); }).then(function(res) {
+  function _ptaFail() {
+    var hint = document.getElementById('ptaRefreshHint');
+    if (hint && hint.parentNode) hint.parentNode.removeChild(hint);
+    var hasList = (_ptnApplies && _ptnApplies.length > 0);
+    if (hasList) {
+      // cached list stays visible; retry silently in 30s
+      showToast('📶 새로고침 실패 — 마지막 저장 내용을 표시 중입니다');
+      setTimeout(function() {
+        if (mySeq === _ptaSeq) _ptaFetch(mySeq, 0);
+      }, 30000);
+    } else if (box) {
+      box.innerHTML = '<div class="pta-empty">네트워크 오류 — '
+        + '<a href="#" onclick="_ptaLoad(); return false;" style="color:inherit; font-weight:800; text-decoration:underline;">다시 시도</a></div>';
+    }
+  }
+
+  fetch(url, ctrl ? { signal: ctrl.signal, cache: 'no-store' } : { cache: 'no-store' }).then(function(r) { return r.json(); }).then(function(res) {
     clearTimeout(timer);
     if (mySeq !== _ptaSeq) return; // 더 최신 요청이 있으면 이 응답은 버림
     if (!res || !res.ok) {
-      if (box) box.innerHTML = '<div class="pta-empty">' + ((res && res.msg) || '불러오지 못했습니다') + '</div>';
+      var hint2 = document.getElementById('ptaRefreshHint');
+      if (hint2 && hint2.parentNode) hint2.parentNode.removeChild(hint2);
+      if (!(_ptnApplies && _ptnApplies.length) && box) {
+        box.innerHTML = '<div class="pta-empty">' + ((res && res.msg) || '불러오지 못했습니다') + '</div>';
+      }
       return;
     }
     _ptaCache = { key: _ptaKey(), res: res };
@@ -14958,8 +14979,8 @@ function _ptaFetch(mySeq, attempt) {
   }).catch(function() {
     clearTimeout(timer);
     if (mySeq !== _ptaSeq) return;
-    if (attempt < 1) { _ptaFetch(mySeq, attempt + 1); return; } // 1회 자동 재시도
-    if (box) box.innerHTML = '<div class="pta-empty">네트워크 오류 — 잠시 후 다시 열어주세요</div>';
+    if (attempt < 2) { setTimeout(function() { _ptaFetch(mySeq, attempt + 1); }, 800 * (attempt + 1)); return; }
+    _ptaFail();
   });
 }
 
@@ -23326,7 +23347,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 45;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 46;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
