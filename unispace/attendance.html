@@ -182,7 +182,7 @@ body.theme-light .pr-actno{color:#854F0B;}
 .pr-section-title.acc-head{font-size:15.5px;color:var(--text);margin:-22px -24px 0;padding:18px 24px;border-bottom:1px solid var(--bdr2);border-radius:16px 16px 0 0;transition:background .15s;}
 .pr-section-title.acc-head:hover{background:rgba(201,168,76,.06);}
 .pr-section-title.acc-head .acc-arrow{font-size:14px;color:var(--gold2);}
-.acc-body{overflow:hidden;transition:max-height .25s ease;max-height:2000px;}
+.acc-body{overflow:hidden;transition:max-height .25s ease;max-height:20000px;}
 .acc-body.collapsed{max-height:0 !important;}
 .acc-body:not(.collapsed){padding-top:20px;}
 .pr-section-title.acc-head.acc-collapsed{margin-bottom:-22px;border-bottom:none;border-radius:16px;}
@@ -2122,7 +2122,8 @@ function toggleAcc(bodyId, head){
   var body=document.getElementById(bodyId);
   if(!body) return;
   var collapsed=body.classList.toggle('collapsed');
-  if(!collapsed){ body.style.maxHeight=body.scrollHeight+'px'; }
+  // expanded: clear the inline cap entirely so a re-rendered (longer) list is never clipped
+  if(!collapsed){ body.style.maxHeight=''; }
   else { body.style.maxHeight='0px'; }
   if(head){
     var ar=head.querySelector('.acc-arrow'); if(ar) ar.classList.toggle('up', collapsed);
@@ -2240,8 +2241,11 @@ function renderStatus(){
     totalPossible += targetDays.length;
     if(lateCnt > 0)  lateFpSet[fp.id]   = true;
     if(absentCnt > 0) absentFpSet[fp.id] = true;
-    if(!isDayMode && demerit>=3 && (normalCnt+lateCnt)>0) demeritFps++;
-    return {fp,normalCnt,lateCnt,absentCnt,prCnt,demerit,
+    // demerit = attendance rate 80% or below (rate = normal / (normal+late+absent))
+    var _days = normalCnt + lateCnt + absentCnt;
+    var _rate = _days > 0 ? (normalCnt / _days) : null;
+    if(!isDayMode && _rate !== null && _rate <= 0.8) demeritFps++;
+    return {fp,normalCnt,lateCnt,absentCnt,prCnt,demerit,rate:_rate,
             timeStr: isDayMode && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')]
                      && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id]
                      ? attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id].time : ''};
@@ -2283,7 +2287,7 @@ function renderStatus(){
   if(isDayMode){
     head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>'+(canOverride?'<th>직권</th>':'');
   } else {
-    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(3회 기준)</span></th>';
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(출근율 80% 이하)</span></th>';
   }
 
   // 테이블 행 — 알파지점 먼저, 브라보지점 다음, 각 지점 내 디메리트 순
@@ -2296,7 +2300,9 @@ function renderStatus(){
     var bo = branchOrder(a.fp) - branchOrder(b.fp);
     if(bo !== 0) return bo;
     if(isDayMode) return (b.lateCnt+b.absentCnt)-(a.lateCnt+a.absentCnt);
-    return b.demerit-a.demerit;
+    var ra=(a.rate===null||a.rate===undefined)?2:a.rate;
+    var rb=(b.rate===null||b.rate===undefined)?2:b.rate;
+    return ra-rb; // lowest attendance rate first
   });
   var tbody=document.getElementById('statusTableBody');
   tbody.innerHTML=sortedRows.map(function(r){
@@ -2340,12 +2346,18 @@ function renderStatus(){
       '</tr>';
     } else {
       var demeritHtml;
-      var hasAnyData = (r.normalCnt + r.lateCnt) > 0;
-      if(!hasAnyData)              demeritHtml = '<span style="color:var(--text3);font-size:11px">미집계</span>';
-      else if(r.demerit === 0)     demeritHtml = '<span style="color:var(--text3)">—</span>';
-      else if(r.demerit === 1)     demeritHtml = '<span style="color:#60A5FA;font-weight:700;font-size:13px">D-2</span>';
-      else if(r.demerit === 2)     demeritHtml = '<span style="color:var(--orange);font-weight:700;font-size:13px">D-1 ⚡</span>';
-      else                         demeritHtml = '<span class="demerit-badge">⚠️ 디메리트</span>';
+      if(r.rate === null || r.rate === undefined){
+        demeritHtml = '<span style="color:var(--text3);font-size:11px">미집계</span>';
+      } else {
+        var _pct = Math.round(r.rate * 100);
+        if(r.rate <= 0.8){
+          demeritHtml = '<span class="demerit-badge">⚠️ 디메리트</span> <span style="font-size:11px;color:var(--orange);font-weight:700">' + _pct + '%</span>';
+        } else if(r.rate < 0.9){
+          demeritHtml = '<span style="color:var(--orange);font-weight:700;font-size:13px">' + _pct + '% ⚡</span>';
+        } else {
+          demeritHtml = '<span style="color:#34D399;font-weight:700;font-size:13px">' + _pct + '%</span>';
+        }
+      }
       return '<tr>'+
         '<td>'+brLabelHtml+'</td>'+
         '<td style="font-weight:700">'+r.fp.name+'</td>'+
