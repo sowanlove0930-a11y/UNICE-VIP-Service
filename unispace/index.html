@@ -14576,6 +14576,7 @@ function _ptlRender() {
     h += '<div class="ptl-r1"><span class="ptl-nm">' + _ptaEsc(r.custName) + '</span>';
     h += '<span class="ptl-tag s' + (st > 3 ? 3 : st) + '">' + _ptaEsc(r.statusName) + '</span>';
     if (urgent) h += '<span class="ptl-tag day">' + r.days + '일 경과</span>';
+    if (isAll) h += '<button type="button" class="pta-i-del" onclick="_ptlDelete(\'' + _ptaEsc(r.id) + '\')">삭제</button>';
     h += '</div>';
     h += '<div class="ptl-ph">' + _ptaEsc(_ptaPhone(r.custPhone)) + '</div>';
     var meta = [];
@@ -14615,6 +14616,63 @@ function _ptlPill(id, n, cur, label) {
   return '<button type="button" class="' + cls + '" onclick="_ptlSetStatus(\'' + _ptaEsc(id) + '\',' + n + ')">' + label + '</button>';
 }
 
+// admin/manager delete: soft-delete on the server (status 9), so the same
+// record disappears from the partners app too. optimistic + revert on failure.
+function _ptlDelete(leadId) {
+  if (_ptlPending[leadId]) { showToast('⏳ 처리 중입니다. 잠시만요...'); return; }
+  var idx = -1, rec = null;
+  for (var i = 0; i < _ptlList.length; i++) {
+    if (String(_ptlList[i].id) === String(leadId)) { idx = i; rec = _ptlList[i]; break; }
+  }
+  if (!rec) return;
+  var warn = (rec.status >= 3)
+    ? '<b>' + _ptaEsc(rec.custName) + '</b> 건은 <b>청약 완료</b>된 소개건입니다.<br>삭제하면 파트너스앱에서도 함께 사라집니다.<br>정말 삭제할까요?'
+    : '<b>' + _ptaEsc(rec.custName) + '</b> 소개건을 삭제할까요?<br>파트너스앱에서도 함께 사라집니다.';
+  showConfirm({
+    icon: '🗑️', iconCls: 'confirm-icon-danger',
+    title: '소개건 삭제',
+    msg: warn,
+    okLabel: '삭제', okCls: 'red'
+  }).then(function (ok) {
+    if (!ok) return;
+    _ptlPending[leadId] = true;
+    _ptlList.splice(idx, 1);
+    _ptlRenderFiltered();
+    showToast('🗑️ 삭제 중...');
+    var url = UNISPACE_GAS_URL + '?action=deletePartnerLead'
+      + '&fp=' + encodeURIComponent(currentUser.id)
+      + '&leadId=' + encodeURIComponent(leadId);
+    function run(attempt) {
+      var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 20000);
+      var opt = { cache: 'no-store' };
+      if (ctrl) opt.signal = ctrl.signal;
+      fetch(url + '&_=' + Date.now() + '&r=' + attempt, opt)
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          clearTimeout(timer);
+          delete _ptlPending[leadId];
+          if (!res || !res.ok) {
+            _ptlList.splice(idx, 0, rec);
+            _ptlRenderFiltered();
+            showToast('⚠️ ' + ((res && res.msg) || '삭제하지 못했습니다') + ' — 원래대로 되돌렸습니다');
+            return;
+          }
+          showToast('🗑️ 삭제되었습니다 — 파트너스앱에서도 사라집니다');
+          _ptlLoad(); // resync local cache in the background
+        })
+        .catch(function () {
+          clearTimeout(timer);
+          if (attempt < 1) { run(attempt + 1); return; }
+          delete _ptlPending[leadId];
+          _ptlList.splice(idx, 0, rec);
+          _ptlRenderFiltered();
+          showToast('⚠️ 네트워크 오류 — 원래대로 되돌렸습니다');
+        });
+    }
+    run(0);
+  });
+}
 var _ptlPending = {};
 function _ptlSetStatus(leadId, status) {
   if (_ptlPending[leadId]) { showToast('⏳ 처리 중입니다. 잠시만요...'); return; }
@@ -23268,7 +23326,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 43;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 44;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
