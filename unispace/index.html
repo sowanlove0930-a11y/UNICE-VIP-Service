@@ -4897,6 +4897,17 @@ function loadAllFpsFromGas(cb){
   fetch(url, { cache:'no-store' }).then(function(r){return r.json();}).then(function(res){
     if(res && res.ok && res.list){
       try { localStorage.setItem('unispace_fp_roster_full', JSON.stringify(res.list)); } catch(e) {}
+      // re-apply in-flight optimistic toggle values so a background refresh never visually reverts them
+      try {
+        if (typeof _fpTogglePending === 'object' && _fpTogglePending) {
+          for (var pk in _fpTogglePending) {
+            var parts = String(pk).split('|');
+            if (parts.length === 2 && _fpTogglePending[pk]) {
+              _fpApplyServerVal(parts[0], parts[1], _fpTogglePending[pk].on);
+            }
+          }
+        }
+      } catch(e3) {}
       // server roster just arrived: drop stale server-managed overrides (keep pw only)
       try {
         var ov = JSON.parse(localStorage.getItem('unispace_fp_overrides') || '{}');
@@ -6504,8 +6515,14 @@ function renderFpMgmtTable() {
     '</tr>';
   }).join('');
 }
-// ---- FP toggle: server-first (GAS is the single source of truth) ----
-// timeout 20s + 1 auto retry + cache buster, so PC/mobile always converge
+// ---- FP toggle: optimistic UI + in-flight guard (GAS is the single source of truth) ----
+// press -> flip instantly -> confirm with server -> revert automatically on failure.
+// while a request is in flight the same button ignores extra presses (no more race on double tap).
+var _fpTogglePending = {};
+function _fpHasPending() {
+  for (var k in _fpTogglePending) { return true; }
+  return false;
+}
 function _fpToggleRequest(action, id, nextOn, extraQs, onDone) {
   var url = UNISPACE_GAS_URL + '?action=' + action
     + '&fp=' + encodeURIComponent(id)
@@ -6527,7 +6544,7 @@ function _fpToggleRequest(action, id, nextOn, extraQs, onDone) {
   }
   run(0);
 }
-// after a server-confirmed change: update cached roster + drop local override
+// write one confirmed/optimistic value into cached roster + drop local override
 function _fpApplyServerVal(id, key, val) {
   try {
     var full = JSON.parse(localStorage.getItem('unispace_fp_roster_full') || 'null');
@@ -6549,132 +6566,68 @@ function _fpApplyServerVal(id, key, val) {
     }
   } catch (e2) {}
 }
-function _fpToggleFail(res) {
+// toggle definitions: how to read the current value + server action + response field
+var _FP_TOGGLE_DEFS = {
+  active:   { action:'setFpActive',       resKey:'active',   icon:'\u2705', label:'\uACC4\uC815',
+              onMsg:'\uACC4\uC815\uC744 \uD65C\uC131\uD654\uD588\uC2B5\uB2C8\uB2E4', offMsg:'\uACC4\uC815\uC744 \uBE44\uD65C\uC131\uD654\uD588\uC2B5\uB2C8\uB2E4', offIcon:'\uD83D\uDEAB' },
+  carefit:  { action:'setCarefitAccess',  resKey:'carefit',  icon:'\uD83C\uDF3F', label:'\uCF00\uC5B4\uD54F' },
+  carefit2: { action:'setCarefit2Access', resKey:'carefit2', icon:'\uD83E\uDE7A', label:'\uCF00\uC5B4\uD54F 2.0' },
+  ugobi:    { action:'setUgobiAccess',    resKey:'ugobi',    icon:'\uD83D\uDC8E', label:'U\uACE0\uBE44' },
+  nohupai:  { action:'setNohupaiAccess',  resKey:'nohupai',  icon:'\uD83C\uDF19', label:'\uB178\uD6C4\uD30C\uC774' },
+  nohupai2: { action:'setNohupai2Access', resKey:'nohupai2', icon:'\uD83E\uDD67', label:'\uB178\uD6C4\uD30C\uC774 2.0' },
+  jenius:   { action:'setJeniusAccess',   resKey:'jenius',   icon:'\u26A1', label:'\uC81C\uB2C8\uC2A4' },
+  team:     { action:'setTeamFlag',       resKey:'team',     icon:'\uD83D\uDD14', label:'\uB9AC\uCFE8\uD478\uC26C', adminOnly:true, defFalse:true, by:true },
+  perfKeep: { action:'setPerfKeep',       resKey:'perfKeep', icon:'\uD83D\uDCCA', label:'\uC5C5\uC801\uC720\uC9C0', adminOnly:true, defFalse:true, by:true }
+};
+function _fpDoToggle(id, key) {
+  var cfg = _FP_TOGGLE_DEFS[key];
+  if (!cfg) return;
+  var pkey = id + '|' + key;
+  if (_fpTogglePending[pkey]) { showToast('\u23F3 \uCC98\uB9AC \uC911\uC785\uB2C8\uB2E4. \uC7A0\uC2DC\uB9CC\uC694...'); return; }
+  if (cfg.adminOnly && (!currentUser || currentUser.role !== '대표')) { showToast('⚠️ 대표만 변경할 수 있습니다'); return; }
+  var fp = getMergedFpList().find(function (f) { return f.id === id; });
+  if (!fp) return;
+  if (key === 'active' && fp.role === '대표') { showToast('⚠️ 대표 계정은 비활성화할 수 없습니다'); return; }
+  // current value: tools default to true (!== false), team/perfKeep default to false (=== true)
+  var cur = cfg.defFalse ? (fp[key] === true) : (fp[key] !== false);
+  var nextOn = !cur;
+  _fpTogglePending[pkey] = { on: nextOn };
+  // optimistic: flip the button right away
+  _fpApplyServerVal(id, key, nextOn);
   renderFpMgmtTable();
-  showToast('\u26A0\uFE0F ' + ((res && res.msg) || '\uC11C\uBC84 \uC5F0\uACB0 \uC2E4\uD328 \u2014 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694'));
-}
-function toggleFpActive(id) {
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
-  if (!fp) return;
-  if (fp.role === '대표') { showToast('⚠️ 대표 계정은 비활성화할 수 없습니다'); return; }
-  var nextOn = !fp.active;
-  showToast((nextOn ? '✅ ' : '🚫 ') + fp.name + ' 계정 변경 중...');
-  _fpToggleRequest('setFpActive', id, nextOn, '', function(res){
+  showToast(cfg.icon + ' ' + fp.name + ' ' + cfg.label + ' \uBCC0\uACBD \uC911...');
+  var extra = cfg.by ? ('&by=' + encodeURIComponent(currentUser.id)) : '';
+  _fpToggleRequest(cfg.action, id, nextOn, extra, function (res) {
+    delete _fpTogglePending[pkey];
     if (res && res.ok) {
-      _fpApplyServerVal(id, 'active', res.active);
+      var v = res[cfg.resKey];
+      _fpApplyServerVal(id, key, v);
       renderFpMgmtTable();
-      showToast((res.active ? '✅ ' : '🚫 ') + fp.name + ' 계정을 ' + (res.active ? '활성화' : '비활성화') + '했습니다');
-    } else { _fpToggleFail(res); }
+      if (key === 'perfKeep' && typeof renderFpPerf === 'function') { try { renderFpPerf(); } catch (e) {} }
+      if (key === 'active') {
+        showToast((v ? '\u2705 ' : '\uD83D\uDEAB ') + fp.name + ' ' + (v ? cfg.onMsg : cfg.offMsg));
+      } else if (cfg.defFalse) {
+        showToast(cfg.icon + ' ' + fp.name + ' ' + cfg.label + ' ' + (v ? 'ON' : 'OFF'));
+      } else {
+        showToast((v ? cfg.icon + ' ' : '\uD83D\uDEAB ') + fp.name + ' ' + cfg.label + ' ' + (v ? '\uC0AC\uC6A9 \uD5C8\uC6A9\uD588\uC2B5\uB2C8\uB2E4' : '\uCC28\uB2E8\uD588\uC2B5\uB2C8\uB2E4'));
+      }
+    } else {
+      // server failed: revert to the previous value
+      _fpApplyServerVal(id, key, cur);
+      renderFpMgmtTable();
+      showToast('\u26A0\uFE0F ' + ((res && res.msg) || '\uC11C\uBC84 \uC5F0\uACB0 \uC2E4\uD328') + ' \u2014 \uC6D0\uB798\uB300\uB85C \uB418\uB3CC\uB838\uC2B5\uB2C8\uB2E4');
+    }
   });
 }
-function toggleFpCarefit(id) {
-  var fp = getMergedFpList().find(function(f){ return f.id === id; });
-  if (!fp) return;
-  var nextOn = (fp.carefit === false);
-  showToast('🌿 케어핏 권한 변경 중...');
-  _fpToggleRequest('setCarefitAccess', id, nextOn, '', function(res){
-    if (res && res.ok) {
-      _fpApplyServerVal(id, 'carefit', res.carefit);
-      renderFpMgmtTable();
-      showToast((res.carefit ? '🌿 ' : '🚫 ') + fp.name + ' 케어핏 ' + (res.carefit ? '사용 허용' : '차단') + '했습니다');
-    } else { _fpToggleFail(res); }
-  });
-}
-function toggleFpCarefit2(id) {
-  var fp = getMergedFpList().find(function(f){ return f.id === id; });
-  if (!fp) return;
-  var nextOn = (fp.carefit2 === false);
-  showToast('🩺 케어핏 2.0 권한 변경 중...');
-  _fpToggleRequest('setCarefit2Access', id, nextOn, '', function(res){
-    if (res && res.ok) {
-      _fpApplyServerVal(id, 'carefit2', res.carefit2);
-      renderFpMgmtTable();
-      showToast((res.carefit2 ? '🩺 ' : '🚫 ') + fp.name + ' 케어핏 2.0 ' + (res.carefit2 ? '사용 허용' : '차단') + '했습니다');
-    } else { _fpToggleFail(res); }
-  });
-}
-function toggleFpUgobi(id) {
-  var fp = getMergedFpList().find(function(f){ return f.id === id; });
-  if (!fp) return;
-  var nextOn = (fp.ugobi === false);
-  showToast('💎 U고비 권한 변경 중...');
-  _fpToggleRequest('setUgobiAccess', id, nextOn, '', function(res){
-    if (res && res.ok) {
-      _fpApplyServerVal(id, 'ugobi', res.ugobi);
-      renderFpMgmtTable();
-      showToast((res.ugobi ? '💎 ' : '🚫 ') + fp.name + ' U고비 ' + (res.ugobi ? '사용 허용' : '차단') + '했습니다');
-    } else { _fpToggleFail(res); }
-  });
-}
-function toggleFpNohupai(id) {
-  var fp = getMergedFpList().find(function(f){ return f.id === id; });
-  if (!fp) return;
-  var nextOn = (fp.nohupai === false);
-  showToast('🌙 노후파이 권한 변경 중...');
-  _fpToggleRequest('setNohupaiAccess', id, nextOn, '', function(res){
-    if (res && res.ok) {
-      _fpApplyServerVal(id, 'nohupai', res.nohupai);
-      renderFpMgmtTable();
-      showToast((res.nohupai ? '🌙 ' : '🚫 ') + fp.name + ' 노후파이 ' + (res.nohupai ? '사용 허용' : '차단') + '했습니다');
-    } else { _fpToggleFail(res); }
-  });
-}
-function toggleFpNohupai2(id) {
-  var fp = getMergedFpList().find(function(f){ return f.id === id; });
-  if (!fp) return;
-  var nextOn = (fp.nohupai2 === false);
-  showToast('🥧 노후파이 2.0 권한 변경 중...');
-  _fpToggleRequest('setNohupai2Access', id, nextOn, '', function(res){
-    if (res && res.ok) {
-      _fpApplyServerVal(id, 'nohupai2', res.nohupai2);
-      renderFpMgmtTable();
-      showToast((res.nohupai2 ? '🥧 ' : '🚫 ') + fp.name + ' 노후파이 2.0 ' + (res.nohupai2 ? '사용 허용' : '차단') + '했습니다');
-    } else { _fpToggleFail(res); }
-  });
-}
-function toggleFpJenius(id) {
-  var fp = getMergedFpList().find(function(f){ return f.id === id; });
-  if (!fp) return;
-  var nextOn = (fp.jenius === false);
-  showToast('⚡ 제니스 권한 변경 중...');
-  _fpToggleRequest('setJeniusAccess', id, nextOn, '', function(res){
-    if (res && res.ok) {
-      _fpApplyServerVal(id, 'jenius', res.jenius);
-      renderFpMgmtTable();
-      showToast((res.jenius ? '⚡ ' : '🚫 ') + fp.name + ' 제니스 ' + (res.jenius ? '사용 허용' : '차단') + '했습니다');
-    } else { _fpToggleFail(res); }
-  });
-}
-function toggleFpTeam(id) {
-  if (!currentUser || currentUser.role !== '대표') { showToast('⚠️ 대표만 변경할 수 있습니다'); return; }
-  var fp = getMergedFpList().find(function(f){ return f.id === id; });
-  if (!fp) return;
-  var nextOn = (fp.team !== true);
-  showToast('🔔 리쿨푸쉬 변경 중...');
-  _fpToggleRequest('setTeamFlag', id, nextOn, '&by=' + encodeURIComponent(currentUser.id), function(res){
-    if (res && res.ok) {
-      _fpApplyServerVal(id, 'team', res.team);
-      renderFpMgmtTable();
-      showToast('🔔 ' + fp.name + ' 리쿨푸쉬 ' + (res.team ? 'ON' : 'OFF'));
-    } else { _fpToggleFail(res); }
-  });
-}
-function toggleFpPerfKeep(id) {
-  if (!currentUser || currentUser.role !== '대표') { showToast('⚠️ 대표만 변경할 수 있습니다'); return; }
-  var fp = getMergedFpList().find(function(f){ return f.id === id; });
-  if (!fp) return;
-  var nextOn = (fp.perfKeep !== true);
-  showToast('📊 업적유지 변경 중...');
-  _fpToggleRequest('setPerfKeep', id, nextOn, '&by=' + encodeURIComponent(currentUser.id), function(res){
-    if (res && res.ok) {
-      _fpApplyServerVal(id, 'perfKeep', res.perfKeep);
-      renderFpMgmtTable();
-      if (typeof renderFpPerf === 'function') { try { renderFpPerf(); } catch(e){} }
-      showToast('📊 ' + fp.name + ' 업적유지 ' + (res.perfKeep ? 'ON — 일보·업적에 계속 집계됩니다' : 'OFF'));
-    } else { _fpToggleFail(res); }
-  });
-}
+function toggleFpActive(id)   { _fpDoToggle(id, 'active'); }
+function toggleFpCarefit(id)  { _fpDoToggle(id, 'carefit'); }
+function toggleFpCarefit2(id) { _fpDoToggle(id, 'carefit2'); }
+function toggleFpUgobi(id)    { _fpDoToggle(id, 'ugobi'); }
+function toggleFpNohupai(id)  { _fpDoToggle(id, 'nohupai'); }
+function toggleFpNohupai2(id) { _fpDoToggle(id, 'nohupai2'); }
+function toggleFpJenius(id)   { _fpDoToggle(id, 'jenius'); }
+function toggleFpTeam(id)     { _fpDoToggle(id, 'team'); }
+function toggleFpPerfKeep(id) { _fpDoToggle(id, 'perfKeep'); }
 function resetFpPw(id, name) {
   showConfirm({
     icon: '🔑', iconCls: 'confirm-icon-gold',
@@ -14641,6 +14594,23 @@ function _ptaSetBranch(br) {
 var _ptaSeq = 0;       // 요청 순서 가드 — 늦게 도착한 이전 응답이 최신 결과를 덮어쓰지 않게
 var _ptaCache = null;  // 마지막 성공 결과 캐시
 
+// persistent stale-while-revalidate: last result per user+filter survives app restarts
+function _ptaStoreKey() {
+  return ((currentUser && currentUser.id) || '') + '|' + _ptaKey();
+}
+function _ptaSaveLocal(res) {
+  try {
+    localStorage.setItem('unispace_pta_last', JSON.stringify({ k: _ptaStoreKey(), at: Date.now(), res: res }));
+  } catch (e) {}
+}
+function _ptaReadLocal() {
+  try {
+    var d = JSON.parse(localStorage.getItem('unispace_pta_last') || 'null');
+    if (d && d.k === _ptaStoreKey() && d.res) return d.res;
+  } catch (e) {}
+  return null;
+}
+
 function _ptaLoad() {
   var box = document.getElementById('ptaList');
   var mySeq = ++_ptaSeq;
@@ -14648,8 +14618,22 @@ function _ptaLoad() {
   // 캐시가 있으면 즉시 표시하고 백그라운드 갱신 (로딩 체감속도 개선)
   if (_ptaCache && _ptaCache.key === _ptaKey()) {
     _ptaApply(_ptaCache.res);
-  } else if (box) {
-    box.innerHTML = '<div class="pta-empty">불러오는 중...</div>';
+  } else {
+    var localRes = _ptaReadLocal();
+    if (localRes) {
+      _ptaApply(localRes);
+      if (box) {
+        var hint = document.createElement('div');
+        hint.className = 'pta-empty';
+        hint.id = 'ptaRefreshHint';
+        hint.style.padding = '6px 0';
+        hint.style.fontSize = '12px';
+        hint.textContent = '\uCD5C\uC2E0 \uB0B4\uC6A9 \uBD88\uB7EC\uC624\uB294 \uC911...';
+        box.insertBefore(hint, box.firstChild);
+      }
+    } else if (box) {
+      box.innerHTML = '<div class="pta-empty">불러오는 중...</div>';
+    }
   }
 
   _ptaFetch(mySeq, 0);
@@ -14684,6 +14668,7 @@ function _ptaFetch(mySeq, attempt) {
       return;
     }
     _ptaCache = { key: _ptaKey(), res: res };
+    _ptaSaveLocal(res);
     _ptaApply(res);
   }).catch(function() {
     clearTimeout(timer);
@@ -22989,7 +22974,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 37;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 38;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
