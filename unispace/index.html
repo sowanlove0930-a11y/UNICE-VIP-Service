@@ -8853,6 +8853,8 @@ function confirmPerfInput() {
     if(okFlag){
       if(res && res.mode === 'dup-skip'){
         showToast('ℹ️ 이미 동일한 건이 등록되어 있어 중복 저장을 막았습니다');
+      } else if(res && res.mode === 'deleted-skip'){
+        showToast('ℹ️ 관리자가 삭제한 건이라 다시 저장하지 않았습니다');
       } else {
         showToast((isEdit?'✏️ ':'✅ ')+amtTxt+(isEdit?' 수정 완료':' 업적 입력 완료'));
       }
@@ -8920,7 +8922,24 @@ function _perfSubmitToGas(rec, attempt, onDone){
     headers:{ 'Content-Type':'text/plain;charset=utf-8' },
     body: payload
   }).then(function(r){ return r.json(); }).then(function(res){
-    if(res && res.ok){ _perfPendingDel(rec.id); _perfRecentSavedAdd(rec); if(onDone) onDone(true, res); return; }
+    if(res && res.ok){
+      _perfPendingDel(rec.id);
+      if(res.mode === 'deleted-skip'){
+        // an admin already deleted this record: drop it locally instead of resurrecting it
+        try {
+          var _lgDel = getPerfLog().filter(function(r){ return r.id !== rec.id; });
+          savePerfLog(_lgDel);
+          rebuildPerfData();
+          _perfRecentSavedDel(rec.id);
+          if(typeof renderGoals==='function') renderGoals();
+          if(typeof renderTop10==='function') renderTop10();
+          var _pvOv = document.getElementById('perfViewOverlay');
+          if(_pvOv && _pvOv.classList.contains('open') && typeof renderPerfView==='function') renderPerfView();
+        } catch(eDS) {}
+        if(onDone) onDone(true, res); return;
+      }
+      _perfRecentSavedAdd(rec); if(onDone) onDone(true, res); return;
+    }
     if(attempt < 2){ setTimeout(function(){ _perfSubmitToGas(rec, attempt+1, onDone); }, 1200); return; }
     if(onDone) onDone(false, res);
   }).catch(function(){
@@ -9505,6 +9524,7 @@ function deletePerfRec(id){
       + '&total=' + encodeURIComponent(rec.total || 0);
     fetch(_delUrl).then(function(r){ return r.json(); }).then(function(res){
       if(res && res.ok){
+        _perfPendingDel(id); // retry queue must not resurrect a just-deleted record
         showToast('🗑️ 삭제되었습니다 — 누계 반영 완료');
         // 서버 반영 안정화 후 추적 해제 (그 전 재로드는 부활 차단됨)
         setTimeout(function(){ delete _recentDeletedPerf[id]; }, 300000);
@@ -22998,7 +23018,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 39;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 40;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
