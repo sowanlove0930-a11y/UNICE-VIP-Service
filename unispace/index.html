@@ -1697,9 +1697,11 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .pta-empty { text-align: center; color: #9A9484; font-size: 13px; padding: 42px 0; }
 /* ── partners admin v2 ── */
 .pta-ftr { padding: 11px 16px 4px; display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+.pta-ftr-row { display: flex; gap: 7px; align-items: center; width: 100%; }
 .pta-tabs { display: flex; gap: 5px; }
 .pta-tab { font-size: 11.5px; font-weight: 700; border: 1px solid #DCD3BE; background: #fff;
   color: #6B6558; border-radius: 9px; padding: 7px 13px; cursor: pointer; font-family: inherit; }
+.pta-tab.sm { font-size: 11px; padding: 6px 11px; }
 .pta-tab.on { background: #16294A; border-color: #16294A; color: #fff; }
 .pta-dt { display: flex; align-items: center; gap: 5px; margin-left: auto; }
 .pta-dt input { border: 1px solid #DCD3BE; background: #fff; border-radius: 8px; padding: 6px 9px;
@@ -14445,34 +14447,63 @@ function _ptaSetMode(mode) {
   el = document.getElementById('ptaSumLead');  if (el) el.style.display = isLead ? 'flex' : 'none';
   el = document.getElementById('ptaList');     if (el) el.style.display = isLead ? 'none' : 'block';
   el = document.getElementById('ptlList');     if (el) el.style.display = isLead ? 'block' : 'none';
-  // 지점 필터·기간·카톡공유는 신청자 명단 전용
+  // 지점 필터·기간·카톡공유는 파트너스 명단 전용 (2번째 줄 통째 제어)
+  el = document.getElementById('ptaRow2');     if (el) el.style.display = isLead ? 'none' : 'flex';
   el = document.getElementById('ptaTabs');     if (el) el.style.display = isLead ? 'none' : (_ptaMeta && _ptaMeta.canPickBranch ? 'flex' : 'none');
-  el = document.querySelector('.pta-dt');      if (el) el.style.display = isLead ? 'none' : 'flex';
   el = document.getElementById('ptaShareBtn');
   if (el) el.style.display = isLead ? 'none' : ((_ptaMeta && (_ptaMeta.scope === 'all' || _ptaMeta.scope === 'branch')) ? 'inline-block' : 'none');
 
   if (isLead) _ptlLoad();
 }
 
+function _ptlSaveLocal(res) {
+  try { localStorage.setItem('unispace_ptl_last', JSON.stringify({ k: currentUser.id, at: Date.now(), res: res })); } catch (e) {}
+}
+function _ptlReadLocal() {
+  try {
+    var d = JSON.parse(localStorage.getItem('unispace_ptl_last') || 'null');
+    if (d && d.k === currentUser.id && d.res) return d.res;
+  } catch (e) {}
+  return null;
+}
+function _ptlApply(res) {
+  _ptlData = res;
+  _ptlList = res.list || [];
+  _ptlRenderKpi();
+  _ptlRender();
+  _ptnSetBadge(res.waiting || 0);
+}
 function _ptlLoad() {
   var box = document.getElementById('ptlList');
-  if (box && !_ptlList.length) box.innerHTML = '<div class="pta-empty">불러오는 중...</div>';
-  fetch(UNISPACE_GAS_URL + '?action=getPartnerLeads&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now())
-    .then(function(r) { return r.json(); })
-    .then(function(res) {
-      if (!res || !res.ok) {
-        if (box) box.innerHTML = '<div class="pta-empty">' + ((res && res.msg) || '불러오지 못했습니다') + '</div>';
-        return;
-      }
-      _ptlData = res;
-      _ptlList = res.list || [];
-      _ptlRenderKpi();
-      _ptlRender();
-      _ptnSetBadge(res.waiting || 0);
-    })
-    .catch(function() {
-      if (box) box.innerHTML = '<div class="pta-empty">네트워크 오류 — 잠시 후 다시 시도해주세요</div>';
-    });
+  if (!_ptlList.length) {
+    var localRes = _ptlReadLocal();
+    if (localRes) { _ptlApply(localRes); }
+    else if (box) { box.innerHTML = '<div class="pta-empty">불러오는 중...</div>'; }
+  }
+  var url = UNISPACE_GAS_URL + '?action=getPartnerLeads&fp=' + encodeURIComponent(currentUser.id);
+  function run(attempt) {
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 20000);
+    var opt = { cache: 'no-store' };
+    if (ctrl) opt.signal = ctrl.signal;
+    fetch(url + '&_=' + Date.now() + '&r=' + attempt, opt)
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        clearTimeout(timer);
+        if (!res || !res.ok) {
+          if (box && !_ptlList.length) box.innerHTML = '<div class="pta-empty">' + ((res && res.msg) || '불러오지 못했습니다') + '</div>';
+          return;
+        }
+        _ptlSaveLocal(res);
+        _ptlApply(res);
+      })
+      .catch(function() {
+        clearTimeout(timer);
+        if (attempt < 1) { run(attempt + 1); return; }
+        if (box && !_ptlList.length) box.innerHTML = '<div class="pta-empty">네트워크 오류 — 잠시 후 다시 시도해주세요</div>';
+      });
+  }
+  run(0);
 }
 
 function _ptlRenderKpi() {
@@ -14539,17 +14570,49 @@ function _ptlRender() {
   box.innerHTML = h;
 }
 
+var _ptlPending = {};
 function _ptlSetStatus(leadId, status) {
+  if (_ptlPending[leadId]) { showToast('⏳ 처리 중입니다. 잠시만요...'); return; }
+  var idx = -1, prevSt = null, prevNm = '';
+  for (var i = 0; i < _ptlList.length; i++) {
+    if (String(_ptlList[i].id) === String(leadId)) { idx = i; prevSt = _ptlList[i].status; prevNm = _ptlList[i].statusName || ''; break; }
+  }
+  _ptlPending[leadId] = true;
+  // optimistic: flip the card right away, revert on failure
+  var _stNames = { 0:'소개 접수', 1:'연락 완료', 2:'상담 완료', 3:'청약 완료', 4:'지원금 지급' };
+  if (idx >= 0) { _ptlList[idx].status = status; _ptlList[idx].statusName = _stNames[status] || ''; _ptlRender(); }
+  showToast('⏳ 상태 변경 중...');
   var url = UNISPACE_GAS_URL + '?action=setPartnerLeadStatus'
     + '&leadId=' + encodeURIComponent(leadId)
     + '&status=' + encodeURIComponent(status)
-    + '&fp=' + encodeURIComponent(currentUser.id)
-    + '&_=' + Date.now();
-  fetch(url).then(function(r) { return r.json(); }).then(function(res) {
-    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '변경하지 못했습니다')); return; }
-    showToast('✅ ' + res.statusName + '로 변경했습니다');
-    _ptlLoad();
-  }).catch(function() { showToast('⚠️ 네트워크 오류'); });
+    + '&fp=' + encodeURIComponent(currentUser.id);
+  function run(attempt) {
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 20000);
+    var opt = { cache: 'no-store' };
+    if (ctrl) opt.signal = ctrl.signal;
+    fetch(url + '&_=' + Date.now() + '&r=' + attempt, opt)
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        clearTimeout(timer);
+        delete _ptlPending[leadId];
+        if (!res || !res.ok) {
+          if (idx >= 0 && prevSt !== null) { _ptlList[idx].status = prevSt; _ptlList[idx].statusName = prevNm; _ptlRender(); }
+          showToast('⚠️ ' + ((res && res.msg) || '변경하지 못했습니다') + ' — 원래대로 되돌렸습니다');
+          return;
+        }
+        showToast('✅ ' + res.statusName + '로 변경했습니다');
+        _ptlLoad(); // background resync refreshes KPI + local cache
+      })
+      .catch(function() {
+        clearTimeout(timer);
+        if (attempt < 1) { run(attempt + 1); return; }
+        delete _ptlPending[leadId];
+        if (idx >= 0 && prevSt !== null) { _ptlList[idx].status = prevSt; _ptlList[idx].statusName = prevNm; _ptlRender(); }
+        showToast('⚠️ 네트워크 오류 — 원래대로 되돌렸습니다');
+      });
+  }
+  run(0);
 }
 
 // ── 홈 카드 배지 ─────────────────────────────────
@@ -14582,7 +14645,7 @@ function _ptaPrefetch() {
   var role = String(currentUser.role || '');
   if (role !== '대표' && role !== '지점장') return;
   var r = _ptaMonthRange();
-  var storeKey = currentUser.id + '|' + r.from + '|' + r.to + '|';
+  var storeKey = currentUser.id + '|' + r.from + '|' + r.to;
   var url = UNISPACE_GAS_URL + '?action=getPartnerApplies'
     + '&fp=' + encodeURIComponent(currentUser.id)
     + '&start=' + encodeURIComponent(r.from)
@@ -14632,7 +14695,28 @@ function _ptaSetBranch(br) {
     if (btns[i].getAttribute('data-br') === _ptaBranch) btns[i].classList.add('on');
     else btns[i].classList.remove('on');
   }
-  _ptaLoad();
+  // instant client-side filter: no server round trip on branch change
+  _ptaRenderFiltered();
+}
+// current branch filter applied to the full list
+function _ptaFilterList() {
+  var list = _ptnApplies || [];
+  if (!_ptaBranch) return list;
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var br = String(list[i].branch || '');
+    var isA = br.indexOf('알파') >= 0;
+    var isB = br.indexOf('브라보') >= 0;
+    if (_ptaBranch === '기타') { if (!isA && !isB) out.push(list[i]); }
+    else if (_ptaBranch.indexOf('알파') >= 0) { if (isA) out.push(list[i]); }
+    else if (_ptaBranch.indexOf('브라보') >= 0) { if (isB) out.push(list[i]); }
+  }
+  return out;
+}
+function _ptaRenderFiltered() {
+  var k3 = document.getElementById('ptaKpi3');
+  if (k3) k3.textContent = _ptaFilterList().length + '명';
+  _ptaRender();
 }
 
 var _ptaSeq = 0;       // 요청 순서 가드 — 늦게 도착한 이전 응답이 최신 결과를 덮어쓰지 않게
@@ -14686,18 +14770,19 @@ function _ptaLoad() {
 function _ptaKey() {
   var f = document.getElementById('ptaFrom');
   var t = document.getElementById('ptaTo');
-  return (f ? f.value : '') + '|' + (t ? t.value : '') + '|' + _ptaBranch;
+  return (f ? f.value : '') + '|' + (t ? t.value : '');
 }
 
 function _ptaFetch(mySeq, attempt) {
   var box = document.getElementById('ptaList');
   var f = document.getElementById('ptaFrom');
   var t = document.getElementById('ptaTo');
+  // always fetch the full list; branch filtering happens instantly on the client
   var url = UNISPACE_GAS_URL + '?action=getPartnerApplies'
     + '&fp=' + encodeURIComponent(currentUser.id)
     + '&start=' + encodeURIComponent(f ? f.value : '')
     + '&end=' + encodeURIComponent(t ? t.value : '')
-    + '&branch=' + encodeURIComponent(_ptaBranch)
+    + '&branch='
     + '&_=' + Date.now();
 
   // 20초 타임아웃 — 초과 시 1회 자동 재시도
@@ -14734,7 +14819,7 @@ function _ptaApply(res) {
     k1l.innerHTML = '전체 신청<br><span style="font-size:11px; opacity:0.75; white-space:nowrap;">알파 ' + res.byBranch.alpha + ' · 브라보 ' + res.byBranch.bravo + ' · 기타 ' + res.byBranch.none + '</span>';
   }
   if (k2) k2.textContent = res.left + '명';
-  if (k3) k3.textContent = res.count + '명';
+  if (k3) k3.textContent = _ptaFilterList().length + '명';
 
   var tabs = document.getElementById('ptaTabs');
   if (tabs) tabs.style.display = res.canPickBranch ? 'flex' : 'none';
@@ -14840,14 +14925,15 @@ function _ptaFindById(id) {
 function _ptaRender() {
   var box = document.getElementById('ptaList');
   if (!box) return;
-  if (!_ptnApplies.length) {
+  var _flt = _ptaFilterList();
+  if (!_flt.length) {
     box.innerHTML = '<div class="pta-empty">해당 기간에 신청자가 없습니다</div>';
     return;
   }
   var canDel = _ptaMeta && _ptaMeta.canDelete;
   var h = '';
-  for (var i = 0; i < _ptnApplies.length; i++) {
-    var a = _ptnApplies[i];
+  for (var i = 0; i < _flt.length; i++) {
+    var a = _flt[i];
     var brStr = String(a.branch || '');
     var brCls, brTxt;
     if (brStr.indexOf('알파') >= 0) { brCls = 'a'; brTxt = '알파'; }
@@ -22398,21 +22484,25 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" class="pta-close" onclick="closePartnersAdmin()">✕</button>
     </div>
     <div class="pta-ftr">
-      <div class="pta-tabs" id="ptaModeTabs" style="margin-right:6px">
-        <button type="button" class="pta-tab on" id="ptaModeApply" onclick="_ptaSetMode('apply')">신청자 명단</button>
-        <button type="button" class="pta-tab" id="ptaModeLead" onclick="_ptaSetMode('lead')">소개 고객<span id="ptaLeadCnt" class="pta-cnt" style="display:none">0</span></button>
+      <div class="pta-ftr-row">
+        <div class="pta-tabs" id="ptaModeTabs">
+          <button type="button" class="pta-tab on" id="ptaModeApply" onclick="_ptaSetMode('apply')">파트너스 명단</button>
+          <button type="button" class="pta-tab" id="ptaModeLead" onclick="_ptaSetMode('lead')">소개 고객<span id="ptaLeadCnt" class="pta-cnt" style="display:none">0</span></button>
+        </div>
+        <button type="button" id="ptaShareBtn" onclick="_ptaShare()" style="display:none; margin-left:auto; border:1.5px solid #F7E600; background:#FEE500; color:#191919; border-radius:10px; padding:7px 12px; font-family:inherit; font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap;">💬 카톡 공유</button>
       </div>
-      <div class="pta-tabs" id="ptaTabs">
-        <button type="button" class="pta-tab on" data-br="" onclick="_ptaSetBranch('')">전체</button>
-        <button type="button" class="pta-tab" data-br="알파지점" onclick="_ptaSetBranch('알파지점')">알파</button>
-        <button type="button" class="pta-tab" data-br="브라보지점" onclick="_ptaSetBranch('브라보지점')">브라보</button>
-        <button type="button" class="pta-tab" data-br="기타" onclick="_ptaSetBranch('기타')">기타</button>
-      </div>
-      <button type="button" id="ptaShareBtn" onclick="_ptaShare()" style="display:none; border:1.5px solid #F7E600; background:#FEE500; color:#191919; border-radius:10px; padding:8px 14px; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer; white-space:nowrap;">💬 카톡 공유</button>
-      <div class="pta-dt">
-        <input type="date" id="ptaFrom" onchange="_ptaLoad()">
-        <span class="sep">~</span>
-        <input type="date" id="ptaTo" onchange="_ptaLoad()">
+      <div class="pta-ftr-row" id="ptaRow2">
+        <div class="pta-tabs" id="ptaTabs">
+          <button type="button" class="pta-tab sm on" data-br="" onclick="_ptaSetBranch('')">전체</button>
+          <button type="button" class="pta-tab sm" data-br="알파지점" onclick="_ptaSetBranch('알파지점')">알파</button>
+          <button type="button" class="pta-tab sm" data-br="브라보지점" onclick="_ptaSetBranch('브라보지점')">브라보</button>
+          <button type="button" class="pta-tab sm" data-br="기타" onclick="_ptaSetBranch('기타')">기타</button>
+        </div>
+        <div class="pta-dt">
+          <input type="date" id="ptaFrom" onchange="_ptaLoad()">
+          <span class="sep">~</span>
+          <input type="date" id="ptaTo" onchange="_ptaLoad()">
+        </div>
       </div>
     </div>
     <div class="pta-sum" id="ptaSumApply">
@@ -23018,7 +23108,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 40;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 41;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
