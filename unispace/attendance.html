@@ -303,6 +303,23 @@ textarea.prm-input{resize:vertical;}
 .ov-btn { font-size:11px; font-weight:700; border:1px solid rgba(46,158,107,.4); background:rgba(46,158,107,.1);
   color:#1E7A50; border-radius:7px; padding:5px 9px; cursor:pointer; font-family:inherit; white-space:nowrap; }
 .ov-btn:active { opacity:.7; }
+/* 커스텀 확인 모달 (직권 출결 등) */
+.att-cf-ov { position:fixed; inset:0; z-index:100050; background:rgba(43,38,28,.5);
+  backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:20px; }
+.att-cf-ov.open { display:flex; }
+.att-cf-box { width:100%; max-width:340px; background:#FFFDF8; border:1px solid #E3DAC4;
+  border-radius:18px; padding:24px 20px 18px; text-align:center;
+  box-shadow:0 18px 50px rgba(43,38,28,.25); }
+.att-cf-ic { font-size:34px; margin-bottom:10px; }
+.att-cf-tt { font-size:16px; font-weight:800; color:#3B3524; margin-bottom:8px; }
+.att-cf-msg { font-size:13px; color:#6B6558; line-height:1.65; margin-bottom:18px; word-break:keep-all; }
+.att-cf-msg b { color:#3B3524; }
+.att-cf-btns { display:flex; gap:8px; }
+.att-cf-btns button { flex:1; padding:12px 0; border-radius:11px; font-family:inherit;
+  font-size:14px; font-weight:800; cursor:pointer; }
+.att-cf-no { border:1px solid #DCD3BE; background:#fff; color:#6B6558; }
+.att-cf-ok { border:none; background:#1E7A50; color:#fff; }
+.att-cf-ok:active, .att-cf-no:active { opacity:.75; }
 /* GAS 배너 */
 .gas-todo-banner{display:flex;align-items:center;gap:10px;background:rgba(244,163,38,.06);border:1px solid rgba(244,163,38,.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--orange);}
 
@@ -2117,22 +2134,51 @@ function setStatusBranch(val, el){
   if(el) el.classList.add('on');
   renderStatus();
 }
+// custom confirm modal (promise based) — replaces the browser's plain confirm()
+function attConfirm(opts){
+  return new Promise(function(resolve){
+    var ov = document.createElement('div');
+    ov.className = 'att-cf-ov open';
+    ov.innerHTML = '<div class="att-cf-box">'
+      + '<div class="att-cf-ic">' + (opts.icon || '✅') + '</div>'
+      + '<div class="att-cf-tt">' + (opts.title || '확인') + '</div>'
+      + '<div class="att-cf-msg">' + (opts.msg || '') + '</div>'
+      + '<div class="att-cf-btns">'
+      + '<button type="button" class="att-cf-no">취소</button>'
+      + '<button type="button" class="att-cf-ok">' + (opts.okLabel || '확인') + '</button>'
+      + '</div></div>';
+    function done(v){ if(ov.parentNode) ov.parentNode.removeChild(ov); resolve(v); }
+    ov.addEventListener('click', function(e){ if(e.target === ov) done(false); });
+    ov.querySelector('.att-cf-no').addEventListener('click', function(){ done(false); });
+    ov.querySelector('.att-cf-ok').addEventListener('click', function(){ done(true); });
+    document.body.appendChild(ov);
+  });
+}
 // admin/manager: force one FP's day to normal (server validates permission again)
 var _ovPending = {};
 function adminOverrideAtt(fpId, fpName, ds){
   var pk = fpId + '|' + ds;
   if(_ovPending[pk]) return;
-  if(!confirm(fpName + '님의 ' + ds + ' 출결을 직권으로 정상 처리할까요?')) return;
-  _ovPending[pk] = true;
-  attGasGetTimeout({ action:'adminSetAttendance', by: currentUser.id, target: fpId, date: ds }, 15000, 2).then(function(res){
-    delete _ovPending[pk];
-    if(!res || !res.ok){ alert('처리 실패: ' + ((res && res.msg) || '서버 오류')); return; }
-    var db = getAttDB();
-    if(!db[ds]) db[ds] = {};
-    var prev = db[ds][fpId] || {};
-    db[ds][fpId] = { name: fpName, branch: prev.branch || '', time: res.time || prev.time || '직권', status: '정상' };
-    saveAttDB(db);
-    renderStatus();
+  attConfirm({
+    icon: '✔️',
+    title: '직권 출결 처리',
+    msg: '<b>' + fpName + '</b>님의 <b>' + ds + '</b> 출결을<br>직권으로 <b>정상</b> 처리할까요?',
+    okLabel: '직권 출결'
+  }).then(function(ok){
+    if(!ok) return;
+    _ovPending[pk] = true;
+    showToast('✔️ 직권 출결 처리 중...');
+    attGasGetTimeout({ action:'adminSetAttendance', by: currentUser.id, target: fpId, date: ds }, 15000, 2).then(function(res){
+      delete _ovPending[pk];
+      if(!res || !res.ok){ showToast('⚠️ 처리 실패: ' + ((res && res.msg) || '서버 오류')); return; }
+      var db = getAttDB();
+      if(!db[ds]) db[ds] = {};
+      var prev = db[ds][fpId] || {};
+      db[ds][fpId] = { name: fpName, branch: prev.branch || '', time: res.time || prev.time || '직권', status: '정상' };
+      saveAttDB(db);
+      renderStatus();
+      showToast('✅ ' + fpName + '님 ' + ds + ' 직권 출결 완료');
+    });
   });
 }
 function renderStatus(){
