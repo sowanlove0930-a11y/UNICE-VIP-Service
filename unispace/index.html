@@ -4893,10 +4893,29 @@ function getMergedFpList() {
 
 // GAS에서 전체 명단 로드 -> localStorage 저장 (명단 단일 기준)
 function loadAllFpsFromGas(cb){
-  var url = UNISPACE_GAS_URL + '?action=getAllFps';
-  fetch(url).then(function(r){return r.json();}).then(function(res){
+  var url = UNISPACE_GAS_URL + '?action=getAllFps&_=' + Date.now();
+  fetch(url, { cache:'no-store' }).then(function(r){return r.json();}).then(function(res){
     if(res && res.ok && res.list){
       try { localStorage.setItem('unispace_fp_roster_full', JSON.stringify(res.list)); } catch(e) {}
+      // server roster just arrived: drop stale server-managed overrides (keep pw only)
+      try {
+        var ov = JSON.parse(localStorage.getItem('unispace_fp_overrides') || '{}');
+        var keys = ['active','carefit','carefit2','ugobi','nohupai','nohupai2','jenius','team','perfKeep'];
+        var ids = [];
+        for (var idKey in ov) { ids.push(idKey); }
+        var changed = false;
+        for (var a = 0; a < ids.length; a++) {
+          var rec = ov[ids[a]];
+          if (!rec) continue;
+          for (var b = 0; b < keys.length; b++) {
+            if (rec[keys[b]] !== undefined) { delete rec[keys[b]]; changed = true; }
+          }
+          var rest = false;
+          for (var k in rec) { rest = true; break; }
+          if (!rest) { delete ov[ids[a]]; changed = true; }
+        }
+        if (changed) localStorage.setItem('unispace_fp_overrides', JSON.stringify(ov));
+      } catch(e2) {}
     }
     if(cb) cb();
   }).catch(function(){ if(cb) cb(); });
@@ -6406,6 +6425,13 @@ function openFpMgmt() {
   document.getElementById('userMenu').style.display = 'none';
   renderFpMgmtTable();
   document.getElementById('fpMgmtOverlay').classList.add('open');
+  // background refresh from GAS so every device shows the latest server state
+  if (typeof loadAllFpsFromGas === 'function') {
+    loadAllFpsFromGas(function(){
+      var ovl = document.getElementById('fpMgmtOverlay');
+      if (ovl && ovl.classList.contains('open')) renderFpMgmtTable();
+    });
+  }
 }
 function closeFpMgmt() {
   document.getElementById('fpMgmtOverlay').classList.remove('open');
@@ -6478,177 +6504,175 @@ function renderFpMgmtTable() {
     '</tr>';
   }).join('');
 }
+// ---- FP toggle: server-first (GAS is the single source of truth) ----
+// timeout 20s + 1 auto retry + cache buster, so PC/mobile always converge
+function _fpToggleRequest(action, id, nextOn, extraQs, onDone) {
+  var url = UNISPACE_GAS_URL + '?action=' + action
+    + '&fp=' + encodeURIComponent(id)
+    + '&on=' + (nextOn ? 'Y' : 'N')
+    + (extraQs || '');
+  function run(attempt) {
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 20000);
+    var opt = { cache: 'no-store' };
+    if (ctrl) opt.signal = ctrl.signal;
+    fetch(url + '&_=' + Date.now() + '&r=' + attempt, opt)
+      .then(function (r) { return r.json(); })
+      .then(function (res) { clearTimeout(timer); onDone(res); })
+      .catch(function () {
+        clearTimeout(timer);
+        if (attempt < 1) { run(attempt + 1); return; }
+        onDone(null);
+      });
+  }
+  run(0);
+}
+// after a server-confirmed change: update cached roster + drop local override
+function _fpApplyServerVal(id, key, val) {
+  try {
+    var full = JSON.parse(localStorage.getItem('unispace_fp_roster_full') || 'null');
+    if (full && full.length) {
+      for (var i = 0; i < full.length; i++) {
+        if (String(full[i].id) === String(id)) { full[i][key] = val; break; }
+      }
+      localStorage.setItem('unispace_fp_roster_full', JSON.stringify(full));
+    }
+  } catch (e) {}
+  try {
+    var ov = JSON.parse(localStorage.getItem('unispace_fp_overrides') || '{}');
+    if (ov[id] && ov[id][key] !== undefined) {
+      delete ov[id][key];
+      var rest = false;
+      for (var k in ov[id]) { rest = true; break; }
+      if (!rest) delete ov[id];
+      localStorage.setItem('unispace_fp_overrides', JSON.stringify(ov));
+    }
+  } catch (e2) {}
+}
+function _fpToggleFail(res) {
+  renderFpMgmtTable();
+  showToast('\u26A0\uFE0F ' + ((res && res.msg) || '\uC11C\uBC84 \uC5F0\uACB0 \uC2E4\uD328 \u2014 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694'));
+}
 function toggleFpActive(id) {
   var list = getMergedFpList();
   var fp   = list.find(function(f){ return f.id === id; });
   if (!fp) return;
-  // 대표 계정은 비활성화 불가
   if (fp.role === '대표') { showToast('⚠️ 대표 계정은 비활성화할 수 없습니다'); return; }
-  saveFpOverride(id, 'active', !fp.active);
-  renderFpMgmtTable();
-  showToast((fp.active ? '🚫 ' : '✅ ') + fp.name + ' 계정을 ' + (fp.active ? '비활성화' : '활성화') + '했습니다');
+  var nextOn = !fp.active;
+  showToast((nextOn ? '✅ ' : '🚫 ') + fp.name + ' 계정 변경 중...');
+  _fpToggleRequest('setFpActive', id, nextOn, '', function(res){
+    if (res && res.ok) {
+      _fpApplyServerVal(id, 'active', res.active);
+      renderFpMgmtTable();
+      showToast((res.active ? '✅ ' : '🚫 ') + fp.name + ' 계정을 ' + (res.active ? '활성화' : '비활성화') + '했습니다');
+    } else { _fpToggleFail(res); }
+  });
 }
 function toggleFpCarefit(id) {
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
+  var fp = getMergedFpList().find(function(f){ return f.id === id; });
   if (!fp) return;
-  var nextOn = (fp.carefit === false); // currently off -> turn on
-  var url = UNISPACE_GAS_URL + '?action=setCarefitAccess&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  var nextOn = (fp.carefit === false);
   showToast('🌿 케어핏 권한 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  _fpToggleRequest('setCarefitAccess', id, nextOn, '', function(res){
     if (res && res.ok) {
-      fp.carefit = res.carefit;
-      saveFpOverride(id, 'carefit', res.carefit);
+      _fpApplyServerVal(id, 'carefit', res.carefit);
       renderFpMgmtTable();
       showToast((res.carefit ? '🌿 ' : '🚫 ') + fp.name + ' 케어핏 ' + (res.carefit ? '사용 허용' : '차단') + '했습니다');
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
+    } else { _fpToggleFail(res); }
   });
 }
 function toggleFpCarefit2(id) {
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
+  var fp = getMergedFpList().find(function(f){ return f.id === id; });
   if (!fp) return;
-  var nextOn = (fp.carefit2 === false); // currently off -> turn on
-  var url = UNISPACE_GAS_URL + '?action=setCarefit2Access&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  var nextOn = (fp.carefit2 === false);
   showToast('🩺 케어핏 2.0 권한 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  _fpToggleRequest('setCarefit2Access', id, nextOn, '', function(res){
     if (res && res.ok) {
-      fp.carefit2 = res.carefit2;
-      saveFpOverride(id, 'carefit2', res.carefit2);
+      _fpApplyServerVal(id, 'carefit2', res.carefit2);
       renderFpMgmtTable();
       showToast((res.carefit2 ? '🩺 ' : '🚫 ') + fp.name + ' 케어핏 2.0 ' + (res.carefit2 ? '사용 허용' : '차단') + '했습니다');
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
+    } else { _fpToggleFail(res); }
   });
 }
 function toggleFpUgobi(id) {
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
+  var fp = getMergedFpList().find(function(f){ return f.id === id; });
   if (!fp) return;
-  var nextOn = (fp.ugobi === false); // currently off -> turn on
-  var url = UNISPACE_GAS_URL + '?action=setUgobiAccess&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  var nextOn = (fp.ugobi === false);
   showToast('💎 U고비 권한 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  _fpToggleRequest('setUgobiAccess', id, nextOn, '', function(res){
     if (res && res.ok) {
-      fp.ugobi = res.ugobi;
-      saveFpOverride(id, 'ugobi', res.ugobi);
+      _fpApplyServerVal(id, 'ugobi', res.ugobi);
       renderFpMgmtTable();
       showToast((res.ugobi ? '💎 ' : '🚫 ') + fp.name + ' U고비 ' + (res.ugobi ? '사용 허용' : '차단') + '했습니다');
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
+    } else { _fpToggleFail(res); }
   });
 }
 function toggleFpNohupai(id) {
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
+  var fp = getMergedFpList().find(function(f){ return f.id === id; });
   if (!fp) return;
-  var nextOn = (fp.nohupai === false); // currently off -> turn on
-  var url = UNISPACE_GAS_URL + '?action=setNohupaiAccess&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  var nextOn = (fp.nohupai === false);
   showToast('🌙 노후파이 권한 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  _fpToggleRequest('setNohupaiAccess', id, nextOn, '', function(res){
     if (res && res.ok) {
-      fp.nohupai = res.nohupai;
-      saveFpOverride(id, 'nohupai', res.nohupai);
+      _fpApplyServerVal(id, 'nohupai', res.nohupai);
       renderFpMgmtTable();
       showToast((res.nohupai ? '🌙 ' : '🚫 ') + fp.name + ' 노후파이 ' + (res.nohupai ? '사용 허용' : '차단') + '했습니다');
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
+    } else { _fpToggleFail(res); }
   });
 }
 function toggleFpNohupai2(id) {
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
+  var fp = getMergedFpList().find(function(f){ return f.id === id; });
   if (!fp) return;
-  var nextOn = (fp.nohupai2 === false); // currently off -> turn on
-  var url = UNISPACE_GAS_URL + '?action=setNohupai2Access&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  var nextOn = (fp.nohupai2 === false);
   showToast('🥧 노후파이 2.0 권한 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  _fpToggleRequest('setNohupai2Access', id, nextOn, '', function(res){
     if (res && res.ok) {
-      fp.nohupai2 = res.nohupai2;
-      saveFpOverride(id, 'nohupai2', res.nohupai2);
+      _fpApplyServerVal(id, 'nohupai2', res.nohupai2);
       renderFpMgmtTable();
       showToast((res.nohupai2 ? '🥧 ' : '🚫 ') + fp.name + ' 노후파이 2.0 ' + (res.nohupai2 ? '사용 허용' : '차단') + '했습니다');
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
+    } else { _fpToggleFail(res); }
   });
 }
 function toggleFpJenius(id) {
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
+  var fp = getMergedFpList().find(function(f){ return f.id === id; });
   if (!fp) return;
-  var nextOn = (fp.jenius === false); // currently off -> turn on
-  var url = UNISPACE_GAS_URL + '?action=setJeniusAccess&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N');
+  var nextOn = (fp.jenius === false);
   showToast('⚡ 제니스 권한 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  _fpToggleRequest('setJeniusAccess', id, nextOn, '', function(res){
     if (res && res.ok) {
-      fp.jenius = res.jenius;
-      saveFpOverride(id, 'jenius', res.jenius);
+      _fpApplyServerVal(id, 'jenius', res.jenius);
       renderFpMgmtTable();
       showToast((res.jenius ? '⚡ ' : '🚫 ') + fp.name + ' 제니스 ' + (res.jenius ? '사용 허용' : '차단') + '했습니다');
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
+    } else { _fpToggleFail(res); }
   });
 }
 function toggleFpTeam(id) {
   if (!currentUser || currentUser.role !== '대표') { showToast('⚠️ 대표만 변경할 수 있습니다'); return; }
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
+  var fp = getMergedFpList().find(function(f){ return f.id === id; });
   if (!fp) return;
-  var nextOn = (fp.team !== true); // currently off -> turn on
-  var url = UNISPACE_GAS_URL + '?action=setTeamFlag&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N') + '&by=' + encodeURIComponent(currentUser.id);
+  var nextOn = (fp.team !== true);
   showToast('🔔 리쿨푸쉬 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  _fpToggleRequest('setTeamFlag', id, nextOn, '&by=' + encodeURIComponent(currentUser.id), function(res){
     if (res && res.ok) {
-      fp.team = res.team;
-      saveFpOverride(id, 'team', res.team);
+      _fpApplyServerVal(id, 'team', res.team);
       renderFpMgmtTable();
       showToast('🔔 ' + fp.name + ' 리쿨푸쉬 ' + (res.team ? 'ON' : 'OFF'));
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
+    } else { _fpToggleFail(res); }
   });
 }
 function toggleFpPerfKeep(id) {
   if (!currentUser || currentUser.role !== '대표') { showToast('⚠️ 대표만 변경할 수 있습니다'); return; }
-  var list = getMergedFpList();
-  var fp   = list.find(function(f){ return f.id === id; });
+  var fp = getMergedFpList().find(function(f){ return f.id === id; });
   if (!fp) return;
   var nextOn = (fp.perfKeep !== true);
-  var url = UNISPACE_GAS_URL + '?action=setPerfKeep&fp=' + encodeURIComponent(id) + '&on=' + (nextOn ? 'Y' : 'N') + '&by=' + encodeURIComponent(currentUser.id);
   showToast('📊 업적유지 변경 중...');
-  fetch(url).then(function(r){ return r.json(); }).then(function(res){
+  _fpToggleRequest('setPerfKeep', id, nextOn, '&by=' + encodeURIComponent(currentUser.id), function(res){
     if (res && res.ok) {
-      fp.perfKeep = res.perfKeep;
-      saveFpOverride(id, 'perfKeep', res.perfKeep);
+      _fpApplyServerVal(id, 'perfKeep', res.perfKeep);
       renderFpMgmtTable();
       if (typeof renderFpPerf === 'function') { try { renderFpPerf(); } catch(e){} }
       showToast('📊 ' + fp.name + ' 업적유지 ' + (res.perfKeep ? 'ON — 일보·업적에 계속 집계됩니다' : 'OFF'));
-    } else {
-      showToast('⚠️ ' + ((res && res.msg) || '변경 실패'));
-    }
-  }).catch(function(){
-    showToast('⚠️ 서버 연결 실패');
+    } else { _fpToggleFail(res); }
   });
 }
 function resetFpPw(id, name) {
@@ -22965,7 +22989,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 36;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 37;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
