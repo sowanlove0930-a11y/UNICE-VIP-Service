@@ -6047,6 +6047,9 @@ function showDashboard() {
       if(typeof renderTop10==='function') renderTop10();
     });
 
+    // partners admin prefetch: run after the dashboard burst settles (5s idle)
+    if (typeof _ptaPrefetch === 'function') { setTimeout(_ptaPrefetch, 5000); }
+
     // 활동을 GAS에서 로드 후 업적/리크루팅 TOP 갱신 (로컬엔 본인 지점만 있어 전체가 아님)
     if(typeof loadActivitiesFromGas==='function'){
       loadActivitiesFromGas(function(){
@@ -14553,6 +14556,27 @@ function _ptaMonthRange() {
   return { from: f(new Date(y, m, 1)), to: f(new Date(y, m + 1, 0)) };
 }
 
+// idle-time prefetch: warm the local cache so the modal opens instantly
+function _ptaPrefetch() {
+  if (!currentUser || !currentUser.id) return;
+  var role = String(currentUser.role || '');
+  if (role !== '대표' && role !== '지점장') return;
+  var r = _ptaMonthRange();
+  var storeKey = currentUser.id + '|' + r.from + '|' + r.to + '|';
+  var url = UNISPACE_GAS_URL + '?action=getPartnerApplies'
+    + '&fp=' + encodeURIComponent(currentUser.id)
+    + '&start=' + encodeURIComponent(r.from)
+    + '&end=' + encodeURIComponent(r.to)
+    + '&branch=&_=' + Date.now();
+  fetch(url, { cache: 'no-store' })
+    .then(function (res) { return res.json(); })
+    .then(function (res) {
+      if (res && res.ok) {
+        try { localStorage.setItem('unispace_pta_last', JSON.stringify({ k: storeKey, at: Date.now(), res: res })); } catch (e) {}
+      }
+    })['catch'](function () {});
+}
+
 function openPartnersAdmin(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
@@ -22974,7 +22998,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 38;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 39;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
