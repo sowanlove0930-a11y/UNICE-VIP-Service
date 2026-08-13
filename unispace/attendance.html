@@ -54,7 +54,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .tab-btn{flex:1;padding:11px 14px;border:none;border-radius:12px;background:transparent;color:var(--text2);font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .25s;}
 .tab-btn:hover{color:var(--text);background:var(--sur2);}
 .tab-btn.active{background:linear-gradient(135deg,var(--gold2),var(--gold));color:#fff;font-weight:700;box-shadow:0 4px 16px rgba(201,168,76,.3);}
-.tab-page{display:none;} .tab-page.active{display:block;}
+.tab-page{display:none;} .tab-page.active{display:block; padding-bottom:60px;}
 
 /* 체크인 */
 .checkin-hero{background:linear-gradient(135deg,rgba(201,168,76,.1),rgba(201,168,76,.04));border:1px solid rgba(201,168,76,.2);border-radius:20px;padding:32px;margin-bottom:20px;text-align:center;}
@@ -1745,6 +1745,7 @@ function renderPrereportTab(){
   // 증빙 처리 드롭다운 — 이번달 사전보고 중 미증빙 건
   var _isAdminPR = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장';
   var _myBranch = currentUser.branch||'';
+  var _actSet=_activeFpIdSet(); // null while roster not loaded yet
   var proofSel=document.getElementById('proofTargetDate');
   proofSel.innerHTML='<option value="">사전보고 날짜 선택</option>';
   if(_isAdminPR){
@@ -1754,6 +1755,7 @@ function renderPrereportTab(){
       var fpIds=Object.keys(recs);
       for(var _pi=0;_pi<fpIds.length;_pi++){
         var _fid=fpIds[_pi];
+        if(_actSet && !_actSet[String(_fid)]) continue; // deleted/deactivated FP
         var _r=recs[_fid];
         if(!_r||_r.proof) continue;
         if(currentUser.role==='지점장' && (_r.branch||'')!==_myBranch) continue;
@@ -1776,6 +1778,7 @@ function renderPrereportTab(){
       var recs=db[date]||{};
       var fpIds=Object.keys(recs);
       for(var _ii=0;_ii<fpIds.length;_ii++){
+        if(_actSet && !_actSet[String(fpIds[_ii])]) continue; // deleted/deactivated FP
         var _rr=recs[fpIds[_ii]];
         if(!_rr) continue;
         if(currentUser.role==='지점장' && (_rr.branch||'')!==_myBranch) continue;
@@ -2192,6 +2195,9 @@ function renderStatus(){
 
   var fpList=getFpList().filter(function(fp){
     if(!fp.active) return false;
+    // 출석 현황은 체크인 대상(FP)만: 대표·지점장·교육지점장 제외
+    if(fp.role==='대표'||fp.role==='지점장') return false;
+    if(String(fp.title||'').indexOf('지점장')>=0) return false;
     var _fpBr = String(fp.branch||'');
     if(branch!=='all'){
       var _key = branch.replace('지점',''); // '알파지점'->'알파'
@@ -2370,7 +2376,10 @@ function loadFpListFromGas(cb){
         if(t==='대표'||lv==='admin') role='대표';
         else if(t==='지점장'||t==='교육지점장'||lv==='manager') role='지점장';
         else if(fp.id==='ktk01') role='대표';
-        return { id:String(fp.id), active:true, name:fp.name, role:role, branch:fp.branch, title:t, level:lv };
+        var br = String(fp.branch||'');
+        if (br === '알파') br = '알파지점';
+        else if (br === '브라보') br = '브라보지점';
+        return { id:String(fp.id), active:true, name:fp.name, role:role, branch:br, title:t, level:lv };
       });
     }
     if(cb) cb();
@@ -2379,6 +2388,14 @@ function loadFpListFromGas(cb){
 function getFpList(){
   if(_fpListCache && _fpListCache.length) return _fpListCache;
   return _getFpListFallback();
+}
+// active roster id set: hide records of deleted/deactivated FPs everywhere.
+// only trust it once the GAS roster has actually arrived (fallback list is stale).
+function _activeFpIdSet(){
+  if(!(_fpListCache && _fpListCache.length)) return null;
+  var s = {};
+  for(var i=0;i<_fpListCache.length;i++){ s[String(_fpListCache[i].id)] = true; }
+  return s;
 }
 function _getFpListFallback(){
   return [
