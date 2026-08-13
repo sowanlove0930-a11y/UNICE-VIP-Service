@@ -1702,6 +1702,16 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .pta-tab { font-size: 11.5px; font-weight: 700; border: 1px solid #DCD3BE; background: #fff;
   color: #6B6558; border-radius: 9px; padding: 7px 13px; cursor: pointer; font-family: inherit; }
 .pta-tab.sm { font-size: 11px; padding: 6px 11px; }
+.pta-q { flex: 1; min-width: 70px; border: 1px solid #DCD3BE; background: #fff; border-radius: 9px;
+  padding: 6px 10px; font-family: inherit; font-size: 11.5px; color: #3B4557; }
+.pta-q::placeholder { color: #B3AC9B; }
+.ptl-step { display: flex; gap: 5px; flex-wrap: wrap; }
+.ptl-sp { flex: 1; min-width: 76px; text-align: center; font-size: 11.5px; font-weight: 700;
+  border: 1px solid #DCD3BE; background: #fff; color: #8A8474; border-radius: 8px;
+  padding: 8px 4px; cursor: pointer; font-family: inherit; }
+.ptl-sp.done { background: #EFF6F1; border-color: #BFDCC9; color: #2E7D54; }
+.ptl-sp.cur { background: #16294A; border-color: #16294A; color: #fff; cursor: default; }
+.ptl-sp.lock { background: #F5F1E6; border-color: #E4DCC6; color: #A38D3F; cursor: default; }
 .pta-tab.on { background: #16294A; border-color: #16294A; color: #fff; }
 .pta-dt { display: flex; align-items: center; gap: 5px; margin-left: auto; }
 .pta-dt input { border: 1px solid #DCD3BE; background: #fff; border-radius: 8px; padding: 6px 9px;
@@ -14428,6 +14438,15 @@ function loadPartnerSlots() { return; }
 // ── partners admin v2 ──
 var _ptaBranch = '';
 var _ptaMeta = null;
+var _ptaQ = '';  // shared search keyword (both tabs)
+function _ptaQChange() {
+  var el = document.getElementById('ptaQ');
+  _ptaQ = el ? String(el.value || '').trim() : '';
+  if (_ptaMode === 'lead') { _ptlRenderFiltered(); } else { _ptaRenderFiltered(); }
+}
+function _ptaDateChange() {
+  if (_ptaMode === 'lead') { _ptlRenderFiltered(); } else { _ptaLoad(); }
+}
 
 // ── 파트너 소개 고객 탭 ─────────────────────────────
 var _ptaMode = 'apply';        // 'apply' | 'lead'
@@ -14447,9 +14466,12 @@ function _ptaSetMode(mode) {
   el = document.getElementById('ptaSumLead');  if (el) el.style.display = isLead ? 'flex' : 'none';
   el = document.getElementById('ptaList');     if (el) el.style.display = isLead ? 'none' : 'block';
   el = document.getElementById('ptlList');     if (el) el.style.display = isLead ? 'block' : 'none';
-  // 지점 필터·기간·카톡공유는 파트너스 명단 전용 (2번째 줄 통째 제어)
-  el = document.getElementById('ptaRow2');     if (el) el.style.display = isLead ? 'none' : 'flex';
-  el = document.getElementById('ptaTabs');     if (el) el.style.display = isLead ? 'none' : (_ptaMeta && _ptaMeta.canPickBranch ? 'flex' : 'none');
+  // 2번째 줄(지점·검색·기간)은 두 탭 공용. 지점칩은 권한(scope)에 따라 표시.
+  el = document.getElementById('ptaRow2');     if (el) el.style.display = 'flex';
+  var _canBr = isLead ? (_ptlData && _ptlData.scope === 'all') : (_ptaMeta && _ptaMeta.canPickBranch);
+  el = document.getElementById('ptaTabs');     if (el) el.style.display = _canBr ? 'flex' : 'none';
+  el = document.getElementById('ptaQ');
+  if (el) el.placeholder = isLead ? '고객·파트너·FP 검색' : '이름·FP 검색';
   el = document.getElementById('ptaShareBtn');
   if (el) el.style.display = isLead ? 'none' : ((_ptaMeta && (_ptaMeta.scope === 'all' || _ptaMeta.scope === 'branch')) ? 'inline-block' : 'none');
 
@@ -14469,9 +14491,13 @@ function _ptlReadLocal() {
 function _ptlApply(res) {
   _ptlData = res;
   _ptlList = res.list || [];
-  _ptlRenderKpi();
-  _ptlRender();
+  _ptlRenderFiltered();
   _ptnSetBadge(res.waiting || 0);
+  // scope arrived: sync branch-chip visibility for the lead tab
+  if (_ptaMode === 'lead') {
+    var el = document.getElementById('ptaTabs');
+    if (el) el.style.display = (res.scope === 'all') ? 'flex' : 'none';
+  }
 }
 function _ptlLoad() {
   var box = document.getElementById('ptlList');
@@ -14536,9 +14562,14 @@ function _ptlRender() {
     return;
   }
   var isAll = (_ptlData && _ptlData.scope !== 'self');
+  var _list = _ptlFilterList();
+  if (!_list.length) {
+    box.innerHTML = '<div class="pta-empty">조건에 맞는 소개 고객이 없습니다</div>';
+    return;
+  }
   var h = '';
-  for (var i = 0; i < _ptlList.length; i++) {
-    var r = _ptlList[i];
+  for (var i = 0; i < _list.length; i++) {
+    var r = _list[i];
     var st = r.status;
     var urgent = (st === 0 && r.days >= 2);
     h += '<div class="ptl-item' + (urgent ? ' urgent' : '') + '">';
@@ -14550,6 +14581,7 @@ function _ptlRender() {
     var meta = [];
     if (r.callTime) meta.push('연락 가능 시간 <b>' + _ptaEsc(r.callTime) + '</b>');
     if (r.createdAt) meta.push('소개일 ' + _ptaEsc(r.createdAt));
+    if (r.updatedAt) meta.push('마지막 변경 ' + _ptaEsc(String(r.updatedAt).slice(0, 10)));
     if (st >= 3 && r.payout) meta.push('지원금 ' + Number(r.payout).toLocaleString() + '원');
     h += '<div class="ptl-meta">' + meta.join(' · ') + '</div>';
     if (r.memo) h += '<div class="ptl-memo">' + _ptaEsc(r.memo) + '</div>';
@@ -14557,17 +14589,30 @@ function _ptlRender() {
     if (isAll && r.fpName) h += ' · 담당 ' + _ptaEsc(r.fpName) + (r.branch ? ' (' + _ptaEsc(r.branch) + ')' : '');
     h += '</div>';
 
-    h += '<div class="ptl-acts">';
     var tel = String(r.custPhone || '').replace(/[^0-9]/g, '');
-    if (tel) h += '<a class="ptl-ab call" href="tel:' + tel + '">📞 전화 걸기</a>';
-    if (st === 0) h += '<button type="button" class="ptl-ab pri" onclick="_ptlSetStatus(\'' + _ptaEsc(r.id) + '\',1)">연락 완료로 변경</button>';
-    else if (st === 1) h += '<button type="button" class="ptl-ab pri" onclick="_ptlSetStatus(\'' + _ptaEsc(r.id) + '\',2)">상담 완료로 변경</button>';
-    else if (st === 2) h += '<button type="button" class="ptl-ab" onclick="_ptlSetStatus(\'' + _ptaEsc(r.id) + '\',1)">연락 완료로 되돌리기</button>';
-    else h += '<span class="ptl-ab" style="opacity:.6">업적 입력으로 확정된 건</span>';
-    h += '</div>';
+    if (tel) h += '<div class="ptl-acts"><a class="ptl-ab call" href="tel:' + tel + '">📞 전화 걸기</a></div>';
+    // progress stepper: tap a stage to set it (replaces the confusing back/forward buttons)
+    if (st >= 3) {
+      h += '<div class="ptl-step" style="margin-top:8px">'
+        + '<span class="ptl-sp done">소개 접수</span>'
+        + '<span class="ptl-sp done">연락 완료</span>'
+        + '<span class="ptl-sp done">상담 완료</span>'
+        + '<span class="ptl-sp lock">🔒 ' + _ptaEsc(r.statusName) + '</span>'
+        + '</div>';
+      h += '<div style="font-size:10.5px;color:#A38D3F;margin-top:5px">업적 입력으로 확정된 건이라 단계를 바꿀 수 없습니다</div>';
+    } else {
+      h += '<div class="ptl-step" style="margin-top:8px">' + _ptlPill(r.id, 0, st, '소개 접수') + _ptlPill(r.id, 1, st, '연락 완료') + _ptlPill(r.id, 2, st, '상담 완료') + '</div>';
+      h += '<div style="font-size:10.5px;color:#9A9484;margin-top:5px">단계를 누르면 그 상태로 바뀝니다</div>';
+    }
     h += '</div>';
   }
   box.innerHTML = h;
+}
+// one stage pill: current = filled(not clickable), others = tap to set
+function _ptlPill(id, n, cur, label) {
+  if (n === cur) return '<span class="ptl-sp cur">' + label + '</span>';
+  var cls = (n < cur) ? 'ptl-sp done' : 'ptl-sp';
+  return '<button type="button" class="' + cls + '" onclick="_ptlSetStatus(\'' + _ptaEsc(id) + '\',' + n + ')">' + label + '</button>';
 }
 
 var _ptlPending = {};
@@ -14580,7 +14625,7 @@ function _ptlSetStatus(leadId, status) {
   _ptlPending[leadId] = true;
   // optimistic: flip the card right away, revert on failure
   var _stNames = { 0:'소개 접수', 1:'연락 완료', 2:'상담 완료', 3:'청약 완료', 4:'지원금 지급' };
-  if (idx >= 0) { _ptlList[idx].status = status; _ptlList[idx].statusName = _stNames[status] || ''; _ptlRender(); }
+  if (idx >= 0) { _ptlList[idx].status = status; _ptlList[idx].statusName = _stNames[status] || ''; _ptlRenderFiltered(); }
   showToast('⏳ 상태 변경 중...');
   var url = UNISPACE_GAS_URL + '?action=setPartnerLeadStatus'
     + '&leadId=' + encodeURIComponent(leadId)
@@ -14597,7 +14642,7 @@ function _ptlSetStatus(leadId, status) {
         clearTimeout(timer);
         delete _ptlPending[leadId];
         if (!res || !res.ok) {
-          if (idx >= 0 && prevSt !== null) { _ptlList[idx].status = prevSt; _ptlList[idx].statusName = prevNm; _ptlRender(); }
+          if (idx >= 0 && prevSt !== null) { _ptlList[idx].status = prevSt; _ptlList[idx].statusName = prevNm; _ptlRenderFiltered(); }
           showToast('⚠️ ' + ((res && res.msg) || '변경하지 못했습니다') + ' — 원래대로 되돌렸습니다');
           return;
         }
@@ -14608,7 +14653,7 @@ function _ptlSetStatus(leadId, status) {
         clearTimeout(timer);
         if (attempt < 1) { run(attempt + 1); return; }
         delete _ptlPending[leadId];
-        if (idx >= 0 && prevSt !== null) { _ptlList[idx].status = prevSt; _ptlList[idx].statusName = prevNm; _ptlRender(); }
+        if (idx >= 0 && prevSt !== null) { _ptlList[idx].status = prevSt; _ptlList[idx].statusName = prevNm; _ptlRenderFiltered(); }
         showToast('⚠️ 네트워크 오류 — 원래대로 되돌렸습니다');
       });
   }
@@ -14696,22 +14741,75 @@ function _ptaSetBranch(br) {
     else btns[i].classList.remove('on');
   }
   // instant client-side filter: no server round trip on branch change
-  _ptaRenderFiltered();
+  if (_ptaMode === 'lead') { _ptlRenderFiltered(); } else { _ptaRenderFiltered(); }
 }
 // current branch filter applied to the full list
+function _ptaBrMatch(br) {
+  if (!_ptaBranch) return true;
+  var s = String(br || '');
+  var isA = s.indexOf('알파') >= 0;
+  var isB = s.indexOf('브라보') >= 0;
+  if (_ptaBranch === '기타') return !isA && !isB;
+  if (_ptaBranch.indexOf('알파') >= 0) return isA;
+  if (_ptaBranch.indexOf('브라보') >= 0) return isB;
+  return true;
+}
 function _ptaFilterList() {
   var list = _ptnApplies || [];
-  if (!_ptaBranch) return list;
+  var q = _ptaQ.toLowerCase();
   var out = [];
   for (var i = 0; i < list.length; i++) {
-    var br = String(list[i].branch || '');
-    var isA = br.indexOf('알파') >= 0;
-    var isB = br.indexOf('브라보') >= 0;
-    if (_ptaBranch === '기타') { if (!isA && !isB) out.push(list[i]); }
-    else if (_ptaBranch.indexOf('알파') >= 0) { if (isA) out.push(list[i]); }
-    else if (_ptaBranch.indexOf('브라보') >= 0) { if (isB) out.push(list[i]); }
+    var a = list[i];
+    if (!_ptaBrMatch(a.branch)) continue;
+    if (q) {
+      var hay = (String(a.name||'') + ' ' + String(a.fpName||'') + ' ' + String(a.phone||'') + ' ' + String(a.area||'')).toLowerCase();
+      if (hay.indexOf(q) < 0) continue;
+    }
+    out.push(a);
   }
   return out;
+}
+// lead tab filter: branch + intro-date range + keyword, all client-side
+function _ptlFilterList() {
+  var list = _ptlList || [];
+  var q = _ptaQ.toLowerCase();
+  var f = document.getElementById('ptaFrom');
+  var t = document.getElementById('ptaTo');
+  var s = f ? String(f.value || '') : '';
+  var e = t ? String(t.value || '') : '';
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var r = list[i];
+    if (!_ptaBrMatch(r.branch)) continue;
+    var day = String(r.createdAt || '').slice(0, 10);
+    if (s && day && day < s) continue;
+    if (e && day && day > e) continue;
+    if (q) {
+      var hay = (String(r.custName||'') + ' ' + String(r.partnerName||'') + ' ' + String(r.fpName||'') + ' ' + String(r.custPhone||'')).toLowerCase();
+      if (hay.indexOf(q) < 0) continue;
+    }
+    out.push(r);
+  }
+  return out;
+}
+// lead tab: KPI recomputed from the filtered list so numbers always match the screen
+function _ptlRenderFiltered() {
+  var list = _ptlFilterList();
+  var waiting = 0, progress = 0, dealt = 0, payout = 0, oldest = 0;
+  for (var i = 0; i < list.length; i++) {
+    var st = list[i].status;
+    if (st === 0) { waiting++; if (list[i].days > oldest) oldest = list[i].days; }
+    else if (st === 1 || st === 2) progress++;
+    else if (st >= 3) { dealt++; payout += parseInt(list[i].payout) || 0; }
+  }
+  var k1 = document.getElementById('ptlKpi1'); if (k1) k1.textContent = waiting + '건';
+  var k2 = document.getElementById('ptlKpi2'); if (k2) k2.textContent = progress + '건';
+  var k3 = document.getElementById('ptlKpi3'); if (k3) k3.textContent = dealt + '건';
+  var l1 = document.getElementById('ptlKpi1L');
+  if (l1) l1.innerHTML = '연락 대기' + (oldest > 0 ? '<br><span style="font-size:10px;opacity:.8">가장 오래된 건 ' + oldest + '일 경과</span>' : '');
+  var l3 = document.getElementById('ptlKpi3L');
+  if (l3) l3.innerHTML = '청약 완료' + (payout > 0 ? '<br><span style="font-size:10px;opacity:.8">지원금 ' + Math.round(payout / 10000) + '만원</span>' : '');
+  _ptlRender();
 }
 function _ptaRenderFiltered() {
   var k3 = document.getElementById('ptaKpi3');
@@ -22498,10 +22596,11 @@ function doCheckin() { doSmartCheckin(); }
           <button type="button" class="pta-tab sm" data-br="브라보지점" onclick="_ptaSetBranch('브라보지점')">브라보</button>
           <button type="button" class="pta-tab sm" data-br="기타" onclick="_ptaSetBranch('기타')">기타</button>
         </div>
+        <input type="search" id="ptaQ" class="pta-q" placeholder="이름·FP 검색" oninput="_ptaQChange()">
         <div class="pta-dt">
-          <input type="date" id="ptaFrom" onchange="_ptaLoad()">
+          <input type="date" id="ptaFrom" onchange="_ptaDateChange()">
           <span class="sep">~</span>
-          <input type="date" id="ptaTo" onchange="_ptaLoad()">
+          <input type="date" id="ptaTo" onchange="_ptaDateChange()">
         </div>
       </div>
     </div>
@@ -23108,7 +23207,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 41;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 42;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
