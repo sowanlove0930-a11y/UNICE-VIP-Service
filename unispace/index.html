@@ -7458,10 +7458,12 @@ function _awmProgPaint(p) {
     h += _awmGauge(mn + '월 보장월초', _manTxt(A.amount), '50', '만',
           Math.min(100, Math.round(A.amount / 500000 * 100)),
           A.okAmount ? '충족' : (_manTxt(A.amountNeed) + '원 더 필요'), A.okAmount, 'p', '');
+    var _aFull = (_awlData && _awlData.fullDays) ? _awlData.fullDays : A.attDays;
+    var _aNeed = Math.max(0, Math.ceil(A.floor / 100 * _aFull) - A.attHit);
     h += _awmGauge(mn + '월 출결률', A.att + '%', A.floor, '%',
           Math.min(100, Math.round(A.att / A.floor * 100)),
-          A.okAtt ? '충족' : (A.attNeedDays + '일 더 출근'), A.okAtt, 'p',
-          A.attHit + '일 / 근무일 ' + A.attDays + '일');
+          A.okAtt ? '충족' : ('목표 ' + A.floor + '%까지 출결 ' + _aNeed + '일 더 필요'), A.okAtt, 'p',
+          mn + '월 근무일 ' + _aFull + '일 중 ' + A.attHit + '일 출결');
   }
   h += '</div></div>';
 
@@ -7485,15 +7487,20 @@ function _awmProgPaint(p) {
             B.sumNeed === 0 ? '충족' : (_manTxt(B.sumNeed) + '원 더 필요'), B.sumNeed === 0, 'g', '');
       h += _awmGauge(pn + '~' + mn + '월 평균 출결률', B.att + '%', B.floor, '%',
             Math.min(100, Math.round(B.att / B.floor * 100)),
-            B.okAtt ? '충족' : (B.attNeedDays + '일 더 출근'), B.okAtt, 'g',
-            B.attHit + '일 / 근무일 ' + B.attDays + '일');
+            B.okAtt ? '충족' : (function(){
+              var _bFull = ((_awlData && _awlData.fullDays) || 0) + ((_awlData && _awlData.prevFullDays) || 0);
+              if (!_bFull) _bFull = B.attDays;
+              var _bNeed = Math.max(0, Math.ceil(B.floor / 100 * _bFull) - B.attHit);
+              return '목표 ' + B.floor + '%까지 출결 ' + _bNeed + '일 더 필요';
+            })(), B.okAtt, 'g',
+            pn + '~' + mn + '월 근무일 ' + (((_awlData && _awlData.fullDays) || 0) + ((_awlData && _awlData.prevFullDays) || 0) || B.attDays) + '일 중 ' + B.attHit + '일 출결');
       if (B.waived) {
         h += '<div class="awm-ex">시행 첫 달이라 ' + pn + '월 30만 조건은 면제되며, 평균 출결 <b>' + B.floor + '%</b>를 적용합니다.</div>';
       }
     }
     h += '</div></div>';
   } else if (d.graceOn) {
-    h += '<div class="awm-ex" style="margin-top:10px">' + pn + '월은 판정에서 제외되어 B 합산은 다음 달부터 열립니다.</div>';
+    h += '<div class="awm-ex" style="margin-top:10px">' + mn + '~' + qn + '월 진행현황은 ' + qn + '월 오픈 예정입니다.</div>';
   }
 
   document.getElementById('awmBody').innerHTML = h;
@@ -15102,9 +15109,9 @@ function _ptaBuildShareText() {
     + (now.getHours() < 10 ? '0' : '') + now.getHours() + ':'
     + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
 
-  // 현재 조회된 목록을 지점별로 그룹핑
+  // share exactly what the screen shows: current branch tab (+ search) applied
   var groups = { alpha: [], bravo: [], etc: [] };
-  var list = _ptnApplies || [];
+  var list = _ptaFilterList();
   for (var i = 0; i < list.length; i++) {
     var it = list[i];
     if (String(it.status || '') === '취소') continue;
@@ -15126,9 +15133,15 @@ function _ptaBuildShareText() {
   }
 
   var total = groups.alpha.length + groups.bravo.length + groups.etc.length;
-  var txt = '*유니스 파트너스 현황(' + stamp + '기준)\n\n'
+  var brTag = '';
+  if (_ptaBranch) {
+    brTag = (_ptaBranch.indexOf('알파') >= 0) ? ' · 알파'
+          : (_ptaBranch.indexOf('브라보') >= 0) ? ' · 브라보' : ' · 기타';
+  }
+  var txt = '*유니스 파트너스 현황' + brTag + '(' + stamp + '기준)\n\n'
     + '총 ' + total + '명\n'
-    + '(알파 ' + groups.alpha.length + ' /브라보 ' + groups.bravo.length + ' /기타 ' + groups.etc.length + ')\n\n'
+    + (_ptaBranch ? '' : '(알파 ' + groups.alpha.length + ' /브라보 ' + groups.bravo.length + ' /기타 ' + groups.etc.length + ')\n')
+    + '\n'
     + section('알파', groups.alpha)
     + section('브라보', groups.bravo)
     + section('기타', groups.etc);
@@ -23434,7 +23447,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 54;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 56;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
