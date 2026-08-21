@@ -4269,6 +4269,7 @@ window.UNISPACE_FCM = {
           <span class="att-today-date" id="attTodayDate" style="font-size:12px;color:var(--text3);font-weight:400"></span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" id="attShareBtn" onclick="event.stopPropagation();shareAttToday()" style="display:none;background:#FAE100;border:none;border-radius:8px;padding:4px 12px;color:#3A1D1D;font-size:11px;font-weight:800;cursor:pointer">💬 공유</button>
           <button type="button" id="attRefreshBtn" onclick="event.stopPropagation();refreshAttendance()" style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer"><span id="attRefreshIcon" style="display:inline-block">🔄</span> <span id="attRefreshTxt">새로고침</span></button>
           <span class="accordion-chevron" id="chev3">▼</span>
         </div>
@@ -15805,6 +15806,86 @@ function refreshAttendance() {
     }, 1200);
   }, 700);
 }
+// kakao share for today's attendance card.
+// late/absent lines carry this-month accumulated counts; prereport lines carry
+// this-month unproven counts. working days = weekdays minus HOLIDAYS_2026.
+function _attMonthStats() {
+  var today = getTodayStr();
+  var ym = today.slice(0, 7);
+  var db = {}, pr = {};
+  try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch (e) {}
+  try { pr = JSON.parse(localStorage.getItem('unispace_prereport') || '{}'); } catch (e) {}
+  var late = {}, abs = {}, unpv = {};
+  var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10);
+  var dEnd = parseInt(today.slice(8, 10), 10);
+  function _p2(n) { return (n < 10 ? '0' : '') + n; }
+  var roster = (window._attTodayShare) ?
+    [].concat(window._attTodayShare.normal, window._attTodayShare.late,
+              window._attTodayShare.absent, window._attTodayShare.pre) : [];
+  var ids = {};
+  for (var r = 0; r < roster.length; r++) { if (roster[r] && roster[r].id) ids[roster[r].id] = true; }
+  for (var d = 1; d <= dEnd; d++) {
+    var ds = ym + '-' + _p2(d);
+    var wd = new Date(y, m - 1, d).getDay();
+    if (wd === 0 || wd === 6) continue;
+    if (typeof HOLIDAYS_2026 !== 'undefined' && HOLIDAYS_2026[ds]) continue;
+    var dayAtt = db[ds] || {};
+    var dayPr = pr[ds] || {};
+    for (var fid in ids) {
+      if (!ids.hasOwnProperty(fid)) continue;
+      var rec = dayAtt[fid];
+      if (rec && rec.status === '지각') late[fid] = (late[fid] || 0) + 1;
+      if (!rec && !dayPr[fid]) abs[fid] = (abs[fid] || 0) + 1;
+      if (dayPr[fid] && !dayPr[fid].proof) unpv[fid] = (unpv[fid] || 0) + 1;
+    }
+  }
+  return { late: late, abs: abs, unpv: unpv };
+}
+function _attShareText() {
+  var s = window._attTodayShare;
+  if (!s) return '';
+  var n = new Date();
+  var head = '*출결현황(' + (n.getMonth() + 1) + '/' + n.getDate() + ')';
+  var st = _attMonthStats();
+  function brMk(fp) { return (String(fp.branch || '').indexOf('알파') >= 0) ? '(알)' : '(브)'; }
+  function cnt(arr) {
+    var a = 0, b = 0;
+    for (var i = 0; i < arr.length; i++) {
+      if (String(arr[i].branch || '').indexOf('알파') >= 0) a++; else b++;
+    }
+    return '(알파 ' + a + '명 / 브라보 ' + b + '명)';
+  }
+  function sec(title, arr, lineFn) {
+    var t = '\n\n-' + title + cnt(arr);
+    if (!arr.length) return t + '\n없음';
+    for (var i = 0; i < arr.length; i++) t += '\n' + lineFn(arr[i]);
+    return t;
+  }
+  var txt = head;
+  txt += sec('정상출근', s.normal, function (fp) { return fp.name + brMk(fp); });
+  txt += sec('지각', s.late, function (fp) {
+    var c = st.late[fp.id] || 1;
+    return fp.name + brMk(fp) + ' ' + c + '회';
+  });
+  txt += sec('미출결', s.absent, function (fp) {
+    var c = st.abs[fp.id] || 1;
+    return fp.name + brMk(fp) + ' ' + c + '회';
+  });
+  txt += sec('사전보고', s.pre, function (fp) {
+    var c = st.unpv[fp.id] || 0;
+    return fp.name + brMk(fp) + ' 미증빙 ' + c + '건';
+  });
+  return txt;
+}
+function shareAttToday() {
+  var txt = _attShareText();
+  if (!txt) { showToast('공유할 출결 데이터가 아직 없습니다'); return; }
+  if (navigator.share) {
+    navigator.share({ text: txt }).catch(function () {});
+    return;
+  }
+  _ptaCopyText(txt);
+}
 function renderAttToday() {
   var today = getTodayStr();
   var n = new Date(), days = ['일','월','화','수','목','금','토'];
@@ -15928,6 +16009,18 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
   var prCountEl = document.getElementById('prereportCount');
   if (prCountEl) prCountEl.textContent = preList.length;
   _setBr('prereportBr', preList);
+
+  // keep the latest snapshot for the kakao-share text builder
+  window._attTodayShare = { normal: fullNormalArr, late: lateArr, absent: absentArr, pre: preList };
+  var _asb = document.getElementById('attShareBtn');
+  if (_asb) {
+    // share allowed for 대표 and 지점장 only
+    var _t9 = currentUser ? String(currentUser.title || '') : '';
+    var _can9 = currentUser && (
+      currentUser.role === '대표' || currentUser.id === 'ktk01' || currentUser.level === 'admin' ||
+      currentUser.role === '지점장' || _t9 === '지점장');
+    _asb.style.display = _can9 ? 'inline-block' : 'none';
+  }
 
   function chip(fp, showTime, extraBadge) {
     var isAlpha = fp.branch === '알파' || fp.branch === '알파지점';
@@ -23490,7 +23583,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 67;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 69;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
