@@ -3968,7 +3968,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📊 업적유지</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
+          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적유지</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -6508,7 +6508,14 @@ function renderFpMgmtTable() {
   });
   var tbody = document.getElementById('fpMgmtBody');
   tbody.innerHTML = list.map(function(fp) {
-    var roleLabel = fp.role === '대표' ? '👑 대표' : fp.role === '지점장' ? '⭐ 지점장' : 'FP';
+    var _tt = String(fp.title || '');
+    var roleLabel;
+    if (fp.role === '대표') roleLabel = '👑 대표';
+    else if (_tt === '교육지점장' || fp.id === 'H2503162') roleLabel = '📚 교육지점장';
+    else if (fp.role === '지점장' || _tt === '지점장') roleLabel = '⭐ 지점장';
+    else if (_tt.indexOf('센터장') >= 0) roleLabel = '🎯 센터장';
+    else if (_tt.indexOf('매니저') >= 0) roleLabel = '💼 매니저';
+    else roleLabel = 'FP';
     return '<tr>' +
       '<td style="font-weight:700">' + fp.name + '</td>' +
       '<td style="font-size:12px;color:var(--text2);font-family:monospace">' + fp.id + '</td>' +
@@ -6516,6 +6523,9 @@ function renderFpMgmtTable() {
       '<td style="font-size:12px">' + roleLabel + '</td>' +
       '<td><button class="fp-active-toggle ' + (fp.active?'on':'off') + '" onclick="toggleFpActive(\'' + fp.id + '\')">' +
         (fp.active ? '✅ 활성' : '🚫 비활성') +
+      '</button></td>' +
+      '<td><button class="fp-active-toggle ' + (fp.attend!==false?'on':'off') + '" onclick="toggleFpAttend(\'' + fp.id + '\')">' +
+        (fp.attend!==false ? '📋 대상' : '🚫 제외') +
       '</button></td>' +
       '<td><button class="fp-active-toggle ' + (fp.perfKeep===true?'on':'off') + '" onclick="toggleFpPerfKeep(\'' + fp.id + '\')">' +
         (fp.perfKeep===true ? '📊 집계' : (fp.active ? '—' : '⛔ 제외')) +
@@ -6607,6 +6617,7 @@ var _FP_TOGGLE_DEFS = {
   nohupai:  { action:'setNohupaiAccess',  resKey:'nohupai',  icon:'\uD83C\uDF19', label:'\uB178\uD6C4\uD30C\uC774' },
   nohupai2: { action:'setNohupai2Access', resKey:'nohupai2', icon:'\uD83E\uDD67', label:'\uB178\uD6C4\uD30C\uC774 2.0' },
   jenius:   { action:'setJeniusAccess',   resKey:'jenius',   icon:'\u26A1', label:'\uC81C\uB2C8\uC2A4' },
+  attend:   { action:'setAttendAccess',   resKey:'attend',   icon:'\uD83D\uDCCB', label:'\uCD9C\uACB0 \uB300\uC0C1' },
   team:     { action:'setTeamFlag',       resKey:'team',     icon:'\uD83D\uDD14', label:'\uB9AC\uCFE8\uD478\uC26C', adminOnly:true, defFalse:true, by:true },
   perfKeep: { action:'setPerfKeep',       resKey:'perfKeep', icon:'\uD83D\uDCCA', label:'\uC5C5\uC801\uC720\uC9C0', adminOnly:true, defFalse:true, by:true }
 };
@@ -6657,6 +6668,7 @@ function toggleFpUgobi(id)    { _fpDoToggle(id, 'ugobi'); }
 function toggleFpNohupai(id)  { _fpDoToggle(id, 'nohupai'); }
 function toggleFpNohupai2(id) { _fpDoToggle(id, 'nohupai2'); }
 function toggleFpJenius(id)   { _fpDoToggle(id, 'jenius'); }
+function toggleFpAttend(id)   { _fpDoToggle(id, 'attend'); }
 function toggleFpTeam(id)     { _fpDoToggle(id, 'team'); }
 function toggleFpPerfKeep(id) { _fpDoToggle(id, 'perfKeep'); }
 function resetFpPw(id, name) {
@@ -15837,6 +15849,7 @@ function renderAttToday() {
       if((f.branch||'').indexOf('교육')>=0) return;
       if((f.branch||'').indexOf('유니스지사')>=0) return; // 지사 소속(대표) 제외
       if(!f.active) return;
+      if(f.attend===false) return; // 계정관리에서 출결 제외 처리된 FP
       if(!_attSeeAll && _attMyBr && _attNb(f.branch) !== _attMyBr) return;
       FPS.push({ id:f.id, name:f.name, branch:(f.branch||'').replace('지점','') });
     });
@@ -21752,6 +21765,14 @@ function _reportScope(u) {
 
 function _isCheckinExempt(u) {
   if (!u) return false;
+  // account-management toggle: this FP is not an attendance target
+  if (u.attend === false) return true;
+  if (typeof getMergedFpList === 'function') {
+    try {
+      var _me = getMergedFpList().find(function (f) { return f.id === u.id; });
+      if (_me && _me.attend === false) return true;
+    } catch (e) {}
+  }
   if (_isManagerUser(u)) return true; // 대표/지점장/교육지점장 (role 기준 포함)
   if (u.level === 'admin' || u.level === 'manager') return true;
   if (u.branch && u.branch.indexOf('교육') === 0) return true;
@@ -23471,7 +23492,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 64;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 65;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
