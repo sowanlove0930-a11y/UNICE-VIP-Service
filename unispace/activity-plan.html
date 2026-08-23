@@ -242,6 +242,7 @@ input:focus,select,textarea:focus{border-color:var(--gold)}
     <div class="hero-s" id="heroSub">주차 정보 로딩중</div>
     <div class="hero-warn" id="heroWarn"></div>
   </div>
+  <div id="apprProgWrap" style="display:none"></div>
 
   <div class="top-block">
     <div class="perf-bar">
@@ -360,8 +361,12 @@ input:focus,select,textarea:focus{border-color:var(--gold)}
     </div>
     <div class="st-stat">
       <div class="st-card"><div class="st-lbl">제출</div><div class="st-val" id="stDone" style="color:#1F9268">0</div></div>
+      <div class="st-card"><div class="st-lbl">보완 요청</div><div class="st-val" id="stFix" style="color:#B4560B">0</div></div>
       <div class="st-card"><div class="st-lbl">미제출</div><div class="st-val" id="stUndone" style="color:#C0392B">0</div></div>
       <div class="st-card"><div class="st-lbl">제출률</div><div class="st-val" id="stRate" style="color:var(--navy)">0%</div></div>
+    </div>
+    <div id="stFinalAllWrap" style="display:none;margin-bottom:10px;text-align:right">
+      <button type="button" id="stFinalAllBtn" style="background:#153E75;color:#fff;border:none;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">✓ 전체 최종 승인</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
       <button type="button" class="pv-bf on" id="stbAll" onclick="setStBranch('all',this)">전체</button>
@@ -1820,6 +1825,7 @@ function loadExisting(){
         var wk=pl.weekKey||wi.key;
         if(!db[wk]) db[wk]={};
         db[wk][pl.fpId]={
+          approval:pl.approval||'', apprLog:pl.apprLog||{},
           fpId:pl.fpId, name:pl.name, branch:pl.branch,
           monthGoal:pl.monthGoal, weekGoal:pl.weekGoal, request:pl.request,
           customers:pl.customers, updatedAt:pl.updatedAt, submittedAt:pl.submittedAt||null
@@ -1830,10 +1836,43 @@ function loadExisting(){
     _fillExistingFromDb();
   }).catch(function(){ _fillExistingFromDb(); });
 }
+function _renderApprProgress(rec){
+  var box=document.getElementById('apprProgWrap');
+  if(!box) return;
+  var st=_apprStatus(rec);
+  if(!st){ box.style.display='none'; box.innerHTML=''; return; }
+  var lg=(rec&&rec.apprLog)||{};
+  function dot(state, num){
+    if(state==='on') return '<div style="width:26px;height:26px;border-radius:50%;margin:0 auto 5px;background:#177245;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800">✓</div>';
+    if(state==='cur') return '<div style="width:26px;height:26px;border-radius:50%;margin:0 auto 5px;background:#fff;border:2.5px solid #B8860B;color:#B8860B;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800">'+num+'</div>';
+    return '<div style="width:26px;height:26px;border-radius:50%;margin:0 auto 5px;background:#EDF0F5;color:#B7BFCE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800">'+num+'</div>';
+  }
+  var s1='on', s2='off', s3='off';
+  if(st==='wait'){ s2='cur'; }
+  else if(st==='approved1'){ s2='on'; s3='cur'; }
+  else if(st==='final'){ s2='on'; s3='on'; }
+  else if(st==='fix_fp'||st==='fix_mgr'){ s2='cur'; }
+  function bar(on){ return '<div style="height:3px;flex:.5;border-radius:2px;margin-bottom:18px;background:'+(on?'#177245':'#EDF0F5')+'"></div>'; }
+  var h='<div style="background:#fff;border:1px solid #E3E8F0;border-radius:12px;padding:14px 16px;margin:10px 0;display:flex;align-items:center">'
+    +'<div style="flex:1;text-align:center">'+dot(s1,1)+'<div style="font-size:11px;font-weight:700;color:#4A5468">제출 완료</div></div>'+bar(s2!=='off')
+    +'<div style="flex:1;text-align:center">'+dot(s2,2)+'<div style="font-size:11px;font-weight:700;color:'+(s2==='off'?'#B7BFCE':'#4A5468')+'">지점장 승인</div></div>'+bar(s3!=='off')
+    +'<div style="flex:1;text-align:center">'+dot(s3,3)+'<div style="font-size:11px;font-weight:700;color:'+(s3==='off'?'#B7BFCE':'#4A5468')+'">대표 최종 승인</div></div>'
+    +'</div>';
+  if(st==='fix_fp' && lg.fixReason){
+    h+='<div style="background:#FFF7EA;border:1px solid #F0D9AE;border-radius:11px;padding:11px 13px;font-size:12.5px;color:#7A5A1E;margin-bottom:10px">🔶 <b>보완 요청</b> — "'+String(lg.fixReason)+'"'
+      +(lg.fixByName?' · '+lg.fixByName:'')+'<br><span style="font-size:11.5px">내용을 수정한 뒤 다시 제출해주세요. 재제출하면 검토 대기로 올라갑니다.</span></div>';
+  }
+  if(st==='final'){
+    h+='<div style="background:#EAF3FB;border:1px solid #C7DCF0;border-radius:11px;padding:10px 13px;font-size:12.5px;color:#153E75;margin-bottom:10px">🎉 이번 주 활동계획이 <b>최종 승인</b>되었습니다</div>';
+  }
+  box.innerHTML=h;
+  box.style.display='';
+}
 function _fillExistingFromDb(){
   var wi=effectiveWeekInfo();
   var db=getPlanDB();
   var rec = db[wi.key] && db[wi.key][currentUser.id];
+  try{ _renderApprProgress(rec); }catch(e){}
   // month goal fill priority: admin adjust (final, locked) > this-week saved > inherit earlier week
   var mgFill=null;
   var adminMg=getAdminMonthGoal(currentUser.id, wi);
@@ -1958,8 +1997,9 @@ function saveDraft(submitted){
   planGasPost({ action:'savePlan', data:{
     weekKey:wi.key, fpCode:currentUser.id, fpName:currentUser.name, branch:currentUser.branch,
     monthGoal:data.monthGoal, weekGoal:data.weekGoal, request:data.request,
-    customers:data.customers, submittedAt:submittedAt||''
-  }}).catch(function(){});
+    customers:data.customers, submittedAt:submittedAt||'',
+    submitNow: submitted ? 1 : 0
+  }}).then(function(){ if(submitted){ try{ loadExisting(); }catch(e){} } }).catch(function(){});
 }
 
 function _buildActFromCust(c, idx, planKey){
@@ -2253,6 +2293,77 @@ function _planSummary(rec){
   return { n:custs.length, pt:pt, chung:chung };
 }
 
+// ===== approval workflow (A-plan): wait -> approved1(manager) -> final(rep) / fix_fp / fix_mgr =====
+function _apprRole(){
+  if(!currentUser) return '';
+  var id=currentUser.id||'', r=currentUser.role||'', t=currentUser.title||'', b=String(currentUser.branch||'');
+  if(id==='ktk01' || r==='대표') return 'rep';
+  if(id==='H2503162' || t==='교육지점장' || b.indexOf('교육')>=0) return '';
+  if(r==='지점장' || t==='지점장') return 'mgr';
+  return '';
+}
+function _apprStatus(rec){
+  if(!rec || !rec.submittedAt) return '';
+  var a=rec.approval||'';
+  if(a==='approved1'||a==='final'||a==='fix_fp'||a==='fix_mgr'||a==='wait') return a;
+  return 'wait'; // submitted without approval field -> reviewable
+}
+function _apprBadge(st){
+  if(st==='wait') return '<span class="st-badge" style="background:#E8F0FE;color:#2653B0">검토 대기</span>';
+  if(st==='approved1') return '<span class="st-badge" style="background:#E5F5EC;color:#177245">1차 승인</span>';
+  if(st==='final') return '<span class="st-badge" style="background:#153E75;color:#fff">최종 승인 ✓</span>';
+  if(st==='fix_fp') return '<span class="st-badge" style="background:#FDEBD3;color:#B4560B">보완 요청</span>';
+  if(st==='fix_mgr') return '<span class="st-badge" style="background:#153E75;color:#fff">🔺 대표 보완</span>';
+  return '';
+}
+var _apprBusy=false;
+function _apprDo(op, targetFp, reason, cb){
+  if(_apprBusy) return;
+  _apprBusy=true;
+  var wi=_statusWi||getStatusWeekInfo(statusWeekOffset);
+  planGasPost({ action:'planApprove', data:{
+    fpCode:currentUser.id, weekKey:wi.key, targetFp:targetFp, op:op, reason:reason||''
+  }}).then(function(res){
+    _apprBusy=false;
+    if(!res || !res.ok){ showToast('⚠️ '+((res&&res.msg)||'처리 실패')); return; }
+    if(cb) cb(res);
+    _renderStatusWeek();
+  }).catch(function(){ _apprBusy=false; showToast('⚠️ 네트워크 오류'); });
+}
+function apprApprove1(fpId, fpName){
+  _apprDo('approve1', fpId, '', function(){ showToast('✅ '+fpName+' 1차 승인'); });
+}
+function apprFinal(fpId, fpName){
+  _apprDo('final', fpId, '', function(){ showToast('✅ '+fpName+' 최종 승인'); });
+}
+function apprFinalAll(){
+  _apprDo('finalAll', '', '', function(res){ showToast('✅ '+(res.count||0)+'건 최종 승인 완료'); });
+}
+var _fixTargetFp='', _fixOp='';
+function openFixModal(op, fpId, fpName, preset){
+  _fixTargetFp=fpId; _fixOp=op;
+  var old=document.getElementById('fixOv'); if(old&&old.parentNode) old.parentNode.removeChild(old);
+  var isRep=(op==='fix_mgr');
+  var ov=document.createElement('div');
+  ov.id='fixOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(20,25,40,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML='<div style="width:100%;max-width:360px;background:#fff;border-radius:14px;padding:18px;font-family:inherit">'
+    +'<div style="font-size:14px;font-weight:800;color:'+(isRep?'#153E75':'#B4560B')+';margin-bottom:10px">'+(isRep?'🔺':'🔶')+' 보완 요청 — '+fpName+'</div>'
+    +'<textarea id="fixReasonTa" style="width:100%;height:80px;border:1px solid #DDE3EC;border-radius:9px;padding:9px;font-size:13px;resize:none;font-family:inherit" placeholder="보완이 필요한 내용을 적어주세요 (필수)">'+(preset||'')+'</textarea>'
+    +(isRep?'<div style="font-size:11.5px;color:#8B93A5;margin-top:6px">→ 해당 지점장에게 전달됩니다. 지점장이 확인 후 FP에게 보완 요청을 내립니다.</div>':'<div style="font-size:11.5px;color:#8B93A5;margin-top:6px">→ FP에게 사유와 함께 전달되고, 수정 후 재제출하면 다시 검토 대기로 올라옵니다.</div>')
+    +'<div style="display:flex;gap:8px;margin-top:12px">'
+    +'<button type="button" id="fixCancel" style="flex:1;padding:11px;border:1px solid #DDE3EC;border-radius:9px;background:#fff;color:#6B7280;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">취소</button>'
+    +'<button type="button" id="fixSend" style="flex:2;padding:11px;border:none;border-radius:9px;background:'+(isRep?'#153E75':'#B4560B')+';color:#fff;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">'+(isRep?'지점장에게 전달':'보완 요청 보내기')+'</button>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  document.getElementById('fixCancel').addEventListener('click', function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); });
+  document.getElementById('fixSend').addEventListener('click', function(){
+    var rs=(document.getElementById('fixReasonTa').value||'').trim();
+    if(!rs){ showToast('⚠️ 보완 사유를 입력해주세요'); return; }
+    if(ov.parentNode) ov.parentNode.removeChild(ov);
+    _apprDo(_fixOp, _fixTargetFp, rs, function(){ showToast(isRep?'🔺 지점장에게 전달했습니다':'🔶 보완 요청을 보냈습니다'); });
+  });
+}
 function renderStatus(){
   var wi=_statusWi||getStatusWeekInfo(statusWeekOffset);
   var db=getPlanDB();
@@ -2267,12 +2378,29 @@ function renderStatus(){
     if(_stBranch==='all') return true;
     return _pBranchKey(fp.branch)===_stBranch;
   });
-  var done=0;
-  scoped.forEach(function(fp){ var r=weekRec[fp.id]; if(r && r.submittedAt) done++; });
+  var done=0, fixCnt=0, appr1Cnt=0;
+  scoped.forEach(function(fp){
+    var r=weekRec[fp.id];
+    var st=_apprStatus(r);
+    if(!st) return;
+    if(st==='fix_fp'||st==='fix_mgr'){ fixCnt++; }
+    else { done++; if(st==='approved1') appr1Cnt++; }
+  });
   var total=scoped.length;
   document.getElementById('stDone').textContent=done;
-  document.getElementById('stUndone').textContent=(total-done);
+  var _fx=document.getElementById('stFix'); if(_fx) _fx.textContent=fixCnt;
+  document.getElementById('stUndone').textContent=(total-done-fixCnt);
   document.getElementById('stRate').textContent=total>0?Math.round(done/total*100)+'%':'0%';
+  var _role=_apprRole();
+  var _faWrap=document.getElementById('stFinalAllWrap');
+  if(_faWrap){
+    if(_role==='rep' && appr1Cnt>0){
+      _faWrap.style.display='';
+      var _faBtn=document.getElementById('stFinalAllBtn');
+      _faBtn.textContent='✓ 전체 최종 승인 ('+appr1Cnt+')';
+      _faBtn.onclick=function(){ apprFinalAll(); };
+    } else { _faWrap.style.display='none'; }
+  }
 
   // 정렬: 미제출 먼저? -> 제출자 먼저(요약 보기), 미제출 아래
   scoped.sort(function(a,b){
@@ -2293,10 +2421,31 @@ function renderStatus(){
       var metaBits=[bLabel, '고객 '+s.n+'명'];
       if(s.pt) metaBits.push('PT '+s.pt);
       if(s.chung) metaBits.push('청약 '+s.chung);
-      var _doneCls = bk==='al' ? 'st-badge done-al' : bk==='br' ? 'st-badge done-br' : 'st-badge done';
-      h+='<div class="st-row">'+
-        '<div class="st-row-l"><span class="'+_doneCls+'">제출</span><span class="st-name">'+fp.name+'</span><span class="st-meta">'+metaBits.join(' · ')+'</span></div>'+
-        '<button type="button" class="st-view" data-stview="'+fp.id+'">보기</button>'+
+      var st=_apprStatus(rec);
+      var lg=rec.apprLog||{};
+      if(st==='fix_fp' && lg.fixReason){ metaBits.push('"'+String(lg.fixReason).slice(0,20)+(String(lg.fixReason).length>20?'…':'')+'"'); }
+      if(st==='fix_mgr' && lg.repReason){ metaBits.push('대표: "'+String(lg.repReason).slice(0,18)+(String(lg.repReason).length>18?'…':'')+'"'); }
+      if(st==='approved1' && lg.by1Name){ metaBits.push(lg.by1Name+' 승인'); }
+      var _nm=fp.name.replace(/'/g,'');
+      var btns='<button type="button" class="st-view" data-stview="'+fp.id+'">보기</button>';
+      if(_role==='mgr'){
+        if(st==='wait'){
+          btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_fp\',\''+fp.id+'\',\''+_nm+'\')">보완 요청</button>'
+              +'<button type="button" class="st-view" style="background:#177245;color:#fff;border-color:#177245" onclick="apprApprove1(\''+fp.id+'\',\''+_nm+'\')">승인</button>';
+        } else if(st==='fix_mgr'){
+          var pre=(lg.repReason||'').replace(/'/g,'').replace(/"/g,'');
+          btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_fp\',\''+fp.id+'\',\''+_nm+'\',\''+pre+'\')">FP에게 보완 요청</button>';
+        }
+      } else if(_role==='rep'){
+        if(st==='approved1'){
+          btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_mgr\',\''+fp.id+'\',\''+_nm+'\')">보완 요청</button>'
+              +'<button type="button" class="st-view" style="background:#153E75;color:#fff;border-color:#153E75" onclick="apprFinal(\''+fp.id+'\',\''+_nm+'\')">최종 승인</button>';
+        }
+      }
+      var rowStyle=(st==='fix_mgr' && _role==='mgr')?' style="border-color:#153E75;background:#F4F7FD"':'';
+      h+='<div class="st-row"'+rowStyle+'>'+
+        '<div class="st-row-l">'+_apprBadge(st)+'<span class="st-name">'+fp.name+'</span><span class="st-meta">'+metaBits.join(' · ')+'</span></div>'+
+        '<div style="display:flex;gap:5px;flex:0 0 auto">'+btns+'</div>'+
       '</div>';
     } else {
       h+='<div class="st-row undone">'+
@@ -2583,7 +2732,8 @@ function _renderStatusWeek(){
         db[wi.key][pl.fpId]={
           fpId:pl.fpId, name:pl.name, branch:pl.branch,
           monthGoal:pl.monthGoal, weekGoal:pl.weekGoal, request:pl.request,
-          customers:pl.customers, updatedAt:pl.updatedAt, submittedAt:pl.submittedAt||null
+          customers:pl.customers, updatedAt:pl.updatedAt, submittedAt:pl.submittedAt||null,
+          approval:pl.approval||'', apprLog:pl.apprLog||{}
         };
       });
       savePlanDB(db);
