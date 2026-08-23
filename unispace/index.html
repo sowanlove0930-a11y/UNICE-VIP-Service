@@ -16256,8 +16256,9 @@ function rc2LoadFromGas(ym, cb) {
   }).catch(function(){ if(cb) cb(false); });
 }
 // 후보자 1건 GAS 저장
-function rc2SaveToGas(rec, ym) {
+function rc2SaveToGas(rec, ym, sendEvents) {
   if (typeof UNISPACE_GAS_URL === 'undefined' || !currentUser || !currentUser.id) return;
+  // sendEvents!==true: omit events param so server keeps existing schedule (stale-cache overwrite guard)
   var u = UNISPACE_GAS_URL + '?action=saveRecruit'
     + '&fp=' + encodeURIComponent(currentUser.id)
     + '&id=' + encodeURIComponent(rec.id)
@@ -16271,7 +16272,7 @@ function rc2SaveToGas(rec, ym) {
     + '&itvDt=' + encodeURIComponent(rec.itvDt||'')
     + '&join=' + encodeURIComponent(rec.join||'')
     + '&status=' + encodeURIComponent(rec.status||'추진중')
-    + '&events=' + encodeURIComponent(JSON.stringify(rec.events||[]))
+    + (sendEvents===true ? ('&events=' + encodeURIComponent(JSON.stringify(rec.events||[]))) : '')
     + '&note=' + encodeURIComponent(rec.note||'')
     + '&phoenix=' + encodeURIComponent(rec.phoenix===true ? 'Y' : 'N')
     + '&phone=' + encodeURIComponent(rec.phone||'')
@@ -16831,7 +16832,7 @@ function rc2PendHideFromList(candId, evtId){
         if(!found && evs.length===1){ evs[0].hideFromPending=true; found=true; }
         d.list[i].events=evs;
         rc2SetMonthData(ym, d);
-        rc2SaveToGas(d.list[i], ym);
+        rc2SaveToGas(d.list[i], ym, true);
         break;
       }
     }
@@ -17974,7 +17975,7 @@ function rc2SaveCand() {
   if(rc2.editId){ for(var i=0;i<d.list.length;i++) if(d.list[i].id===rc2.editId){ d.list[i]=rec; break; } }
   else d.list.push(rec);
   rc2SetMonthData(_saveYm, d);
-  rc2SaveToGas(rec, _saveYm);
+  rc2SaveToGas(rec, _saveYm, true);
   _notifyScheduleAdded(rec, _prevEvtIds);
   rc2CloseAdd();
   rc2RenderList();
@@ -18205,7 +18206,7 @@ function rc2SaveRes(){
   }
   d.list[idx] = it;
   rc2SetMonthData(_ym, d);
-  rc2SaveToGas(it, _ym);
+  rc2SaveToGas(it, _ym, true);
   rc2CloseRes();
   rc2CloseCalDetail();
   rc2RenderList();
@@ -18232,7 +18233,7 @@ function rc2DeleteEvt(){
   }
   d.list[idx]=it;
   rc2SetMonthData(_ym, d);
-  rc2SaveToGas(it, _ym);
+  rc2SaveToGas(it, _ym, true);
   rc2CloseRes();
   rc2CloseCalDetail();
   rc2RenderList();
@@ -18970,7 +18971,7 @@ function rc2ToggleVisitConfirm(candId, evtId){
   target.visitConfirm = !(target.visitConfirm===true);
   it.events = evs;
   rc2SetMonthData(_ym, d);
-  rc2SaveToGas(it, _ym);
+  rc2SaveToGas(it, _ym, true);
   if(rc2.view==='cal') rc2RenderCal();
   rc2RenderList();
   // 모달 유지: 현재 열린 날짜 상세를 다시 그림 (rc2RenderCal이 _evByDayCache 갱신)
@@ -19043,7 +19044,7 @@ function rc2DeleteEvtById(candId, evtId){
   }
   d.list[idx]=it;
   rc2SetMonthData(_ym, d);
-  rc2SaveToGas(it, _ym);
+  rc2SaveToGas(it, _ym, true);
   rc2RenderList();
   if(rc2.view==='cal') rc2RenderCal();
   renderRecruitStat();
@@ -20360,7 +20361,12 @@ function deleteActFromPopup(){
   // 활동현황에서 만든 리쿨 활동(리크루팅 연결) → 일정만/후보자 선택 삭제
   var _aIsRecruit = (String(act.type||'')==='리쿨') || (act.planTags && act.planTags.indexOf && act.planTags.indexOf('리쿨')>=0);
   var _aIsRcsync = String(_currentActId||'').indexOf('rcsync_')===0;
-  if(_aIsRecruit && !_aIsRcsync){
+  if(_aIsRcsync){
+    closeActPopup();
+    showToast('🔗 리크루팅 연동 일정입니다. 리크루팅 탭에서 관리하세요');
+    return;
+  }
+  if(_aIsRecruit){
     _deleteRecruitActChoice(_currentActId, act);
     return;
   }
