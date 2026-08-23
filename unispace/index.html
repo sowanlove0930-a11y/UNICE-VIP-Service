@@ -10241,6 +10241,21 @@ var _sichaekTab = 'active';
 var _sichaekFileData = null;
 var _sichaekAllCache = null;   // status=all 캠페인 전체 캐시
 var _sichaekPastMonth = null;  // 지난 시책 탭에서 보고 있는 월(1~12), null=가장 최근 지난달
+var SICHAEK_CACHE_KEY = 'unispace_sichaek_cache';
+var _sichaekWkSel = {};    // insurer|kind -> selected week (0=monthly, 1..4)
+var _sichaekMenuOpen = ''; // group key with open manage menu
+// resize drive thumbnail url (card=w400, viewer=w1600). non-drive urls pass through
+function _sichaekThumb(url, w){
+  var s = String(url||'');
+  if(s.indexOf('drive.google.com/thumbnail') >= 0){ return s.replace(/sz=w\d+/, 'sz=w'+w); }
+  return s;
+}
+// startWeek("8월 3주차")에서 주차(1~4) 추출. 없으면 0(월간 공통)
+function _sichaekWeekOf(c){
+  var s = String((c && c.startWeek) || '');
+  var m = s.match(/(\d)\s*주/);
+  return m ? parseInt(m[1],10) : 0;
+}
 
 // startWeek("6월 3주차")에서 월(1~12) 추출. 실패 시 0
 function _sichaekMonthOf(c){
@@ -10265,6 +10280,7 @@ function _sichaekWeekOptions(){
       var label = m+'월 '+w+'주차' + ((m===mon && w===wk) ? ' (이번 주)' : '');
       opts += '<option value="'+m+'월 '+w+'주차"'+sel+'>'+label+'</option>';
     }
+    opts += '<option value="'+m+'월 공통">'+m+'월 월간 공통</option>';
   }
   return opts;
 }
@@ -10293,14 +10309,39 @@ function switchSichaekTab(tab){
 
 function loadSichaek(){
   var wrap = document.getElementById('sichaekListWrap');
-  wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">불러오는 중...</div>';
-  // status=all 로 전체 조회 후 월 기준으로 클라이언트 분류
+  // 1) local cache -> instant render (stale-while-revalidate)
+  var hadCache = false;
+  try{
+    var cached = JSON.parse(localStorage.getItem(SICHAEK_CACHE_KEY)||'null');
+    if(cached && cached.campaigns && cached.campaigns.length){
+      _sichaekAllCache = cached.campaigns;
+      _sichaekRenderByMonth(cached.canManage);
+      hadCache = true;
+    }
+  }catch(e){}
+  if(!hadCache){
+    wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">불러오는 중...</div>';
+  }
+  // 2) background refresh from GAS
   var url = UNISPACE_GAS_URL + '?action=getCampaigns&fp=' + encodeURIComponent(currentUser.id) + '&status=all';
   fetch(url).then(function(r){return r.json();}).then(function(res){
-    if(!res || !res.ok){ wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">불러오기 실패</div>'; return; }
-    _sichaekAllCache = res.campaigns || [];
-    _sichaekRenderByMonth(res.canManage);
-  }).catch(function(){ wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">네트워크 오류</div>'; });
+    if(!res || !res.ok){
+      if(!hadCache) wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">불러오기 실패</div>';
+      return;
+    }
+    var fresh = res.campaigns || [];
+    var freshStr = JSON.stringify(fresh);
+    var oldStr = JSON.stringify(_sichaekAllCache||[]);
+    try{ localStorage.setItem(SICHAEK_CACHE_KEY, JSON.stringify({ campaigns:fresh, canManage:res.canManage, at:Date.now() })); }catch(e){}
+    if(!hadCache || freshStr !== oldStr){
+      _sichaekAllCache = fresh;
+      _sichaekRenderByMonth(res.canManage);
+    } else {
+      _sichaekLastCanManage = res.canManage;
+    }
+  }).catch(function(){
+    if(!hadCache) wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">네트워크 오류</div>';
+  });
 }
 
 // 월 기준 분류 렌더
@@ -10361,40 +10402,118 @@ var _sichaekLastCanManage = false;
 var SICHAEK_LIFE_ORDER = ['한화생명','라이나생명','미래에셋','신한라이프','흥국생명','메트라이프'];
 var SICHAEK_NON_ORDER = ['한화손보','현대해상','DB손보','메리츠화재','KB손보','삼성화재'];
 
-function _sichaekCardHtml(c, canManage){
-  var kindColor = c.kind==='생보' ? 'var(--gold2)' : '#60A5FA';
-  var imgs = (c.images && c.images.length) ? c.images : (c.imageUrl ? [c.imageUrl] : []);
+// 회사(insurer|kind)별 그룹핑: 주차(0=월간, 1~4)별 캠페인 버킷
+function _sichaekGroups(list){
+  var map = {}, keys = [];
+  list.forEach(function(c){
+    var k = (c.insurer||'') + '|' + (c.kind||'');
+    if(!map[k]){ map[k] = { key:k, insurer:c.insurer||'', kind:c.kind||'', byWk:{} }; keys.push(k); }
+    var w = _sichaekWeekOf(c);
+    if(!map[k].byWk[w]) map[k].byWk[w] = [];
+    map[k].byWk[w].push(c); // list는 createdAt 내림차순 -> [0]이 최신
+  });
+  return keys.map(function(k){ return map[k]; });
+}
+// 그룹의 기본 선택 주차: 저장된 선택 > 현재 주 > 가장 높은 존재 주 > 월간
+function _sichaekDefaultWk(g){
+  var saved = _sichaekWkSel[g.key];
+  if(saved !== undefined) return saved; // honor tap even on empty week (shows register preset)
+  var curWk = Math.ceil(new Date().getDate()/7); if(curWk>4) curWk=4;
+  if(g.byWk[curWk]) return curWk;
+  for(var w=4; w>=1; w--){ if(g.byWk[w]) return w; }
+  return 0;
+}
+function _sichaekSelWk(gkEnc, w){
+  var gk = decodeURIComponent(gkEnc);
+  _sichaekWkSel[gk] = w;
+  _sichaekMenuOpen = '';
+  _sichaekRenderByMonth(_sichaekLastCanManage);
+}
+function _sichaekToggleMenu(gkEnc){
+  var gk = decodeURIComponent(gkEnc);
+  _sichaekMenuOpen = (_sichaekMenuOpen === gk) ? '' : gk;
+  _sichaekRenderByMonth(_sichaekLastCanManage);
+}
+function _sichaekRegPreset(gkEnc, wk){
+  var gk = decodeURIComponent(gkEnc);
+  _sichaekMenuOpen = '';
+  openSichaekAdd(gk, wk);
+}
+function _sichaekGroupCardHtml(g, canManage){
+  var kindColor = g.kind==='생보' ? 'var(--gold2)' : '#60A5FA';
+  var gkEnc = encodeURIComponent(g.key);
+  var hasWeekly = false;
+  for(var w2=1; w2<=4; w2++){ if(g.byWk[w2]) hasWeekly = true; }
+  var hasMonthly = !!g.byWk[0];
+  var sel = _sichaekDefaultWk(g);
+  var c = (g.byWk[sel] && g.byWk[sel][0]) || null;
+  var imgs = c ? ((c.images && c.images.length) ? c.images : (c.imageUrl ? [c.imageUrl] : [])) : [];
   var cnt = imgs.length;
-  var firstImg = imgs[0] || '';
-  var statusLine = c.status==='active'
-    ? '<span style="color:#1F9268">● 진행 중 · '+(c.startWeek||'')+'~'+(cnt>1?' · '+cnt+'장':'')+'</span>'
-    : '<span style="color:var(--text3)">종료됨 · '+(c.startWeek||'')+(cnt>1?' · '+cnt+'장':'')+'</span>';
-  var badge = cnt>1 ? '<span style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px">📑 1/'+cnt+'</span>' : '';
-  var imgsAttr = encodeURIComponent(JSON.stringify(imgs));
-  var h = '<div class="sichaek-card">'+
-    '<div style="position:relative">'+
-      '<img class="sichaek-card-img" src="'+firstImg+'" alt="'+c.insurer+'" onclick="openSichaekImgs(\''+imgsAttr+'\',\''+c.id+'\','+(canManage?'true':'false')+')" onerror="this.style.opacity=0.3">'+
-      badge+
-    '</div>'+
-    '<div style="padding:9px 11px">'+
-      '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">'+
-        '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(c.kind||'')+'</span>'+
-        '<span style="font-size:13px;font-weight:700">'+c.insurer+'</span>'+
-      '</div>'+
-      '<div style="font-size:10.5px">'+statusLine+'</div>';
-  if(canManage){
-    h += '<div style="display:flex;gap:5px;margin-top:8px">';
-    if(c.status==='active'){
-      h += '<button type="button" onclick="addSichaekImage(\''+c.id+'\',\''+c.insurer+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#1F9268;cursor:pointer;white-space:nowrap">＋장 추가</button>';
-      h += '<button type="button" onclick="openSichaekReplace(\''+c.id+'\',\''+c.insurer+'\',\''+(c.kind||'')+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:var(--gold2);cursor:pointer;white-space:nowrap">교체</button>';
-      h += '<button type="button" onclick="endSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer;white-space:nowrap">종료</button>';
-    } else {
-      h += '<button type="button" onclick="reactivateSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#1F9268;cursor:pointer;white-space:nowrap">되돌리기</button>';
-      h += '<button type="button" onclick="deleteSichaek(\''+c.id+'\')" style="flex:1;font-size:11px;padding:5px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg2);color:#C0392B;cursor:pointer;white-space:nowrap">삭제</button>';
-    }
-    h += '</div>';
+  var badge = cnt>1 ? '<span style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px">\uD83D\uDCD1 1/'+cnt+'</span>' : '';
+  var selLabel = sel===0 ? '월간 공통' : (sel+'주차');
+  // 이미지 영역
+  var imgArea;
+  if(c && imgs.length){
+    var imgsAttr = encodeURIComponent(JSON.stringify(imgs));
+    imgArea = '<img class="sichaek-card-img" loading="lazy" decoding="async" src="'+_sichaekThumb(imgs[0],400)+'" alt="'+g.insurer+'" onclick="openSichaekImgs(\''+imgsAttr+'\',\''+c.id+'\','+(canManage?'true':'false')+')" onerror="this.style.opacity=0.3">';
+  } else {
+    imgArea = '<div class="sichaek-card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px">'+g.insurer+' · '+selLabel+' 시책 없음</div>';
   }
-  h += '</div></div>';
+  // 관리 ⋯ 메뉴
+  var menuBtn = '', menuBox = '';
+  if(canManage){
+    menuBtn = '<button type="button" onclick="event.stopPropagation();_sichaekToggleMenu(\''+gkEnc+'\')" style="position:absolute;top:6px;left:6px;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.92);border:1px solid var(--bdr2);color:var(--text2);font-size:15px;font-weight:800;cursor:pointer;line-height:1">⋯</button>';
+    if(_sichaekMenuOpen === g.key){
+      var mi = '';
+      function _miItem(label, js, color){
+        return '<div onclick="event.stopPropagation();'+js+'" style="font-size:12px;font-weight:700;padding:9px 12px;color:'+(color||'var(--text1)')+';border-bottom:1px solid var(--bdr);cursor:pointer;white-space:nowrap">'+label+'</div>';
+      }
+      if(_sichaekTab === 'active'){
+        if(c){
+          mi += _miItem('＋ 장 추가', "_sichaekMenuOpen='';addSichaekImage('"+c.id+"','"+g.insurer+"')", '#1F9268');
+          mi += _miItem('↺ 교체', "_sichaekMenuOpen='';openSichaekReplace('"+c.id+"','"+g.insurer+"','"+g.kind+"')", 'var(--gold2)');
+          mi += _miItem('종료', "_sichaekMenuOpen='';endSichaek('"+c.id+"')", '#C0392B');
+        } else {
+          mi += _miItem('＋ '+selLabel+' 시책 등록', "_sichaekRegPreset('"+gkEnc+"',"+sel+")", '#1F9268');
+        }
+      } else {
+        if(c){
+          mi += _miItem('되돌리기', "_sichaekMenuOpen='';reactivateSichaek('"+c.id+"')", '#1F9268');
+          mi += _miItem('삭제', "_sichaekMenuOpen='';deleteSichaek('"+c.id+"')", '#C0392B');
+        }
+      }
+      if(mi){
+        menuBox = '<div style="position:absolute;top:36px;left:6px;background:var(--bg2);border:1px solid var(--bdr2);border-radius:10px;box-shadow:0 6px 16px rgba(0,0,0,.22);overflow:hidden;z-index:6;min-width:118px">'+mi+'</div>';
+      }
+    }
+  }
+  // 주차 탭
+  var tabs = '';
+  function _wkTab(w, label, flexN){
+    var has = !!g.byWk[w];
+    var on = (w===sel);
+    var st = 'flex:'+(flexN||1)+';text-align:center;font-size:11px;font-weight:700;padding:5px 0;border-radius:7px;cursor:pointer;'
+      + (on ? 'background:var(--gold);color:#fff;' : 'background:var(--surface);color:var(--text3);')
+      + (has ? '' : 'opacity:.4;');
+    return '<span onclick="event.stopPropagation();_sichaekSelWk(\''+gkEnc+'\','+w+')" style="'+st+'">'+label+'</span>';
+  }
+  if(hasWeekly){
+    for(var w3=1; w3<=4; w3++){ tabs += _wkTab(w3, w3+'주'); }
+    if(hasMonthly){ tabs += _wkTab(0, '월간'); }
+  } else {
+    tabs += _wkTab(0, '월간 공통', 2);
+  }
+  var h = '<div class="sichaek-card" style="cursor:default">'+
+    '<div style="position:relative">'+imgArea+badge+menuBtn+menuBox+'</div>'+
+    '<div style="padding:9px 11px">'+
+      '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
+        '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(g.kind||'')+'</span>'+
+        '<span style="font-size:13px;font-weight:700">'+g.insurer+'</span>'+
+        (cnt>1?'<span style="font-size:10px;color:var(--text3)">· '+cnt+'장</span>':'')+
+      '</div>'+
+      '<div style="display:flex;gap:4px">'+tabs+'</div>'+
+    '</div>'+
+  '</div>';
   return h;
 }
 
@@ -10417,28 +10536,25 @@ function renderSichaekList(list, canManage){
     wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">'+msg+'</div>';
     return;
   }
-  // 지난 시책: 최신순 그대로
-  if(_sichaekTab !== 'active'){
-    var allCards = list.map(function(c){ return _sichaekCardHtml(c, canManage); });
-    wrap.innerHTML = _sichaekGrid(allCards);
-    return;
-  }
-  // 진행 중: 생보 구역 / 손보 구역으로 나눠 지정 순서대로
-  var lifeArr = _sichaekSortByOrder(list.filter(function(c){ return c.kind==='생보'; }), SICHAEK_LIFE_ORDER);
-  var nonArr = _sichaekSortByOrder(list.filter(function(c){ return c.kind==='손보'; }), SICHAEK_NON_ORDER);
-  var etcArr = list.filter(function(c){ return c.kind!=='생보' && c.kind!=='손보'; });
+  var groups = _sichaekGroups(list);
+  var lifeArr = _sichaekSortByOrder(groups.filter(function(g){ return g.kind==='생보'; }), SICHAEK_LIFE_ORDER);
+  var nonArr = _sichaekSortByOrder(groups.filter(function(g){ return g.kind==='손보'; }), SICHAEK_NON_ORDER);
+  var etcArr = groups.filter(function(g){ return g.kind!=='생보' && g.kind!=='손보'; });
   var h = '';
   if(lifeArr.length){
-    h += '<div style="font-size:12px;font-weight:700;color:var(--gold2);margin:4px 4px 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr2)">🛡️ 생명보험</div>';
-    h += _sichaekGrid(lifeArr.map(function(c){ return _sichaekCardHtml(c, canManage); }));
+    h += '<div style="font-size:12px;font-weight:700;color:var(--gold2);margin:4px 4px 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr2)">\uD83D\uDEE1\uFE0F 생명보험</div>';
+    h += _sichaekGrid(lifeArr.map(function(g){ return _sichaekGroupCardHtml(g, canManage); }));
   }
   if(nonArr.length){
-    h += '<div style="font-size:12px;font-weight:700;color:#60A5FA;margin:18px 4px 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr2)">☂️ 손해보험</div>';
-    h += _sichaekGrid(nonArr.map(function(c){ return _sichaekCardHtml(c, canManage); }));
+    h += '<div style="font-size:12px;font-weight:700;color:#60A5FA;margin:18px 4px 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr2)">\u2602\uFE0F 손해보험</div>';
+    h += _sichaekGrid(nonArr.map(function(g){ return _sichaekGroupCardHtml(g, canManage); }));
   }
   if(etcArr.length){
     h += '<div style="font-size:12px;font-weight:700;color:var(--text3);margin:18px 4px 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr2)">기타</div>';
-    h += _sichaekGrid(etcArr.map(function(c){ return _sichaekCardHtml(c, canManage); }));
+    h += _sichaekGrid(etcArr.map(function(g){ return _sichaekGroupCardHtml(g, canManage); }));
+  }
+  if(_sichaekTab === 'active'){
+    h += '<div style="font-size:11px;color:var(--text3);text-align:center;padding:14px 8px 6px">\uD83D\uDCC5 달이 바뀌면 이번 달 시책은 자동으로 "지난 시책"으로 이동합니다</div>';
   }
   wrap.innerHTML = h;
 }
@@ -10482,7 +10598,7 @@ function _applySichaekTransform(){
 }
 function _renderSichaekView(){
   var img = document.getElementById('sichaekBigImg');
-  img.src = _sichaekViewImgs[_sichaekViewIdx] || '';
+  img.src = _sichaekThumb(_sichaekViewImgs[_sichaekViewIdx] || '', 1600);
   _applySichaekTransform();
   var nav = document.getElementById('sichaekViewNav');
   if(nav){
@@ -11254,57 +11370,167 @@ function _docPromptLink(onOk){
   if (y) y.addEventListener('click', _submit);
   if (n) n.addEventListener('click', _docCloseDlg);
 }
-function openSichaekAdd(){
-  document.getElementById('sichaekWeek').innerHTML = _sichaekWeekOptions();
-  _sichaekFileData = null;
-  var prev = document.getElementById('sichaekPreview');
-  prev.style.display = 'none'; prev.src = '';
+var _sichaekFiles = [];    // [{data,mime,name}] multi-upload queue
+var _sichaekWeekVal = '';  // selected week value e.g. "8월 3주차" / "8월 공통"
+function _sichaekBuildWeekChips(presetWeek){
+  var n = new Date();
+  var mon = n.getMonth()+1;
+  var curWk = Math.ceil(n.getDate()/7); if(curWk>4) curWk=4;
+  var vals = [];
+  for(var w=1; w<=4; w++){ vals.push({ v:mon+'월 '+w+'주차', l:w+'주' }); }
+  vals.push({ v:mon+'월 공통', l:'월간 공통' });
+  if(presetWeek === 0){ _sichaekWeekVal = mon+'월 공통'; }
+  else if(presetWeek >= 1 && presetWeek <= 4){ _sichaekWeekVal = mon+'월 '+presetWeek+'주차'; }
+  else { _sichaekWeekVal = mon+'월 '+curWk+'주차'; }
+  _sichaekRenderWeekChips(vals);
+}
+function _sichaekRenderWeekChips(vals){
+  var box = document.getElementById('sichaekWeekChips');
+  if(!box) return;
+  var h = '';
+  for(var i=0;i<vals.length;i++){
+    var on = (vals[i].v === _sichaekWeekVal);
+    h += '<span onclick="_sichaekPickWeek(this.getAttribute(\'data-wv\'))" data-wv="'+vals[i].v+'" style="flex:'+(i===4?'1.6':'1')+';text-align:center;font-size:12px;font-weight:700;padding:8px 0;border-radius:8px;cursor:pointer;border:1px solid '+(on?'var(--gold)':'var(--bdr2)')+';'+(on?'background:var(--gold);color:#fff':'background:var(--bg2);color:var(--text2)')+'">'+vals[i].l+'</span>';
+  }
+  box.innerHTML = h;
+  box._vals = vals;
+}
+function _sichaekPickWeek(v){
+  _sichaekWeekVal = v;
+  var box = document.getElementById('sichaekWeekChips');
+  if(box && box._vals) _sichaekRenderWeekChips(box._vals);
+}
+function _sichaekRenderPrevGrid(){
+  var grid = document.getElementById('sichaekPrevGrid');
+  var drop = document.getElementById('sichaekDrop');
+  var dropTxt = document.getElementById('sichaekDropTxt');
+  if(!grid) return;
+  if(!_sichaekFiles.length){
+    grid.style.display = 'none'; grid.innerHTML = '';
+    if(dropTxt) dropTxt.textContent = '사진 선택 또는 촬영 (여러 장 가능)';
+    return;
+  }
+  var h = '';
+  for(var i=0;i<_sichaekFiles.length;i++){
+    h += '<div style="position:relative">'
+      + '<img src="'+_sichaekFiles[i].data+'" style="width:100%;height:84px;object-fit:cover;border-radius:8px;display:block" alt="장표'+(i+1)+'">'
+      + '<span onclick="_sichaekRemoveFile('+i+')" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#C0392B;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid var(--bg2)">✕</span>'
+      + '</div>';
+  }
+  grid.innerHTML = h;
+  grid.style.display = 'grid';
+  if(dropTxt) dropTxt.textContent = '＋ 더 추가';
+  if(drop) drop.style.display = '';
+}
+function _sichaekRemoveFile(i){
+  _sichaekFiles.splice(i,1);
+  _sichaekRenderPrevGrid();
+  _sichaekUpdateSubmitLabel();
+}
+function _sichaekUpdateSubmitLabel(){
+  var btn = document.getElementById('sichaekSubmitBtn');
+  if(!btn || btn.disabled) return;
+  btn.textContent = _sichaekFiles.length>1 ? ('등록하기 ('+_sichaekFiles.length+'장)') : '등록하기';
+}
+function openSichaekAdd(presetGk, presetWk){
+  _sichaekFiles = [];
+  var inp = document.getElementById('sichaekFile');
+  if(inp) inp.value = '';
+  _sichaekBuildWeekChips(presetWk);
+  if(presetGk){
+    var sel = document.getElementById('sichaekInsurer');
+    if(sel){
+      for(var i=0;i<sel.options.length;i++){
+        if(sel.options[i].value === presetGk){ sel.selectedIndex = i; break; }
+      }
+    }
+  }
+  _sichaekRenderPrevGrid();
+  var btn = document.getElementById('sichaekSubmitBtn');
+  if(btn){ btn.disabled = false; btn.textContent = '등록하기'; }
   document.getElementById('sichaekDrop').style.display = '';
   document.getElementById('sichaekAddOverlay').classList.add('open');
 }
 function closeSichaekAdd(){ document.getElementById('sichaekAddOverlay').classList.remove('open'); }
 
 function _sichaekFileChange(e){
-  var f = e.target.files && e.target.files[0];
-  if(!f) return;
-  var reader = new FileReader();
-  reader.onload = function(ev){
-    _sichaekFileData = { data: ev.target.result, mime: f.type };
-    var prev = document.getElementById('sichaekPreview');
-    prev.src = ev.target.result; prev.style.display = 'block';
-    document.getElementById('sichaekDrop').style.display = 'none';
-  };
-  reader.readAsDataURL(f);
+  var fl = e.target.files;
+  if(!fl || !fl.length) return;
+  var remain = fl.length;
+  for(var i=0;i<fl.length;i++){
+    (function(f){
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        _sichaekFiles.push({ data: ev.target.result, mime: f.type, name: f.name||'' });
+        remain--;
+        if(remain<=0){ _sichaekRenderPrevGrid(); _sichaekUpdateSubmitLabel(); }
+      };
+      reader.readAsDataURL(f);
+    })(fl[i]);
+  }
+  e.target.value = '';
 }
 
 function submitSichaek(){
-  if(!_sichaekFileData){ showToast('⚠️ 시상 이미지를 선택하세요'); return; }
+  if(!_sichaekFiles.length){ showToast('⚠️ 시상 이미지를 선택하세요'); return; }
   var iv = document.getElementById('sichaekInsurer').value;
   var parts = iv.split('|');
   var insurer = parts[0];
   var kind = parts[1] || '';
-  var week = document.getElementById('sichaekWeek').value;
+  var week = _sichaekWeekVal || '';
   var btn = document.getElementById('sichaekSubmitBtn');
-  btn.disabled = true; btn.textContent = '등록 중...';
+  var total = _sichaekFiles.length;
+  btn.disabled = true; btn.textContent = '등록 중... (1/'+total+')';
+  function _fail(msg){
+    btn.disabled = false; _sichaekUpdateSubmitLabel();
+    showToast('⚠️ ' + (msg||'등록 실패'));
+  }
+  function _done(){
+    btn.disabled = false;
+    showToast('✅ 시책이 등록되었습니다' + (total>1 ? ' ('+total+'장)' : ''));
+    closeSichaekAdd();
+    _sichaekTab = 'active';
+    document.getElementById('sichaekTabActive').classList.add('sichaek-tab-on');
+    document.getElementById('sichaekTabEnded').classList.remove('sichaek-tab-on');
+    loadSichaek();
+  }
+  // 1장째: 캔페인 생성 -> 나머지: 장표 추가 순차 업로드
   fetch(UNISPACE_GAS_URL, {
     method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
     body: JSON.stringify({ action:'saveCampaign', data:{
       fpCode: currentUser.id, insurer: insurer, kind: kind, startWeek: week,
-      photoBase64: _sichaekFileData.data, mimeType: _sichaekFileData.mime
+      photoBase64: _sichaekFiles[0].data, mimeType: _sichaekFiles[0].mime
     }})
   }).then(function(r){return r.json();}).then(function(res){
-    btn.disabled = false; btn.textContent = '등록하기';
-    if(res && res.ok){
-      showToast('✅ 시책이 등록되었습니다');
-      closeSichaekAdd();
-      _sichaekTab = 'active';
-      document.getElementById('sichaekTabActive').classList.add('sichaek-tab-on');
-      document.getElementById('sichaekTabEnded').classList.remove('sichaek-tab-on');
-      loadSichaek();
-    } else {
-      showToast('⚠️ ' + ((res&&res.msg)||'등록 실패'));
+    if(!res || !res.ok){ _fail(res&&res.msg); return; }
+    var campId = res.id;
+    var idx = 1;
+    function _next(){
+      if(idx >= total){ _done(); return; }
+      btn.textContent = '등록 중... ('+(idx+1)+'/'+total+')';
+      fetch(UNISPACE_GAS_URL, {
+        method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action:'addCampaignImage', data:{
+          fpCode: currentUser.id, id: campId,
+          photoBase64: _sichaekFiles[idx].data, mimeType: _sichaekFiles[idx].mime
+        }})
+      }).then(function(r2){return r2.json();}).then(function(res2){
+        if(!res2 || !res2.ok){
+          btn.disabled = false; _sichaekUpdateSubmitLabel();
+          showToast('⚠️ '+(idx)+'장까지만 등록됨 · 나머지는 카드 메뉴에서 추가하세요');
+          closeSichaekAdd(); loadSichaek();
+          return;
+        }
+        idx++;
+        _next();
+      }).catch(function(){
+        btn.disabled = false; _sichaekUpdateSubmitLabel();
+        showToast('⚠️ 네트워크 오류 · '+(idx)+'장까지 등록됨');
+        closeSichaekAdd(); loadSichaek();
+      });
     }
-  }).catch(function(){ btn.disabled=false; btn.textContent='등록하기'; showToast('⚠️ 네트워크 오류'); });
+    _next();
+  }).catch(function(){ _fail('네트워크 오류'); });
 }
 
 // 커스텀 확인창
@@ -22554,17 +22780,17 @@ function doCheckin() { doSmartCheckin(); }
         </select>
       </div>
       <div style="margin-bottom:12px">
-        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">시작 주차</div>
-        <select id="sichaekWeek" style="width:100%;padding:9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text1);font-size:14px"></select>
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">적용 주차</div>
+        <div id="sichaekWeekChips" style="display:flex;gap:5px"></div>
       </div>
       <div style="margin-bottom:14px">
-        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">시상 이미지</div>
-        <input type="file" id="sichaekFile" accept="image/*" style="display:none">
-        <div id="sichaekDrop" onclick="document.getElementById('sichaekFile').click()" style="border:1px dashed var(--bdr2);border-radius:8px;padding:22px;text-align:center;color:var(--text3);cursor:pointer">
-          <div style="font-size:24px">📤</div>
-          <div style="font-size:13px;margin-top:5px">사진 선택 또는 촬영</div>
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">시상 이미지 <span style="font-weight:400;color:var(--text3)">(여러 장 선택 가능)</span></div>
+        <input type="file" id="sichaekFile" accept="image/*" multiple style="display:none">
+        <div id="sichaekPrevGrid" style="display:none;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px"></div>
+        <div id="sichaekDrop" onclick="document.getElementById('sichaekFile').click()" style="border:1px dashed var(--bdr2);border-radius:8px;padding:16px;text-align:center;color:var(--text3);cursor:pointer">
+          <div style="font-size:22px">📤</div>
+          <div id="sichaekDropTxt" style="font-size:13px;margin-top:4px">사진 선택 또는 촬영 (여러 장 가능)</div>
         </div>
-        <img id="sichaekPreview" style="display:none;width:100%;border-radius:8px;margin-top:8px" alt="미리보기">
       </div>
       <button type="button" id="sichaekSubmitBtn" onclick="submitSichaek()" style="width:100%;padding:11px;border:none;border-radius:8px;background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer">등록하기</button>
     </div>
