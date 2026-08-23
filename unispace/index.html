@@ -6116,7 +6116,8 @@ function showDashboard() {
             var er = document.getElementById('st1-rate');
             if(er){
               var _mGoalMan = 0;
-              try { var _gdb = getFpGoalDB()[getCurrentYM()] || {}; var _gg = _gdb[currentUser.id]; if(_gg) _mGoalMan = parseInt(_gg.goal) || 0; } catch(e) {}
+              try { _mGoalMan = _adjGoalMan(currentUser.id, getCurrentYM()); } catch(e) {}
+              if(!_mGoalMan){ try { var _gdb = getFpGoalDB()[getCurrentYM()] || {}; var _gg = _gdb[currentUser.id]; if(_gg) _mGoalMan = parseInt(_gg.goal) || 0; } catch(e) {} }
               var _mGoalWon = _mGoalMan * 10000;
               if(_mGoalWon > 0){ er.innerHTML = '<span style="font-size:13px;font-weight:800;color:var(--gold2)">'+Math.round((res.myAmt||0)/_mGoalWon*100)+'%</span>'; }
               else { er.textContent = ''; }
@@ -6189,11 +6190,12 @@ function showDashboard() {
           var er = document.getElementById('st1-rate');
           if(er){
             var _myGoalMan = 0;
-            try {
+            try { _myGoalMan = _adjGoalMan(currentUser.id, getCurrentYM()); } catch(e) {}
+            if(!_myGoalMan){ try {
               var _gdb = getFpGoalDB()[getCurrentYM()] || {};
               var _gg = _gdb[currentUser.id];
               if(_gg) _myGoalMan = parseInt(_gg.goal) || 0;
-            } catch(e) {}
+            } catch(e) {} }
             var _myGoalWon = _myGoalMan * 10000;
             if(_myGoalWon > 0){
               var _myRate = Math.round((res.myAmt||0) / _myGoalWon * 100);
@@ -10106,6 +10108,16 @@ function saveFpGoalDB(db){ localStorage.setItem(FP_GOAL_KEY, JSON.stringify(db))
 var GOAL_ADJ_KEY = 'unispace_goal_adjust';
 function getGoalAdjDB(){ try{ return JSON.parse(localStorage.getItem(GOAL_ADJ_KEY)||'{}'); }catch(e){ return {}; } }
 function saveGoalAdjDB(db){ localStorage.setItem(GOAL_ADJ_KEY, JSON.stringify(db)); }
+// admin goal-adjust total for fp+ym in 10k-won; 0 if not set. Highest priority everywhere.
+function _adjGoalMan(fpId, ym){
+  try{
+    var db=getGoalAdjDB();
+    var rec=db[ym] && db[ym].fp && db[ym].fp[fpId];
+    if(!rec) return 0;
+    var t=(parseInt(rec.life)||0)+(parseInt(rec.non)||0);
+    return t>0 ? Math.round(t/10000) : 0;
+  }catch(e){ return 0; }
+}
 // 지점 월 목표(만원) 읽기 - GAS 연동된 goal_adjust 기준 (전체 공유)
 // goal_adjust의 지점 목표 입력칸은 '원 단위' -> 만원으로 변환
 // 반환: { alpha:만원, bravo:만원 } (월 생보+손보 합)
@@ -12011,8 +12023,9 @@ function renderFpPerf(){
   var byFp={};
   fpList.forEach(function(fp){
     var g=goalDB[fp.id]||{};
-    var _goalMan=parseInt(g.goal);
-    // fallback to FP activity-plan month goal (auto unit) when no admin goal set
+    // priority: goal-adjust tab (final authority) > FP-goal modal > FP activity-plan month goal
+    var _goalMan=_adjGoalMan(fp.id, _fpSelYm());
+    if(_goalMan<=0){ _goalMan=parseInt(g.goal); }
     if(isNaN(_goalMan)||_goalMan<=0){
       _goalMan=_fpPlanGoalMan(fp.id);
     }
@@ -12293,7 +12306,8 @@ function renderFpGoalList(){
     var bk=_pvBranchKey(fp.branch);
     var chip = bk==='al'?'<span class="pv-bchip al">알</span>':'<span class="pv-bchip br">브</span>';
     var _planMan=_fpPlanGoalMan(fp.id);
-    var _ph = _planMan>0 ? ('계획 '+_planMan) : '목표(만)';
+    var _adjMan=_adjGoalMan(fp.id, _fpYm());
+    var _ph = _adjMan>0 ? ('조정 '+_adjMan) : (_planMan>0 ? ('계획 '+_planMan) : '목표(만)');
     h+='<div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--bdr)">'+
       '<div style="flex:1;font-size:13px;font-weight:700">'+chip+fp.name+'</div>'+
       '<input type="number" id="fpg_'+fp.id+'" placeholder="'+_ph+'" value="'+(g.goal||'')+'" style="width:80px;padding:6px 8px;background:var(--surface);border:1px solid var(--bdr2);border-radius:8px;color:var(--text);font-size:12px;font-family:\'Noto Sans KR\',sans-serif">'+
@@ -12508,8 +12522,12 @@ function exportFpDailyReport(){
       if(typeof loadTeamsFromGas==='function'){ loadTeamsFromGas(function(){ _build(); }); }
       else { _build(); }
     }
-    if(typeof loadPlansFromGas==='function'){ loadPlansFromGas(null, function(){ _afterPlans(); }); }
-    else { _afterPlans(); }
+    function _afterAdj(){
+      if(typeof loadPlansFromGas==='function'){ loadPlansFromGas(null, function(){ _afterPlans(); }); }
+      else { _afterPlans(); }
+    }
+    if(typeof loadGoalAdjFromGas==='function'){ loadGoalAdjFromGas(function(){ _afterAdj(); }); }
+    else { _afterAdj(); }
   }
   _go();
 }
@@ -12521,8 +12539,9 @@ function _fpAllRows(){
   var byFp={};
   fpList.forEach(function(fp){
     var g=goalDB[fp.id]||{};
-    var _goalMan=parseInt(g.goal);
-    // priority: admin goal-adjust value first; fallback to FP activity-plan month goal (auto unit)
+    // priority: goal-adjust tab (final authority) > FP-goal modal > FP activity-plan month goal
+    var _goalMan=_adjGoalMan(fp.id, _fpSelYm());
+    if(_goalMan<=0){ _goalMan=parseInt(g.goal); }
     if(isNaN(_goalMan)||_goalMan<=0){
       _goalMan=_fpPlanGoalMan(fp.id);
     }

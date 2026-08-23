@@ -1834,15 +1834,28 @@ function _fillExistingFromDb(){
   var wi=effectiveWeekInfo();
   var db=getPlanDB();
   var rec = db[wi.key] && db[wi.key][currentUser.id];
-  // month goal fill priority: admin adjust > this-week saved > inherit earlier week
+  // month goal fill priority: admin adjust (final, locked) > this-week saved > inherit earlier week
   var mgFill=null;
   var adminMg=getAdminMonthGoal(currentUser.id, wi);
   if(adminMg){ mgFill=adminMg; }
   else if(rec && rec.monthGoal && (rec.monthGoal.life||rec.monthGoal.non)){ mgFill={ life:rec.monthGoal.life, non:rec.monthGoal.non }; }
   else { mgFill=getInheritedMonthGoal(currentUser.id, wi); }
-  if(mgFill){
-    var mL=document.getElementById('mGoalLife'); if(mL && !mL.value) mL.value=fmtComma(mgFill.life);
-    var mN=document.getElementById('mGoalNon'); if(mN && !mN.value) mN.value=fmtComma(mgFill.non);
+  var mL=document.getElementById('mGoalLife');
+  var mN=document.getElementById('mGoalNon');
+  if(adminMg){
+    // branch-head adjusted goal is the final value: overwrite and lock inputs
+    if(mL){ mL.value=fmtComma(adminMg.life); mL.readOnly=true; mL.style.background='#F4EFE3'; mL.style.color='#8A6D1F'; mL.title='지점장 조정 목표 (수정 불가)'; }
+    if(mN){ mN.value=fmtComma(adminMg.non); mN.readOnly=true; mN.style.background='#F4EFE3'; mN.style.color='#8A6D1F'; mN.title='지점장 조정 목표 (수정 불가)'; }
+    if(!document.getElementById('adjGoalHint') && mL && mL.parentNode){
+      var _h=document.createElement('div');
+      _h.id='adjGoalHint';
+      _h.style.cssText='font-size:11px;color:#8A6D1F;font-weight:700;margin-top:3px';
+      _h.textContent='🔒 지점장이 조정한 월 목표가 적용되었습니다';
+      mL.parentNode.appendChild(_h);
+    }
+  } else if(mgFill){
+    if(mL && !mL.value) mL.value=fmtComma(mgFill.life);
+    if(mN && !mN.value) mN.value=fmtComma(mgFill.non);
   }
   if(rec){
     if(rec.weekGoal){ document.getElementById('wGoalLife').value=fmtComma(rec.weekGoal.life); document.getElementById('wGoalNon').value=fmtComma(rec.weekGoal.non); }
