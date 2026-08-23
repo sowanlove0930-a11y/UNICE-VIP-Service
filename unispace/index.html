@@ -12511,12 +12511,7 @@ function exportFpDailyReport(){
     if(typeof loadPlansFromGas==='function'){ loadPlansFromGas(null, function(){ _afterPlans(); }); }
     else { _afterPlans(); }
   }
-  // ensure dashboard TOP5 (rank badges) loaded first
-  if(typeof loadDashboardBundle==='function' && (typeof _dashBundle==='undefined' || !_dashBundle)){
-    loadDashboardBundle(function(){ _go(); });
-  } else {
-    _go();
-  }
+  _go();
 }
 // \uc804\uccb4 FP \uc9d1\uacc4 (\uc9c0\uc810 \ud544\ud130 \uc5c6\uc774, \uae30\uac04\uc740 \ud604\uc7ac _fpRange)
 function _fpAllRows(){
@@ -12552,46 +12547,26 @@ function _buildFpExcel(){
   // base time line (no trailing month range, per request)
   var baseStr=now.getFullYear()+'\ub144 '+(now.getMonth()+1)+'\uc6d4 '+now.getDate()+'\uc77c '+hh+'\uc2dc'+mm+'\ubd84 \uae30\uc900';
 
-  // standard-FP per-condition map by name
-  var _stdMap={};
-  try{
-    var _stdRows=(typeof _stdFpCompute==='function')?_stdFpCompute():[];
-    (_stdRows||[]).forEach(function(r){ if(r && r.name) _stdMap[r.name]={c1:!!r.c1,c2:!!r.c2,c3:!!r.c3,c4:!!r.c4,branch:r.branch||''}; });
-  }catch(e){}
-  function _stdCntAll(){ var n=0; for(var k in _stdMap){ var s=_stdMap[k]; if(s.c1&&s.c2&&s.c3&&s.c4) n++; } return n; }
-  function _stdCntBranch(){
-    var al=0,br=0;
-    for(var k in _stdMap){ var s=_stdMap[k]; if(s.c1&&s.c2&&s.c3&&s.c4){ var bk=_pvBranchKey(s.branch); if(bk==='al') al++; else if(bk==='br') br++; } }
-    return { al:al, br:br };
+  // award tier ladder by amount: 500k std / 700k hol / 1m uni
+  function _tierOf(total){
+    var t=parseInt(total)||0;
+    if(t>=1000000) return 3;
+    if(t>=700000) return 2;
+    if(t>=500000) return 1;
+    return 0;
   }
-  function _stdCntLabel(scopeKey){
-    if(scopeKey==='all'){ var c=_stdCntBranch(); return '\uC54C\uD30C '+c.al+'\uBA85 / \uBE0C\uB77C\uBCF4 '+c.br+'\uBA85'; }
-    return _stdCntAll()+'\uBA85';
+  function _tierCnt(rows2){
+    var s=0,h=0,u=0;
+    (rows2||[]).forEach(function(f){ var t=_tierOf(f.total); if(t>=1)s++; if(t>=2)h++; if(t>=3)u++; });
+    return { std:s, hol:h, uni:u };
   }
-
-  // rank maps from dashboard TOP5 (name -> rank 1..5)
-  function _rankMapFrom(arr){
-    var m={};
-    (arr||[]).forEach(function(r,i){ if(r && r.name && i<5) m[r.name]=i+1; });
-    return m;
-  }
-  var _bojRank={}, _recRank={}, _actRank={};
-  try{
-    if(typeof _dashBundle!=='undefined' && _dashBundle){
-      _bojRank=_rankMapFrom(_dashBundle.bojangTop);
-      _recRank=_rankMapFrom(_dashBundle.recruitTop);
-      _actRank=_rankMapFrom(_dashBundle.actTop);
-    }
-  }catch(e){}
-  // build TOP5 richText for a name, sorted by rank then category
-  function _rankPrefix(name){
-    var parts=[];
-    if(_bojRank[name]) parts.push({txt:'\uC6D4\uCD08'+_bojRank[name]+'\uC704', col:'FF0C447C', rank:_bojRank[name], ord:0});
-    if(_recRank[name]) parts.push({txt:'\uB9AC\uCFE8'+_recRank[name]+'\uC704', col:'FF0F6E56', rank:_recRank[name], ord:1});
-    if(_actRank[name]) parts.push({txt:'\uD65C\uB3D9'+_actRank[name]+'\uC704', col:'FF9A4F0F', rank:_actRank[name], ord:2});
-    parts.sort(function(a,b){ if(a.rank!==b.rank) return a.rank-b.rank; return a.ord-b.ord; });
-    return parts;
-  }
+  // perf TOP5: whole-branch total desc, fpId -> rank 1..5
+  var _perfRank={};
+  (function(){
+    var sorted=allRows.filter(function(f){ return (parseInt(f.total)||0)>0; })
+      .slice().sort(function(a,b){ return (b.total||0)-(a.total||0); });
+    for(var ri=0;ri<sorted.length && ri<5;ri++){ _perfRank[sorted[ri].id]=ri+1; }
+  })();
 
   var NAVY='FF1A2744', GOLD='FFB8860B', HEAD='FFEAE2CE', SUMBG='FAEEDA', HILITE='FFFFF3D6', BD='FFD8D2C2';
   var HDR='FF2E3D5C', HDR2='FF2E3D5C';
@@ -12605,23 +12580,36 @@ function _buildFpExcel(){
   var FNT='\\ub9d1\\uc740 \\uace0\\ub515';
   var wb=new ExcelJS.Workbook();
 
-  function _achCell(ws, rn, col, ok, bd2, full){
+  function _tierCell(ws, rn, col, ok, bd2, lvl){
     var c=ws.getCell(rn,col);
     if(ok){
       c.value='\uB2EC\uC131';
-      if(full){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:STDFULL}}; c.font={size:11,name:FNT,bold:true,color:{argb:'FF412402'}}; }
-      else { c.fill={type:'pattern',pattern:'solid',fgColor:{argb:STDOK}}; c.font={size:11,name:FNT,bold:true,color:{argb:'FF854F0B'}}; }
+      if(lvl>=3){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:AMT100}}; c.font={size:11,name:FNT,bold:true,color:{argb:'FF0C447C'}}; }
+      else if(lvl===2){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:AMT70}}; c.font={size:11,name:FNT,bold:true,color:{argb:'FF3B6D11'}}; }
+      else { c.fill={type:'pattern',pattern:'solid',fgColor:{argb:AMT50}}; c.font={size:11,name:FNT,bold:true,color:{argb:'FF9A4F0F'}}; }
     }
     else { c.value='-'; c.font={size:11,name:FNT,color:{argb:'FFC8C5BC'}}; }
     c.alignment={vertical:'middle',horizontal:'center'};
     c.border=bd2();
   }
+  function _rankCell(ws, rn, col, rk, bd2){
+    var c=ws.getCell(rn,col);
+    if(rk){
+      c.value=rk+'\uC704';
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:TOP5BG}};
+      if(rk===1){ c.font={size:11,name:FNT,bold:true,color:{argb:'FF9A4F0F'}}; }
+      else { c.font={size:10,name:FNT,bold:true,color:{argb:'FF5F5E5A'}}; }
+    }
+    else { c.value='-'; c.font={size:10,name:FNT,color:{argb:'FFC8C5BC'}}; }
+    c.alignment={vertical:'middle',horizontal:'center'};
+    c.border=bd2();
+  }
   function buildSheet(title, scopeKey, scopeLabel){
     var ws=wb.addWorksheet(title);
-    ws.columns=[{width:7},{width:11},{width:10},{width:8},{width:13},{width:6},{width:8},{width:11},{width:11},{width:8.5},{width:6.5},{width:8},{width:8},{width:15}];
+    ws.columns=[{width:7},{width:11},{width:10},{width:8},{width:13},{width:6},{width:8},{width:11},{width:11},{width:10},{width:10},{width:10.5},{width:9}];
     ws.pageSetup={ orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0, paperSize:9, margins:{ left:0.3, right:0.3, top:0.4, bottom:0.4, header:0.2, footer:0.2 } };
     var headers=['\uC9C0\uC810','FP','\uC0AC\uBC88','\uBAA9\uD45C(\uB9CC)','\uD604\uC7AC\uC5C5\uC801(\uC6D0)','\uAC74\uC218','\uB2EC\uC131\uB960','\uC0DD\uBCF4(\uC6D0)','\uC190\uBCF4(\uC6D0)'];
-    var stdHeaders=['\uC870\uAE30\uAC00\uB3D9','\uD788\uB4E0','\uC190\uBCF410\uB9CC','\uC6D4\uB9D050\uB9CC'];
+    var stdHeaders=['\uD83C\uDF96 \uC2A4\uD0E0\uB2E4\uB4DC\n50\uB9CC','\u2708 \uC6CC\uD640\n70\uB9CC','\uD83E\uDD84 \uC720\uB2C8\uCF58\uC988\n100\uB9CC'];
     function bd(){ return {top:{style:'thin',color:{argb:BD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}}; }
 
     var rows=allRows.filter(function(f){
@@ -12631,12 +12619,12 @@ function _buildFpExcel(){
     rows.sort(function(a,b){ return (a.name||'').localeCompare((b.name||''),'ko'); });
 
     var titleTxt = scopeKey==='all' ? 'Unice \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4' : scopeLabel+' \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4';
-    ws.mergeCells('A1:N1');
+    ws.mergeCells('A1:M1');
     var t=ws.getCell('A1'); t.value=titleTxt;
     t.font={bold:true,size:20,color:{argb:'FF111111'},name:FNT};
     t.alignment={vertical:'middle',horizontal:'center'};
     ws.getRow(1).height=40;
-    ws.mergeCells('A2:N2');
+    ws.mergeCells('A2:M2');
     var st=ws.getCell('A2'); st.value=baseStr;
     st.font={size:11,color:{argb:'FF5F5E5A'},name:FNT};
     st.alignment={vertical:'middle',horizontal:'right',indent:1};
@@ -12644,7 +12632,7 @@ function _buildFpExcel(){
 
     var sumGoal=0,sumTot=0,sumLife=0,sumNon=0,sumCnt=0;
     rows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumCnt+=f.cnt; });
-    ws.mergeCells('A4:N4');
+    ws.mergeCells('A4:M4');
     var sm=ws.getCell('A4');
     var _LBL={size:9,name:FNT,bold:false,color:{argb:'FF5F5E5A'}};
     var _SEP={text:'    \u2502    ', font:{size:11,name:FNT,color:{argb:'FFB4B2A9'}}};
@@ -12658,8 +12646,13 @@ function _buildFpExcel(){
     _srt.push(_lab('\uC190\uBCF4 ')); _srt.push(_num(sumNon.toLocaleString(),'FF185FA5',12));
     _srt.push(_SEP);
     _srt.push(_lab('\uCD1D ')); _srt.push(_num(sumCnt+'\uAC74','FF1A2744',12));
+    var _tc=_tierCnt(rows);
     _srt.push(_SEP);
-    _srt.push(_lab('\uC2A4\uD0E0\uB2E4\uB4DC ')); _srt.push(_num(_stdCntLabel(scopeKey),'FF9A4F0F',12));
+    _srt.push(_lab('\uD83E\uDD84 \uC720\uB2C8\uCF58\uC988 ')); _srt.push(_num(_tc.uni+'\uBA85','FF0C447C',12));
+    _srt.push(_SEP);
+    _srt.push(_lab('\u2708 \uC6CC\uD640 ')); _srt.push(_num(_tc.hol+'\uBA85','FF3B6D11',12));
+    _srt.push(_SEP);
+    _srt.push(_lab('\uD83C\uDF96 \uC2A4\uD0E0\uB2E4\uB4DC ')); _srt.push(_num(_tc.std+'\uBA85','FF9A4F0F',12));
     sm.value={ richText:_srt };
     sm.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
     sm.alignment={vertical:'middle',horizontal:'left',indent:1};
@@ -12674,26 +12667,26 @@ function _buildFpExcel(){
       c.alignment={vertical:'middle',horizontal:'center'};
       c.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
     }
-    ws.mergeCells(HR1,10,HR1,13);
-    var sh=ws.getCell(HR1,10); sh.value='\uD83C\uDFC6 \uC2A4\uD0E0\uB2E4\uB4DCFP';
+    ws.mergeCells(HR1,10,HR1,12);
+    var sh=ws.getCell(HR1,10); sh.value='\uD83C\uDFC5 \uC2DC\uC0C1 \uB2EC\uC131 \uD604\uD669';
     sh.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
     sh.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
     sh.alignment={vertical:'middle',horizontal:'center'};
     sh.border=bd();
     for(var s2=0;s2<stdHeaders.length;s2++){
       var sc=ws.getCell(HR2,10+s2); sc.value=stdHeaders[s2];
-      sc.font={bold:true,size:11,name:FNT,color:{argb:'FFFFFFFF'}};
+      sc.font={bold:true,size:10,name:FNT,color:{argb:'FFFFFFFF'}};
       sc.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
-      sc.alignment={vertical:'middle',horizontal:'center'};
+      sc.alignment={vertical:'middle',horizontal:'center',wrapText:true};
       sc.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
     }
-    ws.mergeCells(HR1,14,HR2,14);
-    var th5=ws.getCell(HR1,14); th5.value='TOP5';
-    th5.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
+    ws.mergeCells(HR1,13,HR2,13);
+    var th5=ws.getCell(HR1,13); th5.value='\uC5C5\uC801TOP5';
+    th5.font={bold:true,size:11,name:FNT,color:{argb:'FFFFFFFF'}};
     th5.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR}};
     th5.alignment={vertical:'middle',horizontal:'center'};
     th5.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
-    ws.getRow(HR1).height=24; ws.getRow(HR2).height=22;
+    ws.getRow(HR1).height=24; ws.getRow(HR2).height=30;
 
     var rn=8;
     rows.forEach(function(f){
@@ -12719,23 +12712,12 @@ function _buildFpExcel(){
         }
         if(i===3||i===4||i===7||i===8) c.numFmt='#,##0';
       }
-      var sd=_stdMap[f.name]||{};
-      var _full=!!(sd.c1&&sd.c2&&sd.c3&&sd.c4);
-      _achCell(ws, rn, 10, !!sd.c1, bd, _full);
-      _achCell(ws, rn, 11, !!sd.c2, bd, _full);
-      _achCell(ws, rn, 12, !!sd.c3, bd, _full);
-      _achCell(ws, rn, 13, !!sd.c4, bd, _full);
-      var _rp=_rankPrefix(f.name);
-      var c5=ws.getCell(rn,14);
-      if(_rp.length){
-        var _rt=[];
-        _rp.forEach(function(p,pi){ if(pi>0) _rt.push({ text:'\n', font:{size:9,name:FNT} }); _rt.push({ text:p.txt, font:{size:9,name:FNT,bold:true,color:{argb:p.col}} }); });
-        c5.value={ richText:_rt };
-        c5.fill={type:'pattern',pattern:'solid',fgColor:{argb:TOP5BG}};
-      } else { c5.value='-'; c5.font={size:9,name:FNT,color:{argb:'FFC8C5BC'}}; }
-      c5.alignment={vertical:'middle',horizontal:'center',wrapText:true};
-      c5.border=bd();
-      ws.getRow(rn).height=(_rp.length>=3?42:(_rp.length===2?30:24));
+      var _lv=_tierOf(f.total);
+      _tierCell(ws, rn, 10, _lv>=1, bd, _lv);
+      _tierCell(ws, rn, 11, _lv>=2, bd, _lv);
+      _tierCell(ws, rn, 12, _lv>=3, bd, _lv);
+      _rankCell(ws, rn, 13, _perfRank[f.id]||0, bd);
+      ws.getRow(rn).height=24;
       rn++;
     });
 
@@ -12748,14 +12730,18 @@ function _buildFpExcel(){
       c.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
       if(i===3||i===4||i===7||i===8) c.numFmt='#,##0';
     }
-    ws.mergeCells(rn,10,rn,13);
-    var sc2=ws.getCell(rn,10); sc2.value=_stdCntLabel(scopeKey);
-    sc2.font={bold:true,size:11,name:FNT,color:{argb:'FF854F0B'}};
-    sc2.fill={type:'pattern',pattern:'solid',fgColor:{argb:STDOK}};
-    sc2.alignment={vertical:'middle',horizontal:'center'};
-    sc2.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
-    var sc3=ws.getCell(rn,14); sc3.value='';
-    sc3.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFFFF'}};
+    var _tcb=_tierCnt(rows);
+    var _tvv=[_tcb.std,_tcb.hol,_tcb.uni];
+    var _tcc=['FF9A4F0F','FF3B6D11','FF0C447C'];
+    for(var ti=0;ti<3;ti++){
+      var sc2=ws.getCell(rn,10+ti); sc2.value=_tvv[ti]+'\uBA85';
+      sc2.font={bold:true,size:11,name:FNT,color:{argb:_tcc[ti]}};
+      sc2.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
+      sc2.alignment={vertical:'middle',horizontal:'center'};
+      sc2.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
+    }
+    var sc3=ws.getCell(rn,13); sc3.value='';
+    sc3.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
     sc3.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
     ws.getRow(rn).height=26;
   }
@@ -12771,15 +12757,15 @@ function _buildFpExcel(){
     var byId={};
     allRows.forEach(function(f){ byId[f.id]=f; });
     var ws=wb.addWorksheet('\uB9E4\uB2C8\uC800');
-    ws.columns=[{width:7},{width:11},{width:10},{width:10},{width:8},{width:13},{width:6},{width:8},{width:11},{width:11},{width:8.5},{width:6.5},{width:8},{width:8},{width:15}];
+    ws.columns=[{width:7},{width:11},{width:10},{width:10},{width:8},{width:13},{width:6},{width:8},{width:11},{width:11},{width:10},{width:10},{width:10.5},{width:9}];
     ws.pageSetup={ orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0, paperSize:9, margins:{ left:0.3, right:0.3, top:0.4, bottom:0.4, header:0.2, footer:0.2 } };
     function bd(){ return {top:{style:'thin',color:{argb:BD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}}; }
-    ws.mergeCells('A1:O1');
+    ws.mergeCells('A1:N1');
     var t=ws.getCell('A1'); t.value='Unice \uB9E4\uB2C8\uC800\u00B7\uD300\uBCC4 \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4';
     t.font={bold:true,size:20,color:{argb:'FF111111'},name:FNT};
     t.alignment={vertical:'middle',horizontal:'center'};
     ws.getRow(1).height=40;
-    ws.mergeCells('A2:O2');
+    ws.mergeCells('A2:N2');
     var st=ws.getCell('A2'); st.value=baseStr;
     st.font={size:11,color:{argb:'FF5F5E5A'},name:FNT};
     st.alignment={vertical:'middle',horizontal:'right',indent:1};
@@ -12787,7 +12773,7 @@ function _buildFpExcel(){
 
     var HR1=4, HR2=5;
     var headers=['\uC9C0\uC810','FP','\uC0AC\uBC88','\uAD6C\uBD84','\uBAA9\uD45C(\uB9CC)','\uD604\uC7AC\uC5C5\uC801(\uC6D0)','\uAC74\uC218','\uB2EC\uC131\uB960','\uC0DD\uBCF4(\uC6D0)','\uC190\uBCF4(\uC6D0)'];
-    var stdHeaders=['\uC870\uAE30\uAC00\uB3D9','\uD788\uB4E0','\uC190\uBCF410\uB9CC','\uC6D4\uB9D050\uB9CC'];
+    var stdHeaders=['\uD83C\uDF96 \uC2A4\uD0E0\uB2E4\uB4DC\n50\uB9CC','\u2708 \uC6CC\uD640\n70\uB9CC','\uD83E\uDD84 \uC720\uB2C8\uCF58\uC988\n100\uB9CC'];
     for(var hi2=0;hi2<headers.length;hi2++){
       ws.mergeCells(HR1,hi2+1,HR2,hi2+1);
       var hc=ws.getCell(HR1,hi2+1); hc.value=headers[hi2];
@@ -12796,26 +12782,26 @@ function _buildFpExcel(){
       hc.alignment={vertical:'middle',horizontal:'center'};
       hc.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
     }
-    ws.mergeCells(HR1,11,HR1,14);
-    var sh=ws.getCell(HR1,11); sh.value='\uD83C\uDFC6 \uC2A4\uD0E0\uB2E4\uB4DCFP';
+    ws.mergeCells(HR1,11,HR1,13);
+    var sh=ws.getCell(HR1,11); sh.value='\uD83C\uDFC5 \uC2DC\uC0C1 \uB2EC\uC131 \uD604\uD669';
     sh.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
     sh.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
     sh.alignment={vertical:'middle',horizontal:'center'};
     sh.border=bd();
     for(var s2=0;s2<stdHeaders.length;s2++){
       var sc=ws.getCell(HR2,11+s2); sc.value=stdHeaders[s2];
-      sc.font={bold:true,size:11,name:FNT,color:{argb:'FFFFFFFF'}};
+      sc.font={bold:true,size:10,name:FNT,color:{argb:'FFFFFFFF'}};
       sc.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
-      sc.alignment={vertical:'middle',horizontal:'center'};
+      sc.alignment={vertical:'middle',horizontal:'center',wrapText:true};
       sc.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
     }
-    ws.mergeCells(HR1,15,HR2,15);
-    var th5=ws.getCell(HR1,15); th5.value='TOP5';
-    th5.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
+    ws.mergeCells(HR1,14,HR2,14);
+    var th5=ws.getCell(HR1,14); th5.value='\uC5C5\uC801TOP5';
+    th5.font={bold:true,size:11,name:FNT,color:{argb:'FFFFFFFF'}};
     th5.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR}};
     th5.alignment={vertical:'middle',horizontal:'center'};
     th5.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
-    ws.getRow(HR1).height=24; ws.getRow(HR2).height=22;
+    ws.getRow(HR1).height=24; ws.getRow(HR2).height=30;
 
     var rn=6;
     function putRow(f, kind){
@@ -12843,29 +12829,18 @@ function _buildFpExcel(){
         }
         if(i===4||i===5||i===8||i===9) c.numFmt='#,##0';
       }
-      var sd=_stdMap[f.name]||{};
-      var _full=!!(sd.c1&&sd.c2&&sd.c3&&sd.c4);
-      _achCell(ws, rn, 11, !!sd.c1, bd, _full);
-      _achCell(ws, rn, 12, !!sd.c2, bd, _full);
-      _achCell(ws, rn, 13, !!sd.c3, bd, _full);
-      _achCell(ws, rn, 14, !!sd.c4, bd, _full);
-      var _rp=_rankPrefix(f.name);
-      var c5=ws.getCell(rn,15);
-      if(_rp.length){
-        var _rt=[];
-        _rp.forEach(function(p,pi){ if(pi>0) _rt.push({ text:'\n', font:{size:9,name:FNT} }); _rt.push({ text:p.txt, font:{size:9,name:FNT,bold:true,color:{argb:p.col}} }); });
-        c5.value={ richText:_rt };
-        c5.fill={type:'pattern',pattern:'solid',fgColor:{argb:TOP5BG}};
-      } else { c5.value='-'; c5.font={size:9,name:FNT,color:{argb:'FFC8C5BC'}}; }
-      c5.alignment={vertical:'middle',horizontal:'center',wrapText:true};
-      c5.border=bd();
-      ws.getRow(rn).height=(_rp.length>=3?42:(_rp.length===2?30:24));
+      var _lv=_tierOf(f.total);
+      _tierCell(ws, rn, 11, _lv>=1, bd, _lv);
+      _tierCell(ws, rn, 12, _lv>=2, bd, _lv);
+      _tierCell(ws, rn, 13, _lv>=3, bd, _lv);
+      _rankCell(ws, rn, 14, _perfRank[f.id]||0, bd);
+      ws.getRow(rn).height=24;
       rn++;
     }
     teamsDB.forEach(function(tm){
       var mgrIds=(tm.managers||[]);
       var memIds=(tm.members||[]);
-      ws.mergeCells('A'+rn+':O'+rn);
+      ws.mergeCells('A'+rn+':N'+rn);
       var th=ws.getCell('A'+rn);
       var mgrNames=mgrIds.map(function(id){ return byId[id]?byId[id].name:''; }).filter(Boolean).join('\u00B7');
       th.value='\uD83C\uDFC5 '+(mgrNames||'\uD300')+' \uD300';
@@ -12887,7 +12862,7 @@ function _buildFpExcel(){
         sc.border=bd();
         if(si===4||si===5||si===8||si===9) sc.numFmt='#,##0';
       }
-      ws.mergeCells(rn,11,rn,15);
+      ws.mergeCells(rn,11,rn,14);
       var se=ws.getCell(rn,11); se.value='';
       se.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
       se.border=bd();
@@ -12902,7 +12877,7 @@ function _buildFpExcel(){
     var url=URL.createObjectURL(blob);
     var a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click();
     setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-    showToast('\u2705 \uc77c\ubcf4 \uc5d1\uc140 \ub2e4\uc6b4\ub85c\ub4dc \uc644\ub8cc (3\uc2dc\ud2b8)');
+    showToast('\u2705 \uc77c\ubcf4 \uc5d1\uc140 \ub2e4\uc6b4\ub85c\ub4dc \uc644\ub8cc (4\uc2dc\ud2b8)');
   }).catch(function(){ showToast('\u26a0\ufe0f \uc5d1\uc140 \uc0dd\uc131 \uc2e4\ud328'); });
 }
 
