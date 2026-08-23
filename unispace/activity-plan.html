@@ -1867,6 +1867,79 @@ function _fillExistingFromDb(){
   }
 }
 
+// 제출 검증: (1) 월·주간 목표 미입력 차단  (2) PT·청약 제안 합계 < 주간 목표 차단
+function _pvNum(el){ return el ? (parseInt((el.value||'').replace(/[^0-9]/g,''))||0) : 0; }
+function _pvMark(el, on){
+  if(!el) return;
+  el.style.borderColor = on ? '#E24B4A' : '';
+  if(!el.readOnly) el.style.background = on ? '#FDF1F0' : '';
+  if(on && !el._pvClearBound){
+    el._pvClearBound = true;
+    el.addEventListener('input', function(){ el.style.borderColor=''; if(!el.readOnly) el.style.background=''; });
+  }
+}
+function _ptCheongyakSum(){
+  var sum = 0;
+  for(var i=0;i<custs.length;i++){
+    var c = custs[i]; if(!c) continue;
+    var tg = c.tags || [];
+    if(tg.indexOf('PT') < 0 && tg.indexOf('청약') < 0) continue;
+    var ps = c.products || [];
+    for(var k=0;k<ps.length;k++){
+      sum += parseInt((''+(ps[k].amount||'')).replace(/[^0-9]/g,'')) || 0;
+    }
+  }
+  return sum;
+}
+function _openShortfallModal(goalSum, planSum){
+  var old = document.getElementById('pvShortOv');
+  if(old && old.parentNode) old.parentNode.removeChild(old);
+  var ov = document.createElement('div');
+  ov.id = 'pvShortOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(30,25,15,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  var lack = goalSum - planSum;
+  ov.innerHTML =
+    '<div style="width:100%;max-width:360px;background:#fff;border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-family:inherit">'+
+      '<div style="font-size:30px;text-align:center">📉</div>'+
+      '<div style="font-size:16px;font-weight:800;color:#1A2744;text-align:center;margin:6px 0 12px">PT·청약 계획이 주간 목표보다 부족해요</div>'+
+      '<div style="background:#FBF6EA;border:1px solid #EADFC5;border-radius:12px;padding:12px 14px;font-size:13px">'+
+        '<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#7A745F">주간 목표 (생보+손보)</span><b style="color:#1A2744">'+goalSum.toLocaleString()+'원</b></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#7A745F">계획된 PT·청약 제안 합계</span><b style="color:#1A2744">'+planSum.toLocaleString()+'원</b></div>'+
+        '<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#7A745F">부족 금액</span><b style="color:#C0392B;font-size:15px">-'+lack.toLocaleString()+'원</b></div>'+
+      '</div>'+
+      '<div style="font-size:12px;color:#7A745F;text-align:center;margin:12px 0 14px;line-height:1.6">고객 활동에서 <b>PT 또는 청약</b>을 추가하고<br>제안상품 보험료를 목표 이상으로 채워주세요</div>'+
+      '<button type="button" id="pvShortOk" style="width:100%;padding:12px;border:none;border-radius:10px;background:#B8860B;color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">확인하고 계획 보완하기</button>'+
+    '</div>';
+  document.body.appendChild(ov);
+  document.getElementById('pvShortOk').addEventListener('click', function(){
+    if(ov && ov.parentNode) ov.parentNode.removeChild(ov);
+  });
+  ov.addEventListener('click', function(e){ if(e.target===ov && ov.parentNode) ov.parentNode.removeChild(ov); });
+}
+function _validatePlanSubmit(){
+  var mL=document.getElementById('mGoalLife'), mN=document.getElementById('mGoalNon');
+  var wL=document.getElementById('wGoalLife'), wN=document.getElementById('wGoalNon');
+  var mSum=_pvNum(mL)+_pvNum(mN);
+  var wSum=_pvNum(wL)+_pvNum(wN);
+  var missM=(mSum<=0), missW=(wSum<=0);
+  _pvMark(mL,missM); _pvMark(mN,missM); _pvMark(wL,missW); _pvMark(wN,missW);
+  if(missM||missW){
+    var msg = (missM&&missW) ? '⚠️ 월 목표와 주간 목표를 입력해야 제출할 수 있어요'
+      : (missM ? '⚠️ 월 목표를 입력해야 제출할 수 있어요'
+               : '⚠️ 주간 목표를 입력해야 제출할 수 있어요');
+    showToast(msg);
+    var tgt = missM ? mL : wL;
+    if(tgt && tgt.scrollIntoView) tgt.scrollIntoView({behavior:'smooth', block:'center'});
+    return false;
+  }
+  var planSum=_ptCheongyakSum();
+  if(planSum < wSum){
+    _openShortfallModal(wSum, planSum);
+    return false;
+  }
+  return true;
+}
+
 function saveDraft(submitted){
   var wi=effectiveWeekInfo();
   var db=getPlanDB();
@@ -2726,6 +2799,7 @@ function init(){
   _on('excelBtn', 'click', function(){ commitEditingIfAny(); saveDraft(false); buildExcel(); });
   _on('submitBtn', 'click', function(){
     commitEditingIfAny();
+    if(!_validatePlanSubmit()){ saveDraft(false); return; }
     saveDraft(true);
     var n=syncToActivities();
     var _swi=effectiveWeekInfo();
