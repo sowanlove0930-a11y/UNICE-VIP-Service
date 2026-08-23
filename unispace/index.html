@@ -23590,7 +23590,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 70;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 71;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -23598,6 +23598,47 @@ var APP_BUILD = 70;   // ← 배포할 때 version.json 의 v 와 같은 숫자�
     if (_bt) _bt.textContent = 'v' + APP_BUILD;
   } catch(e) {}
   var _updNotified = false;
+  var _updShowing = false;
+  // clear all caches + refresh SW, then reload - guarantees latest build
+  function _doHardUpdate(){
+    var p = (window.caches && caches.keys)
+      ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+      : Promise.resolve();
+    p.then(function(){
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+        return navigator.serviceWorker.getRegistration().then(function(reg){ if(reg) return reg.update(); }).catch(function(){});
+      }
+    }).then(function(){ location.reload(); }).catch(function(){ location.reload(); });
+  }
+  function _showUpdateModal(newV){
+    if (_updShowing || document.getElementById('updModalOv')) return;
+    _updShowing = true;
+    var ov = document.createElement('div');
+    ov.id = 'updModalOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999998;background:rgba(20,16,8,.55);'
+      + 'display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML =
+      '<div style="width:100%;max-width:340px;background:#fff;border-radius:18px;padding:24px 20px;'
+      + 'box-shadow:0 12px 34px rgba(0,0,0,.35);text-align:center">'
+      +   '<div style="font-size:38px">\uD83D\uDD04</div>'
+      +   '<div style="font-size:17px;font-weight:800;color:#1A2744;margin:8px 0 4px">\uC0C8 \uBC84\uC804\uC774 \uB098\uC654\uC2B5\uB2C8\uB2E4</div>'
+      +   '<div style="font-size:13px;color:#7A745F;margin-bottom:16px">v' + APP_BUILD + ' \u2192 <b style="color:#B8860B">v' + newV + '</b> \u00B7 \uC5C5\uB370\uC774\uD2B8\uD558\uBA74 \uCD5C\uC2E0 \uAE30\uB2A5\uC774 \uC801\uC6A9\uB3FC\uC694</div>'
+      +   '<button type="button" id="updGoBtn" style="width:100%;padding:14px;border:none;border-radius:12px;'
+      +   'background:linear-gradient(135deg,#C9A84C,#BA7517);color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">\uC9C0\uAE08 \uC5C5\uB370\uC774\uD2B8</button>'
+      +   '<button type="button" id="updLaterBtn" style="width:100%;padding:10px;border:none;background:none;'
+      +   'color:#9A937E;font-size:12.5px;font-weight:700;cursor:pointer;margin-top:6px;font-family:inherit">\uB098\uC911\uC5D0 (\uB2E4\uC2DC \uC548\uB0B4\uB428)</button>'
+      + '</div>';
+    document.body.appendChild(ov);
+    document.getElementById('updGoBtn').addEventListener('click', function(){
+      this.textContent = '\uC5C5\uB370\uC774\uD2B8 \uC911...';
+      this.disabled = true;
+      _doHardUpdate();
+    });
+    document.getElementById('updLaterBtn').addEventListener('click', function(){
+      if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+      _updShowing = false;
+    });
+  }
   function _showUpdateBanner(){
     if (_updNotified || document.getElementById('updBanner')) return;
     _updNotified = true;
@@ -23625,15 +23666,15 @@ var APP_BUILD = 70;   // ← 배포할 때 version.json 의 v 와 같은 숫자�
           var ls = document.getElementById('loginOverlay');
           loginVisible = !!(ls && ls.className.indexOf('hidden') < 0);
         } catch(e) {}
-        if (loginVisible) { location.reload(); return; }
-        _showUpdateBanner();
+        if (loginVisible) { _doHardUpdate(); return; }
+        _showUpdateModal(parseInt(v.v));
       })['catch'](function(){});
   }
-  setInterval(_checkVersion, 1800000);   // 30분마다
+  setInterval(_checkVersion, 600000);   // 30분마다
   document.addEventListener('visibilitychange', function(){
     if (document.visibilityState === 'visible') _checkVersion();
   });
-  setTimeout(_checkVersion, 20000);      // 켠 지 20초 후 1회 (시작 트래픽과 분리)
+  setTimeout(_checkVersion, 5000);      // 켠 지 20초 후 1회 (시작 트래픽과 분리)
 })();
 
 // PWA: Service Worker 등록 (앱 설치 지원)
