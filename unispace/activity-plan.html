@@ -2000,14 +2000,46 @@ function saveDraft(submitted){
     submittedAt: submittedAt
   };
   savePlanDB(db);
-  // GAS에 저장 (POST)
-  planGasPost({ action:'savePlan', data:{
+  // GAS에 저장 (POST) - 제출은 서버 응답 확인 + 실패 시 재전송 큐
+  var _payload={ action:'savePlan', data:{
     weekKey:wi.key, fpCode:currentUser.id, fpName:currentUser.name, branch:currentUser.branch,
     monthGoal:data.monthGoal, weekGoal:data.weekGoal, request:data.request,
     customers:data.customers, submittedAt:submittedAt||'',
     submitNow: submitted ? 1 : 0
-  }}).then(function(){ if(submitted){ try{ loadExisting(); }catch(e){} } }).catch(function(){});
+  }};
+  planGasPost(_payload).then(function(res){
+    if(res && res.ok){
+      if(submitted){
+        _planOutboxClear();
+        showToast('✅ 제출 완료 — 서버 저장 확인됨');
+        try{ loadExisting(); }catch(e){}
+      }
+    } else {
+      if(submitted){ _planOutboxSave(_payload); showToast('⚠️ 서버 저장 실패 — 자동으로 재시도합니다'); }
+    }
+  }).catch(function(){
+    if(submitted){ _planOutboxSave(_payload); showToast('⚠️ 서버 연결 실패 — 연결되면 자동으로 다시 제출됩니다'); }
+  });
 }
+// 제출 실패분 재전송 큐: 앱 복귀/온라인 복구 시 자동 재시도
+function _planOutboxSave(pl){ try{ localStorage.setItem('unispace_plan_outbox', JSON.stringify(pl)); }catch(e){} }
+function _planOutboxClear(){ try{ localStorage.removeItem('unispace_plan_outbox'); }catch(e){} }
+function _planOutboxFlush(){
+  var raw=null; try{ raw=localStorage.getItem('unispace_plan_outbox'); }catch(e){}
+  if(!raw) return;
+  var pl=null; try{ pl=JSON.parse(raw); }catch(e){ _planOutboxClear(); return; }
+  if(!currentUser || !currentUser.id || !pl.data || pl.data.fpCode!==currentUser.id) return;
+  planGasPost(pl).then(function(res){
+    if(res && res.ok){
+      _planOutboxClear();
+      showToast('✅ 미전송 활동계획이 서버에 저장되었습니다');
+      try{ loadExisting(); }catch(e){}
+    }
+  }).catch(function(){});
+}
+window.addEventListener('online', function(){ _planOutboxFlush(); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _planOutboxFlush(); });
+setTimeout(function(){ _planOutboxFlush(); }, 5000);
 
 function _buildActFromCust(c, idx, planKey){
   var chasuN = c.chasu==='1차'?'1':c.chasu==='2차'?'2':c.chasu==='3차'?'3':c.chasu==='N차'?'N':'';
