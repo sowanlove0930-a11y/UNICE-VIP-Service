@@ -2324,7 +2324,23 @@ function _apprBadge(st){
   return '';
 }
 var _apprBusy=false;
-function _apprDo(op, targetFp, reason, cb){
+function _apprBtnBusy(btn, txt){
+  if(!btn) return;
+  btn.disabled=true;
+  if(!btn.getAttribute('data-orig')) btn.setAttribute('data-orig', btn.textContent);
+  btn.textContent=txt;
+  btn.style.opacity='.55';
+  btn.style.pointerEvents='none';
+}
+function _apprBtnRestore(btn){
+  if(!btn) return;
+  btn.disabled=false;
+  var o=btn.getAttribute('data-orig');
+  if(o) btn.textContent=o;
+  btn.style.opacity='';
+  btn.style.pointerEvents='';
+}
+function _apprDo(op, targetFp, reason, cb, btn){
   if(_apprBusy) return;
   _apprBusy=true;
   var wi=_statusWi||getStatusWeekInfo(statusWeekOffset);
@@ -2332,19 +2348,22 @@ function _apprDo(op, targetFp, reason, cb){
     fpCode:currentUser.id, weekKey:wi.key, targetFp:targetFp, op:op, reason:reason||''
   }}).then(function(res){
     _apprBusy=false;
-    if(!res || !res.ok){ showToast('⚠️ '+((res&&res.msg)||'처리 실패')); return; }
+    if(!res || !res.ok){ _apprBtnRestore(btn); showToast('⚠️ '+((res&&res.msg)||'처리 실패')); return; }
     if(cb) cb(res);
     _renderStatusWeek();
-  }).catch(function(){ _apprBusy=false; showToast('⚠️ 네트워크 오류'); });
+  }).catch(function(){ _apprBusy=false; _apprBtnRestore(btn); showToast('⚠️ 네트워크 오류'); });
 }
-function apprApprove1(fpId, fpName){
-  _apprDo('approve1', fpId, '', function(){ showToast('✅ '+fpName+' 1차 승인'); });
+function apprApprove1(fpId, fpName, btn){
+  _apprBtnBusy(btn, '승인 중…');
+  _apprDo('approve1', fpId, '', function(res){ showToast(res.already?('ℹ️ '+fpName+' 이미 승인된 건입니다'):('✅ '+fpName+' 1차 승인')); }, btn);
 }
-function apprFinal(fpId, fpName){
-  _apprDo('final', fpId, '', function(){ showToast('✅ '+fpName+' 최종 승인'); });
+function apprFinal(fpId, fpName, btn){
+  _apprBtnBusy(btn, '승인 중…');
+  _apprDo('final', fpId, '', function(res){ showToast(res.already?('ℹ️ '+fpName+' 이미 최종 승인된 건입니다'):('✅ '+fpName+' 최종 승인')); }, btn);
 }
-function apprFinalAll(){
-  _apprDo('finalAll', '', '', function(res){ showToast('✅ '+(res.count||0)+'건 최종 승인 완료'); });
+function apprFinalAll(btn){
+  _apprBtnBusy(btn, '일괄 승인 중…');
+  _apprDo('finalAll', '', '', function(res){ showToast('✅ '+(res.count||0)+'건 최종 승인 완료'); }, btn);
 }
 var _fixTargetFp='', _fixOp='';
 function openFixModal(op, fpId, fpName, preset){
@@ -2367,8 +2386,12 @@ function openFixModal(op, fpId, fpName, preset){
   document.getElementById('fixSend').addEventListener('click', function(){
     var rs=(document.getElementById('fixReasonTa').value||'').trim();
     if(!rs){ showToast('⚠️ 보완 사유를 입력해주세요'); return; }
-    if(ov.parentNode) ov.parentNode.removeChild(ov);
-    _apprDo(_fixOp, _fixTargetFp, rs, function(){ showToast(isRep?'🔺 지점장에게 전달했습니다':'🔶 보완 요청을 보냈습니다'); });
+    this.disabled=true; this.textContent='보내는 중…'; this.style.opacity='.6';
+    var _self=this;
+    _apprDo(_fixOp, _fixTargetFp, rs, function(){
+      if(ov.parentNode) ov.parentNode.removeChild(ov);
+      showToast(isRep?'🔺 지점장에게 전달했습니다':'🔶 보완 요청을 보냈습니다');
+    }, _self);
   });
 }
 function renderStatus(){
@@ -2405,7 +2428,7 @@ function renderStatus(){
       _faWrap.style.display='';
       var _faBtn=document.getElementById('stFinalAllBtn');
       _faBtn.textContent='✓ 전체 최종 승인 ('+appr1Cnt+')';
-      _faBtn.onclick=function(){ apprFinalAll(); };
+      _faBtn.onclick=function(){ apprFinalAll(_faBtn); };
     } else { _faWrap.style.display='none'; }
   }
 
@@ -2438,7 +2461,7 @@ function renderStatus(){
       if(_role==='mgr'){
         if(st==='wait'){
           btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_fp\',\''+fp.id+'\',\''+_nm+'\')">보완 요청</button>'
-              +'<button type="button" class="st-view" style="background:#177245;color:#fff;border-color:#177245" onclick="apprApprove1(\''+fp.id+'\',\''+_nm+'\')">승인</button>';
+              +'<button type="button" class="st-view" style="background:#177245;color:#fff;border-color:#177245" onclick="apprApprove1(\''+fp.id+'\',\''+_nm+'\',this)">승인</button>';
         } else if(st==='fix_mgr'){
           var pre=(lg.repReason||'').replace(/'/g,'').replace(/"/g,'');
           btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_fp\',\''+fp.id+'\',\''+_nm+'\',\''+pre+'\')">FP에게 보완 요청</button>';
@@ -2446,7 +2469,7 @@ function renderStatus(){
       } else if(_role==='rep'){
         if(st==='approved1'){
           btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_mgr\',\''+fp.id+'\',\''+_nm+'\')">보완 요청</button>'
-              +'<button type="button" class="st-view" style="background:#153E75;color:#fff;border-color:#153E75" onclick="apprFinal(\''+fp.id+'\',\''+_nm+'\')">최종 승인</button>';
+              +'<button type="button" class="st-view" style="background:#153E75;color:#fff;border-color:#153E75" onclick="apprFinal(\''+fp.id+'\',\''+_nm+'\',this)">최종 승인</button>';
         }
       }
       var rowStyle=(st==='fix_mgr' && _role==='mgr')?' style="border-color:#153E75;background:#F4F7FD"':'';
