@@ -23816,7 +23816,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 71;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 72;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -23830,12 +23830,19 @@ var APP_BUILD = 71;   // ← 배포할 때 version.json 의 v 와 같은 숫자�
     var p = (window.caches && caches.keys)
       ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
       : Promise.resolve();
+    // cache-busting reload: bypasses browser HTTP cache (GitHub Pages 10-min max-age)
+    function _go(){ location.replace(location.pathname + '?u=' + Date.now()); }
     p.then(function(){
       if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
         return navigator.serviceWorker.getRegistration().then(function(reg){ if(reg) return reg.update(); }).catch(function(){});
       }
-    }).then(function(){ location.reload(); }).catch(function(){ location.reload(); });
+    }).then(_go).catch(_go);
   }
+  try {
+    if (location.search.indexOf('u=') >= 0 && window.history && history.replaceState) {
+      history.replaceState(null, '', location.pathname + (location.search.replace(/[?&]u=\d+/, '').replace(/^&/, '?') || ''));
+    }
+  } catch(e) {}
   function _showUpdateModal(newV){
     if (_updShowing || document.getElementById('updModalOv')) return;
     _updShowing = true;

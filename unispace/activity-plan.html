@@ -2039,13 +2039,21 @@ function _planOutboxFlush(){
   }).catch(function(){});
 }
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 71; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 73; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
     : Promise.resolve();
-  p.then(function(){ location.reload(); }).catch(function(){ location.reload(); });
+  // cache-busting reload: bypasses browser HTTP cache (GitHub Pages 10-min max-age)
+  function _go(){ location.replace(location.pathname + '?u=' + Date.now()); }
+  p.then(_go).catch(_go);
 }
+// clean the ?u= cache-buster from the address bar after update
+try {
+  if (location.search.indexOf('u=') >= 0 && window.history && history.replaceState) {
+    history.replaceState(null, '', location.pathname);
+  }
+} catch(e) {}
 function _planShowUpdBanner(newV, strict){
   if(document.getElementById('planUpdBanner')) return;
   var b=document.createElement('div');
