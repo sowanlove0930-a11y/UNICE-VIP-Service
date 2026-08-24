@@ -2037,6 +2037,47 @@ function _planOutboxFlush(){
     }
   }).catch(function(){});
 }
+// ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
+var PLAN_BUILD = 71; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+function _planHardUpdate(){
+  var p = (window.caches && caches.keys)
+    ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+    : Promise.resolve();
+  p.then(function(){ location.reload(); }).catch(function(){ location.reload(); });
+}
+function _planShowUpdBanner(newV, strict){
+  if(document.getElementById('planUpdBanner')) return;
+  var b=document.createElement('div');
+  b.id='planUpdBanner';
+  b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(135deg,#C9A84C,#BA7517);color:#fff;font-size:13px;font-weight:800;text-align:center;padding:12px 14px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.28);font-family:inherit';
+  b.innerHTML='\uD83D\uDD04 \uC0C8 \uBC84\uC804(v'+newV+')\uC774 \uB098\uC654\uC2B5\uB2C8\uB2E4 \u2014 \uC5EC\uAE30\uB97C \uB20C\uB7EC \uC5C5\uB370\uC774\uD2B8 \uD6C4 \uC791\uC131\uD574\uC8FC\uC138\uC694';
+  b.addEventListener('click', function(){
+    b.textContent='\uC5C5\uB370\uC774\uD2B8 \uC911...';
+    try{ localStorage.setItem('unispace_plan_upd_try', String(newV)); }catch(e){}
+    _planHardUpdate();
+  });
+  document.body.appendChild(b);
+  document.body.style.paddingTop='44px';
+}
+function _planCheckVersion(){
+  fetch('version.json?_='+Date.now(), { cache:'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j) return;
+      var strict = (j.plan!==undefined && j.plan!==null);
+      var remote = parseInt(strict ? j.plan : j.v)||0;
+      if(remote <= PLAN_BUILD) return;
+      if(!strict){
+        // 공용 v 사용 시: 같은 버전으로 이미 업데이트 시도했으면 반복 배너 방지
+        var tried=0; try{ tried=parseInt(localStorage.getItem('unispace_plan_upd_try'))||0; }catch(e){}
+        if(tried===remote) return;
+      }
+      _planShowUpdBanner(remote, strict);
+    })['catch'](function(){});
+}
+setInterval(_planCheckVersion, 600000);
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _planCheckVersion(); });
+setTimeout(_planCheckVersion, 4000);
 window.addEventListener('online', function(){ _planOutboxFlush(); });
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _planOutboxFlush(); });
 setTimeout(function(){ _planOutboxFlush(); }, 5000);
@@ -2787,22 +2828,31 @@ function _renderStatusWeek(){
   if(nx) nx.style.opacity = (statusWeekOffset >= 0) ? '.35' : '1';
   renderStatus();
   // load that week's all plans from GAS then re-render (per permission)
-  planGasGet({ action:'getPlans', fp:currentUser.id, weekKey:wi.key }).then(function(res){
-    if(res && res.ok && res.plans){
-      var db=getPlanDB();
-      if(!db[wi.key]) db[wi.key]={};
-      res.plans.forEach(function(pl){
-        db[wi.key][pl.fpId]={
-          fpId:pl.fpId, name:pl.name, branch:pl.branch,
-          monthGoal:pl.monthGoal, weekGoal:pl.weekGoal, request:pl.request,
-          customers:pl.customers, updatedAt:pl.updatedAt, submittedAt:pl.submittedAt||null,
-          approval:pl.approval||'', apprLog:pl.apprLog||{}
-        };
-      });
-      savePlanDB(db);
-      renderStatus();
-    }
-  }).catch(function(){});
+  var _stTryLeft=2;
+  function _stFetch(){
+    planGasGet({ action:'getPlans', fp:currentUser.id, weekKey:wi.key }).then(function(res){
+      if(res && res.ok && res.plans){
+        var db=getPlanDB();
+        db[wi.key]={}; // rebuild from server: stale local rows must not linger
+        res.plans.forEach(function(pl){
+          db[wi.key][pl.fpId]={
+            fpId:pl.fpId, name:pl.name, branch:pl.branch,
+            monthGoal:pl.monthGoal, weekGoal:pl.weekGoal, request:pl.request,
+            customers:pl.customers, updatedAt:pl.updatedAt, submittedAt:pl.submittedAt||null,
+            approval:pl.approval||'', apprLog:pl.apprLog||{}
+          };
+        });
+        savePlanDB(db);
+        renderStatus();
+      } else { _stRetry(); }
+    }).catch(function(){ _stRetry(); });
+  }
+  function _stRetry(){
+    _stTryLeft--;
+    if(_stTryLeft>0){ setTimeout(_stFetch, 2500); return; }
+    showToast('⚠️ 제출현황 서버 조회 실패 — 화면을 닫았다 다시 열어주세요');
+  }
+  _stFetch();
 }
 function _weekKeyLabel(key){
   var m=key.match(/^(\d{4})-(\d{2})-W(\d+)$/);
