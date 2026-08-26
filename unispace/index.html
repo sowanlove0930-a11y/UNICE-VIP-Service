@@ -24275,6 +24275,12 @@ function goWorkPlay(){
 .mw-lead .sel { margin-top:7px; background:#FFF8EC; border:1px solid #F5C77A; border-radius:9px; padding:6px 10px; font-size:12px; color:#7A4A10; }
 .mw-lead .sel b { color:#C25E00; }
 .mw-empty { text-align:center; color:#97A0B0; font-size:13px; padding:40px 10px; line-height:1.6; }
+.mw-selbar { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #F5C77A; border-radius:12px; padding:8px 10px; margin-bottom:10px; font-size:12.5px; font-weight:800; color:#1A2744; }
+.mw-selbar button { font-size:11.5px; padding:6px 10px; border-radius:8px; border:1px solid #DCD2BE; background:#fff; color:#1A2744; font-family:inherit; cursor:pointer; font-weight:700; }
+.mw-selbar button.del { margin-left:auto; background:#DC2626; border-color:#DC2626; color:#fff; }
+.mw-cb { width:20px; height:20px; border-radius:6px; border:2px solid #DCD2BE; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:900; color:#fff; flex:none; }
+.mw-cb.on { background:#B8860B; border-color:#B8860B; }
+.mw-lead.sel-on { border-color:#B8860B; background:rgba(201,168,76,.08); }
 .mw-back { font-size:12.5px; color:#5C6678; margin-bottom:10px; cursor:pointer; display:inline-block; }
 .mw-hd { display:block; margin-bottom:10px; min-width:0; }
 .mw-hd input { background:#fff; border:1px dashed #DCD2BE; border-radius:8px; color:#1A2744; font-size:16px; font-weight:800; padding:8px 10px; width:100%; min-width:0; font-family:inherit; box-sizing:border-box; }
@@ -24403,7 +24409,7 @@ try { _MW_DEEP_LEAD = new URLSearchParams(location.search).get('lead') || ''; } 
 var _mw = {
   view:'list', list:[], counts:{}, batches:[], scope:'', canManage:false, tel:'',
   status:'', q:'', flt:'all', owner:'', lead:null, detail:null, touchers:[],
-  file:null, rows:[], autoAssign:true, uploading:false, lastAssign:null, stats:null, loading:false, lastErr:''
+  file:null, rows:[], autoAssign:true, uploading:false, lastAssign:null, stats:null, loading:false, lastErr:'', batch:'', selMode:false, selIds:{}
 };
 
 function _mwCanTouch() {
@@ -24521,12 +24527,50 @@ function _mwLoadList(cb) {
     if (cb) cb();
   });
 }
+function _mwBatchLabel(b) {
+  var at = String(b.at || '');
+  var d = at.length >= 10 ? at.substr(5, 5).replace('-', '/') : b.batchId;
+  return d + ' · ' + (b.count || 0) + '건';
+}
+function _mwSelCount() { var n = 0; for (var k in _mw.selIds) if (_mw.selIds.hasOwnProperty(k) && _mw.selIds[k]) n++; return n; }
+function _mwToggleSelMode(on) {
+  _mw.selMode = (on === undefined) ? !_mw.selMode : !!on;
+  if (!_mw.selMode) _mw.selIds = {};
+  _mwRenderList();
+}
+function _mwToggleSel(id) {
+  if (_mw.selIds[id]) delete _mw.selIds[id]; else _mw.selIds[id] = true;
+  _mwRenderListOnly();
+  var c = document.getElementById('mwSelCnt'); if (c) c.textContent = _mwSelCount() + '건 선택';
+}
+function _mwSelAll() {
+  var rows = _mwFiltered();
+  for (var i = 0; i < rows.length; i++) _mw.selIds[rows[i].id] = true;
+  _mwRenderListOnly();
+  var c = document.getElementById('mwSelCnt'); if (c) c.textContent = _mwSelCount() + '건 선택';
+}
+function _mwDeleteSelected() {
+  var ids = [];
+  for (var k in _mw.selIds) if (_mw.selIds.hasOwnProperty(k) && _mw.selIds[k]) ids.push(k);
+  if (!ids.length) { showToast('⚠️ 선택된 DB가 없습니다'); return; }
+  showConfirm({ icon:'🗑️', iconCls:'confirm-icon-danger', title:'DB ' + ids.length + '건 삭제', msg:'선택한 ' + ids.length + '건을 삭제할까요?<br>30일 후 상병·검진 정보가 자동 파기됩니다.', okLabel:'삭제', okCls:'red' }).then(function(ok){
+    if (!ok) return;
+    showToast('🗑️ 삭제 중…');
+    _mwPost({ action:'mwDeleteMany', fp:currentUser.id, ids:ids }, function(res){
+      if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '삭제 실패')); return; }
+      showToast('✓ ' + res.deleted + '건 삭제' + (res.denied ? ' · 권한 없음 ' + res.denied : ''));
+      _mw.selMode = false; _mw.selIds = {};
+      _mwLoadList();
+    });
+  });
+}
 function _mwFiltered() {
   var out = [];
   var q = String(_mw.q || '').replace(/[^0-9a-zA-Z가-힣]/g, '').toLowerCase();
   for (var i = 0; i < _mw.list.length; i++) {
     var l = _mw.list[i];
     if (_mw.status && l.status !== _mw.status) continue;
+    if (_mw.batch && l.batchId !== _mw.batch) continue;
     if (_mw.owner && String(l.fpCode).toLowerCase() !== _mw.owner.toLowerCase()) continue;
     if (_mw.flt === 'sel' && !l.selAt) continue;
     if (_mw.flt === 'data' && !(l.hasIns || l.hasDx || l.hasChk)) continue;
@@ -24547,8 +24591,12 @@ function _mwFiltered() {
   return out;
 }
 function _mwLeadCard(l) {
-  var h = '<div class="mw-lead" onclick="_mwOpenLead(\'' + _mwEsc(l.id) + '\')">';
+  var sel = !!_mw.selIds[l.id];
+  var h = _mw.selMode
+    ? '<div class="mw-lead' + (sel ? ' sel-on' : '') + '" onclick="_mwToggleSel(\'' + _mwEsc(l.id) + '\')">'
+    : '<div class="mw-lead" onclick="_mwOpenLead(\'' + _mwEsc(l.id) + '\')">';
   h += '<div class="l1">';
+  if (_mw.selMode) h += '<span class="mw-cb' + (sel ? ' on' : '') + '">' + (sel ? '✓' : '') + '</span>';
   h += l.name ? '<span class="nm">' + _mwEsc(l.name) + '</span>' : '<span class="nm none">이름 미입력</span>';
   var ag = []; if (l.ageBand) ag.push(l.ageBand); if (l.gender) ag.push(l.gender);
   if (ag.length) h += '<span class="ag">' + _mwEsc(ag.join(' · ')) + '</span>';
@@ -24587,6 +24635,11 @@ function _mwRenderList() {
   h += '</div>';
   h += '<input type="search" class="mw-q" placeholder="이름 · 전화번호 뒷자리 · 담당자" value="' + _mwEsc(_mw.q) + '" oninput="_mw.q=this.value;_mwRenderListOnly()">';
   h += '<div class="mw-filt">';
+  if (_mw.batches.length > 1 || _mw.batch) {
+    h += '<select onchange="_mw.batch=this.value;_mwRenderList()"><option value="">업로드 전체</option>';
+    for (var bi = _mw.batches.length - 1; bi >= 0; bi--) h += '<option value="' + _mwEsc(_mw.batches[bi].batchId) + '"' + (_mw.batch === _mw.batches[bi].batchId ? ' selected' : '') + '>' + _mwEsc(_mwBatchLabel(_mw.batches[bi])) + '</option>';
+    h += '</select>';
+  }
   var flts = [['all','전체'],['sel','선택 도착 🔔'],['data','데이터 有'],['nocall','미접촉']];
   for (var f = 0; f < flts.length; f++) h += '<button type="button" class="' + (_mw.flt === flts[f][0] ? 'on' : '') + '" onclick="_mw.flt=\'' + flts[f][0] + '\';_mwRenderList()">' + flts[f][1] + '</button>';
   if (_mw.scope !== 'mine') {
@@ -24597,7 +24650,11 @@ function _mwRenderList() {
     for (var o = 0; o < ol.length; o++) h += '<option value="' + _mwEsc(ol[o].id) + '"' + (_mw.owner === ol[o].id ? ' selected' : '') + '>' + _mwEsc(ol[o].name) + '</option>';
     h += '</select>';
   }
+  h += '<button type="button" class="' + (_mw.selMode ? 'on' : '') + '" style="margin-left:auto" onclick="_mwToggleSelMode()">' + (_mw.selMode ? '선택 취소' : '☑ 선택') + '</button>';
   h += '</div>';
+  if (_mw.selMode) {
+    h += '<div class="mw-selbar"><span id="mwSelCnt">' + _mwSelCount() + '건 선택</span><button type="button" onclick="_mwSelAll()">현재 목록 전체 선택</button><button type="button" class="del" onclick="_mwDeleteSelected()">선택 삭제</button></div>';
+  }
   h += '<div id="mwListBody"></div>';
   b.innerHTML = h;
   _mwRenderListOnly();
@@ -24763,12 +24820,10 @@ function _mwRenderDetail() {
   if (d.calls && d.calls.length) { for (var ci2 = 0; ci2 < d.calls.length && ci2 < 10; ci2++) { var c = d.calls[ci2]; h += '<div class="mw-log"><b>' + _mwEsc(c.result) + '</b> · ' + _mwEsc(_mwShort(c.at)) + ' · ' + _mwEsc(c.fpName) + (c.memo ? '<br>' + _mwEsc(c.memo) : '') + '</div>'; } }
   h += '</div>';
   // manage
-  if (_mw.canManage) {
-    h += '<div class="mw-card"><h3>관리 <small>대표·지점장</small></h3><div class="mw-grid2" style="margin:0">';
-    h += '<button type="button" class="mw-btn ghost sm" onclick="_mwReassignUI()">담당 변경</button>';
-    h += '<button type="button" class="mw-btn ghost sm" style="color:#DC2626" onclick="_mwDeleteLead()">DB 삭제</button>';
-    h += '</div><div id="mwReassignBox"></div></div>';
-  }
+  h += '<div class="mw-card"><h3>관리' + (_mw.canManage ? ' <small>대표·지점장</small>' : '') + '</h3><div class="mw-grid2" style="margin:0">';
+  if (_mw.canManage) h += '<button type="button" class="mw-btn ghost sm" onclick="_mwReassignUI()">담당 변경</button>';
+  h += '<button type="button" class="mw-btn ghost sm" style="color:#DC2626' + (_mw.canManage ? '' : ';grid-column:1 / span 2') + '" onclick="_mwDeleteLead()">DB 삭제</button>';
+  h += '</div><div id="mwReassignBox"></div></div>';
   b.innerHTML = h;
 }
 function _mwBuildTips(d, ins, hint, hasIns, hasDx, hasChk) {
@@ -24975,6 +25030,21 @@ function _mwRenderUpload() {
   var disabled = (!_mw.rows.length || _mw.uploading) ? ' disabled' : '';
   h += '<button type="button" class="mw-btn gold"' + disabled + ' onclick="_mwUploadGo()">' + (_mw.uploading ? '업로드 중…' : (_mw.autoAssign ? '업로드하고 ' + onCnt + '명에게 자동 배분' : '업로드만 (배분은 나중에)')) + '</button>';
   h += '<div class="mw-note">엑셀 담당FP명 칸이 채워진 행은 그 사람에게 먼저 배정되고, 나머지만 자동 배분됩니다. 전화번호가 이미 있는 DB는 건너뜁니다.</div>';
+  // current assignment status
+  if (_mw.list.length) {
+    var per0 = {}; var names0 = []; var live = 0;
+    for (var li = 0; li < _mw.list.length; li++) {
+      var L = _mw.list[li]; if (L.status === 'deleted') continue; live++;
+      var nm0 = L.fpName || '(미배분)';
+      if (!per0[nm0]) { per0[nm0] = { n:0, done:0 }; names0.push(nm0); }
+      per0[nm0].n++;
+      if (L.status === 'booked' || L.status === 'done' || L.status === 'signed' || L.status === 'reject' || L.status === 'selected') per0[nm0].done++;
+    }
+    names0.sort(function(a2, b2){ return per0[b2].n - per0[a2].n; });
+    h += '<div class="mw-card" style="margin-top:12px"><h3>현재 배분 현황 <small>' + live + '건 · ' + names0.length + '명</small></h3><div class="mw-per">';
+    for (var ni = 0; ni < names0.length; ni++) h += '<div>' + _mwEsc(names0[ni]) + '<b>' + per0[names0[ni]].n + '</b></div>';
+    h += '</div><div class="mw-note">숫자 = 배분 건수 (삭제 제외). 상세 진행률은 현황 탭.</div></div>';
+  }
   var unassigned = _mw.counts.unassigned || 0;
   if (unassigned) {
     h += '<div class="mw-card" style="margin-top:12px"><h3>미배분 DB <small>' + unassigned + '건</small></h3><button type="button" class="mw-btn ghost sm" onclick="_mwAssignGo(\'\')">위 선택 인원에게 지금 배분</button></div>';
@@ -24990,7 +25060,7 @@ function _mwRenderUpload() {
     h += '<div class="mw-card" style="margin-top:12px"><h3>업로드 이력</h3>';
     for (var bi = _mw.batches.length - 1; bi >= 0 && bi >= _mw.batches.length - 8; bi--) {
       var bt = _mw.batches[bi];
-      h += '<div class="mw-log"><b>' + _mwEsc(bt.batchId) + '</b> · ' + _mwEsc(_mwShort(bt.at)) + ' · ' + _mwEsc(bt.byName) + ' · ' + bt.count + '건' + (bt.skipped ? ' (중복 ' + bt.skipped + ')' : '') + '</div>';
+      h += '<div class="mw-log"><b>' + _mwEsc(_mwShort(bt.at)) + '</b> · ' + bt.count + '건 추가' + (bt.skipped ? ' · 중복 제외 ' + bt.skipped : '') + ' · ' + _mwEsc(bt.byName) + ' <span style="color:#97A0B0">' + _mwEsc(bt.batchId) + '</span></div>';
     }
     h += '</div>';
   }
