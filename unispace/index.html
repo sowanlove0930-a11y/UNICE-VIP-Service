@@ -5498,6 +5498,7 @@ const SUBMENUS = {
       { icon:'👥', name:'고객 조회 및 등록', desc:'조회 · 등록 · 수정 · 관리', href:'customer.html', internal:true },
       { icon:'🔄', name:'고객 이관 관리', desc:'퇴직·이동 시 고객 일괄 이관', href:'#', action:'transfer', adminOnly:true },
       { icon:'🤝', name:'파트너스 신청현황', desc:'소개 접수 확인 · 상태 관리', href:'#', action:'partners_admin' },
+      { icon:'🚶', name:'머니워크 DB', desc:'상담 신청 리드 · 링크 발송 · 콜 기록', href:'#', action:'moneywalk', mwOnly:true },
     ]
   },
   attend: {
@@ -5912,6 +5913,7 @@ function _openFromPush(op){
   try {
     if(op === 'recruit'){ setTimeout(function(){ if(typeof openRecruitModal==='function') openRecruitModal(); }, 300); return; }
     if(op === 'checkup'){ setTimeout(function(){ if(typeof openCheckupAdmin==='function') openCheckupAdmin(); }, 400); return; }
+    if(op === 'moneywalk'){ setTimeout(function(){ if(typeof openMoneywalk==='function') openMoneywalk(typeof _MW_DEEP_LEAD !== 'undefined' ? _MW_DEEP_LEAD : ''); }, 500); return; }
     if(op === 'today'){ window.location.href = 'today_alarm.html'; return; }
     if(op === 'perf'){ setTimeout(function(){ if(typeof openPerfView==='function') openPerfView(); }, 400); return; }
     if(op === 'bojtop' || op === 'stdfp'){
@@ -6708,6 +6710,7 @@ function buildMenuHtml(data) {
     if (item.action === 'fp_perf' && !_canSeeReport(currentUser)) return;
     // admin-only cards (manager matching)
     if (item.adminOnly && !_isPerfAdmin()) return;
+    if (item.mwOnly && !(typeof _mwCanTouch === 'function' && _mwCanTouch())) return;
     var isHash   = item.href === '#';
     var action   = item.action || '';
     var onclick;
@@ -6800,6 +6803,7 @@ function handleSubClick(e, action) {
   if (action === 'goal_adjust'){ openGoalAdj(); loadGoalAdjFromGas(function(){ if(document.getElementById('goalAdjOverlay').classList.contains('open')){ _gaRenderBranchGoal(); _gaRenderFpList(); _gaUpdateSum(); } }); loadPlansFromGas(null, function(){ if(document.getElementById('goalAdjOverlay').classList.contains('open')){ _gaRenderFpList(); _gaUpdateSum(); } }); return false; }
   if (action === 'transfer')  { openTransfer(); return false; }
   if (action === 'partners_admin') { openPartnersAdmin(); return false; }
+  if (action === 'moneywalk') { openMoneywalk(); return false; }
   if (action === 'attendance') {
     window.location.href = 'attendance.html';
     return false;
@@ -23816,7 +23820,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 72;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 73;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -24220,5 +24224,767 @@ function goWorkPlay(){
   }
 })();
 </script>
+
+<!-- ═══════════════════ MONEYWALK DB (mw) ═══════════════════ -->
+<style>
+.mw-overlay { display:none; position:fixed; inset:0; background:rgba(43,38,28,.42); z-index:100000; align-items:flex-end; justify-content:center; }
+.mw-overlay.on { display:flex; }
+.mw-box { width:100%; max-width:560px; height:90vh; height:90dvh; background:#FBF9F4; border:1px solid #E8E0D0; border-radius:22px 22px 0 0; display:flex; flex-direction:column; overflow:hidden; }
+@media (min-width:640px) { .mw-overlay { align-items:center; } .mw-box { border-radius:22px; height:760px; max-height:92vh; } }
+.mw-head { padding:14px 18px 12px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #E8E0D0; background:#fff; }
+.mw-head .ic { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#C9A84C,#E8C97A); display:flex; align-items:center; justify-content:center; font-size:16px; }
+.mw-head .t { font-size:16.5px; font-weight:800; color:#1A2744; flex:1; letter-spacing:-.3px; }
+.mw-head .t small { display:block; font-size:11px; color:#5C6678; font-weight:600; margin-top:2px; }
+.mw-role { font-size:10.5px; font-weight:800; color:#A6791A; background:rgba(201,168,76,.16); border:1px solid rgba(184,134,11,.35); border-radius:999px; padding:3px 8px; }
+.mw-close { background:none; border:none; color:#97A0B0; font-size:20px; cursor:pointer; padding:4px 6px; }
+.mw-tabs { display:flex; gap:6px; padding:10px 14px 0; }
+.mw-tab { flex:1; text-align:center; font-size:12.5px; font-weight:700; padding:9px 0; border-radius:10px; background:rgba(26,39,68,.03); border:1px solid #E8E0D0; color:#5C6678; cursor:pointer; font-family:inherit; }
+.mw-tab.on { background:#FFF3DF; border-color:#F5C77A; color:#C25E00; }
+.mw-body { flex:1; overflow-y:auto; padding:12px 14px 20px; -webkit-overflow-scrolling:touch; }
+.mw-card { background:#fff; border:1px solid #E8E0D0; border-radius:14px; padding:13px 14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(180,160,110,.08); }
+.mw-card h3 { font-size:13.5px; font-weight:800; color:#1A2744; margin:0 0 8px; display:flex; align-items:center; justify-content:space-between; letter-spacing:-.3px; }
+.mw-card h3 small { font-size:11px; color:#5C6678; font-weight:600; }
+.mw-stat { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; margin-bottom:8px; -webkit-overflow-scrolling:touch; }
+.mw-stat div { flex:none; background:#fff; border:1px solid #E8E0D0; border-radius:10px; padding:6px 10px; font-size:10.5px; color:#5C6678; white-space:nowrap; cursor:pointer; }
+.mw-stat div b { display:block; font-size:15px; color:#1A2744; font-weight:800; }
+.mw-stat div.on { border-color:#B8860B; background:rgba(201,168,76,.12); }
+.mw-stat div.hot { border-color:#F5C77A; background:#FFF3DF; } .mw-stat div.hot b { color:#C25E00; }
+.mw-q { width:100%; background:#fff; border:1px solid #E8E0D0; border-radius:10px; padding:9px 12px; font-size:13px; color:#1A2744; font-family:inherit; margin-bottom:8px; box-sizing:border-box; }
+.mw-q:focus { outline:none; border-color:#B8860B; }
+.mw-filt { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+.mw-filt button { font-size:11.5px; padding:5px 10px; border-radius:999px; background:#fff; border:1px solid #E8E0D0; color:#5C6678; font-family:inherit; cursor:pointer; }
+.mw-filt button.on { background:rgba(201,168,76,.16); border-color:rgba(184,134,11,.4); color:#A6791A; font-weight:700; }
+.mw-filt select { font-size:11.5px; padding:5px 8px; border-radius:999px; background:#fff; border:1px solid #E8E0D0; color:#5C6678; font-family:inherit; }
+.mw-lead { background:#fff; border:1px solid #E8E0D0; border-radius:13px; padding:11px 12px 9px; margin-bottom:8px; cursor:pointer; box-shadow:0 1px 3px rgba(180,160,110,.08); }
+.mw-lead:active { background:#FBF9F4; }
+.mw-lead .l1 { display:flex; align-items:center; gap:7px; }
+.mw-lead .nm { font-size:15px; font-weight:800; color:#1A2744; letter-spacing:-.3px; }
+.mw-lead .nm.none { color:#5C6678; font-weight:600; font-size:13.5px; }
+.mw-lead .ag { font-size:11.5px; color:#5C6678; }
+.mw-st { margin-left:auto; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; }
+.mw-st.new,.mw-st.unassigned { background:rgba(37,99,235,.1); color:#2563EB; } .mw-st.tried { background:rgba(92,102,120,.12); color:#5C6678; }
+.mw-st.talked { background:rgba(109,79,184,.12); color:#6D4FB8; } .mw-st.linked { background:rgba(199,125,20,.12); color:#C77D14; }
+.mw-st.selected { background:#FFF3DF; color:#C25E00; border:1px solid #F5C77A; } .mw-st.booked { background:rgba(31,146,104,.12); color:#1F9268; }
+.mw-st.done { background:rgba(31,146,104,.18); color:#146B4C; } .mw-st.signed { background:#1F9268; color:#fff; }
+.mw-st.hold { background:rgba(92,102,120,.1); color:#5C6678; } .mw-st.reject { background:rgba(220,38,38,.1); color:#DC2626; }
+.mw-lead .l2 { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; align-items:center; }
+.mw-lead .ph { font-size:12.5px; color:#5C6678; font-variant-numeric:tabular-nums; }
+.mw-ico { font-size:10.5px; padding:2px 7px; border-radius:6px; background:rgba(26,39,68,.06); color:#5C6678; font-weight:700; }
+.mw-ico.y { background:rgba(201,168,76,.16); color:#A6791A; }
+.mw-lead .l3 { margin-top:6px; font-size:11.5px; color:#5C6678; display:flex; justify-content:space-between; gap:8px; }
+.mw-lead .sel { margin-top:7px; background:#FFF8EC; border:1px solid #F5C77A; border-radius:9px; padding:6px 10px; font-size:12px; color:#7A4A10; }
+.mw-lead .sel b { color:#C25E00; }
+.mw-empty { text-align:center; color:#97A0B0; font-size:13px; padding:40px 10px; line-height:1.6; }
+.mw-back { font-size:12.5px; color:#5C6678; margin-bottom:10px; cursor:pointer; display:inline-block; }
+.mw-hd { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; }
+.mw-hd input { background:#fff; border:1px dashed #DCD2BE; border-radius:8px; color:#1A2744; font-size:16px; font-weight:800; padding:6px 10px; width:160px; font-family:inherit; }
+.mw-hd input:focus { outline:none; border-color:#B8860B; border-style:solid; }
+.mw-hd .meta { font-size:12px; color:#5C6678; margin-top:4px; line-height:1.5; }
+.mw-btn { display:block; width:100%; border:0; border-radius:11px; padding:12px; font-size:13.5px; font-weight:800; text-align:center; cursor:pointer; font-family:inherit; text-decoration:none; box-sizing:border-box; }
+.mw-btn.gold { background:linear-gradient(135deg,#C9A84C,#E8C97A); color:#1A2744; box-shadow:0 4px 12px rgba(201,168,76,.28); }
+.mw-btn.ghost { background:#fff; color:#1A2744; border:1px solid #DCD2BE; }
+.mw-btn.sm { padding:9px; font-size:12.5px; border-radius:10px; }
+.mw-btn:disabled { opacity:.55; cursor:default; }
+.mw-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+.mw-bri { border:1px solid rgba(184,134,11,.35); background:linear-gradient(180deg,rgba(201,168,76,.10),#fff); }
+.mw-bri .t { font-size:11px; color:#A6791A; font-weight:800; letter-spacing:.3px; margin:10px 0 5px; }
+.mw-bri .t:first-child { margin-top:0; }
+.mw-pill { display:inline-block; font-size:11.5px; padding:4px 9px; border-radius:999px; background:rgba(26,39,68,.06); color:#1A2744; margin:0 4px 4px 0; }
+.mw-pill.bad { background:rgba(220,38,38,.1); color:#DC2626; font-weight:700; }
+.mw-pill.ok { background:rgba(31,146,104,.12); color:#1F9268; font-weight:700; }
+.mw-pill.warn { background:#FFF3DF; color:#C25E00; font-weight:700; }
+.mw-pill.dim { color:#97A0B0; }
+.mw-sug { background:rgba(26,39,68,.03); border-radius:10px; padding:8px 10px; font-size:12px; line-height:1.6; color:#1A2744; }
+.mw-sug b { color:#A6791A; }
+.mw-yr { font-size:12px; line-height:1.5; color:#5C6678; padding:6px 0; border-top:1px solid #E8E0D0; }
+.mw-yr b { color:#1A2744; margin-right:6px; }
+.mw-yr .hb { color:#1F9268; font-size:10.5px; margin-left:4px; white-space:nowrap; }
+.mw-note { font-size:11px; color:#97A0B0; margin-top:6px; line-height:1.5; }
+.mw-call { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+.mw-call button { text-align:center; background:#fff; border:1px solid #E8E0D0; border-radius:10px; padding:8px 2px; font-size:11.5px; font-weight:700; color:#1A2744; font-family:inherit; cursor:pointer; }
+.mw-call button span { display:block; font-size:17px; margin-bottom:2px; }
+.mw-call button.on { border-color:#B8860B; background:rgba(201,168,76,.12); }
+.mw-memo { width:100%; background:#FBF9F4; border:1px solid #E8E0D0; border-radius:10px; padding:9px 10px; font-size:12.5px; color:#1A2744; font-family:inherit; margin-top:8px; box-sizing:border-box; resize:vertical; min-height:56px; }
+.mw-log { font-size:11.5px; color:#5C6678; padding:5px 0; border-top:1px dashed #E8E0D0; line-height:1.5; }
+.mw-log b { color:#1A2744; }
+.mw-sms { background:#FBF9F4; border:1px solid #E8E0D0; border-radius:10px; padding:10px; font-size:11.5px; line-height:1.55; color:#5C6678; white-space:pre-line; word-break:break-all; }
+.mw-drop { border:1.5px dashed #DCD2BE; border-radius:14px; padding:18px 12px; text-align:center; color:#5C6678; font-size:12.5px; line-height:1.5; background:rgba(26,39,68,.02); cursor:pointer; }
+.mw-drop b { display:block; color:#1A2744; font-size:13.5px; margin-bottom:3px; }
+.mw-drop .file { display:inline-block; margin-top:8px; background:rgba(31,146,104,.12); color:#1F9268; border-radius:8px; padding:5px 10px; font-size:11.5px; font-weight:700; }
+.mw-kv { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; }
+.mw-kv div { background:rgba(26,39,68,.03); border:1px solid #E8E0D0; border-radius:10px; padding:8px; text-align:center; }
+.mw-kv b { display:block; font-size:17px; font-weight:800; color:#A6791A; }
+.mw-kv span { font-size:10.5px; color:#5C6678; }
+.mw-chk { display:flex; flex-wrap:wrap; gap:6px; }
+.mw-chk label { display:inline-flex; align-items:center; gap:6px; font-size:12px; background:#fff; border:1px solid #E8E0D0; border-radius:999px; padding:5px 10px 5px 7px; cursor:pointer; color:#1A2744; }
+.mw-chk label.a { border-color:rgba(46,158,107,.45); } .mw-chk label.b { border-color:rgba(123,82,208,.45); }
+.mw-chk label input { accent-color:#B8860B; margin:0; }
+.mw-row { display:flex; align-items:center; justify-content:space-between; font-size:12.5px; padding:8px 0; border-top:1px solid #E8E0D0; color:#1A2744; }
+.mw-row:first-of-type { border-top:0; }
+.mw-tog { width:38px; height:22px; border-radius:999px; background:#DCD2BE; position:relative; cursor:pointer; flex:none; transition:background .15s; }
+.mw-tog:after { content:''; position:absolute; left:3px; top:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .15s; }
+.mw-tog.on { background:#1F9268; } .mw-tog.on:after { left:19px; }
+.mw-per { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:8px; }
+.mw-per div { font-size:11.5px; background:rgba(26,39,68,.03); border-radius:8px; padding:6px 8px; display:flex; justify-content:space-between; color:#1A2744; }
+.mw-per b { color:#A6791A; }
+.mw-tbl { width:100%; border-collapse:collapse; font-size:11.5px; }
+.mw-tbl th { text-align:left; color:#5C6678; font-weight:700; padding:6px 4px; border-bottom:1px solid #E8E0D0; white-space:nowrap; }
+.mw-tbl td { padding:7px 4px; border-bottom:1px solid #F1EBDD; color:#1A2744; font-variant-numeric:tabular-nums; }
+.mw-tbl td.n { font-weight:800; white-space:nowrap; }
+.mw-tbl td.hi { color:#C25E00; font-weight:800; }
+.mw-tbl tr.sum td { border-top:2px solid #E8E0D0; font-weight:800; }
+.mw-spin { text-align:center; color:#97A0B0; font-size:12.5px; padding:30px 0; }
+.mw-badge { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; margin-left:6px; border-radius:9px; background:#EF4444; color:#fff; font-size:10.5px; font-weight:900; vertical-align:middle; }
+</style>
+
+<div class="mw-overlay" id="mwOverlay" onclick="if(event.target===this)closeMoneywalk()">
+  <div class="mw-box">
+    <div class="mw-head">
+      <div class="ic">🚶</div>
+      <div class="t">머니워크 DB<small id="mwHeadSub"></small></div>
+      <span class="mw-role" id="mwRole"></span>
+      <button type="button" class="mw-close" onclick="closeMoneywalk()">✕</button>
+    </div>
+    <div class="mw-tabs" id="mwTabs" style="display:none">
+      <button type="button" class="mw-tab" data-v="upload" onclick="_mwSetView('upload')">업로드·배분</button>
+      <button type="button" class="mw-tab on" data-v="list" onclick="_mwSetView('list')">리드 목록</button>
+      <button type="button" class="mw-tab" data-v="stats" onclick="_mwSetView('stats')">현황</button>
+    </div>
+    <div class="mw-body" id="mwBody"></div>
+  </div>
+</div>
+<input type="file" id="mwFile" accept=".xlsx,.xls" style="display:none" onchange="_mwFileChosen(this)">
+
+<script>
+// ═══════════════════ MONEYWALK DB module ═══════════════════
+var MW_ITEM_LABEL = { '3big':'암·뇌·심장 보장', 'silson':'실손보험', 'prem':'보험료 적정성', 'hist':'병력 가입 가능 여부', 'all':'전체 점검' };
+var MW_STATUS_KO = { 'unassigned':'미배분', 'new':'신규', 'tried':'부재', 'talked':'통화', 'linked':'링크발송', 'selected':'고객선택', 'booked':'상담예약', 'done':'상담완료', 'signed':'청약', 'hold':'보류', 'reject':'거절' };
+var MW_STATUS_ORDER = ['new','tried','talked','linked','selected','booked','done','signed','hold','reject','unassigned'];
+var MW_CALL_RESULTS = [
+  { r:'부재', e:'📵' }, { r:'통화', e:'📞' }, { r:'재통화', e:'🔁' }, { r:'상담예약', e:'📅' }, { r:'거절', e:'✖' }
+];
+var _MW_DEEP_LEAD = '';
+try { _MW_DEEP_LEAD = new URLSearchParams(location.search).get('lead') || ''; } catch(e) {}
+
+var _mw = {
+  view:'list', list:[], counts:{}, batches:[], scope:'', canManage:false, tel:'',
+  status:'', q:'', flt:'all', owner:'', lead:null, detail:null, touchers:[],
+  file:null, rows:[], autoAssign:true, uploading:false, lastAssign:null, stats:null, loading:false
+};
+
+function _mwCanTouch() {
+  if (!currentUser) return false;
+  if (currentUser.role === '대표' || currentUser.level === 'admin' || currentUser.id === 'ktk01') return true;
+  var t = String(currentUser.title || '');
+  if (currentUser.role === '지점장' || currentUser.level === 'manager') return true;
+  if (t.indexOf('지점장') >= 0 || t.indexOf('매니저') >= 0) return true;
+  return false;
+}
+function _mwCanManage() {
+  if (!currentUser) return false;
+  if (currentUser.role === '대표' || currentUser.level === 'admin' || currentUser.id === 'ktk01') return true;
+  if (currentUser.role === '지점장' || currentUser.level === 'manager') return true;
+  if (String(currentUser.title || '').indexOf('지점장') >= 0) return true;
+  return false;
+}
+function _mwEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function _mwGet(params, cb) {
+  var qs = [];
+  for (var k in params) { if (params.hasOwnProperty(k) && params[k] !== undefined && params[k] !== null) qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k])); }
+  qs.push('_=' + Date.now());
+  fetch(UNISPACE_GAS_URL + '?' + qs.join('&'))
+    .then(function(r){ return r.json(); })
+    .then(function(res){ cb(res); })
+    .catch(function(){ cb({ ok:false, msg:'네트워크 오류' }); });
+}
+function _mwPost(body, cb) {
+  fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+    .then(function(r){ return r.json(); })
+    .then(function(res){ cb(res); })
+    .catch(function(){ cb({ ok:false, msg:'네트워크 오류' }); });
+}
+function _mwWon(n) { n = parseInt(n || 0, 10) || 0; if (n >= 10000) return Math.round(n / 10000) + '만원'; return n.toLocaleString() + '원'; }
+function _mwShort(dt) { var s = String(dt || ''); if (s.length >= 16) return s.substr(5, 11).replace('-', '/'); return s; }
+
+// ---- open / close ----
+function openMoneywalk(leadId) {
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  if (!_mwCanTouch()) { showToast('⚠️ 머니워크 DB 접근 권한이 없습니다'); return false; }
+  var ov = document.getElementById('mwOverlay');
+  ov.classList.add('on');
+  document.body.style.overflow = 'hidden';
+  var lbl = currentUser.title || currentUser.role || 'FP';
+  if (lbl === '유니스 대표') lbl = '대표';
+  document.getElementById('mwRole').textContent = lbl;
+  document.getElementById('mwTabs').style.display = _mwCanManage() ? 'flex' : 'none';
+  _mw.canManage = _mwCanManage();
+  _mw.view = 'list';
+  _mw.lead = null; _mw.detail = null;
+  _mwSetView('list');
+  _mwLoadList(function(){
+    if (leadId) _mwOpenLead(leadId);
+  });
+  return false;
+}
+function closeMoneywalk() {
+  document.getElementById('mwOverlay').classList.remove('on');
+  document.body.style.overflow = '';
+}
+function _mwSetView(v) {
+  _mw.view = v;
+  _mw.lead = null; _mw.detail = null;
+  var tabs = document.querySelectorAll('#mwTabs .mw-tab');
+  for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('on', tabs[i].getAttribute('data-v') === v);
+  if (v === 'list') _mwRenderList();
+  else if (v === 'upload') { _mwRenderUpload(); if (!_mw.touchers.length) _mwLoadTouchers(); }
+  else if (v === 'stats') { _mwRenderStats(); _mwLoadStats(); }
+}
+
+// ---- list ----
+function _mwLoadList(cb) {
+  _mw.loading = true;
+  if (_mw.view === 'list' && !_mw.lead) _mwRenderList();
+  _mwGet({ action:'mwList', fp:currentUser.id }, function(res){
+    _mw.loading = false;
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '리드 조회 실패')); _mwRenderList(); return; }
+    _mw.list = res.list || [];
+    _mw.counts = res.counts || {};
+    _mw.batches = res.batches || [];
+    _mw.scope = res.scope || '';
+    _mw.tel = res.tel || '';
+    if (res.canManage !== undefined) _mw.canManage = !!res.canManage;
+    var sub = _mw.list.length + '건';
+    if (_mw.scope === 'mine') sub = '내 리드 ' + sub;
+    else if (_mw.scope === 'branch') sub = (currentUser.branch || '지점') + ' ' + sub;
+    else sub = '전체 ' + sub;
+    document.getElementById('mwHeadSub').textContent = sub;
+    if (_mw.view === 'list' && !_mw.lead) _mwRenderList();
+    if (cb) cb();
+  });
+}
+function _mwFiltered() {
+  var out = [];
+  var q = String(_mw.q || '').replace(/[^0-9a-zA-Z가-힣]/g, '').toLowerCase();
+  for (var i = 0; i < _mw.list.length; i++) {
+    var l = _mw.list[i];
+    if (_mw.status && l.status !== _mw.status) continue;
+    if (_mw.owner && String(l.fpCode).toLowerCase() !== _mw.owner.toLowerCase()) continue;
+    if (_mw.flt === 'sel' && !l.selAt) continue;
+    if (_mw.flt === 'data' && !(l.hasIns || l.hasDx || l.hasChk)) continue;
+    if (_mw.flt === 'new' && l.status !== 'new') continue;
+    if (_mw.flt === 'nocall' && l.callCount > 0) continue;
+    if (q) {
+      var hay = (String(l.name || '') + String(l.phone || '').replace(/[^0-9]/g, '') + String(l.fpName || '')).toLowerCase();
+      if (hay.indexOf(q) < 0) continue;
+    }
+    out.push(l);
+  }
+  // selected first, then newest activity
+  out.sort(function(a, b){
+    var sa = a.status === 'selected' ? 0 : 1, sb = b.status === 'selected' ? 0 : 1;
+    if (sa !== sb) return sa - sb;
+    return String(b.updatedAt).localeCompare(String(a.updatedAt));
+  });
+  return out;
+}
+function _mwLeadCard(l) {
+  var h = '<div class="mw-lead" onclick="_mwOpenLead(\'' + _mwEsc(l.id) + '\')">';
+  h += '<div class="l1">';
+  h += l.name ? '<span class="nm">' + _mwEsc(l.name) + '</span>' : '<span class="nm none">이름 미입력</span>';
+  var ag = []; if (l.ageBand) ag.push(l.ageBand); if (l.gender) ag.push(l.gender);
+  if (ag.length) h += '<span class="ag">' + _mwEsc(ag.join(' · ')) + '</span>';
+  h += '<span class="mw-st ' + _mwEsc(l.status) + '">' + (l.status === 'selected' ? '고객선택 도착' : _mwEsc(MW_STATUS_KO[l.status] || l.status)) + '</span>';
+  h += '</div><div class="l2"><span class="ph">' + _mwEsc(l.phone) + '</span>';
+  if (l.hasIns) h += '<span class="mw-ico y">보험 ' + l.insTotal + '건</span>';
+  if (l.hasDx) h += '<span class="mw-ico y">병력</span>';
+  if (l.hasChk) h += '<span class="mw-ico y">검진</span>';
+  if (!l.hasIns && !l.hasDx && !l.hasChk) h += '<span class="mw-ico">데이터 없음</span>';
+  if (_mw.scope !== 'mine' && l.fpName) h += '<span class="mw-ico">' + _mwEsc(l.fpName) + '</span>';
+  h += '</div>';
+  if (l.sel && l.sel.items) {
+    var labels = [];
+    for (var i = 0; i < l.sel.items.length; i++) labels.push(MW_ITEM_LABEL[l.sel.items[i]] || l.sel.items[i]);
+    h += '<div class="sel"><b>' + _mwEsc(labels.join(' · ')) + '</b> · ' + (l.sel.contact === 'kakao' ? '카톡' : '통화') + (l.sel.slot ? ' · ' + _mwEsc(l.sel.slot) : '') + (l.receiptNo ? ' · ' + _mwEsc(l.receiptNo) : '') + '</div>';
+  } else {
+    var l3a = '', l3b = '';
+    if (l.callCount) l3a = '콜 ' + l.callCount + '회 · ' + _mwShort(l.lastCallAt) + ' ' + _mwEsc(l.lastCallResult);
+    if (l.linkOpenedAt) l3b = '링크 열람 ✓'; else if (l.linkSentAt) l3b = '링크 발송 ' + _mwShort(l.linkSentAt);
+    if (l3a || l3b) h += '<div class="l3"><span>' + l3a + '</span><span>' + l3b + '</span></div>';
+  }
+  h += '</div>';
+  return h;
+}
+function _mwRenderList() {
+  var b = document.getElementById('mwBody');
+  var h = '';
+  // status chips
+  h += '<div class="mw-stat">';
+  h += '<div class="' + (!_mw.status ? 'on' : '') + '" onclick="_mwStatus(\'\')"><b>' + _mw.list.length + '</b>전체</div>';
+  for (var i = 0; i < MW_STATUS_ORDER.length; i++) {
+    var s = MW_STATUS_ORDER[i]; var c = _mw.counts[s] || 0;
+    if (!c && s !== 'new') continue;
+    h += '<div class="' + (_mw.status === s ? 'on ' : '') + (s === 'selected' && c ? 'hot' : '') + '" onclick="_mwStatus(\'' + s + '\')"><b>' + c + '</b>' + MW_STATUS_KO[s] + '</div>';
+  }
+  h += '</div>';
+  h += '<input type="search" class="mw-q" placeholder="이름 · 전화번호 뒷자리 · 담당자" value="' + _mwEsc(_mw.q) + '" oninput="_mw.q=this.value;_mwRenderListOnly()">';
+  h += '<div class="mw-filt">';
+  var flts = [['all','전체'],['sel','선택 도착 🔔'],['data','데이터 有'],['nocall','미접촉']];
+  for (var f = 0; f < flts.length; f++) h += '<button type="button" class="' + (_mw.flt === flts[f][0] ? 'on' : '') + '" onclick="_mw.flt=\'' + flts[f][0] + '\';_mwRenderList()">' + flts[f][1] + '</button>';
+  if (_mw.scope !== 'mine') {
+    var owners = {}; var ol = [];
+    for (var j = 0; j < _mw.list.length; j++) { var lj = _mw.list[j]; if (lj.fpCode && !owners[lj.fpCode]) { owners[lj.fpCode] = lj.fpName; ol.push({ id:lj.fpCode, name:lj.fpName }); } }
+    ol.sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); });
+    h += '<select onchange="_mw.owner=this.value;_mwRenderList()"><option value="">담당 전체</option>';
+    for (var o = 0; o < ol.length; o++) h += '<option value="' + _mwEsc(ol[o].id) + '"' + (_mw.owner === ol[o].id ? ' selected' : '') + '>' + _mwEsc(ol[o].name) + '</option>';
+    h += '</select>';
+  }
+  h += '</div>';
+  h += '<div id="mwListBody"></div>';
+  b.innerHTML = h;
+  _mwRenderListOnly();
+}
+function _mwRenderListOnly() {
+  var el = document.getElementById('mwListBody');
+  if (!el) return;
+  if (_mw.loading && !_mw.list.length) { el.innerHTML = '<div class="mw-spin">불러오는 중…</div>'; return; }
+  var rows = _mwFiltered();
+  if (!rows.length) {
+    el.innerHTML = '<div class="mw-empty">' + (_mw.list.length ? '조건에 맞는 리드가 없어요' : (_mw.canManage ? '아직 리드가 없어요.<br>업로드·배분 탭에서 엑셀을 올려주세요' : '배분된 리드가 아직 없어요')) + '</div>';
+    return;
+  }
+  var h = '';
+  var max = Math.min(rows.length, 300);
+  for (var i = 0; i < max; i++) h += _mwLeadCard(rows[i]);
+  if (rows.length > max) h += '<div class="mw-note" style="text-align:center">' + (rows.length - max) + '건 더 있음 · 검색으로 좁혀주세요</div>';
+  el.innerHTML = h;
+}
+function _mwStatus(s) { _mw.status = (_mw.status === s) ? '' : s; _mwRenderList(); }
+
+// ---- detail ----
+function _mwOpenLead(id) {
+  var found = null;
+  for (var i = 0; i < _mw.list.length; i++) if (_mw.list[i].id === id) { found = _mw.list[i]; break; }
+  _mw.lead = found || { id:id };
+  _mw.detail = null;
+  _mwRenderDetail();
+  _mwGet({ action:'mwGet', fp:currentUser.id, leadId:id }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '상세 조회 실패')); return; }
+    if (!_mw.lead || _mw.lead.id !== id) return;
+    _mw.lead = res.lead || _mw.lead;
+    _mw.detail = res;
+    _mwRenderDetail();
+  });
+}
+function _mwBackToList() {
+  _mw.lead = null; _mw.detail = null;
+  _mwRenderList();
+  _mwLoadList();
+}
+function _mwRenderDetail() {
+  var b = document.getElementById('mwBody');
+  var l = _mw.lead || {}; var d = _mw.detail;
+  var h = '<span class="mw-back" onclick="_mwBackToList()">‹ 리드 목록</span>';
+  h += '<div class="mw-hd"><div>';
+  h += '<input id="mwNameIn" value="' + _mwEsc(l.name || '') + '" placeholder="통화 중 이름 입력" onchange="_mwSaveName(this.value)">';
+  var meta = [];
+  if (l.birth) meta.push(_mwEsc(l.birth)); if (l.age) meta.push(l.age + '세'); if (l.gender) meta.push(_mwEsc(l.gender));
+  if (l.phone) meta.push(_mwEsc(l.phone)); if (l.fpName) meta.push('담당 ' + _mwEsc(l.fpName));
+  h += '<div class="meta">' + meta.join(' · ') + '</div></div>';
+  h += '<span class="mw-st ' + _mwEsc(l.status || '') + '" style="margin-left:auto;margin-top:6px">' + _mwEsc(MW_STATUS_KO[l.status] || l.status || '') + '</span></div>';
+  h += '<div class="mw-grid2">';
+  h += '<a class="mw-btn ghost sm" href="tel:' + String(l.phone || '').replace(/[^0-9]/g, '') + '">📞 전화 걸기</a>';
+  h += '<button type="button" class="mw-btn gold sm" onclick="_mwSendLink()">🔗 링크 보내기</button>';
+  h += '</div>';
+  if (l.sel && l.sel.items) {
+    var labels = [];
+    for (var i = 0; i < l.sel.items.length; i++) labels.push('<span class="mw-pill warn">' + _mwEsc(MW_ITEM_LABEL[l.sel.items[i]] || l.sel.items[i]) + '</span>');
+    h += '<div class="mw-card"><h3>고객이 선택한 내용 <small>' + _mwEsc(_mwShort(l.selAt)) + (l.receiptNo ? ' · ' + _mwEsc(l.receiptNo) : '') + '</small></h3>';
+    h += labels.join('') + '<span class="mw-pill">' + (l.sel.contact === 'kakao' ? '카카오톡' : '통화') + '</span>' + (l.sel.slot ? '<span class="mw-pill">' + _mwEsc(l.sel.slot) + '</span>' : '') + '</div>';
+  }
+  if (!d) {
+    h += '<div class="mw-spin">브리핑 불러오는 중…</div>';
+    b.innerHTML = h; return;
+  }
+  // briefing
+  h += '<div class="mw-card mw-bri">';
+  var ins = d.ins || { policies:[], byInsurer:[], total:0, auto:0, monthly:0, silson:false, flags:{} };
+  h += '<div class="t">콜 전 브리핑 · 보험 요약</div>';
+  if (ins.total || ins.auto) {
+    for (var bi = 0; bi < ins.byInsurer.length; bi++) h += '<span class="mw-pill">' + _mwEsc(ins.byInsurer[bi].name) + ' ' + ins.byInsurer[bi].count + '</span>';
+    if (ins.auto) h += '<span class="mw-pill dim">자동차 ' + ins.auto + ' 별도</span>';
+    h += '<div style="margin-top:6px">';
+    h += ins.silson ? '<span class="mw-pill ok">실손 ✓</span>' : '<span class="mw-pill bad">실손 없음</span>';
+    h += ins.flags.cancer ? '<span class="mw-pill ok">암 ✓</span>' : '<span class="mw-pill bad">암 ✗</span>';
+    h += ins.flags.brain ? '<span class="mw-pill ok">뇌 ✓</span>' : '<span class="mw-pill bad">뇌 ✗</span>';
+    h += ins.flags.heart ? '<span class="mw-pill ok">심장 ✓</span>' : '<span class="mw-pill bad">심장 ✗</span>';
+    if (ins.monthly) h += '<span class="mw-pill warn">월 ' + _mwWon(ins.monthly) + '</span>';
+    h += '</div>';
+    h += '<div class="mw-note" style="cursor:pointer" onclick="var e=document.getElementById(\'mwPol\');e.style.display=e.style.display===\'none\'?\'block\':\'none\'">▾ 계약 ' + ins.policies.length + '건 펼치기</div><div id="mwPol" style="display:none">';
+    for (var pi = 0; pi < ins.policies.length; pi++) {
+      var p = ins.policies[pi];
+      h += '<div class="mw-yr"><b>' + _mwEsc(p.insurer) + '</b>' + _mwEsc(p.product) + (p.monthly ? ' <span class="hb" style="color:#A6791A">월 ' + _mwWon(p.monthly) + '</span>' : '') + (p.period ? ' <span class="hb" style="color:#97A0B0">' + _mwEsc(p.period.substr(0,4)) + '~</span>' : '') + '</div>';
+    }
+    h += '</div>';
+  } else {
+    h += '<span class="mw-pill dim">보험 가입현황 데이터 없음</span>';
+  }
+  var hint = d.hint || { level:'unknown', notes:[] };
+  if (d.dx && d.dx.years && d.dx.years.length) {
+    h += '<div class="t">가입 가능성 힌트</div>';
+    var hc = hint.level === 'normal' ? 'ok' : (hint.level === 'simple' ? 'warn' : (hint.level === 'hard' ? 'bad' : 'dim'));
+    var hl = hint.level === 'normal' ? '일반심사 가능성 높음' : (hint.level === 'simple' ? '간편심사 검토' : (hint.level === 'hard' ? '심사 난이도 높음' : '판단 보류'));
+    h += '<span class="mw-pill ' + hc + '">' + hl + '</span>';
+    if (hint.notes && hint.notes.length) h += '<div class="mw-note">' + _mwEsc(hint.notes.join(' / ')) + ' · 최종 판단은 고지사항 확인 후</div>';
+  }
+  if (d.suggest && d.suggest.length) {
+    h += '<div class="t">추천 상담 순서</div><div class="mw-sug">';
+    var circ = ['①','②','③','④','⑤'];
+    for (var si = 0; si < d.suggest.length && si < 5; si++) h += (si ? '<br>' : '') + circ[si] + ' <b>' + _mwEsc(MW_ITEM_LABEL[d.suggest[si].key] || d.suggest[si].key) + '</b> — ' + _mwEsc(d.suggest[si].why);
+    h += '</div>';
+  }
+  if (d.chk && d.chk.lines && d.chk.lines.length) {
+    h += '<div class="t">검진 플래그</div>';
+    if (d.chk.flags && d.chk.flags.length) { for (var ci = 0; ci < d.chk.flags.length; ci++) h += '<span class="mw-pill bad">' + _mwEsc(d.chk.flags[ci]) + '</span>'; }
+    else h += '<span class="mw-pill ok">이상 수치 없음</span>';
+    if (d.chk.existing) h += '<span class="mw-pill warn">기존질환: ' + _mwEsc(d.chk.existing) + '</span>';
+    if (d.chk.verdicts) h += '<div class="mw-note">검진판정 ' + _mwEsc(d.chk.verdicts) + '</div>';
+    if (d.chk.values && d.chk.values.length) {
+      h += '<div class="mw-note" style="cursor:pointer" onclick="var e=document.getElementById(\'mwChkV\');e.style.display=e.style.display===\'none\'?\'block\':\'none\'">▾ 수치 전체 보기</div><div id="mwChkV" style="display:none;margin-top:4px">';
+      for (var vi = 0; vi < d.chk.values.length; vi++) { var v = d.chk.values[vi]; h += '<span class="mw-pill ' + (v.bad ? 'bad' : '') + '">' + _mwEsc(v.key) + ' ' + _mwEsc(v.val) + '</span>'; }
+      h += '</div>';
+    }
+  }
+  if (d.dx && d.dx.years && d.dx.years.length) {
+    h += '<div class="t">병력 타임라인' + (d.dx.hanbangOnly ? ' <span class="mw-pill ok" style="font-size:10.5px">한방만</span>' : '') + '</div>';
+    if (d.dx.flags && d.dx.flags.length) {
+      for (var fi = 0; fi < d.dx.flags.length; fi++) { var fl = d.dx.flags[fi]; var sev = (fl.key === 'cancer' || fl.key === 'brain' || fl.key === 'heart') ? 'bad' : 'warn'; h += '<span class="mw-pill ' + sev + '">' + _mwEsc(fl.label) + ' ' + _mwEsc(fl.years.join(',')) + '</span>'; }
+    }
+    for (var yi = 0; yi < d.dx.years.length; yi++) {
+      var y = d.dx.years[yi];
+      var open = yi < 2;
+      h += '<div class="mw-yr"' + (open ? '' : ' style="display:none" data-more="1"') + '><b>' + _mwEsc(y.year) + '</b>' + _mwEsc(y.text) + (y.hanbang || y.yangbang ? '<span class="hb">한방 ' + y.hanbang + ' · 양방 ' + y.yangbang + '</span>' : '') + '</div>';
+    }
+    if (d.dx.years.length > 2) h += '<div class="mw-note" style="cursor:pointer" onclick="var m=this.parentNode.querySelectorAll(\'[data-more]\');for(var i=0;i<m.length;i++)m[i].style.display=\'block\';this.style.display=\'none\'">▾ 이전 연도 ' + (d.dx.years.length - 2) + '개 펼치기</div>';
+  } else if (!(ins.total || ins.auto) && !(d.chk && d.chk.lines && d.chk.lines.length)) {
+    h += '<div class="mw-note">이 리드는 전화번호·성별·나이대만 있습니다. 통화로 파악해주세요.</div>';
+  }
+  h += '</div>';
+  // call log
+  h += '<div class="mw-card"><h3>콜 결과 기록 <small>' + (l.callCount ? l.callCount + '회 · 마지막 ' + _mwEsc(_mwShort(l.lastCallAt)) + ' ' + _mwEsc(l.lastCallResult) : '아직 없음') + '</small></h3>';
+  h += '<div class="mw-call">';
+  for (var ri = 0; ri < MW_CALL_RESULTS.length; ri++) h += '<button type="button" onclick="_mwCall(\'' + MW_CALL_RESULTS[ri].r + '\')"><span>' + MW_CALL_RESULTS[ri].e + '</span>' + MW_CALL_RESULTS[ri].r + '</button>';
+  h += '</div>';
+  h += '<textarea class="mw-memo" id="mwMemo" placeholder="메모 (결과 버튼 누를 때 같이 저장)">' + _mwEsc(l.memo || '') + '</textarea>';
+  h += '<div class="mw-grid2" style="margin:8px 0 0"><button type="button" class="mw-btn ghost sm" onclick="_mwSaveMemo()">메모만 저장</button>';
+  h += '<select class="mw-q" style="margin:0;padding:8px" onchange="if(this.value)_mwSetStatus(this.value)"><option value="">상태 직접 변경…</option>';
+  var sts = ['booked','done','signed','hold','reject','new'];
+  for (var st = 0; st < sts.length; st++) h += '<option value="' + sts[st] + '">' + MW_STATUS_KO[sts[st]] + '</option>';
+  h += '</select></div>';
+  if (d.calls && d.calls.length) { for (var ci2 = 0; ci2 < d.calls.length && ci2 < 10; ci2++) { var c = d.calls[ci2]; h += '<div class="mw-log"><b>' + _mwEsc(c.result) + '</b> · ' + _mwEsc(_mwShort(c.at)) + ' · ' + _mwEsc(c.fpName) + (c.memo ? '<br>' + _mwEsc(c.memo) : '') + '</div>'; } }
+  h += '</div>';
+  // manage
+  if (_mw.canManage) {
+    h += '<div class="mw-card"><h3>관리 <small>대표·지점장</small></h3><div class="mw-grid2" style="margin:0">';
+    h += '<button type="button" class="mw-btn ghost sm" onclick="_mwReassignUI()">담당 변경</button>';
+    h += '<button type="button" class="mw-btn ghost sm" style="color:#DC2626" onclick="_mwDeleteLead()">리드 삭제</button>';
+    h += '</div><div id="mwReassignBox"></div></div>';
+  }
+  b.innerHTML = h;
+}
+function _mwSaveName(v) {
+  if (!_mw.lead) return;
+  var id = _mw.lead.id;
+  _mwGet({ action:'mwSave', fp:currentUser.id, leadId:id, name:v }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '저장 실패')); return; }
+    if (_mw.lead && _mw.lead.id === id) _mw.lead.name = v;
+    for (var i = 0; i < _mw.list.length; i++) if (_mw.list[i].id === id) _mw.list[i].name = v;
+    showToast('✓ 이름 저장');
+  });
+}
+function _mwSaveMemo() {
+  if (!_mw.lead) return;
+  var id = _mw.lead.id; var memo = (document.getElementById('mwMemo') || {}).value || '';
+  _mwGet({ action:'mwSave', fp:currentUser.id, leadId:id, memo:memo }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '저장 실패')); return; }
+    if (_mw.lead && _mw.lead.id === id) _mw.lead.memo = memo;
+    showToast('✓ 메모 저장');
+  });
+}
+function _mwSetStatus(s) {
+  if (!_mw.lead) return;
+  var id = _mw.lead.id;
+  _mwGet({ action:'mwSave', fp:currentUser.id, leadId:id, status:s }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '변경 실패')); return; }
+    showToast('✓ 상태: ' + (MW_STATUS_KO[s] || s));
+    _mwRefreshLead(id);
+  });
+}
+function _mwCall(result) {
+  if (!_mw.lead) return;
+  var id = _mw.lead.id; var memo = (document.getElementById('mwMemo') || {}).value || '';
+  showToast('기록 중…');
+  _mwGet({ action:'mwCall', fp:currentUser.id, leadId:id, result:result, memo:memo }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '기록 실패')); return; }
+    showToast('✓ ' + result + ' 기록됨 (' + res.callCount + '회)');
+    _mwRefreshLead(id);
+  });
+}
+function _mwRefreshLead(id) {
+  _mwGet({ action:'mwList', fp:currentUser.id }, function(res){
+    if (res && res.ok) { _mw.list = res.list || []; _mw.counts = res.counts || {}; }
+    if (_mw.lead && _mw.lead.id === id) _mwOpenLead(id);
+  });
+}
+function _mwSendLink() {
+  if (!_mw.lead) return;
+  var id = _mw.lead.id;
+  var nameNow = (document.getElementById('mwNameIn') || {}).value;
+  showToast('🔗 링크 만드는 중…');
+  var go = function(){
+    _mwGet({ action:'mwLink', fp:currentUser.id, leadId:id }, function(res){
+      if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '링크 생성 실패')); return; }
+      var txt = res.sms || res.url;
+      var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobileDev && navigator.share) {
+        navigator.share({ text: txt }).catch(function(){});
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(function(){ showToast('📋 문자 문구+링크 복사됨. 문자에 붙여넣으세요'); }).catch(function(){ if (typeof shareVipApplyLegacyCopy === 'function') shareVipApplyLegacyCopy(txt); });
+      } else if (typeof shareVipApplyLegacyCopy === 'function') {
+        shareVipApplyLegacyCopy(txt);
+      }
+      setTimeout(function(){ _mwRefreshLead(id); }, 800);
+    });
+  };
+  // push any unsaved name first so the page shows it
+  if (nameNow !== undefined && nameNow !== (_mw.lead.name || '')) {
+    _mwGet({ action:'mwSave', fp:currentUser.id, leadId:id, name:nameNow }, function(){ _mw.lead.name = nameNow; go(); });
+  } else go();
+}
+function _mwReassignUI() {
+  var box = document.getElementById('mwReassignBox');
+  if (!box) return;
+  var render = function(){
+    var h = '<select class="mw-q" style="margin-top:8px" id="mwReSel"><option value="">담당자 선택…</option>';
+    for (var i = 0; i < _mw.touchers.length; i++) h += '<option value="' + _mwEsc(_mw.touchers[i].id) + '">' + _mwEsc(_mw.touchers[i].name) + ' (' + _mwEsc(_mw.touchers[i].branch) + ')</option>';
+    h += '</select><button type="button" class="mw-btn gold sm" onclick="_mwReassignGo()">변경</button>';
+    box.innerHTML = h;
+  };
+  if (_mw.touchers.length) render(); else _mwLoadTouchers(render);
+}
+function _mwReassignGo() {
+  var sel = document.getElementById('mwReSel'); if (!sel || !sel.value || !_mw.lead) return;
+  var id = _mw.lead.id;
+  _mwGet({ action:'mwReassign', fp:currentUser.id, leadId:id, newFp:sel.value }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '변경 실패')); return; }
+    showToast('✓ 담당 변경됨'); _mwRefreshLead(id);
+  });
+}
+function _mwDeleteLead() {
+  if (!_mw.lead) return;
+  var id = _mw.lead.id;
+  showConfirm({ icon:'🗑️', iconCls:'confirm-icon-danger', title:'리드 삭제', msg:'이 리드를 삭제할까요? 30일 후 상병·검진 정보가 자동 파기됩니다.', okLabel:'삭제', okCls:'red' }).then(function(ok){
+    if (!ok) return;
+    _mwGet({ action:'mwDelete', fp:currentUser.id, leadId:id }, function(res){
+      if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '삭제 실패')); return; }
+      showToast('✓ 삭제됨'); _mwBackToList();
+    });
+  });
+}
+
+// ---- upload / assign ----
+function _mwLoadTouchers(cb) {
+  _mwGet({ action:'mwTouchers', fp:currentUser.id }, function(res){
+    if (res && res.ok) {
+      _mw.touchers = res.list || [];
+      // default: everyone checked
+      for (var i = 0; i < _mw.touchers.length; i++) if (_mw.touchers[i].on === undefined) _mw.touchers[i].on = true;
+      if (_mw.view === 'upload') _mwRenderUpload();
+    }
+    if (cb) cb();
+  });
+}
+function _mwRenderUpload() {
+  var b = document.getElementById('mwBody');
+  var h = '';
+  h += '<div class="mw-card"><h3>새 DB 업로드 <small>구매할 때마다 엑셀 그대로</small></h3>';
+  h += '<div class="mw-drop" onclick="document.getElementById(\'mwFile\').click()"><b>엑셀 파일을 탭해서 선택</b>컬럼은 머니워크 원본 그대로 두세요';
+  if (_mw.file) h += '<span class="file">📄 ' + _mwEsc(_mw.file) + '</span>';
+  h += '</div>';
+  if (_mw.rows.length) {
+    var withIns = 0, withDx = 0;
+    for (var i = 0; i < _mw.rows.length; i++) { if (_mw.rows[i].ins) withIns++; if (_mw.rows[i].dx) withDx++; }
+    h += '<div class="mw-kv"><div><b>' + _mw.rows.length + '</b><span>읽은 행</span></div><div><b>' + withIns + '</b><span>보험현황 있음</span></div><div><b>' + withDx + '</b><span>병력 있음</span></div></div>';
+  }
+  h += '</div>';
+  // touchers
+  var onCnt = 0;
+  for (var t = 0; t < _mw.touchers.length; t++) if (_mw.touchers[t].on) onCnt++;
+  h += '<div class="mw-card"><h3>배분 대상 <small>' + _mw.touchers.length + '명 중 ' + onCnt + '명 선택</small></h3><div class="mw-chk">';
+  if (!_mw.touchers.length) h += '<span class="mw-note">담당자 목록 불러오는 중…</span>';
+  for (var k = 0; k < _mw.touchers.length; k++) {
+    var tc = _mw.touchers[k];
+    var cls = String(tc.branch || '').indexOf('알파') >= 0 ? 'a' : (String(tc.branch || '').indexOf('브라보') >= 0 ? 'b' : '');
+    h += '<label class="' + cls + '"><input type="checkbox" ' + (tc.on ? 'checked' : '') + ' onchange="_mw.touchers[' + k + '].on=this.checked;_mwRenderUpload()">' + _mwEsc(tc.name) + '</label>';
+  }
+  h += '</div>';
+  h += '<div class="mw-row" style="margin-top:8px"><span>업로드 즉시 자동 배분</span><span class="mw-tog ' + (_mw.autoAssign ? 'on' : '') + '" onclick="_mw.autoAssign=!_mw.autoAssign;_mwRenderUpload()"></span></div>';
+  if (_mw.rows.length && onCnt) {
+    var per = Math.floor(_mw.rows.length / onCnt), rem = _mw.rows.length % onCnt;
+    h += '<div class="mw-row"><span>1인당 예상</span><b style="color:#A6791A">' + (rem ? per + '~' + (per + 1) : per) + '건</b></div>';
+  }
+  h += '</div>';
+  var disabled = (!_mw.rows.length || _mw.uploading) ? ' disabled' : '';
+  h += '<button type="button" class="mw-btn gold"' + disabled + ' onclick="_mwUploadGo()">' + (_mw.uploading ? '업로드 중…' : (_mw.autoAssign ? '업로드하고 ' + onCnt + '명에게 자동 배분' : '업로드만 (배분은 나중에)')) + '</button>';
+  h += '<div class="mw-note">엑셀 담당FP명 칸이 채워진 행은 그 사람에게 먼저 배정되고, 나머지만 자동 배분됩니다. 전화번호가 이미 있는 리드는 건너뜁니다.</div>';
+  var unassigned = _mw.counts.unassigned || 0;
+  if (unassigned) {
+    h += '<div class="mw-card" style="margin-top:12px"><h3>미배분 리드 <small>' + unassigned + '건</small></h3><button type="button" class="mw-btn ghost sm" onclick="_mwAssignGo(\'\')">위 선택 인원에게 지금 배분</button></div>';
+  }
+  if (_mw.lastAssign) {
+    h += '<div class="mw-card" style="margin-top:12px"><h3>배분 결과 <small>' + _mwEsc(_mw.lastAssign.batchId || '') + '</small></h3>';
+    h += '<div class="mw-note" style="margin:0 0 4px">총 ' + _mw.lastAssign.assigned + '건 (데이터 有 ' + _mw.lastAssign.rich + ' · 無 ' + _mw.lastAssign.poor + ')</div><div class="mw-per">';
+    var per2 = _mw.lastAssign.per || {};
+    for (var nm in per2) if (per2.hasOwnProperty(nm)) h += '<div>' + _mwEsc(nm) + '<b>' + per2[nm] + '</b></div>';
+    h += '</div></div>';
+  }
+  if (_mw.batches.length) {
+    h += '<div class="mw-card" style="margin-top:12px"><h3>업로드 이력</h3>';
+    for (var bi = _mw.batches.length - 1; bi >= 0 && bi >= _mw.batches.length - 8; bi--) {
+      var bt = _mw.batches[bi];
+      h += '<div class="mw-log"><b>' + _mwEsc(bt.batchId) + '</b> · ' + _mwEsc(_mwShort(bt.at)) + ' · ' + _mwEsc(bt.byName) + ' · ' + bt.count + '건' + (bt.skipped ? ' (중복 ' + bt.skipped + ')' : '') + '</div>';
+    }
+    h += '</div>';
+  }
+  b.innerHTML = h;
+}
+function _mwFileChosen(inp) {
+  var f = inp.files && inp.files[0];
+  inp.value = '';
+  if (!f) return;
+  _mw.file = f.name; _mw.rows = [];
+  _mwRenderUpload();
+  showToast('📄 엑셀 읽는 중…');
+  _loadExcelJS(function(){
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var wb = new ExcelJS.Workbook();
+      wb.xlsx.load(ev.target.result).then(function(){
+        var ws = wb.worksheets[0];
+        if (!ws) { showToast('⚠️ 시트를 찾을 수 없습니다'); return; }
+        var rows = _mwParseSheet(ws);
+        if (!rows.length) { showToast('⚠️ 전화번호 컬럼이 있는 행을 찾지 못했습니다'); return; }
+        _mw.rows = rows;
+        showToast('✓ ' + rows.length + '행 읽음');
+        _mwRenderUpload();
+      }).catch(function(){ showToast('⚠️ 엑셀 파싱 실패'); });
+    };
+    reader.readAsArrayBuffer(f);
+  });
+}
+function _mwCellText(cell) {
+  if (!cell) return '';
+  var v = cell.value;
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) {
+    var y = v.getFullYear(), m = v.getMonth() + 1, d = v.getDate();
+    return y + '-' + (m < 10 ? '0' + m : m) + '-' + (d < 10 ? '0' + d : d);
+  }
+  if (typeof v === 'object') {
+    if (v.richText) { var s = ''; for (var i = 0; i < v.richText.length; i++) s += v.richText[i].text || ''; return s; }
+    if (v.result !== undefined) return String(v.result);
+    if (v.text !== undefined) return String(v.text);
+    try { return String(cell.text || ''); } catch(e) { return ''; }
+  }
+  return String(v);
+}
+function _mwParseSheet(ws) {
+  var map = {
+    '순번':'seq', '시트행':'srcRow', '이름':'name', '성별':'gender', '생년월일':'birth', '만나이':'age', '나이대':'ageBand',
+    '전화번호':'phone', '진료상병':'dx', '보험가입현황':'ins', '검진요약':'chk', '담당':'owner', '담당FP명':'fpName'
+  };
+  var headerRow = 0, col = {};
+  ws.eachRow(function(row, rn){
+    if (headerRow) return;
+    var found = 0, tmp = {};
+    row.eachCell(function(cell, cn){
+      var t = _mwCellText(cell).replace(/\s+/g, '');
+      if (map[t]) { tmp[map[t]] = cn; found++; }
+    });
+    if (found >= 3 && tmp.phone) { headerRow = rn; col = tmp; }
+  });
+  if (!headerRow) return [];
+  var out = [];
+  ws.eachRow(function(row, rn){
+    if (rn <= headerRow) return;
+    var o = {};
+    for (var k in col) if (col.hasOwnProperty(k)) o[k] = _mwCellText(row.getCell(col[k])).trim();
+    if (!o.phone || o.phone.replace(/[^0-9]/g, '').length < 9) return;
+    out.push(o);
+  });
+  return out;
+}
+function _mwUploadGo() {
+  if (!_mw.rows.length || _mw.uploading) return;
+  _mw.uploading = true; _mwRenderUpload();
+  showToast('⬆️ ' + _mw.rows.length + '건 업로드 중… (30초 정도)');
+  _mwPost({ action:'mwUpload', fp:currentUser.id, rows:_mw.rows, note:_mw.file || '' }, function(res){
+    _mw.uploading = false;
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '업로드 실패')); _mwRenderUpload(); return; }
+    showToast('✓ ' + res.added + '건 추가' + (res.skipped ? ' · 중복 ' + res.skipped + '건 제외' : ''));
+    _mw.rows = []; _mw.file = null;
+    if (_mw.autoAssign && res.added) _mwAssignGo(res.batchId);
+    else _mwLoadList(function(){ if (_mw.view === 'upload') _mwRenderUpload(); });
+  });
+}
+function _mwAssignGo(batchId) {
+  var codes = [];
+  for (var i = 0; i < _mw.touchers.length; i++) if (_mw.touchers[i].on) codes.push(_mw.touchers[i].id);
+  if (!codes.length) { showToast('⚠️ 배분 대상자를 선택하세요'); return; }
+  showToast('🔀 배분 중…');
+  _mwPost({ action:'mwAssign', fp:currentUser.id, batchId:batchId || '', fpCodes:codes }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '배분 실패')); return; }
+    res.batchId = batchId || '미배분 전체';
+    _mw.lastAssign = res;
+    showToast('✓ ' + res.assigned + '건 배분 완료');
+    _mwLoadList(function(){ if (_mw.view === 'upload') _mwRenderUpload(); });
+  });
+}
+
+// ---- stats ----
+function _mwLoadStats() {
+  _mwGet({ action:'mwStats', fp:currentUser.id }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '현황 조회 실패')); return; }
+    _mw.stats = res;
+    if (_mw.view === 'stats') _mwRenderStats();
+  });
+}
+function _mwRenderStats() {
+  var b = document.getElementById('mwBody');
+  var s = _mw.stats;
+  if (!s) { b.innerHTML = '<div class="mw-spin">현황 불러오는 중…</div>'; return; }
+  var h = '';
+  var bs = s.byStatus || {};
+  h += '<div class="mw-stat">';
+  h += '<div><b>' + s.total + '</b>전체</div>';
+  for (var i = 0; i < MW_STATUS_ORDER.length; i++) { var k = MW_STATUS_ORDER[i]; if (bs[k]) h += '<div class="' + (k === 'selected' ? 'hot' : '') + '"><b>' + bs[k] + '</b>' + MW_STATUS_KO[k] + '</div>'; }
+  h += '</div>';
+  h += '<div class="mw-card"><h3>담당자별 퍼널</h3><div style="overflow-x:auto"><table class="mw-tbl"><tr><th>담당</th><th>배분</th><th>통화</th><th>링크</th><th>선택</th><th>예약</th><th>완료</th><th>청약</th><th>거절</th></tr>';
+  var names = []; var f = s.byFp || {};
+  for (var nm in f) if (f.hasOwnProperty(nm)) names.push(nm);
+  names.sort(function(a, b2){ return (f[b2].total || 0) - (f[a].total || 0); });
+  var sum = { total:0, called:0, linked:0, selected:0, booked:0, done:0, signed:0, reject:0 };
+  for (var n = 0; n < names.length; n++) {
+    var r = f[names[n]];
+    h += '<tr><td class="n">' + _mwEsc(names[n]) + '</td><td>' + r.total + '</td><td>' + r.called + '</td><td>' + r.linked + '</td><td class="' + (r.selected ? 'hi' : '') + '">' + r.selected + '</td><td>' + r.booked + '</td><td>' + r.done + '</td><td class="' + (r.signed ? 'hi' : '') + '">' + r.signed + '</td><td>' + r.reject + '</td></tr>';
+    for (var key in sum) if (sum.hasOwnProperty(key)) sum[key] += (r[key] || 0);
+  }
+  h += '<tr class="sum"><td class="n">합계</td><td>' + sum.total + '</td><td>' + sum.called + '</td><td>' + sum.linked + '</td><td>' + sum.selected + '</td><td>' + sum.booked + '</td><td>' + sum.done + '</td><td>' + sum.signed + '</td><td>' + sum.reject + '</td></tr>';
+  h += '</table></div>';
+  if (sum.total) h += '<div class="mw-note">통화율 ' + Math.round(sum.called / sum.total * 100) + '% · 링크 대비 선택 ' + (sum.linked ? Math.round(sum.selected / sum.linked * 100) : 0) + '% · 배분 대비 청약 ' + (Math.round(sum.signed / sum.total * 1000) / 10) + '%</div>';
+  h += '</div>';
+  b.innerHTML = h;
+}
+</script>
+
 </body>
 </html>
