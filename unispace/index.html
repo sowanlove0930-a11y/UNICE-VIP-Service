@@ -24263,7 +24263,7 @@ function goWorkPlay(){
 .mw-lead .ag { font-size:11.5px; color:#5C6678; }
 .mw-st { margin-left:auto; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; }
 .mw-st.new,.mw-st.unassigned { background:rgba(37,99,235,.1); color:#2563EB; } .mw-st.tried { background:rgba(92,102,120,.12); color:#5C6678; }
-.mw-st.talked { background:rgba(109,79,184,.12); color:#6D4FB8; } .mw-st.linked { background:rgba(199,125,20,.12); color:#C77D14; }
+.mw-st.talked { background:rgba(109,79,184,.12); color:#6D4FB8; } .mw-st.recall { background:rgba(199,125,20,.12); color:#C77D14; } .mw-st.linked { background:rgba(199,125,20,.12); color:#C77D14; }
 .mw-st.selected { background:#FFF3DF; color:#C25E00; border:1px solid #F5C77A; } .mw-st.booked { background:rgba(31,146,104,.12); color:#1F9268; }
 .mw-st.done { background:rgba(31,146,104,.18); color:#146B4C; } .mw-st.signed { background:#1F9268; color:#fff; }
 .mw-st.hold { background:rgba(92,102,120,.1); color:#5C6678; } .mw-st.reject { background:rgba(220,38,38,.1); color:#DC2626; }
@@ -24430,8 +24430,9 @@ function goWorkPlay(){
 <script>
 // ═══════════════════ MONEYWALK DB module ═══════════════════
 var MW_ITEM_LABEL = { '3big':'암·뇌·심장 보장', 'silson':'실손보험', 'prem':'보험료 적정성', 'hist':'병력 가입 가능 여부', 'all':'전체 점검' };
-var MW_STATUS_KO = { 'unassigned':'미배분', 'new':'신규', 'tried':'부재', 'talked':'통화', 'linked':'링크발송', 'selected':'고객선택', 'booked':'상담예약', 'done':'상담완료', 'signed':'청약', 'hold':'보류', 'reject':'거절' };
-var MW_STATUS_ORDER = ['new','tried','talked','linked','selected','booked','done','signed','hold','reject','unassigned'];
+var MW_STATUS_KO = { 'unassigned':'미배분', 'new':'신규', 'tried':'부재', 'talked':'통화', 'recall':'재통화', 'linked':'링크발송', 'selected':'고객접수', 'booked':'상담예약', 'done':'상담완료', 'signed':'청약', 'hold':'보류', 'reject':'거절' };
+var MW_STATUS_ORDER = ['new','tried','recall','talked','linked','selected','booked','done','signed','hold','reject','unassigned'];
+var MW_STATUS_ALWAYS = { 'new':1, 'tried':1, 'recall':1, 'selected':1 };
 var MW_CALL_RESULTS = [
   { r:'부재', e:'📵' }, { r:'통화', e:'📞' }, { r:'재통화', e:'🔁' }, { r:'거절', e:'✖' },
   { r:'상담예약', e:'📅' }, { r:'상담완료', e:'✅' }, { r:'청약', e:'🎉' }, { r:'보류', e:'⏸' }
@@ -24633,7 +24634,7 @@ function _mwLeadCard(l) {
   h += l.name ? '<span class="nm">' + _mwEsc(l.name) + '</span>' : '<span class="nm none">이름 미입력</span>';
   var ag = []; if (l.ageBand) ag.push(l.ageBand); if (l.gender) ag.push(l.gender);
   if (ag.length) h += '<span class="ag">' + _mwEsc(ag.join(' · ')) + '</span>';
-  h += '<span class="mw-st ' + _mwEsc(l.status) + '">' + (l.status === 'selected' ? '고객선택 도착' : _mwEsc(MW_STATUS_KO[l.status] || l.status)) + '</span>';
+  h += '<span class="mw-st ' + _mwEsc(l.status) + '">' + (l.status === 'selected' ? '고객접수 🔔' : _mwEsc(MW_STATUS_KO[l.status] || l.status)) + '</span>';
   h += '</div><div class="l2"><span class="ph">' + _mwEsc(l.phone) + '</span>';
   if (l.hasIns) h += '<span class="mw-ico y">보험 ' + l.insTotal + '건</span>';
   if (l.hasDx) h += '<span class="mw-ico y">병력</span>';
@@ -24662,7 +24663,7 @@ function _mwRenderList() {
   h += '<div class="' + (!_mw.status ? 'on' : '') + '" onclick="_mwStatus(\'\')"><b>' + _mw.list.length + '</b>전체</div>';
   for (var i = 0; i < MW_STATUS_ORDER.length; i++) {
     var s = MW_STATUS_ORDER[i]; var c = _mw.counts[s] || 0;
-    if (!c && s !== 'new') continue;
+    if (!c && !MW_STATUS_ALWAYS[s]) continue;
     h += '<div class="' + (_mw.status === s ? 'on ' : '') + (s === 'selected' && c ? 'hot' : '') + '" onclick="_mwStatus(\'' + s + '\')"><b>' + c + '</b>' + MW_STATUS_KO[s] + '</div>';
   }
   h += '</div>';
@@ -24673,7 +24674,7 @@ function _mwRenderList() {
     for (var bi = _mw.batches.length - 1; bi >= 0; bi--) h += '<option value="' + _mwEsc(_mw.batches[bi].batchId) + '"' + (_mw.batch === _mw.batches[bi].batchId ? ' selected' : '') + '>' + _mwEsc(_mwBatchLabel(_mw.batches[bi])) + '</option>';
     h += '</select>';
   }
-  var flts = [['all','전체'],['sel','선택 도착 🔔'],['data','데이터 有'],['nocall','미접촉']];
+  var flts = [['all','전체'],['sel','접수 🔔'],['nocall','미접촉']];
   for (var f = 0; f < flts.length; f++) h += '<button type="button" class="' + (_mw.flt === flts[f][0] ? 'on' : '') + '" onclick="_mw.flt=\'' + flts[f][0] + '\';_mwRenderList()">' + flts[f][1] + '</button>';
   if (_mw.scope !== 'mine') {
     var owners = {}; var ol = [];
@@ -24758,7 +24759,9 @@ function _mwRenderDetail() {
     var labels = [];
     for (var i = 0; i < l.sel.items.length; i++) labels.push('<span class="mw-pill warn">' + _mwEsc(MW_ITEM_LABEL[l.sel.items[i]] || l.sel.items[i]) + '</span>');
     h += '<div class="mw-card"><h3>고객이 선택한 내용 <small>' + _mwEsc(_mwShort(l.selAt)) + (l.receiptNo ? ' · ' + _mwEsc(l.receiptNo) : '') + '</small></h3>';
-    h += labels.join('') + '<span class="mw-pill">' + (l.sel.contact === 'kakao' ? '카카오톡' : '통화') + '</span>' + (l.sel.slot ? '<span class="mw-pill">' + _mwEsc(l.sel.slot) + '</span>' : '') + '</div>';
+    h += labels.join('') + '<span class="mw-pill">' + (l.sel.contact === 'kakao' ? '카카오톡' : '통화') + '</span>' + (l.sel.slot ? '<span class="mw-pill">' + _mwEsc(l.sel.slot) + '</span>' : '');
+    if (_mw.canManage) h += '<div class="mw-note" style="margin-top:8px"><span style="cursor:pointer;color:#DC2626;font-weight:700" onclick="_mwClearSel()">✕ 접수 초기화 (테스트 취소)</span></div>';
+    h += '</div>';
   }
   if (!d) {
     h += '<div class="mw-spin">브리핑 불러오는 중…</div>';
@@ -24978,6 +24981,17 @@ function _mwSaveMemo() {
     if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '저장 실패')); return; }
     if (_mw.lead && _mw.lead.id === id) _mw.lead.memo = memo;
     showToast('✓ 메모 저장');
+  });
+}
+function _mwClearSel() {
+  if (!_mw.lead) return;
+  var id = _mw.lead.id;
+  showConfirm({ icon:'↩️', iconCls:'confirm-icon-warn', title:'접수 초기화', msg:'고객이 선택한 내용과 접수번호를 지우고 접수 전 상태로 돌립니다.', okLabel:'초기화', okCls:'gold' }).then(function(ok){
+    if (!ok) return;
+    _mwGet({ action:'mwSave', fp:currentUser.id, leadId:id, clearSel:'Y' }, function(res){
+      if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '초기화 실패')); return; }
+      showToast('✓ 접수 초기화됨'); _mwRefreshLead(id);
+    });
   });
 }
 function _mwSetStatus(s) {
