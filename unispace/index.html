@@ -24369,7 +24369,7 @@ try { _MW_DEEP_LEAD = new URLSearchParams(location.search).get('lead') || ''; } 
 var _mw = {
   view:'list', list:[], counts:{}, batches:[], scope:'', canManage:false, tel:'',
   status:'', q:'', flt:'all', owner:'', lead:null, detail:null, touchers:[],
-  file:null, rows:[], autoAssign:true, uploading:false, lastAssign:null, stats:null, loading:false
+  file:null, rows:[], autoAssign:true, uploading:false, lastAssign:null, stats:null, loading:false, lastErr:''
 };
 
 function _mwCanTouch() {
@@ -24392,10 +24392,17 @@ function _mwGet(params, cb) {
   var qs = [];
   for (var k in params) { if (params.hasOwnProperty(k) && params[k] !== undefined && params[k] !== null) qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k])); }
   qs.push('_=' + Date.now());
-  fetch(UNISPACE_GAS_URL + '?' + qs.join('&'))
-    .then(function(r){ return r.json(); })
-    .then(function(res){ cb(res); })
-    .catch(function(){ cb({ ok:false, msg:'네트워크 오류' }); });
+  var done = false;
+  var timer = setTimeout(function(){ if (done) return; done = true; cb({ ok:false, msg:'서버 응답이 늦습니다 (30초). 다시 시도해주세요', timeout:true }); }, 30000);
+  fetch(UNISPACE_GAS_URL + '?' + qs.join('&'), { cache:'no-store' })
+    .then(function(r){ return r.text(); })
+    .then(function(txt){
+      if (done) return; done = true; clearTimeout(timer);
+      var res = null;
+      try { res = JSON.parse(txt); } catch(e) { res = { ok:false, msg:'응답 형식 오류 (GAS 배포 확인)' }; }
+      cb(res);
+    })
+    .catch(function(){ if (done) return; done = true; clearTimeout(timer); cb({ ok:false, msg:'네트워크 오류' }); });
 }
 function _mwPost(body, cb) {
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
@@ -24444,9 +24451,10 @@ function _mwSetView(v) {
 function _mwLoadList(cb) {
   _mw.loading = true;
   if (_mw.view === 'list' && !_mw.lead) _mwRenderList();
+  _mw.lastErr = '';
   _mwGet({ action:'mwList', fp:currentUser.id }, function(res){
     _mw.loading = false;
-    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '리드 조회 실패')); _mwRenderList(); return; }
+    if (!res || !res.ok) { _mw.lastErr = (res && res.msg) || '리드 조회 실패'; showToast('⚠️ ' + _mw.lastErr); if (_mw.view === 'list' && !_mw.lead) _mwRenderList(); return; }
     _mw.list = res.list || [];
     _mw.counts = res.counts || {};
     _mw.batches = res.batches || [];
@@ -24546,7 +24554,8 @@ function _mwRenderList() {
 function _mwRenderListOnly() {
   var el = document.getElementById('mwListBody');
   if (!el) return;
-  if (_mw.loading && !_mw.list.length) { el.innerHTML = '<div class="mw-spin">불러오는 중…</div>'; return; }
+  if (_mw.loading && !_mw.list.length) { el.innerHTML = '<div class="mw-spin">불러오는 중… <span style="font-size:11px">(리드가 많으면 10초쯤 걸려요)</span></div>'; return; }
+  if (_mw.lastErr && !_mw.list.length) { el.innerHTML = '<div class="mw-empty">' + _mwEsc(_mw.lastErr) + '<br><br><button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_mwLoadList()">다시 시도</button></div>'; return; }
   var rows = _mwFiltered();
   if (!rows.length) {
     el.innerHTML = '<div class="mw-empty">' + (_mw.list.length ? '조건에 맞는 리드가 없어요' : (_mw.canManage ? '아직 리드가 없어요.<br>업로드·배분 탭에서 엑셀을 올려주세요' : '배분된 리드가 아직 없어요')) + '</div>';
