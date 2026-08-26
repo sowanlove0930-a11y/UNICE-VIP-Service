@@ -24422,27 +24422,44 @@ function _mwCanManage() {
   return false;
 }
 function _mwEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+var _mwSeq = 0;
+var _mwLastNet = '';
+// GET via JSONP (script tag) -- same path the customer page uses; bypasses fetch/CORS/redirect quirks.
+// Falls back to fetch if the script tag fails to load.
 function _mwGet(params, cb) {
   var qs = [];
   for (var k in params) { if (params.hasOwnProperty(k) && params[k] !== undefined && params[k] !== null) qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k])); }
-  qs.push('_=' + Date.now());
+  var name = 'mwcb' + (++_mwSeq) + '_' + Date.now();
   var done = false;
-  var timer = setTimeout(function(){ if (done) return; done = true; cb({ ok:false, msg:'서버 응답이 늦습니다 (30초). 다시 시도해주세요', timeout:true }); }, 30000);
-  fetch(UNISPACE_GAS_URL + '?' + qs.join('&'), { cache:'no-store' })
-    .then(function(r){ return r.text(); })
-    .then(function(txt){
-      if (done) return; done = true; clearTimeout(timer);
-      var res = null;
-      try { res = JSON.parse(txt); } catch(e) { res = { ok:false, msg:'응답 형식 오류 (GAS 배포 확인)' }; }
-      cb(res);
-    })
-    .catch(function(){ if (done) return; done = true; clearTimeout(timer); cb({ ok:false, msg:'네트워크 오류' }); });
+  var t0 = Date.now();
+  var sc = document.createElement('script');
+  function finish(res) {
+    if (done) return; done = true;
+    clearTimeout(timer);
+    try { delete window[name]; } catch(e) { window[name] = undefined; }
+    if (sc.parentNode) sc.parentNode.removeChild(sc);
+    _mwLastNet = (params.action || '') + ' ' + (Date.now() - t0) + 'ms';
+    cb(res);
+  }
+  var timer = setTimeout(function(){ finish({ ok:false, msg:'서버 응답 없음 (30초) · ' + (params.action || ''), timeout:true }); }, 30000);
+  window[name] = function(res){ finish(res); };
+  sc.onerror = function(){
+    // script load failed -> try plain fetch once
+    if (done) return;
+    try { sc.parentNode.removeChild(sc); } catch(e) {}
+    fetch(UNISPACE_GAS_URL + '?' + qs.join('&') + '&_=' + Date.now())
+      .then(function(r){ return r.text(); })
+      .then(function(txt){ var res; try { res = JSON.parse(txt); } catch(e) { res = { ok:false, msg:'응답 형식 오류: ' + String(txt).substr(0, 80) }; } finish(res); })
+      .catch(function(err){ finish({ ok:false, msg:'네트워크 오류: ' + String(err) }); });
+  };
+  sc.src = UNISPACE_GAS_URL + '?' + qs.join('&') + '&callback=' + name + '&_=' + Date.now();
+  try { document.head.appendChild(sc); } catch(e) { finish({ ok:false, msg:'요청 생성 실패: ' + String(e) }); }
 }
 function _mwPost(body, cb) {
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
-    .then(function(r){ return r.json(); })
-    .then(function(res){ cb(res); })
-    .catch(function(){ cb({ ok:false, msg:'네트워크 오류' }); });
+    .then(function(r){ return r.text(); })
+    .then(function(txt){ var res; try { res = JSON.parse(txt); } catch(e) { res = { ok:false, msg:'응답 형식 오류: ' + String(txt).substr(0, 80) }; } cb(res); })
+    .catch(function(err){ cb({ ok:false, msg:'네트워크 오류: ' + String(err) }); });
 }
 function _mwWon(n) { n = parseInt(n || 0, 10) || 0; if (n >= 10000) return Math.round(n / 10000) + '만원'; return n.toLocaleString() + '원'; }
 function _mwShort(dt) { var s = String(dt || ''); if (s.length >= 16) return s.substr(5, 11).replace('-', '/'); return s; }
@@ -24589,7 +24606,7 @@ function _mwRenderListOnly() {
   var el = document.getElementById('mwListBody');
   if (!el) return;
   if (_mw.loading && !_mw.list.length) { el.innerHTML = '<div class="mw-spin">불러오는 중… <span style="font-size:11px">(DB가 많으면 10초쯤 걸려요)</span></div>'; return; }
-  if (_mw.lastErr && !_mw.list.length) { el.innerHTML = '<div class="mw-empty">' + _mwEsc(_mw.lastErr) + '<br><br><button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_mwLoadList()">다시 시도</button></div>'; return; }
+  if (_mw.lastErr && !_mw.list.length) { el.innerHTML = '<div class="mw-empty">' + _mwEsc(_mw.lastErr) + '<br><br><button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_mwLoadList()">다시 시도</button> <button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_mwPing()">연결 테스트</button><div id="mwPingOut" class="mw-note"></div></div>'; return; }
   var rows = _mwFiltered();
   if (!rows.length) {
     el.innerHTML = '<div class="mw-empty">' + (_mw.list.length ? '조건에 맞는 DB가 없어요' : (_mw.canManage ? '아직 DB가 없어요.<br>업로드·배분 탭에서 엑셀을 올려주세요' : '배분된 DB가 아직 없어요')) + '</div>';
@@ -24600,6 +24617,15 @@ function _mwRenderListOnly() {
   for (var i = 0; i < max; i++) h += _mwLeadCard(rows[i]);
   if (rows.length > max) h += '<div class="mw-note" style="text-align:center">' + (rows.length - max) + '건 더 있음 · 검색으로 좁혀주세요</div>';
   el.innerHTML = h;
+}
+function _mwPing() {
+  var out = document.getElementById('mwPingOut');
+  if (out) out.textContent = 'ping 보내는 중…';
+  var t0 = Date.now();
+  _mwGet({ action:'ping' }, function(res){
+    var msg = (res && res.ok ? 'GAS 응답 OK' : 'GAS 실패: ' + ((res && res.msg) || '?')) + ' · ' + (Date.now() - t0) + 'ms · 사용자 ' + (currentUser ? currentUser.id : '없음');
+    if (out) out.textContent = msg; showToast(msg);
+  });
 }
 function _mwStatus(s) { _mw.status = (_mw.status === s) ? '' : s; _mwRenderList(); }
 
