@@ -47,8 +47,21 @@
   .echo .t{font-size:12px;color:var(--ink3);font-weight:700;letter-spacing:.2px}
   .echo .v{font-size:14.5px;font-weight:700;margin-top:6px;line-height:1.5;letter-spacing:-.3px}
   .echo .v em{font-style:normal;color:#C25E00}
-  .echo .n{font-size:12px;color:var(--ink3);margin-top:6px;line-height:1.5}
+  .echo .n{font-size:12px;color:var(--ink3);margin-top:8px;line-height:1.5}
+  .echo .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .echo .ins{display:inline-flex;align-items:center;gap:5px;background:var(--or3);border:1px solid #F5DDB4;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--ink)}
+  .echo .ins b{color:#C25E00;font-weight:800}
+  .echo .ins.auto{background:#F5F1EA;border-color:var(--line);color:var(--ink3)}
+  .echo .ins.auto b{color:var(--ink3)}
+  .echo .sum{font-size:13px;color:var(--ink2);margin-top:8px}
+  .echo .sum b{color:var(--ink);font-weight:800}
 
+  .nm{margin:14px 16px 0;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+  .nm .t{font-size:14px;font-weight:800;letter-spacing:-.3px}
+  .nm .t small{font-size:11.5px;color:var(--ink3);font-weight:600;margin-left:6px}
+  .nm .d{font-size:12.5px;color:var(--ink2);margin-top:3px;line-height:1.5}
+  .nm input{width:100%;margin-top:10px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font-size:16px;font-weight:700;color:var(--ink);font-family:inherit;box-sizing:border-box}
+  .nm input:focus{outline:none;border-color:var(--or2);background:#fff}
   .sec{margin:26px 16px 0}
   .sec h2{font-size:17px;font-weight:800;letter-spacing:-.4px}
   .sec .d{font-size:13px;color:var(--ink2);margin-top:4px;line-height:1.5}
@@ -58,7 +71,7 @@
   .opt .ic{width:42px;height:42px;border-radius:13px;background:var(--or3);display:flex;align-items:center;justify-content:center;font-size:21px;flex:none}
   .opt .tx{flex:1;min-width:0}
   .opt .tt{font-size:15px;font-weight:800;letter-spacing:-.3px;line-height:1.3}
-  .opt .ds{font-size:12.5px;color:var(--ink2);margin-top:4px;line-height:1.45}
+  .opt .ds{font-size:13px;color:#4E463C;margin-top:4px;line-height:1.45}
   .opt .chk{width:24px;height:24px;border-radius:50%;border:2px solid #D9D0C3;flex:none;margin-top:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:900}
   .opt.on{border-color:var(--or2);background:#FFF8EC}
   .opt.on .chk{background:var(--or2);border-color:var(--or2)}
@@ -151,8 +164,15 @@
 
   <div class="echo hide" id="echo">
     <div class="t">신청 시 확인된 보험 가입 현황</div>
-    <div class="v" id="echoV"></div>
+    <div class="chips" id="echoV"></div>
+    <div class="sum" id="echoSum"></div>
     <div class="n">고객님 본인이 머니워크에서 조회하신 내역 기준입니다. 보험료·상세 내용은 이 페이지에 표시하지 않습니다.</div>
+  </div>
+
+  <div class="nm hide" id="nameCard">
+    <div class="t">성함을 알려주세요 <small>선택</small></div>
+    <div class="d">신청 시 이름이 접수되지 않았어요. 적어주시면 상담 때 편하게 불러드릴게요.</div>
+    <input type="text" id="nameIn" maxlength="20" placeholder="예: 홍길동" autocomplete="name">
   </div>
 
   <div class="sec">
@@ -181,7 +201,7 @@
 
   <div class="safe">
     <div class="i">✓</div>
-    <p><b>이 페이지는 아무것도 입력받지 않습니다.</b> 이름·주민번호·계좌·인증번호를 묻지 않으며, 보험 조회가 필요할 땐 고객님 휴대폰에서 직접 인증하십니다.</p>
+    <p id="safeTxt"><b>이 페이지는 아무것도 입력받지 않습니다.</b> 이름·주민번호·계좌·인증번호를 묻지 않으며, 보험 조회가 필요할 땐 고객님 휴대폰에서 직접 인증하십니다.</p>
   </div>
 
   <div class="cta">
@@ -309,14 +329,21 @@ function renderSelect(d){
   // insurers echo
   var ins = d.insurers || [];
   if (ins.length) {
-    var parts = [];
-    for (var i = 0; i < ins.length; i++) parts.push(esc(ins[i].name) + ' <em>' + ins[i].count + '건</em>');
-    var v = parts.join(' · ') + ' 유지 중';
-    if (d.insAuto) v += ' <span style="color:#9A9187;font-weight:600">(자동차 ' + d.insAuto + '건 별도)</span>';
-    $('echoV').innerHTML = v;
+    var chips = '', total = 0;
+    for (var i = 0; i < ins.length; i++) { chips += '<span class="ins">' + esc(ins[i].name) + ' <b>' + ins[i].count + '건</b></span>'; total += ins[i].count; }
+    if (d.insAuto) chips += '<span class="ins auto">자동차보험 <b>' + d.insAuto + '건</b></span>';
+    $('echoV').innerHTML = chips;
+    $('echoSum').innerHTML = '보장성 보험 <b>' + total + '건</b> 유지 중' + (d.insAuto ? ' · 자동차 별도' : '');
     show('echo');
   } else {
     hide('echo');
+  }
+  if (d.name) {
+    hide('nameCard');
+    $('safeTxt').innerHTML = '<b>이 페이지는 아무것도 입력받지 않습니다.</b> 이름·주민번호·계좌·인증번호를 묻지 않으며, 보험 조회가 필요할 땐 고객님 휴대폰에서 직접 인증하십니다.';
+  } else {
+    show('nameCard');
+    $('safeTxt').innerHTML = '<b>성함 외에는 아무것도 입력받지 않습니다.</b> 주민번호·계좌·인증번호를 묻지 않으며, 보험 조회가 필요할 땐 고객님 휴대폰에서 직접 인증하십니다.';
   }
   // options
   var hints = d.hints || [];
@@ -338,7 +365,8 @@ function renderSelect(d){
 function renderDone(r, fp){
   var f = fp || (state.data && state.data.fp) || {};
   var who = esc(f.name || '담당자') + (f.title ? ' ' + esc(f.title) : '');
-  $('doneSub').innerHTML = '선택하신 시간에 <b>' + who + '</b>가 연락드립니다.';
+  var cust = r.name || (state.data && state.data.name) || '';
+  $('doneSub').innerHTML = (cust ? esc(cust) + '님, ' : '') + '선택하신 시간에 <b>' + who + '</b>가 연락드립니다.';
   $('rNo').textContent = r.receiptNo || '';
   var items = r.items || [];
   var labels = [];
@@ -397,10 +425,11 @@ function submit(){
   if (!keys.length) { $('err').textContent = '상담 항목을 하나 이상 골라주세요'; return; }
   state.busy = true;
   var btn = $('btnGo'); btn.disabled = true; btn.textContent = '전달 중…';
-  jsonp({ action:'mwSubmit', t:token, items:keys.join(','), contact:state.contact, slot:state.slot }, function(res){
+  var typed = ($('nameIn') && !$('nameCard').classList.contains('hide')) ? String($('nameIn').value || '').trim() : '';
+  jsonp({ action:'mwSubmit', t:token, items:keys.join(','), contact:state.contact, slot:state.slot, name:typed }, function(res){
     state.busy = false; btn.disabled = false; btn.textContent = '이대로 상담 신청하기';
     if (!res || !res.ok) { $('err').textContent = (res && res.msg) || '전달에 실패했어요. 다시 눌러주세요'; return; }
-    renderDone({ receiptNo:res.receiptNo, items:keys, contact:res.contact, slot:res.slot }, res.fp);
+    renderDone({ receiptNo:res.receiptNo, items:keys, contact:res.contact, slot:res.slot, name:res.name || typed }, res.fp);
   }, function(){
     state.busy = false; btn.disabled = false; btn.textContent = '이대로 상담 신청하기';
     $('err').textContent = '네트워크 상태를 확인하고 다시 눌러주세요';
