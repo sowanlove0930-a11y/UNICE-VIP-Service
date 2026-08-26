@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', function(event) {
 });
 
 // ===== PWA cache (network-first) =====
-var CACHE_NAME = 'unispace-v73';
+var CACHE_NAME = 'unispace-v74';
 var PRECACHE = [
   './manifest.json',
   './unispace-192.png',
@@ -87,6 +87,10 @@ self.addEventListener('activate', function(e){
 self.addEventListener('fetch', function(e){
   var req = e.request;
   if(req.method !== 'GET'){ return; }
+  // cross-origin requests (Apps Script, Google APIs, CDN) go straight to the network.
+  // Intercepting redirected cross-origin responses makes the browser drop them.
+  var u = String(req.url || '');
+  if(u.indexOf(self.location.origin) !== 0){ return; }
   e.respondWith(
     fetch(req).then(function(res){
       return res;
