@@ -24485,36 +24485,59 @@ function _mwCanManage() {
 function _mwEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 var _mwSeq = 0;
 var _mwLastNet = '';
-// GET via JSONP (script tag) -- same path the customer page uses; bypasses fetch/CORS/redirect quirks.
-// Falls back to fetch if the script tag fails to load.
+// GET: fetch first (gives readable errors), JSONP fallback (bypasses CORS quirks).
 function _mwGet(params, cb) {
   var qs = [];
   for (var k in params) { if (params.hasOwnProperty(k) && params[k] !== undefined && params[k] !== null) qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k])); }
+  var base = UNISPACE_GAS_URL + '?' + qs.join('&');
+  var t0 = Date.now(); var done = false;
+  function finish(res) {
+    if (done) return; done = true;
+    _mwLastNet = (params.action || '') + ' ' + (Date.now() - t0) + 'ms';
+    cb(res);
+  }
+  // 1) fetch
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var fetchTimer = setTimeout(function(){ if (ctrl) { try { ctrl.abort(); } catch(e) {} } }, 25000);
+  var opts = { cache:'no-store' };
+  if (ctrl) opts.signal = ctrl.signal;
+  fetch(base + '&_=' + Date.now(), opts)
+    .then(function(r){ return r.text().then(function(txt){ return { status:r.status, txt:txt }; }); })
+    .then(function(o){
+      clearTimeout(fetchTimer);
+      var res;
+      try { res = JSON.parse(o.txt); } catch(e) {
+        var head = String(o.txt || '').replace(/\s+/g, ' ').substr(0, 90);
+        res = { ok:false, msg:'구글이 JSON 대신 다른 응답을 줌 (HTTP ' + o.status + '): ' + head };
+      }
+      finish(res);
+    })
+    .catch(function(err){
+      clearTimeout(fetchTimer);
+      var why = String(err && err.name === 'AbortError' ? '25초 무응답' : (err && err.message) || err);
+      // 2) JSONP fallback
+      _mwJsonp(base, function(res){
+        if (res && res.ok) finish(res);
+        else finish({ ok:false, msg:'fetch 실패(' + why + ') → JSONP도 실패(' + ((res && res.msg) || '?') + ')' });
+      });
+    });
+}
+function _mwJsonp(base, cb) {
   var name = 'mwcb' + (++_mwSeq) + '_' + Date.now();
   var done = false;
-  var t0 = Date.now();
   var sc = document.createElement('script');
   function finish(res) {
     if (done) return; done = true;
     clearTimeout(timer);
     try { delete window[name]; } catch(e) { window[name] = undefined; }
     if (sc.parentNode) sc.parentNode.removeChild(sc);
-    _mwLastNet = (params.action || '') + ' ' + (Date.now() - t0) + 'ms';
     cb(res);
   }
-  var timer = setTimeout(function(){ finish({ ok:false, msg:'서버 응답 없음 (30초) · ' + (params.action || ''), timeout:true }); }, 30000);
+  var timer = setTimeout(function(){ finish({ ok:false, msg:'15초 무응답' }); }, 15000);
   window[name] = function(res){ finish(res); };
-  sc.onerror = function(){
-    // script load failed -> try plain fetch once
-    if (done) return;
-    try { sc.parentNode.removeChild(sc); } catch(e) {}
-    fetch(UNISPACE_GAS_URL + '?' + qs.join('&') + '&_=' + Date.now())
-      .then(function(r){ return r.text(); })
-      .then(function(txt){ var res; try { res = JSON.parse(txt); } catch(e) { res = { ok:false, msg:'응답 형식 오류: ' + String(txt).substr(0, 80) }; } finish(res); })
-      .catch(function(err){ finish({ ok:false, msg:'네트워크 오류: ' + String(err) }); });
-  };
-  sc.src = UNISPACE_GAS_URL + '?' + qs.join('&') + '&callback=' + name + '&_=' + Date.now();
-  try { document.head.appendChild(sc); } catch(e) { finish({ ok:false, msg:'요청 생성 실패: ' + String(e) }); }
+  sc.onerror = function(){ finish({ ok:false, msg:'스크립트 로드 차단' }); };
+  sc.src = base + '&callback=' + name + '&_=' + Date.now();
+  try { document.head.appendChild(sc); } catch(e) { finish({ ok:false, msg:String(e) }); }
 }
 function _mwPost(body, cb) {
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
@@ -24746,7 +24769,8 @@ function _mwPing() {
   _mwGet({ action:'ping' }, function(res){
     var msg = (res && res.ok ? 'GAS 응답 OK' : 'GAS 실패: ' + ((res && res.msg) || '?')) + ' · ' + (Date.now() - t0) + 'ms · 사용자 ' + (currentUser ? currentUser.id : '없음');
     _mwSwInfo(function(sw){
-      var full = msg + '\n' + sw + ' · 앱 v' + (typeof APP_BUILD !== 'undefined' ? APP_BUILD : '?');
+      var ua = navigator.userAgent; var br = /SamsungBrowser/i.test(ua) ? '삼성인터넷' : (/CriOS|Chrome/i.test(ua) ? '크롬' : (/Safari/i.test(ua) ? '사파리' : '기타'));
+      var full = msg + '\n' + sw + ' · 앱 v' + (typeof APP_BUILD !== 'undefined' ? APP_BUILD : '?') + ' · 브라우저 ' + br + (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches ? '(앱)' : '');
       if (out) out.textContent = full;
       showToast(msg);
     });
