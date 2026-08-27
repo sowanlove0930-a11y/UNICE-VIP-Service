@@ -24432,7 +24432,28 @@ function goWorkPlay(){
 var MW_ITEM_LABEL = { '3big':'암·뇌·심장 보장', 'silson':'실손보험', 'prem':'보험료 적정성', 'hist':'병력 가입 가능 여부', 'all':'전체 점검' };
 var MW_STATUS_KO = { 'unassigned':'미배분', 'new':'신규', 'tried':'부재', 'talked':'통화', 'recall':'재통화', 'linked':'링크발송', 'selected':'고객접수', 'booked':'상담예약', 'done':'상담완료', 'signed':'청약', 'hold':'보류', 'reject':'거절' };
 var MW_STATUS_ORDER = ['new','tried','recall','talked','linked','selected','booked','done','signed','hold','reject','unassigned'];
-var MW_STATUS_ALWAYS = { 'new':1, 'tried':1, 'recall':1, 'selected':1 };
+var MW_METRICS = [
+  ['none','미접촉'], ['reached','통화'], ['missed','부재'], ['recall','재통화'], ['linked','링크'], ['selected','접수'],
+  ['booked','예약'], ['done','완료'], ['signed','청약'], ['reject','거절']
+];
+// people-based rules, identical to the stats table
+function _mwMetric(l, key) {
+  var reached = !!l.reached, tried = !!l.tried;
+  if (!reached && !tried && l.callCount > 0) { tried = true; reached = (l.lastCallResult && l.lastCallResult !== '부재' && l.lastCallResult !== '결번'); }
+  switch (key) {
+    case 'none': return !tried;
+    case 'reached': return reached;
+    case 'missed': return tried && !reached;
+    case 'recall': return (l.lastResult || l.lastCallResult) === '재통화';
+    case 'linked': return !!l.linkSentAt;
+    case 'selected': return !!l.selAt;
+    case 'booked': return l.status === 'booked';
+    case 'done': return l.status === 'done';
+    case 'signed': return l.status === 'signed';
+    case 'reject': return l.status === 'reject';
+  }
+  return true;
+}
 var MW_CALL_RESULTS = [
   { r:'부재', e:'📵' }, { r:'통화', e:'📞' }, { r:'재통화', e:'🔁' }, { r:'거절', e:'✖' },
   { r:'상담예약', e:'📅' }, { r:'상담완료', e:'✅' }, { r:'청약', e:'🎉' }, { r:'보류', e:'⏸' }
@@ -24603,7 +24624,7 @@ function _mwFiltered() {
   var q = String(_mw.q || '').replace(/[^0-9a-zA-Z가-힣]/g, '').toLowerCase();
   for (var i = 0; i < _mw.list.length; i++) {
     var l = _mw.list[i];
-    if (_mw.status && l.status !== _mw.status) continue;
+    if (_mw.status && !_mwMetric(l, _mw.status)) continue;
     if (_mw.batch && l.batchId !== _mw.batch) continue;
     if (_mw.owner && String(l.fpCode).toLowerCase() !== _mw.owner.toLowerCase()) continue;
     if (_mw.flt === 'sel' && !l.selAt) continue;
@@ -24660,11 +24681,11 @@ function _mwRenderList() {
   var h = '';
   // status chips
   h += '<div class="mw-stat">';
-  h += '<div class="' + (!_mw.status ? 'on' : '') + '" onclick="_mwStatus(\'\')"><b>' + _mw.list.length + '</b>전체</div>';
-  for (var i = 0; i < MW_STATUS_ORDER.length; i++) {
-    var s = MW_STATUS_ORDER[i]; var c = _mw.counts[s] || 0;
-    if (!c && !MW_STATUS_ALWAYS[s]) continue;
-    h += '<div class="' + (_mw.status === s ? 'on ' : '') + (s === 'selected' && c ? 'hot' : '') + '" onclick="_mwStatus(\'' + s + '\')"><b>' + c + '</b>' + MW_STATUS_KO[s] + '</div>';
+  h += '<div class="' + (!_mw.status ? 'on' : '') + '" onclick="_mwStatus(\'\')"><b>' + _mw.list.length + '</b>배분</div>';
+  for (var i = 0; i < MW_METRICS.length; i++) {
+    var mk = MW_METRICS[i][0]; var c = 0;
+    for (var li = 0; li < _mw.list.length; li++) if (_mwMetric(_mw.list[li], mk)) c++;
+    h += '<div class="' + (_mw.status === mk ? 'on ' : '') + (mk === 'selected' && c ? 'hot' : '') + '" onclick="_mwStatus(\'' + mk + '\')"><b>' + c + '</b>' + MW_METRICS[i][1] + '</div>';
   }
   h += '</div>';
   h += '<input type="search" class="mw-q" placeholder="이름 · 전화번호 뒷자리 · 담당자" value="' + _mwEsc(_mw.q) + '" oninput="_mw.q=this.value;_mwRenderListOnly()">';
@@ -24674,7 +24695,7 @@ function _mwRenderList() {
     for (var bi = _mw.batches.length - 1; bi >= 0; bi--) h += '<option value="' + _mwEsc(_mw.batches[bi].batchId) + '"' + (_mw.batch === _mw.batches[bi].batchId ? ' selected' : '') + '>' + _mwEsc(_mwBatchLabel(_mw.batches[bi])) + '</option>';
     h += '</select>';
   }
-  var flts = [['all','전체'],['sel','접수 🔔'],['nocall','미접촉']];
+  var flts = [];
   for (var f = 0; f < flts.length; f++) h += '<button type="button" class="' + (_mw.flt === flts[f][0] ? 'on' : '') + '" onclick="_mw.flt=\'' + flts[f][0] + '\';_mwRenderList()">' + flts[f][1] + '</button>';
   if (_mw.scope !== 'mine') {
     var owners = {}; var ol = [];
