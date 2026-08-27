@@ -24697,7 +24697,7 @@ function _mwRenderListOnly() {
   var el = document.getElementById('mwListBody');
   if (!el) return;
   if (_mw.loading && !_mw.list.length) { el.innerHTML = '<div class="mw-spin">불러오는 중… <span style="font-size:11px">(DB가 많으면 10초쯤 걸려요)</span></div>'; return; }
-  if (_mw.lastErr && !_mw.list.length) { el.innerHTML = '<div class="mw-empty">' + _mwEsc(_mw.lastErr) + '<br><br><button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_mwLoadList()">다시 시도</button> <button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_mwPing()">연결 테스트</button><div id="mwPingOut" class="mw-note"></div></div>'; return; }
+  if (_mw.lastErr && !_mw.list.length) { el.innerHTML = '<div class="mw-empty">' + _mwEsc(_mw.lastErr) + '<br><br><button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_mwLoadList()">다시 시도</button> <button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_mwPing()">연결 테스트</button><br><button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px;margin-top:8px;color:#DC2626" onclick="_mwResetSW()">앱 캐시 초기화 (서비스워커 재설치)</button><div id="mwPingOut" class="mw-note" style="white-space:pre-line"></div></div>'; return; }
   var rows = _mwFiltered();
   if (!rows.length) {
     el.innerHTML = '<div class="mw-empty">' + (_mw.list.length ? '조건에 맞는 DB가 없어요' : (_mw.canManage ? '아직 DB가 없어요.<br>업로드·배분 탭에서 엑셀을 올려주세요' : '배분된 DB가 아직 없어요')) + '</div>';
@@ -24709,14 +24709,37 @@ function _mwRenderListOnly() {
   if (rows.length > max) h += '<div class="mw-note" style="text-align:center">' + (rows.length - max) + '건 더 있음 · 검색으로 좁혀주세요</div>';
   el.innerHTML = h;
 }
+function _mwSwInfo(cb) {
+  var info = 'SW 없음';
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) info = 'SW 있음';
+  } catch(e) {}
+  if (window.caches && caches.keys) {
+    caches.keys().then(function(keys){ cb(info + ' · 캐시 ' + (keys.length ? keys.join(', ') : '없음')); }).catch(function(){ cb(info); });
+  } else cb(info);
+}
 function _mwPing() {
   var out = document.getElementById('mwPingOut');
   if (out) out.textContent = 'ping 보내는 중…';
   var t0 = Date.now();
   _mwGet({ action:'ping' }, function(res){
     var msg = (res && res.ok ? 'GAS 응답 OK' : 'GAS 실패: ' + ((res && res.msg) || '?')) + ' · ' + (Date.now() - t0) + 'ms · 사용자 ' + (currentUser ? currentUser.id : '없음');
-    if (out) out.textContent = msg; showToast(msg);
+    _mwSwInfo(function(sw){
+      var full = msg + '\n' + sw + ' · 앱 v' + (typeof APP_BUILD !== 'undefined' ? APP_BUILD : '?');
+      if (out) out.textContent = full;
+      showToast(msg);
+    });
   });
+}
+function _mwResetSW() {
+  showToast('🧹 앱 캐시 초기화 중…');
+  var p = Promise.resolve();
+  if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+    p = navigator.serviceWorker.getRegistrations().then(function(regs){ return Promise.all(regs.map(function(r){ return r.unregister(); })); });
+  }
+  p.then(function(){ if (window.caches && caches.keys) return caches.keys().then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); }); })
+   .then(function(){ location.reload(); })
+   .catch(function(){ location.reload(); });
 }
 function _mwStatus(s) { _mw.status = (_mw.status === s) ? '' : s; _mwRenderList(); }
 
