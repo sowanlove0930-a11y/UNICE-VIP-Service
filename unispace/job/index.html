@@ -250,8 +250,13 @@ h1 em{font-style:normal;color:var(--or-deep)}
       </div>
     </div>
     <div id="nameBox" style="display:none;margin-top:14px">
-      <div class="sub">성함 (선택)</div>
+      <div class="sub" id="nameLabel">성함 (선택)</div>
       <input id="nameInput" type="text" placeholder="이름을 입력해주세요" style="width:100%;margin-top:8px;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:15px;font-family:inherit">
+    </div>
+    <div id="phoneBox" style="display:none;margin-top:12px">
+      <div class="sub">연락처</div>
+      <input id="phoneInput" type="tel" inputmode="numeric" placeholder="예: 01012345678" style="width:100%;margin-top:8px;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:15px;font-family:inherit">
+      <div style="font-size:11.5px;color:var(--mute);margin-top:6px">담당자 전화 안내를 받으실 번호입니다.</div>
     </div>
     <div class="noinput" id="noInputNote"><b>✓</b><span>연락처는 이미 알고 있어 입력칸이 없습니다. 이 페이지는 받으신 분만 열 수 있는 주소입니다.</span></div>
   </div>
@@ -446,10 +451,17 @@ h1 em{font-style:normal;color:var(--or-deep)}
         if (av) av.textContent = String(res.owner.name).charAt(0);
         if (res.owner.title) document.getElementById('ownTitle').textContent = res.owner.title;
       }
+      var needContact = !!res.needContact;
       if (!nm) { document.getElementById('nameBox').style.display = ''; }
-      else {
+      if (needContact) {
+        document.getElementById('phoneBox').style.display = '';
+        var nl = document.getElementById('nameLabel');
+        if (nl) nl.textContent = '성함';
+        document.getElementById('noInputNote').style.display = 'none';
+      } else if (nm) {
         document.getElementById('noInputNote').innerHTML = '<b>&#10003;</b><span>이름·연락처는 이미 알고 있어 입력칸이 없습니다. 이 페이지는 ' + esc(nm) + '님만 열 수 있는 주소입니다.</span>';
       }
+      window._jdNeedContact = needContact;
       renderSlots(res.slots || []);
       if (res.applied) {
         screen('이미 신청이 접수되었습니다.<br>인사담당자가 곧 전화드릴 예정입니다.<br><br>대표번호 051-637-0931');
@@ -476,6 +488,16 @@ h1 em{font-style:normal;color:var(--or-deep)}
     if (!hasName) {
       var ni = document.getElementById('nameInput');
       if (ni && ni.value) params.name = ni.value;
+    }
+    if (window._jdNeedContact) {
+      var pi = document.getElementById('phoneInput');
+      var pv = pi ? pi.value.replace(/[^0-9]/g, '') : '';
+      if (pv.length < 10) {
+        btn.disabled = false; refresh();
+        alert('연락처를 입력해주세요');
+        return;
+      }
+      params.phone = pv;
     }
     jsonp(params, function(res){
       if (!res) { btn.disabled = false; refresh(); alert('연결이 원활하지 않습니다. 잠시 후 다시 시도해주세요.'); return; }
