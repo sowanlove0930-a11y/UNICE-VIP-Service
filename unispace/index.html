@@ -25870,14 +25870,24 @@ function _jdSyncRc2() {
         }
         if (exists) { _mwGet({ action:'jobRcAck', fp:currentUser.id, leadId:ap.leadId }, function(){}); continue; }
         var srcKo = JD_SRC_KO[ap.source] || ap.source || '잡사이트';
+        var _cf = '', _ct = '';
+        var _bd = String(ap.band || '');
+        if (_bd.indexOf('10~12') >= 0) { _cf = '10:00'; _ct = '12:00'; }
+        else if (_bd.indexOf('12~14') >= 0) { _cf = '12:00'; _ct = '14:00'; }
+        else if (_bd.indexOf('14~16') >= 0) { _cf = '14:00'; _ct = '16:00'; }
         var evs = [];
         if (ap.how === 'visit' && ap.slotDate && ap.slotTime) {
           evs.push({ id:'e' + Date.now() + '_jd' + i, types:['지점장인터뷰'], dt: ap.slotDate + ' ' + ap.slotTime, done:false, visitConfirm:false });
+        } else if (ap.how === 'call') {
+          var _apDay = String(ap.at || '').split(' ')[0];
+          if (_apDay) {
+            evs.push({ id:'e' + Date.now() + '_jdc' + i, types:['전화인터뷰'], dt: _apDay + (_cf ? ' ' + _cf : ''), done:false, visitConfirm:false });
+          }
         }
         var rec = { id:cid, ym:ym, branch:(ap.branch === 'bravo' ? 'bravo' : 'alpha'), name:(ap.name || '무명'), age:'',
                     ref:srcKo + '콜', events:evs, join:'', regMonth:'', status:'추진중', joinConfirmDate:'',
-                    note:'커리어데스크 신청: ' + (ap.jobs || '') + (ap.how === 'call' ? (' / 전화인터뷰 ' + (ap.band || '')) : ''),
-                    focus:false, phoenix:false, phone:(ap.phone || ''), callItv:(ap.how === 'call'), callFrom:'', callTo:'', callNote:(ap.how === 'call' ? (ap.band || '') : '') };
+                    note:'커리어데스크 신청: ' + (ap.jobs || '') + (ap.how === 'call' ? (' / 전화인터뷰 ' + _bd) : ''),
+                    focus:false, phoenix:false, phone:(ap.phone || ''), callItv:(ap.how === 'call'), callFrom:(ap.how === 'call' ? _cf : ''), callTo:(ap.how === 'call' ? _ct : ''), callNote:(ap.how === 'call' ? (_bd || '상관없음') : '') };
         var d = rc2GetMonthData(ym);
         d.list.push(rec);
         rc2SetMonthData(ym, d);
