@@ -25605,9 +25605,9 @@ function _jdSmsText(kind, l) {
   var src = JD_SRC_KO[l.source] || l.source || '구직 사이트';
   var url = (_jd.detail && _jd.detail.url) || '';
   if (kind === 'call') {
-    return '[한화금융서비스 유니스 채용안내]\n' + nm + ', 방금 통화드린 직무 안내입니다.\n직무 선택(1분): ' + url + '\n문의 051-637-0931';
+    return '[한화금융서비스 유니스 채용안내]\n' + nm + ',\n방금 통화드린 직무 안내입니다.\n\n직무 선택 ' + url + '\n\n문의 051-637-0931';
   }
-  return '[한화금융서비스 유니스 채용안내]\n' + nm + ', ' + src + ' 이력서 확인 후 연락드렸습니다.\n직무 선택(1분): ' + url + '\n문의 051-637-0931';
+  return '[한화금융서비스 유니스 채용안내]\n' + nm + ',\n' + src + ' 이력서 확인 후 연락드렸습니다.\n\n직무 선택 ' + url + '\n\n문의 051-637-0931';
 }
 function _jdSend(kind) {
   var d = _jd.detail; if (!d) return;
@@ -25953,16 +25953,23 @@ function _jdLinkRender(keep) {
        '<button type="button" class="' + (_jdl.br === 'alpha' ? 'on' : '') + '" onclick="_jdLinkBr(\'alpha\')">알파</button>' +
        '<button type="button" class="' + (_jdl.br === 'bravo' ? 'on' : '') + '" onclick="_jdLinkBr(\'bravo\')">브라보</button></div>')
       : ('<div style="font-size:11.5px;color:#5C6678;margin-bottom:10px">지점: <b>' + (_jdl.br === 'bravo' ? '브라보' : '알파') + '</b> (내 소속 자동)</div>')) +
-    '<button type="button" style="width:100%;padding:12px;border:0;border-radius:11px;background:#F37321;color:#fff;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdLinkMake()">링크 만들기</button>' +
+    '<button type="button" id="jdlGo" style="width:100%;padding:12px;border:0;border-radius:11px;background:#F37321;color:#fff;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdLinkMake()">링크 만들기</button>' +
     '<div style="font-size:11.5px;color:#97A0B0;margin-top:8px">페이지 상단에 이력서 열람 경로(알바몬 등)와 이름이 표시됩니다.</div></div>';
 }
 function _jdLinkMake() {
   var nm = document.getElementById('jdlName').value.trim();
   var ph = document.getElementById('jdlPhone').value.replace(/[^0-9]/g, '');
-  if (ph.length < 10) { showToast('연락처를 확인해주세요'); return; }
-  showToast('링크 만드는 중...');
+  var btn = document.getElementById('jdlGo');
+  if (ph.length < 10) {
+    if (btn) { btn.textContent = '연락처를 확인해주세요'; btn.style.background = '#C0392B'; setTimeout(function(){ btn.textContent = '링크 만들기'; btn.style.background = '#F37321'; }, 1600); }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.style.opacity = '.75'; btn.textContent = '⏳ 링크 만드는 중...'; }
   _mwGet({ action:'jobQuickAdd', fp:currentUser.id, name:nm, phone:ph, source:_jdl.src, branch:_jdl.br }, function(res){
-    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '생성 실패')); return; }
+    if (!res || !res.ok) {
+      if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.background = '#C0392B'; btn.textContent = '⚠️ ' + ((res && res.msg) || '생성 실패') + ' · 다시 시도'; setTimeout(function(){ btn.textContent = '링크 만들기'; btn.style.background = '#F37321'; }, 2200); }
+      return;
+    }
     _jdl.made = { url:res.url, name:nm, leadId:res.leadId };
     _jdLinkRender();
     _mwGet({ action:'jobLink', fp:currentUser.id, leadId:res.leadId }, function(){});
@@ -25974,9 +25981,9 @@ function _jdLinkCopy(kind) {
   var nm = _jdl.made.name ? _jdl.made.name + '님' : '안녕하세요';
   var srcKo = JD_SRC_KO[_jdl.src] || _jdl.src;
   if (kind === 'call') {
-    txt = '[한화금융서비스 유니스 채용안내]\n' + nm + ', 방금 통화드린 직무 안내입니다.\n직무 선택(1분): ' + _jdl.made.url + '\n문의 051-637-0931';
+    txt = '[한화금융서비스 유니스 채용안내]\n' + nm + ',\n방금 통화드린 직무 안내입니다.\n\n직무 선택 ' + _jdl.made.url + '\n\n문의 051-637-0931';
   } else if (kind === 'miss') {
-    txt = '[한화금융서비스 유니스 채용안내]\n' + nm + ', ' + srcKo + ' 이력서 확인 후 연락드렸습니다.\n직무 선택(1분): ' + _jdl.made.url + '\n문의 051-637-0931';
+    txt = '[한화금융서비스 유니스 채용안내]\n' + nm + ',\n' + srcKo + ' 이력서 확인 후 연락드렸습니다.\n\n직무 선택 ' + _jdl.made.url + '\n\n문의 051-637-0931';
   }
   function fallback() {
     var ta = document.createElement('textarea');
