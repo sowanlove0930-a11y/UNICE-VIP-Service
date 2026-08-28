@@ -25858,6 +25858,7 @@ function _jdSyncRc2() {
     _mwGet({ action:'jobApplies', fp:currentUser.id, days:14 }, function(res){
       if (!res || !res.ok || !res.list || !res.list.length) return;
       var added = 0;
+      var addedNames = [];
       for (var i = 0; i < res.list.length; i++) {
         var ap = res.list[i];
         var cid = 'jd_' + ap.leadId;
@@ -25867,7 +25868,7 @@ function _jdSyncRc2() {
           var cur = rc2GetMonthData(ym);
           for (var j = 0; j < (cur.list || []).length; j++) { if (cur.list[j].id === cid) { exists = true; break; } }
         }
-        if (exists) continue;
+        if (exists) { _mwGet({ action:'jobRcAck', fp:currentUser.id, leadId:ap.leadId }, function(){}); continue; }
         var srcKo = JD_SRC_KO[ap.source] || ap.source || '잡사이트';
         var evs = [];
         if (ap.how === 'visit' && ap.slotDate && ap.slotTime) {
@@ -25881,10 +25882,13 @@ function _jdSyncRc2() {
         d.list.push(rec);
         rc2SetMonthData(ym, d);
         rc2SaveToGas(rec, ym, true);
+        _mwGet({ action:'jobRcAck', fp:currentUser.id, leadId:ap.leadId }, function(){});
         added++;
+        addedNames.push(rec.name);
       }
       if (added) {
-        showToast('📋 커리어 데스크 신청 ' + added + '건을 리크루팅탭에 등록했습니다 (미확정)');
+        var _who = addedNames[0] + (added > 1 ? ' 외 ' + (added - 1) + '명' : '');
+        showToast('📋 ' + _who + ' 후보자 일정이 등록되었습니다 (미확정)');
         if (typeof renderRecruitStat === 'function') renderRecruitStat();
         try { if (typeof rc2RenderCal === 'function' && document.getElementById('recruitOverlay') && document.getElementById('recruitOverlay').classList.contains('open')) { rc2RenderCal(); rc2RenderList(); } } catch(e) {}
       }
