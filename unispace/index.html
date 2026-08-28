@@ -3432,6 +3432,7 @@ window.UNISPACE_FCM = {
         <span class="lg"><span class="rc2-cal-dot" style="background:#C99A2E"></span>입과</span>
         <button type="button" id="rc2KakaoBtn" onclick="rc2CopyKakao()" style="margin-left:auto;padding:6px 13px;border:none;border-radius:8px;background:#FAE100;color:#3A1D1D;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">💬 카톡 복사</button>
         <button type="button" id="rc2JoinEvtBtn" onclick="rc2OpenJoinEvt()" style="padding:6px 13px;border:none;border-radius:8px;background:#C99A2E;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">＋ 입과일정</button>
+        <button type="button" id="rc2JdLinkBtn" onclick="rc2OpenJdLink()" style="padding:6px 13px;border:none;border-radius:8px;background:#F37321;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🔗 링크 보내기</button>
       </div>
       <div class="rc2-cal-dow">
         <div style="color:#D85A30">일</div><div style="color:var(--text3)">월</div><div style="color:var(--text3)">화</div><div style="color:var(--text3)">수</div><div style="color:var(--text3)">목</div><div style="color:var(--text3)">금</div><div style="color:#378ADD">토</div>
@@ -5914,6 +5915,7 @@ function _openFromPush(op){
     if(op === 'recruit'){ setTimeout(function(){ if(typeof openRecruitModal==='function') openRecruitModal(); }, 300); return; }
     if(op === 'checkup'){ setTimeout(function(){ if(typeof openCheckupAdmin==='function') openCheckupAdmin(); }, 400); return; }
     if(op === 'moneywalk'){ setTimeout(function(){ if(typeof openMoneywalk==='function') openMoneywalk(typeof _MW_DEEP_LEAD !== 'undefined' ? _MW_DEEP_LEAD : ''); }, 500); return; }
+    if(op === 'jobdesk'){ setTimeout(function(){ if(typeof openJobdesk==='function') openJobdesk(typeof _JD_DEEP_LEAD !== 'undefined' ? _JD_DEEP_LEAD : ''); }, 500); return; }
     if(op === 'today'){ window.location.href = 'today_alarm.html'; return; }
     if(op === 'perf'){ setTimeout(function(){ if(typeof openPerfView==='function') openPerfView(); }, 400); return; }
     if(op === 'bojtop' || op === 'stdfp'){
@@ -6804,6 +6806,7 @@ function handleSubClick(e, action) {
   if (action === 'transfer')  { openTransfer(); return false; }
   if (action === 'partners_admin') { openPartnersAdmin(); return false; }
   if (action === 'moneywalk') { openMoneywalk(); return false; }
+  if (action === 'jobdesk') { openJobdesk(); return false; }
   if (action === 'attendance') {
     window.location.href = 'attendance.html';
     return false;
@@ -16604,6 +16607,7 @@ function rc2MarkRecruitSeen(){
 
 function openRecruitModal() {
   rc2MarkRecruitSeen();
+  try { if (typeof _jdSyncRc2 === 'function') setTimeout(_jdSyncRc2, 800); } catch(e) {}
   var tabBar = document.getElementById('recruitTabBar');
   // 권한: 추진후보자(명단) 탭은 대표·지점장·교육지점장만. FP·매니저는 추진일정만.
   var _listAccess = _canSeeRecruitList();
@@ -23820,7 +23824,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 74;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 75;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -25358,6 +25362,620 @@ function _mwRenderStats() {
   if (sum.total) h += '<div class="mw-note">전부 사람 수 기준. 미접촉 ' + (sum.total - sum.reached - sum.missed) + '명 · 부재 ' + sum.missed + '명 · 통화 ' + sum.reached + '명 (연결률 ' + Math.round(sum.reached / sum.total * 100) + '%) · 통화 중 거절 ' + sum.reject + '명 · 링크 대비 접수 ' + (sum.linked ? Math.round(sum.selected / sum.linked * 100) : 0) + '% · 배분 대비 청약 ' + (Math.round(sum.signed / sum.total * 1000) / 10) + '%</div>';
   h += '</div>';
   b.innerHTML = h;
+}
+</script>
+
+<!-- ═══════════════════ JOBDESK CAREER DESK (jd) ═══════════════════ -->
+<style>
+.jd-src { font-size:10px; font-weight:800; border-radius:999px; padding:2px 7px; }
+.jd-src.albamon { background:#FFF1E8; color:#D95F12; border:1px solid #F5C09A; }
+.jd-src.albacheonguk { background:#FFF6DB; color:#A6791A; border:1px solid #EFD48F; }
+.jd-src.etc { background:#F0F2F5; color:#5C6678; border:1px solid #E2E6EB; }
+.jd-br { font-size:10px; font-weight:800; border-radius:999px; padding:2px 7px; }
+.jd-br.alpha { background:#E5F5EB; color:#1E7A50; border:1px solid #AEDFC2; }
+.jd-br.bravo { background:#F0EAFA; color:#5A2FA0; border:1px solid #D6C2EF; }
+.jd-callbtns { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.jd-callbtns button { font-size:11.5px; font-weight:700; padding:9px 0; border-radius:10px; background:#fff; border:1px solid #E8E0D0; color:#1A2744; font-family:inherit; cursor:pointer; }
+.jd-callbtns button:active { background:#FBF9F4; }
+.jd-quick { display:none; }
+.jd-quick.on { display:block; }
+.jd-seg { display:flex; gap:6px; }
+.jd-seg button { flex:1; font-size:12px; font-weight:700; padding:8px 0; border-radius:10px; background:#fff; border:1px solid #E8E0D0; color:#5C6678; font-family:inherit; cursor:pointer; }
+.jd-seg button.on { background:#FFF3DF; border-color:#F5C77A; color:#C25E00; }
+</style>
+
+<div class="mw-overlay" id="jdOverlay">
+  <div class="mw-box">
+    <div class="mw-head">
+      <div class="ic">💼</div>
+      <div class="t">커리어 데스크<small id="jdHeadSub">채용 리드 · 링크 발송 · 인터뷰 예약</small></div>
+      <span class="mw-role" id="jdRole"></span>
+      <button type="button" class="mw-close" onclick="closeJobdesk()">✕</button>
+    </div>
+    <div class="mw-tabs" id="jdTabs">
+      <button type="button" class="mw-tab on" data-v="list" onclick="_jdSetView('list')">리드 목록</button>
+      <button type="button" class="mw-tab" data-v="upload" onclick="_jdSetView('upload')">업로드·배분</button>
+      <button type="button" class="mw-tab" data-v="stats" onclick="_jdSetView('stats')">현황</button>
+    </div>
+    <div class="mw-body" id="jdBody"></div>
+  </div>
+</div>
+
+<div class="mw-overlay" id="jdLinkOv" style="z-index:100050">
+  <div class="mw-box" style="height:auto;max-height:88vh">
+    <div class="mw-head">
+      <div class="ic">🔗</div>
+      <div class="t">채용 링크 만들기<small>후보자에게 문자로 붙여넣어 보내세요</small></div>
+      <button type="button" class="mw-close" onclick="_jdLinkClose()">✕</button>
+    </div>
+    <div class="mw-body" id="jdLinkBody"></div>
+  </div>
+</div>
+
+<script>
+// ── JOBDESK front module. Reuses mw helpers: _mwGet/_mwPost/_mwEsc/_mwShort, mw-* CSS ──
+var JD_STATUS_KO = { 'unassigned':'미배분', 'new':'미접촉', 'tried':'부재', 'talked':'통화', 'recall':'재통화', 'linked':'링크발송', 'viewed':'열람', 'applied':'신청', 'itv':'인터뷰확정', 'visited':'내방', 'joined':'입사', 'hold':'보류', 'reject':'거절' };
+var JD_STATUS_ORDER = ['new','tried','recall','talked','linked','viewed','applied','itv','visited','joined','hold','reject','unassigned'];
+var JD_CALL_RESULTS = [
+  { r:'부재', e:'📵' }, { r:'통화', e:'📞' }, { r:'재통화', e:'🔁' }, { r:'거절', e:'✖' },
+  { r:'인터뷰확정', e:'📅' }, { r:'내방', e:'🏢' }, { r:'입사', e:'🎉' }, { r:'보류', e:'⏸' }
+];
+var JD_SRC_KO = { 'albamon':'알바몬', 'albacheonguk':'알바천국' };
+var _JD_DEEP_LEAD = '';
+try { _JD_DEEP_LEAD = new URLSearchParams(location.search).get('lead') || ''; } catch(e) {}
+
+var _jd = { view:'list', list:[], scope:'', status:'', q:'', lead:null, detail:null,
+            touchers:[], loading:false, lastErr:'', qaSrc:'albamon', qaBr:'alpha', upBr:'alpha', upRows:[], upBatch:'', assignSel:{} };
+
+function _jdCanTouch(){ return (typeof _mwCanTouch === 'function') ? _mwCanTouch() : false; }
+function _jdCanManage(){ return (typeof _mwCanManage === 'function') ? _mwCanManage() : false; }
+function _jdSrcTag(src){
+  var k = (src === '알바몬' || src === 'albamon') ? 'albamon' : ((src === '알바천국' || src === 'albacheonguk') ? 'albacheonguk' : 'etc');
+  var label = JD_SRC_KO[src] || src || '기타';
+  return '<span class="jd-src ' + k + '">' + _mwEsc(label) + '</span>';
+}
+function _jdBrTag(br){
+  var k = br === 'bravo' ? 'bravo' : 'alpha';
+  return '<span class="jd-br ' + k + '">' + (k === 'bravo' ? '브라보' : '알파') + '</span>';
+}
+
+// ── open / close ──
+function openJobdesk(leadId) {
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  if (!_jdCanTouch()) { showToast('⚠️ 커리어 데스크 접근 권한이 없습니다'); return false; }
+  var ov = document.getElementById('jdOverlay');
+  ov.classList.add('on');
+  document.body.style.overflow = 'hidden';
+  var lbl = currentUser.title || currentUser.role || 'FP';
+  if (lbl === '유니스 대표') lbl = '대표';
+  document.getElementById('jdRole').textContent = lbl;
+  _jd.view = 'list'; _jd.lead = null; _jd.detail = null;
+  _jdSetView('list');
+  _jdLoadList(function(){
+    if (leadId) _jdOpenLead(leadId);
+  });
+  _jdSyncRc2();
+  return false;
+}
+function closeJobdesk() {
+  document.getElementById('jdOverlay').classList.remove('on');
+  document.body.style.overflow = '';
+}
+function _jdSetView(v) {
+  _jd.view = v; _jd.lead = null; _jd.detail = null;
+  var tabs = document.querySelectorAll('#jdTabs .mw-tab');
+  for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('on', tabs[i].getAttribute('data-v') === v);
+  if (v === 'list') _jdRenderList();
+  else if (v === 'upload') _jdRenderUpload();
+  else _jdRenderStats();
+}
+
+// ── list ──
+function _jdLoadList(cb) {
+  _jd.loading = true; _jd.lastErr = '';
+  if (_jd.view === 'list' && !_jd.lead) _jdRenderList();
+  _mwGet({ action:'jobList', fp:currentUser.id }, function(res){
+    _jd.loading = false;
+    if (res && res.ok) { _jd.list = res.list || []; _jd.scope = res.scope || ''; }
+    else { _jd.lastErr = (res && res.msg) || '목록을 불러오지 못했습니다'; }
+    if (_jd.view === 'list' && !_jd.lead) _jdRenderList();
+    if (cb) cb();
+  });
+}
+function _jdCounts() {
+  var c = {};
+  for (var i = 0; i < _jd.list.length; i++) {
+    var st = _jd.list[i].status || 'new';
+    c[st] = (c[st] || 0) + 1;
+  }
+  return c;
+}
+function _jdFiltered() {
+  var out = [];
+  var q = _jd.q.toLowerCase();
+  for (var i = 0; i < _jd.list.length; i++) {
+    var l = _jd.list[i];
+    if (_jd.status && l.status !== _jd.status) continue;
+    if (q) {
+      var hay = (l.name + ' ' + l.phone + ' ' + l.owner).toLowerCase();
+      if (hay.indexOf(q) < 0) continue;
+    }
+    out.push(l);
+  }
+  return out;
+}
+function _jdLeadCard(l) {
+  var st = JD_STATUS_KO[l.status] || l.status;
+  var nm = l.name || '(이름없음)';
+  var last = l.lastResult ? (' · ' + _mwEsc(l.lastResult) + ' ' + _mwEsc(_mwShort(l.lastCallAt))) : '';
+  return '<div class="mw-lead" onclick="_jdOpenLead(\'' + _mwEsc(l.id) + '\')">' +
+    '<div class="l1"><b style="font-size:14px;color:#1A2744">' + _mwEsc(nm) + '</b> ' + _jdSrcTag(l.source) + ' ' + _jdBrTag(l.branch) +
+    '<span style="flex:1"></span><span style="font-size:11px;font-weight:800;color:#C25E00">' + _mwEsc(st) + '</span></div>' +
+    '<div style="font-size:11.5px;color:#5C6678;margin-top:4px">' + _mwEsc(l.phone) + (l.owner ? ' · 담당 ' + _mwEsc(l.owner) : ' · 미배분') + last + '</div>' +
+    '</div>';
+}
+function _jdRenderList() {
+  var el = document.getElementById('jdBody');
+  if (_jd.lead) return;
+  if (_jd.loading && !_jd.list.length) { el.innerHTML = '<div class="mw-empty" style="padding:30px 0;text-align:center;color:#5C6678">불러오는 중...</div>'; return; }
+  if (_jd.lastErr && !_jd.list.length) {
+    el.innerHTML = '<div class="mw-empty" style="padding:30px 0;text-align:center;color:#5C6678">' + _mwEsc(_jd.lastErr) +
+      '<br><br><button type="button" class="mw-btn ghost sm" style="display:inline-block;width:auto;padding:9px 18px" onclick="_jdLoadList()">다시 시도</button></div>';
+    return;
+  }
+  var c = _jdCounts();
+  var chips = '<div class="mw-stat">';
+  chips += '<div class="' + (_jd.status === '' ? 'on' : '') + '" onclick="_jdStatus(\'\')"><b>' + _jd.list.length + '</b>전체</div>';
+  for (var i = 0; i < JD_STATUS_ORDER.length; i++) {
+    var k = JD_STATUS_ORDER[i];
+    if (!c[k]) continue;
+    var hot = (k === 'applied' || k === 'viewed') ? ' hot' : '';
+    chips += '<div class="' + (_jd.status === k ? 'on' : hot) + '" onclick="_jdStatus(\'' + k + '\')"><b>' + c[k] + '</b>' + JD_STATUS_KO[k] + '</div>';
+  }
+  chips += '</div>';
+  var quick =
+    '<div class="mw-card">' +
+    '<h3 onclick="document.getElementById(\'jdQuick\').classList.toggle(\'on\')" style="cursor:pointer">＋ 빠른 등록 <small>통화 중 즉시 링크 만들기</small></h3>' +
+    '<div class="jd-quick" id="jdQuick">' +
+    '<input class="mw-q" id="jdQaName" placeholder="이름 (몰라도 등록 가능)">' +
+    '<input class="mw-q" id="jdQaPhone" placeholder="연락처 숫자만" inputmode="numeric">' +
+    '<div class="jd-seg" style="margin-bottom:8px">' +
+    '<button type="button" id="jdQaS1" class="on" onclick="_jdQaSrc(\'albamon\')">알바몬</button>' +
+    '<button type="button" id="jdQaS2" onclick="_jdQaSrc(\'albacheonguk\')">알바천국</button>' +
+    '<button type="button" id="jdQaS3" onclick="_jdQaSrc(\'기타\')">기타</button></div>' +
+    '<div class="jd-seg" style="margin-bottom:10px">' +
+    '<button type="button" id="jdQaB1" class="on" onclick="_jdQaBr(\'alpha\')">알파</button>' +
+    '<button type="button" id="jdQaB2" onclick="_jdQaBr(\'bravo\')">브라보</button></div>' +
+    '<button type="button" class="mw-btn" style="width:100%;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#C9A84C,#B8860B);color:#fff;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdQuickAdd()">등록하고 링크 만들기</button>' +
+    '</div></div>';
+  var search = '<input class="mw-q" placeholder="이름·연락처·담당 검색" value="' + _mwEsc(_jd.q) + '" oninput="_jd.q=this.value;_jdRenderListOnly()">';
+  var listHtml = '<div id="jdList"></div>';
+  el.innerHTML = quick + chips + search + listHtml;
+  _jdRenderListOnly();
+}
+function _jdRenderListOnly() {
+  var box = document.getElementById('jdList');
+  if (!box) return;
+  var arr = _jdFiltered();
+  if (!arr.length) { box.innerHTML = '<div style="padding:24px 0;text-align:center;color:#97A0B0;font-size:12.5px">해당하는 리드가 없습니다</div>'; return; }
+  var h = '';
+  for (var i = 0; i < arr.length && i < 200; i++) h += _jdLeadCard(arr[i]);
+  box.innerHTML = h;
+}
+function _jdStatus(s) { _jd.status = (_jd.status === s) ? '' : s; _jdRenderList(); }
+function _jdQaSrc(v) {
+  _jd.qaSrc = v;
+  document.getElementById('jdQaS1').classList.toggle('on', v === 'albamon');
+  document.getElementById('jdQaS2').classList.toggle('on', v === 'albacheonguk');
+  document.getElementById('jdQaS3').classList.toggle('on', v === '기타');
+}
+function _jdQaBr(v) {
+  _jd.qaBr = v;
+  document.getElementById('jdQaB1').classList.toggle('on', v === 'alpha');
+  document.getElementById('jdQaB2').classList.toggle('on', v === 'bravo');
+}
+function _jdQuickAdd() {
+  var nm = document.getElementById('jdQaName').value.trim();
+  var ph = document.getElementById('jdQaPhone').value.replace(/[^0-9]/g, '');
+  if (ph.length < 10) { showToast('연락처를 확인해주세요'); return; }
+  showToast('등록 중...');
+  _mwGet({ action:'jobQuickAdd', fp:currentUser.id, name:nm, phone:ph, source:_jd.qaSrc, branch:_jd.qaBr }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '등록 실패')); return; }
+    showToast('✅ 등록 완료');
+    document.getElementById('jdQaName').value = '';
+    document.getElementById('jdQaPhone').value = '';
+    _jdLoadList(function(){ _jdOpenLead(res.leadId); });
+  });
+}
+
+// ── detail ──
+function _jdOpenLead(id) {
+  _jd.lead = id; _jd.detail = null;
+  var el = document.getElementById('jdBody');
+  el.innerHTML = '<div style="padding:30px 0;text-align:center;color:#5C6678">불러오는 중...</div>';
+  _mwGet({ action:'jobGet', fp:currentUser.id, leadId:id }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '조회 실패')); _jdBackToList(); return; }
+    _jd.detail = res;
+    _jdRenderDetail();
+  });
+}
+function _jdBackToList() { _jd.lead = null; _jd.detail = null; _jdRenderList(); }
+function _jdSmsText(kind, l) {
+  var nm = l.name ? l.name + '님' : '안녕하세요';
+  var src = JD_SRC_KO[l.source] || l.source || '구직 사이트';
+  var url = (_jd.detail && _jd.detail.url) || '';
+  if (kind === 'call') {
+    return '[한화생명금융서비스 유니스지사]\n' + nm + ', 방금 통화드린 채용 안내입니다.\n이력서 확인 후 연락드린 직무 안내 (1분)\n' + url;
+  }
+  return '[한화생명금융서비스 유니스지사]\n' + nm + ', ' + src + ' 이력서 열람 후 연락드렸습니다.\n단기 1시간부터 정식 직무까지 안내드립니다 (1분)\n' + url + '\n원치 않으시면 "그만" 회신 부탁드립니다.';
+}
+function _jdSend(kind) {
+  var d = _jd.detail; if (!d) return;
+  _mwGet({ action:'jobLink', fp:currentUser.id, leadId:d.lead.id }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ 링크 생성 실패'); return; }
+    var body = _jdSmsText(kind, d.lead);
+    var ua = navigator.userAgent || '';
+    var sep = (ua.indexOf('iPhone') >= 0 || ua.indexOf('iPad') >= 0) ? '&' : '?';
+    location.href = 'sms:' + d.lead.phone + sep + 'body=' + encodeURIComponent(body);
+    _jdRefreshLead(d.lead.id);
+  });
+}
+function _jdCall(result) {
+  var d = _jd.detail; if (!d) return;
+  _mwGet({ action:'jobCall', fp:currentUser.id, leadId:d.lead.id, result:result, memo:'' }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ 저장 실패'); return; }
+    showToast('✅ ' + result + ' 저장');
+    _jdRefreshLead(d.lead.id);
+  });
+}
+function _jdSaveMemo() {
+  var d = _jd.detail; if (!d) return;
+  var v = document.getElementById('jdMemo').value;
+  _mwGet({ action:'jobSave', fp:currentUser.id, leadId:d.lead.id, memo:v }, function(res){
+    showToast(res && res.ok ? '✅ 메모 저장' : '⚠️ 저장 실패');
+  });
+}
+function _jdRefreshLead(id) {
+  _mwGet({ action:'jobGet', fp:currentUser.id, leadId:id }, function(res){
+    if (res && res.ok && _jd.lead === id) { _jd.detail = res; _jdRenderDetail(); }
+    _jdLoadList();
+  });
+}
+function _jdReassignUI() {
+  var box = document.getElementById('jdReassignBox');
+  if (!box) return;
+  if (box.innerHTML) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div style="padding:8px 0;color:#5C6678;font-size:12px">담당자 불러오는 중...</div>';
+  _mwGet({ action:'mwTouchers', fp:currentUser.id }, function(res){
+    if (!res || !res.ok) { box.innerHTML = '<div style="color:#C0392B;font-size:12px">불러오기 실패</div>'; return; }
+    var arr = res.list || res.touchers || [];
+    var h = '<select class="mw-q" id="jdNewFp" style="margin-top:8px">';
+    for (var i = 0; i < arr.length; i++) {
+      var t = arr[i];
+      h += '<option value="' + _mwEsc(t.id || t.fp) + '">' + _mwEsc((t.name || '') + ' (' + (t.title || '') + ')') + '</option>';
+    }
+    h += '</select><button type="button" class="mw-btn" style="width:100%;margin-top:6px;padding:10px;border:1px solid #E8E0D0;border-radius:10px;background:#fff;font-family:inherit;font-weight:700;cursor:pointer" onclick="_jdReassignGo()">담당 변경</button>';
+    box.innerHTML = h;
+  });
+}
+function _jdReassignGo() {
+  var d = _jd.detail; if (!d) return;
+  var v = document.getElementById('jdNewFp').value;
+  _mwGet({ action:'jobReassign', fp:currentUser.id, leadId:d.lead.id, newFp:v }, function(res){
+    showToast(res && res.ok ? '✅ 담당 변경' : '⚠️ ' + ((res && res.msg) || '실패'));
+    _jdRefreshLead(d.lead.id);
+  });
+}
+function _jdDeleteLead() {
+  var d = _jd.detail; if (!d) return;
+  if (!confirm('이 리드를 삭제할까요?')) return;
+  _mwGet({ action:'jobDelete', fp:currentUser.id, leadId:d.lead.id }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ 삭제 실패'); return; }
+    showToast('🗑 삭제됨');
+    _jdBackToList();
+    _jdLoadList();
+  });
+}
+function _jdRenderDetail() {
+  var el = document.getElementById('jdBody');
+  var d = _jd.detail;
+  if (!d) return;
+  var l = d.lead;
+  var st = JD_STATUS_KO[l.status] || l.status;
+  var h = '<button type="button" style="background:none;border:none;color:#5C6678;font-size:12.5px;font-family:inherit;cursor:pointer;padding:2px 0 10px" onclick="_jdBackToList()">← 목록으로</button>';
+  h += '<div class="mw-card"><h3>' + _mwEsc(l.name || '(이름없음)') + ' <small>' + _mwEsc(st) + '</small></h3>';
+  h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">' + _jdSrcTag(l.source) + ' ' + _jdBrTag(l.branch) + '<span style="font-size:11.5px;color:#5C6678">담당 ' + _mwEsc(l.owner || '미배분') + '</span></div>';
+  h += '<div style="font-size:13px;color:#1A2744;margin-bottom:10px"><a href="tel:' + _mwEsc(l.phone) + '" style="color:#B8860B;font-weight:800;text-decoration:none">📞 ' + _mwEsc(l.phone) + '</a></div>';
+  h += '<div class="jd-callbtns">';
+  for (var i = 0; i < JD_CALL_RESULTS.length; i++) {
+    var cr = JD_CALL_RESULTS[i];
+    h += '<button type="button" onclick="_jdCall(\'' + cr.r + '\')">' + cr.e + ' ' + cr.r + '</button>';
+  }
+  h += '</div></div>';
+  h += '<div class="mw-card"><h3>문자 링크 발송 <small>발송 시 링크발송 상태로 기록</small></h3>' +
+       '<div class="jd-seg"><button type="button" onclick="_jdSend(\'call\')">📞 통화 중 발송</button>' +
+       '<button type="button" onclick="_jdSend(\'miss\')">📵 부재 시 발송</button></div>' +
+       '<div style="font-size:11px;color:#97A0B0;margin-top:8px">링크: ' + _mwEsc(d.url || '') + '</div></div>';
+  if (d.applies && d.applies.length) {
+    h += '<div class="mw-card"><h3>신청 내역</h3>';
+    for (var a = 0; a < d.applies.length; a++) {
+      var ap = d.applies[a];
+      var when = ap.how === 'visit' ? ('지사 방문 · ' + _mwEsc(ap.slotDate) + ' ' + _mwEsc(ap.slotTime)) : ('전화 인터뷰 · ' + _mwEsc(ap.band || '상관없음'));
+      h += '<div style="font-size:12.5px;color:#1A2744;padding:7px 0;border-bottom:1px dashed #E8E0D0"><b>' + _mwEsc(ap.jobs) + '</b><br><span style="color:#5C6678">' + when + ' · ' + _mwEsc(_mwShort(ap.at)) + '</span></div>';
+    }
+    h += '</div>';
+  }
+  if (d.calls && d.calls.length) {
+    h += '<div class="mw-card"><h3>콜 기록</h3>';
+    for (var c = 0; c < d.calls.length && c < 10; c++) {
+      h += '<div style="font-size:12px;color:#5C6678;padding:4px 0">' + _mwEsc(_mwShort(d.calls[c].at)) + ' · <b style="color:#1A2744">' + _mwEsc(d.calls[c].result) + '</b> · ' + _mwEsc(d.calls[c].fp) + '</div>';
+    }
+    h += '</div>';
+  }
+  h += '<div class="mw-card"><h3>메모</h3><textarea class="mw-q" id="jdMemo" rows="3" style="resize:vertical">' + _mwEsc(l.memo || '') + '</textarea>' +
+       '<button type="button" style="width:100%;padding:10px;border:1px solid #E8E0D0;border-radius:10px;background:#fff;font-family:inherit;font-weight:700;cursor:pointer" onclick="_jdSaveMemo()">메모 저장</button></div>';
+  if (_jdCanManage()) {
+    h += '<div class="mw-card"><h3>관리</h3>' +
+         '<button type="button" style="width:100%;padding:10px;border:1px solid #E8E0D0;border-radius:10px;background:#fff;font-family:inherit;font-weight:700;cursor:pointer" onclick="_jdReassignUI()">담당 변경</button>' +
+         '<div id="jdReassignBox"></div>' +
+         '<button type="button" style="width:100%;margin-top:8px;padding:10px;border:1px solid #F1C7C3;border-radius:10px;background:#fff;color:#C0392B;font-family:inherit;font-weight:700;cursor:pointer" onclick="_jdDeleteLead()">리드 삭제</button></div>';
+  }
+  el.innerHTML = h;
+}
+
+// ── upload / assign ──
+function _jdRenderUpload() {
+  var el = document.getElementById('jdBody');
+  if (!_jdCanManage()) { el.innerHTML = '<div style="padding:30px 0;text-align:center;color:#5C6678">업로드·배분은 대표·지점장만 가능합니다</div>'; return; }
+  var h = '<div class="mw-card"><h3>엑셀 붙여넣기 업로드 <small>이름 / 연락처 / 출처 순서</small></h3>' +
+    '<div style="font-size:11.5px;color:#5C6678;margin-bottom:8px">엑셀에서 이름·연락처(·출처) 열을 복사해 아래에 붙여넣으세요. 출처가 없으면 아래 선택값이 적용됩니다. 중복 번호는 자동으로 건너뜁니다.</div>' +
+    '<textarea class="mw-q" id="jdUpTa" rows="7" style="resize:vertical" placeholder="김민지\t01012345678\t알바몬\n이수현\t01023456789"></textarea>' +
+    '<div class="jd-seg" style="margin-bottom:8px">' +
+    '<button type="button" id="jdUpS1" class="on" onclick="_jdUpSrc(\'albamon\')">알바몬</button>' +
+    '<button type="button" id="jdUpS2" onclick="_jdUpSrc(\'albacheonguk\')">알바천국</button>' +
+    '<button type="button" id="jdUpS3" onclick="_jdUpSrc(\'기타\')">기타</button></div>' +
+    '<div class="jd-seg" style="margin-bottom:10px">' +
+    '<button type="button" id="jdUpB1" class="on" onclick="_jdUpBr(\'alpha\')">알파 배정</button>' +
+    '<button type="button" id="jdUpB2" onclick="_jdUpBr(\'bravo\')">브라보 배정</button></div>' +
+    '<button type="button" style="width:100%;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#C9A84C,#B8860B);color:#fff;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdUpload()">업로드</button>' +
+    '<div id="jdUpMsg" style="font-size:12px;color:#5C6678;margin-top:8px"></div></div>';
+  h += '<div class="mw-card"><h3>미배분 리드 배분 <small>선택한 콜 담당자에게 순서대로</small></h3><div id="jdAssignBox">' +
+       '<button type="button" style="width:100%;padding:10px;border:1px solid #E8E0D0;border-radius:10px;background:#fff;font-family:inherit;font-weight:700;cursor:pointer" onclick="_jdAssignUI()">담당자 목록 불러오기</button>' +
+       '</div></div>';
+  el.innerHTML = h;
+}
+var _jdUpSrcV = 'albamon';
+function _jdUpSrc(v) {
+  _jdUpSrcV = v;
+  document.getElementById('jdUpS1').classList.toggle('on', v === 'albamon');
+  document.getElementById('jdUpS2').classList.toggle('on', v === 'albacheonguk');
+  document.getElementById('jdUpS3').classList.toggle('on', v === '기타');
+}
+function _jdUpBr(v) {
+  _jd.upBr = v;
+  document.getElementById('jdUpB1').classList.toggle('on', v === 'alpha');
+  document.getElementById('jdUpB2').classList.toggle('on', v === 'bravo');
+}
+function _jdParseSrc(t) {
+  var s = String(t || '').trim();
+  if (!s) return _jdUpSrcV;
+  if (s.indexOf('알바몬') >= 0) return 'albamon';
+  if (s.indexOf('알바천국') >= 0) return 'albacheonguk';
+  return s;
+}
+function _jdUpload() {
+  var ta = document.getElementById('jdUpTa').value;
+  var lines = ta.split('\n');
+  var rows = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var cols = line.split('\t');
+    if (cols.length < 2) cols = line.split(/\s{2,}|,/);
+    var nm = String(cols[0] || '').trim();
+    var ph = String(cols[1] || '').replace(/[^0-9]/g, '');
+    if (ph.length < 10) {
+      // maybe phone-first row
+      var p0 = nm.replace(/[^0-9]/g, '');
+      if (p0.length >= 10) { ph = p0; nm = String(cols[1] || '').trim(); }
+    }
+    if (ph.length < 10) continue;
+    rows.push({ name:nm, phone:ph, source:_jdParseSrc(cols[2]), branch:_jd.upBr });
+  }
+  if (!rows.length) { showToast('업로드할 행이 없습니다'); return; }
+  document.getElementById('jdUpMsg').textContent = rows.length + '건 업로드 중...';
+  _mwPost({ action:'jobUpload', fp:currentUser.id, rows:rows, note:'', branch:_jd.upBr }, function(res){
+    if (!res || !res.ok) { document.getElementById('jdUpMsg').textContent = '⚠️ ' + ((res && res.msg) || '업로드 실패'); return; }
+    _jd.upBatch = res.batchId;
+    document.getElementById('jdUpMsg').innerHTML = '✅ <b>' + res.added + '건</b> 업로드 (중복·오류 ' + res.skipped + '건 제외) · 배치 ' + _mwEsc(res.batchId) + '<br>아래에서 콜 담당자를 골라 배분하세요.';
+    _jdAssignUI();
+    _jdLoadList();
+  });
+}
+function _jdAssignUI() {
+  var box = document.getElementById('jdAssignBox');
+  box.innerHTML = '<div style="padding:8px 0;color:#5C6678;font-size:12px">담당자 불러오는 중...</div>';
+  _mwGet({ action:'mwTouchers', fp:currentUser.id }, function(res){
+    if (!res || !res.ok) { box.innerHTML = '<div style="color:#C0392B;font-size:12px">불러오기 실패</div>'; return; }
+    var arr = res.list || res.touchers || [];
+    _jd.assignSel = {};
+    var h = '';
+    for (var i = 0; i < arr.length; i++) {
+      var t = arr[i];
+      var id = String(t.id || t.fp);
+      h += '<label style="display:flex;align-items:center;gap:8px;padding:7px 2px;font-size:13px;color:#1A2744;border-bottom:1px dashed #E8E0D0">' +
+        '<input type="checkbox" onchange="_jd.assignSel[\'' + _mwEsc(id) + '\']=this.checked">' +
+        '<b>' + _mwEsc(t.name || '') + '</b><span style="color:#5C6678;font-size:11.5px">' + _mwEsc(t.title || '') + '</span></label>';
+    }
+    h += '<button type="button" style="width:100%;margin-top:10px;padding:12px;border:0;border-radius:11px;background:linear-gradient(135deg,#C9A84C,#B8860B);color:#fff;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdAssignGo()">선택한 담당자에게 미배분 리드 배분</button>';
+    box.innerHTML = h;
+  });
+}
+function _jdAssignGo() {
+  var codes = [];
+  for (var k in _jd.assignSel) { if (_jd.assignSel[k]) codes.push(k); }
+  if (!codes.length) { showToast('담당자를 1명 이상 선택하세요'); return; }
+  _mwPost({ action:'jobAssign', fp:currentUser.id, batchId:_jd.upBatch || '', fpCodes:codes }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '배분 실패')); return; }
+    showToast('✅ ' + res.assigned + '건 배분 완료');
+    _jdLoadList();
+  });
+}
+
+// ── stats ──
+function _jdRenderStats() {
+  var el = document.getElementById('jdBody');
+  el.innerHTML = '<div style="padding:30px 0;text-align:center;color:#5C6678">불러오는 중...</div>';
+  _mwGet({ action:'jobStats', fp:currentUser.id }, function(res){
+    if (!res || !res.ok) { el.innerHTML = '<div style="padding:30px 0;text-align:center;color:#5C6678">' + _mwEsc((res && res.msg) || '조회 실패') + '</div>'; return; }
+    var s = res.stats || {};
+    function row(label, v, sub) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px dashed #E8E0D0;font-size:13px;color:#1A2744"><span>' + label + (sub ? ' <span style="font-size:11px;color:#97A0B0">' + sub + '</span>' : '') + '</span><b>' + (v || 0) + '명</b></div>';
+    }
+    var contacted = (s.tried || 0) + (s.talked || 0) + (s.recall || 0) + (s.linked || 0) + (s.viewed || 0) + (s.applied || 0) + (s.itv || 0) + (s.visited || 0) + (s.joined || 0) + (s.reject || 0) + (s.hold || 0);
+    var h = '<div class="mw-card"><h3>전환 깔때기 <small>사람 수 기준</small></h3>' +
+      row('전체 리드', s.total) +
+      row('미배분', s.unassigned) +
+      row('콜 진행', contacted, '한 번이라도 시도') +
+      row('링크 발송', (s.linked || 0) + (s.viewed || 0) + (s.applied || 0) + (s.itv || 0) + (s.visited || 0) + (s.joined || 0)) +
+      row('열람', (s.viewed || 0) + (s.applied || 0) + (s.itv || 0) + (s.visited || 0) + (s.joined || 0)) +
+      row('신청', (s.applied || 0) + (s.itv || 0) + (s.visited || 0) + (s.joined || 0)) +
+      row('인터뷰 확정', (s.itv || 0) + (s.visited || 0) + (s.joined || 0)) +
+      row('내방', (s.visited || 0) + (s.joined || 0)) +
+      row('입사', s.joined) +
+      '</div>' +
+      '<div class="mw-card"><h3>이탈 <small>현재 상태 기준</small></h3>' + row('거절', s.reject) + row('보류', s.hold) + '</div>';
+    el.innerHTML = h;
+  });
+}
+
+// ── rc2 auto-registration of applies ──
+function _jdSyncRc2() {
+  if (!_jdCanManage()) return;
+  if (typeof rc2LoadFromGas !== 'function' || typeof rc2GetMonthData !== 'function' || typeof rc2SaveToGas !== 'function') return;
+  var ym = getCurrentYM();
+  rc2LoadFromGas(ym, function(){
+    _mwGet({ action:'jobApplies', fp:currentUser.id, days:14 }, function(res){
+      if (!res || !res.ok || !res.list || !res.list.length) return;
+      var added = 0;
+      for (var i = 0; i < res.list.length; i++) {
+        var ap = res.list[i];
+        var cid = 'jd_' + ap.leadId;
+        var exists = false;
+        if (typeof rc2FindCandAcross === 'function') { exists = !!rc2FindCandAcross(cid); }
+        else {
+          var cur = rc2GetMonthData(ym);
+          for (var j = 0; j < (cur.list || []).length; j++) { if (cur.list[j].id === cid) { exists = true; break; } }
+        }
+        if (exists) continue;
+        var srcKo = JD_SRC_KO[ap.source] || ap.source || '잡사이트';
+        var evs = [];
+        if (ap.how === 'visit' && ap.slotDate && ap.slotTime) {
+          evs.push({ id:'e' + Date.now() + '_jd' + i, types:['지점장인터뷰'], dt: ap.slotDate + ' ' + ap.slotTime, done:false, visitConfirm:false });
+        }
+        var rec = { id:cid, ym:ym, branch:(ap.branch === 'bravo' ? 'bravo' : 'alpha'), name:(ap.name || '무명'), age:'',
+                    ref:srcKo + '콜', events:evs, join:'', regMonth:'', status:'추진중', joinConfirmDate:'',
+                    note:'커리어데스크 신청: ' + (ap.jobs || '') + (ap.how === 'call' ? (' / 전화인터뷰 ' + (ap.band || '')) : ''),
+                    focus:false, phoenix:false, phone:(ap.phone || ''), callItv:(ap.how === 'call'), callFrom:'', callTo:'', callNote:(ap.how === 'call' ? (ap.band || '') : '') };
+        var d = rc2GetMonthData(ym);
+        d.list.push(rec);
+        rc2SetMonthData(ym, d);
+        rc2SaveToGas(rec, ym, true);
+        added++;
+      }
+      if (added) {
+        showToast('📋 커리어 데스크 신청 ' + added + '건을 리크루팅탭에 등록했습니다 (미확정)');
+        if (typeof renderRecruitStat === 'function') renderRecruitStat();
+        try { if (typeof rc2RenderCal === 'function' && document.getElementById('recruitOverlay') && document.getElementById('recruitOverlay').classList.contains('open')) { rc2RenderCal(); rc2RenderList(); } } catch(e) {}
+      }
+    });
+  });
+}
+
+// ── recruiting tab: make link dialog ──
+var _jdl = { src:'albamon', br:'alpha', made:null, showBr:false };
+function _jdMyBranchKey() {
+  var b = String((currentUser && currentUser.branch) || '');
+  if (b.indexOf('알파') >= 0) return 'alpha';
+  if (b.indexOf('브라보') >= 0) return 'bravo';
+  return '';
+}
+function rc2OpenJdLink() {
+  if (!_jdCanTouch()) { showToast('⚠️ 링크 만들기 권한이 없습니다 (대표·지점장·매니저)'); return; }
+  _jdl.made = null;
+  var mine = _jdMyBranchKey();
+  if (mine) { _jdl.br = mine; _jdl.showBr = false; }
+  else { _jdl.br = (typeof rc2 !== 'undefined' && rc2.branch === 'bravo') ? 'bravo' : 'alpha'; _jdl.showBr = true; }
+  _jdl.src = 'albamon';
+  document.getElementById('jdLinkOv').classList.add('on');
+  _jdLinkRender();
+  _jdSyncRc2();
+}
+function _jdLinkClose() { document.getElementById('jdLinkOv').classList.remove('on'); }
+function _jdLinkSrc(v) { _jdl.src = v; _jdLinkRender(true); }
+function _jdLinkBr(v) { _jdl.br = v; _jdLinkRender(true); }
+function _jdLinkRender(keep) {
+  var nm = '', ph = '';
+  if (keep) {
+    var n0 = document.getElementById('jdlName'); if (n0) nm = n0.value;
+    var p0 = document.getElementById('jdlPhone'); if (p0) ph = p0.value;
+  }
+  var el = document.getElementById('jdLinkBody');
+  if (_jdl.made) {
+    el.innerHTML =
+      '<div class="mw-card"><h3>링크가 만들어졌습니다</h3>' +
+      '<div style="font-size:12.5px;color:#1A2744;word-break:break-all;background:#FBF9F4;border:1px solid #E8E0D0;border-radius:10px;padding:10px 12px;margin-bottom:10px" id="jdlUrl">' + _mwEsc(_jdl.made.url) + '</div>' +
+      '<button type="button" style="width:100%;padding:12px;border:0;border-radius:11px;background:#F37321;color:#fff;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdLinkCopy(false)">🔗 링크만 복사</button>' +
+      '<button type="button" style="width:100%;margin-top:8px;padding:12px;border:1px solid #E8E0D0;border-radius:11px;background:#fff;color:#1A2744;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdLinkCopy(true)">💬 문자 문구째 복사</button>' +
+      '<div style="font-size:11.5px;color:#5C6678;margin-top:10px;line-height:1.6">후보자가 링크에서 신청하면 리크루팅탭 달력에 <b>미확정 인터뷰</b>로 자동 등록됩니다. 인사담당자 전화로 확인 후 확정해주세요.</div></div>' +
+      '<button type="button" style="width:100%;padding:11px;border:1px solid #E8E0D0;border-radius:11px;background:#fff;color:#5C6678;font-weight:700;font-family:inherit;cursor:pointer" onclick="_jdl.made=null;_jdLinkRender()">＋ 다른 후보자 링크 만들기</button>';
+    return;
+  }
+  el.innerHTML =
+    '<div class="mw-card">' +
+    '<input class="mw-q" id="jdlName" placeholder="후보자 이름 (몰라도 됨)" value="' + _mwEsc(nm) + '">' +
+    '<input class="mw-q" id="jdlPhone" placeholder="연락처 숫자만" inputmode="numeric" value="' + _mwEsc(ph) + '">' +
+    '<div class="jd-seg" style="margin-bottom:8px">' +
+    '<button type="button" class="' + (_jdl.src === 'albamon' ? 'on' : '') + '" onclick="_jdLinkSrc(\'albamon\')">알바몬</button>' +
+    '<button type="button" class="' + (_jdl.src === 'albacheonguk' ? 'on' : '') + '" onclick="_jdLinkSrc(\'albacheonguk\')">알바천국</button>' +
+    '<button type="button" class="' + (_jdl.src === '기타' ? 'on' : '') + '" onclick="_jdLinkSrc(\'기타\')">기타</button></div>' +
+    (_jdl.showBr ?
+      ('<div class="jd-seg" style="margin-bottom:10px">' +
+       '<button type="button" class="' + (_jdl.br === 'alpha' ? 'on' : '') + '" onclick="_jdLinkBr(\'alpha\')">알파</button>' +
+       '<button type="button" class="' + (_jdl.br === 'bravo' ? 'on' : '') + '" onclick="_jdLinkBr(\'bravo\')">브라보</button></div>')
+      : ('<div style="font-size:11.5px;color:#5C6678;margin-bottom:10px">지점: <b>' + (_jdl.br === 'bravo' ? '브라보' : '알파') + '</b> (내 소속 자동)</div>')) +
+    '<button type="button" style="width:100%;padding:12px;border:0;border-radius:11px;background:#F37321;color:#fff;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdLinkMake()">링크 만들기</button>' +
+    '<div style="font-size:11.5px;color:#97A0B0;margin-top:8px">페이지 상단에 이력서 열람 경로(알바몬 등)와 이름이 표시됩니다.</div></div>';
+}
+function _jdLinkMake() {
+  var nm = document.getElementById('jdlName').value.trim();
+  var ph = document.getElementById('jdlPhone').value.replace(/[^0-9]/g, '');
+  if (ph.length < 10) { showToast('연락처를 확인해주세요'); return; }
+  showToast('링크 만드는 중...');
+  _mwGet({ action:'jobQuickAdd', fp:currentUser.id, name:nm, phone:ph, source:_jdl.src, branch:_jdl.br }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '생성 실패')); return; }
+    _jdl.made = { url:res.url, name:nm, leadId:res.leadId };
+    _jdLinkRender();
+    _mwGet({ action:'jobLink', fp:currentUser.id, leadId:res.leadId }, function(){});
+  });
+}
+function _jdLinkCopy(withText) {
+  if (!_jdl.made) return;
+  var txt = _jdl.made.url;
+  if (withText) {
+    var nm = _jdl.made.name ? _jdl.made.name + '님' : '안녕하세요';
+    var srcKo = JD_SRC_KO[_jdl.src] || _jdl.src;
+    txt = '[한화생명금융서비스 유니스지사]\n' + nm + ', ' + srcKo + ' 이력서 열람 후 연락드렸습니다.\n단기 1시간부터 정식 직무까지 안내드립니다 (1분)\n' + _jdl.made.url + '\n원치 않으시면 "그만" 회신 부탁드립니다.';
+  }
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = txt; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); showToast('📋 복사되었습니다'); } catch(e) { showToast('⚠️ 복사 실패'); }
+    document.body.removeChild(ta);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function(){ showToast('📋 복사되었습니다'); }).catch(fallback);
+  } else { fallback(); }
 }
 </script>
 
