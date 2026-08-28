@@ -112,6 +112,9 @@ h1 em{font-style:normal;color:var(--or-deep)}
 /* footer */
 .foot{padding:26px 18px 10px;font-size:11px;color:var(--mute);line-height:1.6}
 .foot b{color:var(--ink2)}
+.spin{width:34px;height:34px;border:3px solid #E2E6EB;border-top-color:var(--or);border-radius:50%;margin:0 auto 14px;animation:jdspin .8s linear infinite}
+@keyframes jdspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2s}}
 
 /* sticky cta */
 .cta{position:fixed;left:0;right:0;bottom:0;padding:10px 16px 16px;background:linear-gradient(to top,rgba(243,245,247,1) 60%,rgba(243,245,247,0))}
@@ -130,7 +133,7 @@ h1 em{font-style:normal;color:var(--or-deep)}
   </div>
 
   <div class="ticket">
-    <div class="row"><span class="k">이력서 열람 경로</span><span class="v src"><i class="dot"></i><span id="tkSrc">확인 중...</span></span></div>
+    <div class="row"><span class="k" id="tkSrcLabel">이력서 열람 경로</span><span class="v src"><i class="dot"></i><span id="tkSrc">확인 중...</span></span></div>
     <div class="row"><span class="k">받으시는 분</span><span class="v" id="tkName">-</span></div>
     <div class="row"><span class="k">이 안내의 유효기간</span><span class="v" id="tkValid">-</span></div>
   </div>
@@ -259,7 +262,7 @@ h1 em{font-style:normal;color:var(--or-deep)}
       <div class="q"><b>고르면 바로 확정되나요?</b><p>아닙니다. 인사담당자(지점장)가 편하신 시간에 전화드려 조건을 설명하고, 서로 맞는다고 판단될 때만 방문 일정을 잡습니다.</p></div>
       <div class="q"><b>여러 개 골라도 되나요?</b><p>네. 고르신 자리 전부를 한 번의 전화에서 같이 안내드립니다.</p></div>
       <div class="q"><b>지사 방문은 꼭 해야 하나요?</b><p>전화 인터뷰만으로 진행되는 자리도 있습니다. 방문이 필요한 경우 담당자가 미리 말씀드립니다.</p></div>
-      <div class="q"><b>제 이력서는 어떻게 보신 건가요?</b><p>알바몬·알바천국에 공개하신 이력서를 채용 목적으로 열람했습니다. 열람 경로와 날짜는 이 페이지 맨 위에 적혀 있습니다.</p></div>
+      <div class="q" id="faqResume"><b>제 이력서는 어떻게 보신 건가요?</b><p>알바몬·알바천국에 공개하신 이력서를 채용 목적으로 열람했습니다. 열람 경로와 날짜는 이 페이지 맨 위에 적혀 있습니다.</p></div>
     </div>
   </div>
 
@@ -290,7 +293,7 @@ h1 em{font-style:normal;color:var(--or-deep)}
 </div>
 
 <div id="screen" style="position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;align-items:center;justify-content:center;padding:30px;text-align:center">
-  <div id="screenMsg" style="font-size:15px;color:var(--ink2)">안내를 불러오는 중입니다...</div>
+  <div><div class="spin" id="screenSpin"></div><div id="screenMsg" style="font-size:15px;color:var(--ink2)">안내를 불러오는 중입니다...</div></div>
 </div>
 <div class="cta"><div class="in">
   <button class="btn" id="go" disabled>자리를 골라주세요</button>
@@ -342,7 +345,9 @@ h1 em{font-style:normal;color:var(--or-deep)}
     var el = document.getElementById('screen');
     if (hide) { el.style.display = 'none'; return; }
     el.style.display = 'flex';
-    document.getElementById('screenMsg').innerHTML = msg;
+    var sp = document.getElementById('screenSpin');
+    if (sp) sp.style.display = msg ? 'none' : '';
+    if (msg) document.getElementById('screenMsg').innerHTML = msg;
   }
 
   function renderSlots(slots){
@@ -413,7 +418,15 @@ h1 em{font-style:normal;color:var(--or-deep)}
       }
       var nm = String(res.name || '');
       hasName = !!nm;
-      document.getElementById('tkSrc').textContent = (res.source || '구직 사이트') + ' · ' + (res.srcDate || '');
+      var isRef = !(res.source === '알바몬' || res.source === '알바천국');
+      if (isRef) {
+        document.getElementById('tkSrcLabel').textContent = '안내 발송일';
+        document.getElementById('tkSrc').textContent = res.srcDate || '';
+        var fr = document.getElementById('faqResume');
+        if (fr) fr.style.display = 'none';
+      } else {
+        document.getElementById('tkSrc').textContent = (res.source || '구직 사이트') + ' · ' + (res.srcDate || '');
+      }
       document.getElementById('tkName').textContent = nm ? nm + '님' : '이력서 등록자';
       var vu = String(res.validUntil || '');
       if (vu) {
@@ -422,7 +435,11 @@ h1 em{font-style:normal;color:var(--or-deep)}
         var wk = ['일','월','화','수','목','금','토'];
         document.getElementById('tkValid').textContent = parseInt(vp[1],10) + '월 ' + parseInt(vp[2],10) + '일(' + wk[vd.getDay()] + ')까지';
       }
-      if (nm) document.getElementById('heroTitle').innerHTML = esc(nm) + '님 이력서를 확인하고<br>연락드렸습니다.<br>지금 <em>5개 자리</em>가 열려 있습니다.';
+      if (isRef) {
+        document.getElementById('heroTitle').innerHTML = (nm ? esc(nm) + '님,<br>' : '') + '유니스에서 함께할<br><em>새로운 멤버</em>를 찾고 있습니다.<br>지금 <em>5개 자리</em>가 열려 있습니다.';
+      } else if (nm) {
+        document.getElementById('heroTitle').innerHTML = esc(nm) + '님 이력서를 확인하고<br>연락드렸습니다.<br>지금 <em>5개 자리</em>가 열려 있습니다.';
+      }
       if (res.owner && res.owner.name) {
         document.getElementById('ownName').textContent = res.owner.name;
         var av = document.getElementById('ownAvatar');
