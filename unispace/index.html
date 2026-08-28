@@ -24422,9 +24422,10 @@ function goWorkPlay(){
   <div class="mw-scr">
     <div class="hd"><span>📜</span><div class="t">콜 스크립트 · 문자 문구</div><button type="button" class="mw-close" onclick="_mwCloseScript()">✕</button></div>
     <div class="tabs" id="mwScrTabs">
-      <button type="button" class="on" onclick="_mwScrTab(0)">콜 스크립트</button>
-      <button type="button" onclick="_mwScrTab(1)">문자 · 항목 선택</button>
-      <button type="button" onclick="_mwScrTab(2)">문자 · 보험료 조회</button>
+      <button type="button" class="on" onclick="_mwScrTab(0)">헬퍼 콜</button>
+      <button type="button" onclick="_mwScrTab(1)">상담 콜</button>
+      <button type="button" onclick="_mwScrTab(2)">문자 · 항목</button>
+      <button type="button" onclick="_mwScrTab(3)">문자 · 조회</button>
     </div>
     <div class="body"><pre id="mwScrText"></pre></div>
     <div class="acts"><button type="button" class="mw-btn gold" onclick="_mwScrCopy()">📋 복사하기</button></div>
@@ -24437,7 +24438,7 @@ var MW_ITEM_LABEL = { '3big':'암·뇌·심장 보장', 'silson':'실손보험',
 var MW_STATUS_KO = { 'unassigned':'미배분', 'new':'신규', 'tried':'부재', 'talked':'통화', 'recall':'재통화', 'linked':'링크발송', 'selected':'고객접수', 'booked':'상담예약', 'done':'상담완료', 'signed':'청약', 'hold':'보류', 'reject':'거절' };
 var MW_STATUS_ORDER = ['new','tried','recall','talked','linked','selected','booked','done','signed','hold','reject','unassigned'];
 var MW_METRICS = [
-  ['none','미접촉'], ['reached','통화'], ['missed','부재'], ['recall','재통화'], ['linked','링크'], ['selected','접수'],
+  ['none','미접촉'], ['reached','통화'], ['missed','부재'], ['recall','재통화'], ['linked','링크'], ['helper','헬퍼'], ['selected','접수'],
   ['booked','예약'], ['done','완료'], ['signed','청약'], ['reject','거절']
 ];
 // people-based rules, identical to the stats table
@@ -24450,6 +24451,7 @@ function _mwMetric(l, key) {
     case 'missed': return tried && !reached;
     case 'recall': return (l.lastResult || l.lastCallResult) === '재통화';
     case 'linked': return !!l.linkSentAt;
+    case 'helper': return !!l.helperNo;
     case 'selected': return !!l.selAt;
     case 'booked': return l.status === 'booked';
     case 'done': return l.status === 'done';
@@ -24684,6 +24686,7 @@ function _mwLeadCard(l) {
   if (ag.length) h += '<span class="ag">' + _mwEsc(ag.join(' · ')) + '</span>';
   h += '<span class="mw-st ' + _mwEsc(l.status) + '">' + (l.status === 'selected' ? '고객접수 🔔' : _mwEsc(MW_STATUS_KO[l.status] || l.status)) + '</span>';
   h += '</div><div class="l2"><span class="ph">' + _mwEsc(l.phone) + '</span>';
+  if (l.helperNo) h += '<span class="mw-ico" style="background:rgba(31,146,104,.12);color:#1F9268">🧾 헬퍼</span>';
   if (l.hasIns) h += '<span class="mw-ico y">보험 ' + l.insTotal + '건</span>';
   if (l.hasDx) h += '<span class="mw-ico y">병력</span>';
   if (l.hasChk) h += '<span class="mw-ico y">검진</span>';
@@ -24825,8 +24828,11 @@ function _mwRenderDetail() {
   h += '</div>';
   h += '<div class="mw-grid2">';
   h += '<a class="mw-btn ghost sm" href="tel:' + String(l.phone || '').replace(/[^0-9]/g, '') + '">📞 전화 걸기</a>';
-  h += '<button type="button" class="mw-btn gold sm" onclick="_mwSendLink()">🔗 링크 보내기</button>';
+  h += '<button type="button" class="mw-btn gold sm" onclick="_mwLinkChooser()">🔗 링크 보내기</button>';
   h += '</div>';
+  if (l.helperNo) {
+    h += '<div class="mw-card"><h3>🧾 청구 헬퍼 등록됨 <small>' + _mwEsc(_mwShort(l.helperAt)) + '</small></h3><span class="mw-pill ok">' + _mwEsc(l.helperNo) + '</span><span class="mw-pill">32개사 · 무료</span><div class="mw-note">청구 문의가 오면 이 카드에 콜 결과·메모로 기록하세요.</div></div>';
+  }
   if (l.sel && l.sel.items) {
     var labels = [];
     for (var i = 0; i < l.sel.items.length; i++) labels.push('<span class="mw-pill warn">' + _mwEsc(MW_ITEM_LABEL[l.sel.items[i]] || l.sel.items[i]) + '</span>');
@@ -24999,6 +25005,8 @@ function _mwBuildTips(d, ins, hint, hasIns, hasDx, hasChk) {
 
 function _mwAcc(hd) { var sec = hd.parentNode; sec.classList.toggle('open'); }
 var MW_SCRIPTS = [
+  { t:'헬퍼 콜', body:
+'안녕하세요, {CUST}님.\n머니워크 앱에서 보험상담 신청하신 건으로\n연락드렸던 한화생명금융서비스\n{FP} {TITLE}입니다.\n\n부담스러운 상담 말고,\n신청 고객님께 드리는\n보험금 청구 헬퍼 하나만 안내드리려고요.\n\n병원 다녀오시고 청구를 놓치거나,\n보험사가 깐깐하게 굴 때 —\n32개 보험사 어디든\n청구 절차랑 서류를 저희가 도와드리고,\n안 풀리는 건은 제휴 손해사정사·변호사까지\n연결해드리는 무료 서비스예요.\n\n지금 문자로 등록 페이지 보내드렸는데,\n성함만 확인하고 등록해두시면\n언제든 쓰실 수 있습니다.\n등록해두시겠어요?' },
   { t:'콜 스크립트', body:
 '안녕하세요, {CUST}님.\n머니워크에서\n보험상담신청 남겨주셔서 연락드렸어요.\n저는 머니워크 협력사\n한화생명금융서비스\n{FP} {TITLE}입니다.\n\n4가지 내용으로\n상담진행 예정인데\n지금 문자로 고객님께\n안내 링크 발송해 드렸습니다.\n\n1. 암·뇌·심장 보장이 부족한지\n2. 실손보험을 잘 가입하고 있는지\n3. 매달 내는 보험료가 적정한지\n4. 전체적으로 한번 점검받고 싶은지\n\n4가지 항목 중\n특별히 원하는 항목 신청해주시면 됩니다.\n\n유지하고 계신 보험 내용확인을 위해\n본인인증 알림톡 먼저 발송해드릴건데요\n혹시 상담은 통화가 편하실까요,\n카톡이 편하실까요?\n(통화가 편하신 시간대는 언제실까요?)\n\n네 알겠습니다.\n알림톡 발송해드리면 셀프 본인인증 부탁드리고,\n인증확인 후에 다시 연락드리겠습니다.\n감사합니다.' },
   { t:'문자 · 항목 선택', body:
@@ -25031,7 +25039,7 @@ function _mwScrTab(i) {
 function _mwScrCopy() {
   var txt = _mwScrFill(MW_SCRIPTS[_mwScrIdx].body);
   var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (_mwScrIdx > 0 && isMobileDev && navigator.share) { navigator.share({ text: txt }).catch(function(){}); return; }
+  if (_mwScrIdx > 1 && isMobileDev && navigator.share) { navigator.share({ text: txt }).catch(function(){}); return; }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(function(){ showToast('📋 복사됨'); }).catch(function(){ if (typeof shareVipApplyLegacyCopy === 'function') shareVipApplyLegacyCopy(txt); });
   } else if (typeof shareVipApplyLegacyCopy === 'function') shareVipApplyLegacyCopy(txt);
@@ -25091,13 +25099,28 @@ function _mwRefreshLead(id) {
     if (_mw.lead && _mw.lead.id === id) _mwOpenLead(id);
   });
 }
-function _mwSendLink() {
+function _mwLinkChooser() {
   if (!_mw.lead) return;
+  var box = document.getElementById('mwLinkChoose');
+  if (box) { box.remove(); return; }
+  var btns = document.querySelector('.mw-grid2');
+  var div = document.createElement('div');
+  div.id = 'mwLinkChoose';
+  div.className = 'mw-card';
+  div.innerHTML = '<h3>어떤 링크를 보낼까요?</h3><div class="mw-grid2" style="margin:0">'
+    + '<button type="button" class="mw-btn gold sm" onclick="_mwSendLink(\'helper\')">🧾 청구 헬퍼 등록</button>'
+    + '<button type="button" class="mw-btn ghost sm" onclick="_mwSendLink(\'consult\')">📋 상담 항목 선택</button></div>'
+    + '<div class="mw-note">헬퍼: 부담 없는 관계 맺기용 · 상담: 항목 선택 접수용</div>';
+  btns.parentNode.insertBefore(div, btns.nextSibling);
+}
+function _mwSendLink(mode) {
+  if (!_mw.lead) return;
+  var ch = document.getElementById('mwLinkChoose'); if (ch) ch.remove();
   var id = _mw.lead.id;
   var nameNow = (document.getElementById('mwNameIn') || {}).value;
   showToast('🔗 링크 만드는 중…');
   var go = function(){
-    _mwGet({ action:'mwLink', fp:currentUser.id, leadId:id }, function(res){
+    _mwGet({ action:'mwLink', fp:currentUser.id, leadId:id, mode:mode || 'consult' }, function(res){
       if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '링크 생성 실패')); return; }
       var txt = res.sms || res.url;
       var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -25336,28 +25359,28 @@ function _mwRenderStats() {
   var h = '';
   // top summary uses the same event-based numbers as the table below
   var fAll = s.byFp || {};
-  var top = { total:0, reached:0, missed:0, recall:0, linked:0, selected:0, booked:0, done:0, signed:0, reject:0 };
+  var top = { total:0, reached:0, missed:0, recall:0, linked:0, helper:0, selected:0, booked:0, done:0, signed:0, reject:0 };
   for (var nm0 in fAll) if (fAll.hasOwnProperty(nm0)) {
     var r0 = fAll[nm0];
     top.total += r0.total || 0; top.reached += (r0.reached !== undefined ? r0.reached : (r0.called || 0)); top.missed += r0.missed || 0; top.recall += r0.recall || 0;
-    top.linked += r0.linked || 0; top.selected += r0.selected || 0; top.booked += r0.booked || 0; top.done += r0.done || 0; top.signed += r0.signed || 0; top.reject += r0.reject || 0;
+    top.linked += r0.linked || 0; top.helper += r0.helper || 0; top.selected += r0.selected || 0; top.booked += r0.booked || 0; top.done += r0.done || 0; top.signed += r0.signed || 0; top.reject += r0.reject || 0;
   }
-  var cols = [['total','배분'],['reached','통화'],['missed','부재'],['recall','재통화'],['linked','링크'],['selected','접수'],['booked','예약'],['done','완료'],['signed','청약'],['reject','거절']];
+  var cols = [['total','배분'],['reached','통화'],['missed','부재'],['recall','재통화'],['linked','링크'],['helper','헬퍼'],['selected','접수'],['booked','예약'],['done','완료'],['signed','청약'],['reject','거절']];
   h += '<div class="mw-stat">';
   for (var ci = 0; ci < cols.length; ci++) h += '<div class="' + (cols[ci][0] === 'selected' && top.selected ? 'hot' : '') + '"><b>' + top[cols[ci][0]] + '</b>' + cols[ci][1] + '</div>';
   h += '</div>';
-  h += '<div class="mw-card"><h3>DB 터치 현황</h3><div style="overflow-x:auto"><table class="mw-tbl"><tr><th>담당</th><th>배분</th><th>통화</th><th>부재</th><th>재통화</th><th>링크</th><th>접수</th><th>예약</th><th>완료</th><th>청약</th><th>거절</th></tr>';
+  h += '<div class="mw-card"><h3>DB 터치 현황</h3><div style="overflow-x:auto"><table class="mw-tbl"><tr><th>담당</th><th>배분</th><th>통화</th><th>부재</th><th>재통화</th><th>링크</th><th>헬퍼</th><th>접수</th><th>예약</th><th>완료</th><th>청약</th><th>거절</th></tr>';
   var names = []; var f = s.byFp || {};
   for (var nm in f) if (f.hasOwnProperty(nm)) names.push(nm);
   names.sort(function(a, b2){ return (f[b2].total || 0) - (f[a].total || 0); });
-  var sum = { total:0, reached:0, missed:0, recall:0, linked:0, selected:0, booked:0, done:0, signed:0, reject:0 };
+  var sum = { total:0, reached:0, missed:0, recall:0, linked:0, helper:0, selected:0, booked:0, done:0, signed:0, reject:0 };
   for (var n = 0; n < names.length; n++) {
     var r = f[names[n]];
     var reached = (r.reached !== undefined) ? r.reached : (r.called || 0);
-    h += '<tr><td class="n">' + _mwEsc(names[n]) + '</td><td>' + r.total + '</td><td>' + reached + '</td><td>' + (r.missed || 0) + '</td><td>' + (r.recall || 0) + '</td><td>' + r.linked + '</td><td class="' + (r.selected ? 'hi' : '') + '">' + r.selected + '</td><td>' + r.booked + '</td><td>' + r.done + '</td><td class="' + (r.signed ? 'hi' : '') + '">' + r.signed + '</td><td>' + r.reject + '</td></tr>';
+    h += '<tr><td class="n">' + _mwEsc(names[n]) + '</td><td>' + r.total + '</td><td>' + reached + '</td><td>' + (r.missed || 0) + '</td><td>' + (r.recall || 0) + '</td><td>' + r.linked + '</td><td class="' + ((r.helper || 0) ? 'hi' : '') + '">' + (r.helper || 0) + '</td><td class="' + (r.selected ? 'hi' : '') + '">' + r.selected + '</td><td>' + r.booked + '</td><td>' + r.done + '</td><td class="' + (r.signed ? 'hi' : '') + '">' + r.signed + '</td><td>' + r.reject + '</td></tr>';
     for (var key in sum) if (sum.hasOwnProperty(key)) sum[key] += (key === 'reached' ? reached : (r[key] || 0));
   }
-  h += '<tr class="sum"><td class="n">합계</td><td>' + sum.total + '</td><td>' + sum.reached + '</td><td>' + sum.missed + '</td><td>' + sum.recall + '</td><td>' + sum.linked + '</td><td>' + sum.selected + '</td><td>' + sum.booked + '</td><td>' + sum.done + '</td><td>' + sum.signed + '</td><td>' + sum.reject + '</td></tr>';
+  h += '<tr class="sum"><td class="n">합계</td><td>' + sum.total + '</td><td>' + sum.reached + '</td><td>' + sum.missed + '</td><td>' + sum.recall + '</td><td>' + sum.linked + '</td><td>' + sum.helper + '</td><td>' + sum.selected + '</td><td>' + sum.booked + '</td><td>' + sum.done + '</td><td>' + sum.signed + '</td><td>' + sum.reject + '</td></tr>';
   h += '</table></div>';
   if (sum.total) h += '<div class="mw-note">전부 사람 수 기준. 미접촉 ' + (sum.total - sum.reached - sum.missed) + '명 · 부재 ' + sum.missed + '명 · 통화 ' + sum.reached + '명 (연결률 ' + Math.round(sum.reached / sum.total * 100) + '%) · 통화 중 거절 ' + sum.reject + '명 · 링크 대비 접수 ' + (sum.linked ? Math.round(sum.selected / sum.linked * 100) : 0) + '% · 배분 대비 청약 ' + (Math.round(sum.signed / sum.total * 1000) / 10) + '%</div>';
   h += '</div>';
