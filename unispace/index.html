@@ -24479,8 +24479,27 @@ function _mwCanTouch() {
   var t = String(currentUser.title || '');
   if (currentUser.role === '지점장' || currentUser.level === 'manager') return true;
   if (t.indexOf('지점장') >= 0 || t.indexOf('매니저') >= 0) return true;
+  try { if (localStorage.getItem('mwTouch_' + currentUser.id) === 'Y') return true; } catch(e) {}
   return false;
 }
+// plain FPs may be added as extra participants on the server; probe once per 6h
+function _mwTouchProbe() {
+  if (!currentUser || !currentUser.id) { setTimeout(_mwTouchProbe, 8000); return; }
+  var t = String(currentUser.title || '');
+  if (currentUser.role === '대표' || currentUser.level === 'admin' || currentUser.role === '지점장' || currentUser.level === 'manager' || t.indexOf('지점장') >= 0 || t.indexOf('매니저') >= 0) return;
+  var key = 'mwTouchTs_' + currentUser.id;
+  try {
+    var last = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+    if (Date.now() - last < 21600000) return;
+  } catch(e) {}
+  _mwGet({ action:'mwTouchCfg', fp:currentUser.id, op:'check' }, function(res){
+    try {
+      localStorage.setItem(key, String(Date.now()));
+      if (res && res.ok) localStorage.setItem('mwTouch_' + currentUser.id, res.touch ? 'Y' : 'N');
+    } catch(e) {}
+  });
+}
+setTimeout(_mwTouchProbe, 6000);
 function _mwCanManage() {
   if (!currentUser) return false;
   if (currentUser.role === '대표' || currentUser.level === 'admin' || currentUser.id === 'ktk01') return true;
@@ -25203,9 +25222,12 @@ function _mwRenderUpload() {
   for (var k = 0; k < _mw.touchers.length; k++) {
     var tc = _mw.touchers[k];
     var cls = String(tc.branch || '').indexOf('알파') >= 0 ? 'a' : (String(tc.branch || '').indexOf('브라보') >= 0 ? 'b' : '');
-    h += '<label class="' + cls + '"><input type="checkbox" ' + (tc.on ? 'checked' : '') + ' onchange="_mw.touchers[' + k + '].on=this.checked;_mwRenderUpload()">' + _mwEsc(tc.name) + '</label>';
+    h += '<label class="' + cls + '"' + (tc.extra ? ' style="border-style:dashed"' : '') + '><input type="checkbox" ' + (tc.on ? 'checked' : '') + ' onchange="_mw.touchers[' + k + '].on=this.checked;_mwRenderUpload()">' + _mwEsc(tc.name) + (tc.extra ? ' <span style="font-size:10px;color:#A6791A">FP</span>' : '') + '</label>';
   }
   h += '</div>';
+  if (_mw.canManage) {
+    h += '<div class="mw-note" style="cursor:pointer;margin-top:8px" onclick="_mwTouchCfgUI()">➕ 일반 FP를 배분에 추가·제거</div><div id="mwCfgBox"></div>';
+  }
   h += '<div class="mw-row" style="margin-top:8px"><span>업로드 즉시 자동 배분</span><span class="mw-tog ' + (_mw.autoAssign ? 'on' : '') + '" onclick="_mw.autoAssign=!_mw.autoAssign;_mwRenderUpload()"></span></div>';
   if (_mw.rows.length && onCnt) {
     var per = Math.floor(_mw.rows.length / onCnt), rem = _mw.rows.length % onCnt;
@@ -25250,6 +25272,61 @@ function _mwRenderUpload() {
     h += '</div>';
   }
   b.innerHTML = h;
+}
+var _mwCfg = { open:false, extras:[], candidates:[], q:'' };
+function _mwTouchCfgUI() {
+  _mwCfg.open = !_mwCfg.open;
+  if (_mwCfg.open && !_mwCfg.candidates.length && !_mwCfg.extras.length) {
+    _mwRenderCfg('<div class="mw-spin">FP 목록 불러오는 중…</div>');
+    _mwGet({ action:'mwTouchCfg', fp:currentUser.id, op:'list' }, function(res){
+      if (!res || !res.ok) { _mwRenderCfg('<div class="mw-note">' + _mwEsc((res && res.msg) || '조회 실패') + '</div>'); return; }
+      _mwCfg.extras = res.extras || []; _mwCfg.candidates = res.candidates || [];
+      _mwRenderCfg();
+    });
+  } else {
+    _mwRenderCfg();
+  }
+}
+function _mwRenderCfg(inner) {
+  var box = document.getElementById('mwCfgBox');
+  if (!box) return;
+  if (!_mwCfg.open) { box.innerHTML = ''; return; }
+  if (inner) { box.innerHTML = inner; return; }
+  var h = '<div style="background:rgba(26,39,68,.03);border-radius:10px;padding:10px;margin-top:6px">';
+  if (_mwCfg.extras.length) {
+    h += '<div class="mw-note" style="margin:0 0 6px">배분 참여 중인 일반 FP — 눌러서 제거</div>';
+    for (var i = 0; i < _mwCfg.extras.length; i++) {
+      var e = _mwCfg.extras[i];
+      h += '<span class="mw-pill warn" style="cursor:pointer" onclick="_mwCfgMod(\'remove\',\'' + _mwEsc(e.id) + '\')">' + _mwEsc(e.name) + ' ✕</span>';
+    }
+  }
+  h += '<input type="search" class="mw-q" style="margin:8px 0 6px" placeholder="이름 검색해서 추가" value="' + _mwEsc(_mwCfg.q) + '" oninput="_mwCfg.q=this.value;_mwRenderCfg()">';
+  var q = String(_mwCfg.q || '').trim();
+  if (q) {
+    var shown = 0;
+    for (var c = 0; c < _mwCfg.candidates.length; c++) {
+      var f = _mwCfg.candidates[c];
+      if (String(f.name).indexOf(q) < 0) continue;
+      h += '<span class="mw-pill" style="cursor:pointer" onclick="_mwCfgMod(\'add\',\'' + _mwEsc(f.id) + '\')">＋ ' + _mwEsc(f.name) + ' <small style="color:#97A0B0">' + _mwEsc(f.branch) + '</small></span>';
+      shown++;
+      if (shown >= 12) break;
+    }
+    if (!shown) h += '<div class="mw-note" style="margin:0">일치하는 FP가 없어요</div>';
+  } else {
+    h += '<div class="mw-note" style="margin:0">이름을 입력하면 추가할 FP가 나옵니다</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+}
+function _mwCfgMod(op, code) {
+  showToast(op === 'add' ? '➕ 추가 중…' : '제거 중…');
+  _mwGet({ action:'mwTouchCfg', fp:currentUser.id, op:op, code:code }, function(res){
+    if (!res || !res.ok) { showToast('⚠️ ' + ((res && res.msg) || '실패')); return; }
+    _mwCfg.extras = res.extras || []; _mwCfg.candidates = res.candidates || [];
+    showToast(op === 'add' ? '✓ 배분 참여에 추가됨' : '✓ 제거됨');
+    _mwRenderCfg();
+    _mwLoadTouchers();
+  });
 }
 function _mwFileChosen(inp) {
   var f = inp.files && inp.files[0];
