@@ -2,6 +2,18 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<script>
+(function(){
+  try {
+    if (/[?&]m=1/.test(location.search)) return;
+    var ua = navigator.userAgent || '';
+    var mob = /Android|iPhone|iPad|iPod|Mobile|KAKAOTALK/i.test(ua);
+    if (!mob && window.innerWidth >= 1024) {
+      location.replace('tv.html' + location.search);
+    }
+  } catch(e) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>🌕 유니스 한가위 윷놀이</title>
 <meta property="og:title" content="🌕 유니스 한가위 윷놀이">
@@ -94,6 +106,8 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .gt .g-ico { font-size:15px; width:28px; }
 .gt .g-amt { color:#8a75b0; font-size:10.5px; text-align:right; }
 .gt tr.hl td { background:#fff6dd; }
+.gt .g-names { font-size:10px; font-weight:800; color:#7a4fd0; margin-top:2px; line-height:1.4; }
+.gt .g-names.none { color:#c0b5d8; }
 
 /* snack rule */
 .snack-row { display:flex; gap:6px; }
@@ -252,11 +266,11 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
   <div class="card">
     <div class="sec-t">🎁 추석선물 확정표 <span style="font-size:10px;color:#a08fc5;font-weight:800">9/13 업적 기준</span></div>
     <table class="gt">
-      <tr id="gt-보름달"><td class="g-ico">🥩</td><td>한우세트 — 🌕 보름달</td><td class="g-amt">50만 이상</td></tr>
-      <tr id="gt-둥근달"><td class="g-ico">🍷</td><td>와인세트 — 둥근달</td><td class="g-amt">40만 ~ 50만 미만</td></tr>
-      <tr id="gt-볼록달"><td class="g-ico">🐟</td><td>참치세트 — 볼록달</td><td class="g-amt">30만 ~ 40만 미만</td></tr>
-      <tr id="gt-반달"><td class="g-ico">🍙</td><td>김세트 — 반달</td><td class="g-amt">20만 ~ 30만 미만</td></tr>
-      <tr id="gt-초승달"><td class="g-ico">🥞</td><td>부침가루세트 — 초승달</td><td class="g-amt">10만 ~ 20만 미만</td></tr>
+      <tr id="gt-보름달"><td class="g-ico">🥩</td><td>한우세트 — 🌕 보름달<div class="g-names none" id="gn-보름달">-</div></td><td class="g-amt">50만 이상</td></tr>
+      <tr id="gt-둥근달"><td class="g-ico">🍷</td><td>와인세트 — 둥근달<div class="g-names none" id="gn-둥근달">-</div></td><td class="g-amt">40만 ~ 50만 미만</td></tr>
+      <tr id="gt-볼록달"><td class="g-ico">🐟</td><td>참치세트 — 볼록달<div class="g-names none" id="gn-볼록달">-</div></td><td class="g-amt">30만 ~ 40만 미만</td></tr>
+      <tr id="gt-반달"><td class="g-ico">🍙</td><td>김세트 — 반달<div class="g-names none" id="gn-반달">-</div></td><td class="g-amt">20만 ~ 30만 미만</td></tr>
+      <tr id="gt-초승달"><td class="g-ico">🥞</td><td>부침가루세트 — 초승달<div class="g-names none" id="gn-초승달">-</div></td><td class="g-amt">10만 ~ 20만 미만</td></tr>
     </table>
   </div>
 
@@ -410,6 +424,7 @@ function loadState(first){
       renderHall(d.hall);
       renderFeed(d.feed);
       renderGiftHl(d.me.moon);
+      renderTiers(d.tiers);
       renderButton(d);
     })
     .catch(function(){});
@@ -482,6 +497,9 @@ function renderHall(hall){
   el.innerHTML = htm;
 }
 
+var MOON_ICON = { '\ucd08\uc2b9\ub2ec':'\uD83C\uDF12', '\ubc18\ub2ec':'\uD83C\uDF13', '\ubcfc\ub85d\ub2ec':'\uD83C\uDF14', '\ub465\uadfc\ub2ec':'\uD83C\uDF14', '\ubcf4\ub984\ub2ec':'\uD83C\uDF15' };
+function moonIcon(m){ return MOON_ICON[m] || '\uD83C\uDF19'; }
+
 function renderFeed(feed){
   var el = qs('feed');
   if (!feed || feed.length === 0) {
@@ -493,12 +511,33 @@ function renderFeed(feed){
     var f = feed[i];
     if (f.type === 'full') {
       htm += '<div class="f-item">\uD83C\uDF15 <b>' + esc(f.name) + '</b>\ub2d8 \ubcf4\ub984\ub2ec \uc644\uc131! \ud55c\uc6b0\uc138\ud2b8 \ud655\uc815 \uD83E\uDD69</div>';
+    } else if (f.type === 'tier') {
+      htm += '<div class="f-item">' + moonIcon(f.moon) + ' <b>' + esc(f.name) + '</b>\ub2d8 <b>' + esc(f.moon) + '</b> \ub2ec\uc131! ' + esc(f.gift) + ' \ud655\uc815</div>';
     } else {
       var pre = f.big ? '\uD83C\uDF89 ' : '';
       htm += '<div class="f-item">' + pre + '<b>' + esc(f.name) + '</b>\ub2d8 <b>' + esc(f.yut) + '!</b> ' + esc(f.snack) + '</div>';
     }
   }
   el.innerHTML = htm;
+}
+
+function renderTiers(tiers){
+  if (!tiers) return;
+  var i, j;
+  for (i = 0; i < tiers.length; i++) {
+    var el = qs('gn-' + tiers[i].moon);
+    if (!el) continue;
+    var ns = tiers[i].names || [];
+    if (ns.length === 0) {
+      el.className = 'g-names none';
+      el.textContent = '\uc544\uc9c1 \uc5c6\uc74c';
+      continue;
+    }
+    var parts = [];
+    for (j = 0; j < ns.length; j++) parts.push(esc(ns[j].name));
+    el.className = 'g-names';
+    el.innerHTML = '\uD83C\uDF1F ' + parts.join(' \u00b7 ') + ' <span style="color:#a08fc5">(' + ns.length + '\uba85)</span>';
+  }
 }
 
 function renderGiftHl(moon){
