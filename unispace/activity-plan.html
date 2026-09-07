@@ -221,8 +221,20 @@ input:focus,select,textarea:focus{border-color:var(--gold)}
 /* plan-view table: mobile horizontal scroll (PC layout untouched) */
 @media (max-width: 700px){
   #planViewOverlay .pv-tablewrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+#planViewOverlay .pv-row{ padding:11px 16px; font-size:13px; font-weight:700; }
+#planViewOverlay .pv-chips{ display:flex; flex-wrap:wrap; column-gap:18px; row-gap:3px; align-items:center; }
+#planViewOverlay .pv-chip{ white-space:nowrap; }
+#planViewOverlay .pv-chip + .pv-chip::before{ content:'\00B7'; margin-right:10px; opacity:.55; }
   #planViewOverlay table.pv-table{ min-width:740px; }
   #planViewOverlay table.pv-table th{ white-space:nowrap; }
+  #planViewOverlay .pv-row{ padding:9px 12px; font-size:12.5px; }
+  #planViewOverlay .pv-r1 .pv-chips{ column-gap:12px; }
+  #planViewOverlay .pv-r1 .pv-chip + .pv-chip::before{ margin-right:6px; }
+  /* 목표·요약 줄은 항목을 격자로 세워서 줄 시작에 점이 오지 않게 */
+  #planViewOverlay .pv-r2 .pv-chips, #planViewOverlay .pv-r3 .pv-chips{ display:grid; grid-template-columns:1fr 1fr; column-gap:10px; row-gap:4px; }
+  #planViewOverlay .pv-r2 .pv-chips{ grid-template-columns:1fr; }
+  #planViewOverlay .pv-r3 .pv-chip:first-child{ grid-column:1 / -1; }
+  #planViewOverlay .pv-r2 .pv-chip::before, #planViewOverlay .pv-r3 .pv-chip::before{ content:none; }
 }
 </style>
 </head>
@@ -1041,7 +1053,6 @@ function _findPlanIdx(a){
 function openCustModal(titleDate){
   var ov=document.getElementById('custModalOverlay');
   if(ov) ov.classList.add('open');
-  try{ if(!history.state || !history.state.custModal){ history.pushState({custModal:true}, ''); } }catch(e){}
   var t=document.getElementById('custModalTitle');
   if(t){
     if(titleDate){
@@ -1063,7 +1074,6 @@ function closeCustModal(){
   editing=null; editIdx=-1;
   renderCusts();
   // if closed by button (not by back), pop the history entry we pushed
-  try{ if(!_custModalPopping && history.state && history.state.custModal){ history.back(); } }catch(e){}
 }
 
 // 달력 날짜 클릭 -> 그 날짜로 새 고객 입력 모달
@@ -1340,7 +1350,6 @@ function cancelEdit(){
   editing=null; editIdx=-1;
   renderCusts();
   var _ov=document.getElementById('custModalOverlay'); if(_ov) _ov.classList.remove('open');
-  try{ if(!_custModalPopping && history.state && history.state.custModal){ history.back(); } }catch(e){}
 }
 
 function saveEditing(){
@@ -1356,7 +1365,6 @@ function saveEditing(){
   showToast(n>0 ? '저장 · 활동현황 반영됨' : '고객이 저장되었습니다');
   if(typeof renderWeekActCal==='function') renderWeekActCal();
   var _ov=document.getElementById('custModalOverlay'); if(_ov) _ov.classList.remove('open');
-  try{ if(!_custModalPopping && history.state && history.state.custModal){ history.back(); } }catch(e){}
 }
 
 function saveAndNew(){
@@ -1532,8 +1540,7 @@ function bindEditorEvents(){
     var nm=(custs[idx] && custs[idx].name) || '고객';
     // 입력 모달을 먼저 닫아 확인창과 겹치지 않게
     var _ov=document.getElementById('custModalOverlay'); if(_ov) _ov.classList.remove('open');
-    try{ if(!_custModalPopping && history.state && history.state.custModal){ history.back(); } }catch(e){}
-    askConfirm('고객 삭제', nm+' 활동을 삭제할까요? 활동현황에서도 제거됩니다.', function(){
+      askConfirm('고객 삭제', nm+' 활동을 삭제할까요? 활동현황에서도 제거됩니다.', function(){
       custs.splice(idx,1);
       editing=null; editIdx=-1;
       saveDraft(false);
@@ -2039,7 +2046,7 @@ function _planOutboxFlush(){
   }).catch(function(){});
 }
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 74; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 75; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2575,6 +2582,12 @@ function renderStatus(){
   }
 }
 
+// 항목 단위 줄바꿈 (모바일에서 단어 중간이 아니라 항목 사이에서만 줄이 바뀐다)
+function _pvChips(items){
+  var h='';
+  for(var i=0;i<items.length;i++){ h+='<span class="pv-chip">'+items[i]+'</span>'; }
+  return '<div class="pv-chips">'+h+'</div>';
+}
 function _pvEsc(s){
   return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -2642,12 +2655,12 @@ function _viewFpPlan(fpId){
       '유니스지사 '+wi.month+'월 '+wi.weekNo+'주차 활동계획 '+
       '<span style="color:#888780;font-size:14px">(~'+_pad2(wi.sun.getMonth()+1)+'/'+_pad2(wi.sun.getDate())+')</span></div>'+
     '<div style="border:2px solid #1A2744">'+
-      '<div style="background:#EAE2CE;padding:11px 16px;font-size:13px;font-weight:700;color:#1A2744;border-bottom:1px solid #1A2744">'+
-        '지점: '+_pvEsc(brName)+'&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;FP: '+_pvEsc(rec.name||'')+'&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;현재업적: '+Number(perf).toLocaleString()+'원</div>'+
-      '<div style="background:#FBF9F4;padding:11px 16px;font-size:13px;font-weight:700;color:#854F0B;border-bottom:1px solid #1A2744">'+
-        wi.month+'월 업적목표 : 생보 '+ml.toLocaleString()+' / 손보 '+mn.toLocaleString()+'&nbsp;&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;&nbsp;'+wi.weekNo+'주차 구간목표 : 생보 '+wl.toLocaleString()+' / 손보 '+wn.toLocaleString()+'</div>'+
-      '<div style="background:#F1EFE8;padding:11px 16px;font-size:13px;font-weight:700;color:#1A2744">'+
-        '주간활동 요약 : 미팅 '+willMeet+'명&nbsp;&nbsp;·&nbsp;&nbsp;케/노/U '+careCnt+'&nbsp;&nbsp;·&nbsp;&nbsp;패널/리쿨 '+panelCnt+'&nbsp;&nbsp;·&nbsp;&nbsp;PT '+ptCnt+'건('+ptAmt.toLocaleString()+')&nbsp;&nbsp;·&nbsp;&nbsp;청약 '+chungCnt+'건('+chungAmt.toLocaleString()+')</div>'+
+      '<div class="pv-row pv-r1" style="background:#EAE2CE;color:#1A2744;border-bottom:1px solid #1A2744">'+
+        _pvChips(['지점: '+_pvEsc(brName), 'FP: '+_pvEsc(rec.name||''), '현재업적: '+Number(perf).toLocaleString()+'원'])+'</div>'+
+      '<div class="pv-row pv-r2" style="background:#FBF9F4;color:#854F0B;border-bottom:1px solid #1A2744">'+
+        _pvChips([wi.month+'월 업적목표 : 생보 '+ml.toLocaleString()+' / 손보 '+mn.toLocaleString(), wi.weekNo+'주차 구간목표 : 생보 '+wl.toLocaleString()+' / 손보 '+wn.toLocaleString()])+'</div>'+
+      '<div class="pv-row pv-r3" style="background:#F1EFE8;color:#1A2744">'+
+        _pvChips(['주간활동 요약', '미팅 '+willMeet+'명', '케/노/U '+careCnt, '패널/리쿨 '+panelCnt, 'PT '+ptCnt+'건('+ptAmt.toLocaleString()+')', '청약 '+chungCnt+'건('+chungAmt.toLocaleString()+')'])+'</div>'+
     '</div>';
 
   var rowsHtml='';
@@ -2743,6 +2756,62 @@ function _pvApprHistory(rec){
   if(!lines.length && !lg.repReason && !lg.fixReason) return '';
   h+='</div>';
   return h;
+}
+// ===== 모바일 뒤로가기: 열린 팝업이 있으면 팝업만 닫고, 없을 때만 페이지를 나간다 =====
+// 팝업이 열리면 history에 가드 상태 1개를 넣고, 모두 닫히면 그 상태를 되돌린다.
+function _bkOpenList(){
+  var out=[];
+  var pk=document.querySelectorAll('.pk-overlay.on');
+  for(var i=0;i<pk.length;i++) out.push(pk[i]);
+  var cm=document.getElementById('custModalOverlay');
+  if(cm && cm.classList.contains('open')) out.push(cm);
+  var fx=document.getElementById('fixOv');
+  if(fx) out.push(fx);
+  return out;
+}
+function _bkCloseTop(){
+  var list=_bkOpenList();
+  if(!list.length) return false;
+  var order=['fixOv','confirmPk','psDatePk','datePk','timePk','importPk','periodSettingPk','planViewOverlay','custModalOverlay'];
+  var top=null;
+  for(var o=0;o<order.length && !top;o++){
+    for(var i=0;i<list.length;i++){ if(list[i].id===order[o]){ top=list[i]; break; } }
+  }
+  if(!top) top=list[list.length-1];
+  var id=top.id;
+  try{
+    if(id==='fixOv'){ if(top.parentNode) top.parentNode.removeChild(top); }
+    else if(id==='custModalOverlay'){ closeCustModal(); }
+    else if(id==='confirmPk'){ top.classList.remove('on'); _confirmCb=null; }
+    else if(id==='planViewOverlay'){ _closePlanView(); }
+    else { top.classList.remove('on'); }
+  }catch(e){ try{ top.classList.remove('on'); }catch(e2){} }
+  return true;
+}
+var _bkSyncTimer=null;
+function _bkSync(){
+  if(_bkSyncTimer) clearTimeout(_bkSyncTimer);
+  _bkSyncTimer=setTimeout(function(){
+    _bkSyncTimer=null;
+    var open=_bkOpenList().length>0;
+    var has=false;
+    try{ has=!!(history.state && history.state.apModal); }catch(e){}
+    if(open && !has){ try{ history.pushState({apModal:true}, ''); }catch(e){} }
+    else if(!open && has){ try{ history.back(); }catch(e){} }
+  }, 30);
+}
+function _bkInstall(){
+  window.addEventListener('popstate', function(){
+    if(_bkCloseTop()){
+      if(_bkOpenList().length){ try{ history.pushState({apModal:true}, ''); }catch(e){} }
+    }
+  });
+  try{
+    if(window.MutationObserver){
+      var mo=new MutationObserver(function(){ _bkSync(); });
+      mo.observe(document.body, { attributes:true, attributeFilter:['class'], childList:true, subtree:true });
+    }
+  }catch(e){}
 }
 function _closePlanView(){
   var ov=document.getElementById('planViewOverlay');
@@ -3110,11 +3179,8 @@ function init(){
   var _cmx=document.getElementById('custModalX'); if(_cmx) _cmx.addEventListener('click', closeCustModal);
   var _cmo=document.getElementById('custModalOverlay');
   if(_cmo) _cmo.addEventListener('click', function(e){ if(e.target===_cmo) closeCustModal(); });
-  // mobile back button: if modal is open, just close it instead of leaving the page
-  window.addEventListener('popstate', function(){
-    var ov=document.getElementById('custModalOverlay');
-    if(ov && ov.classList.contains('open')){ _custModalPopping=true; closeCustModal(); _custModalPopping=false; }
-  });
+  // mobile back button: any open popup closes first; page exits only when nothing is open
+  _bkInstall();
   _on('excelBtn', 'click', function(){ commitEditingIfAny(); saveDraft(false); buildExcel(); });
   _on('submitBtn', 'click', function(){
     commitEditingIfAny();
