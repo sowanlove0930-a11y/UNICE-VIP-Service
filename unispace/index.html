@@ -3929,6 +3929,11 @@ window.UNISPACE_FCM = {
           <span>🔔 오늘의 알림</span>
           <span id="pushToggle" data-on="0" style="font-size:11px;font-weight:700;color:var(--text3)">꺼짐</span>
         </div>
+        <div id="pushDiagMenu" onclick="openPushDiag()" style="display:none;padding:13px 18px;font-size:13px;font-weight:600;cursor:pointer;
+          color:var(--text);border-bottom:1px solid var(--border2);transition:background .15s;"
+          onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background=''">
+          🩺 알림 진단
+        </div>
         <div onclick="openGasPw(false)" style="padding:13px 18px;font-size:13px;font-weight:600;cursor:pointer;
           color:var(--text);border-bottom:1px solid var(--border2);transition:background .15s;"
           onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background=''">
@@ -5967,6 +5972,9 @@ function showDashboard() {
   }
   document.getElementById('userRole').textContent = _ur;
   if (typeof _refreshPushMenu === 'function') _refreshPushMenu();
+  if (typeof _syncPushToken === 'function') setTimeout(_syncPushToken, 2500);
+  var _pdMenu = document.getElementById('pushDiagMenu');
+  if (_pdMenu) _pdMenu.style.display = (currentUser.id === 'ktk01' || currentUser.role === '대표') ? '' : 'none';
 
   // 대표만 FP 관리 메뉴 표시
   var fpMgmtMenu = document.getElementById('fpMgmtMenu');
@@ -23824,7 +23832,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 75;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 76;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -23988,7 +23996,7 @@ function enablePush(){
       _savePushToken(token);   // GAS 저장
       _setPushPref(true);
       _updatePushUI(true);
-      showAppAlert('매일 아침 8:30에 오늘의 알림을<br>푸시로 받아보실 수 있습니다.', {icon:'🔔', title:'알림 켜짐'});
+      showAppAlert('알림이 켜졌습니다.<br>활동계획·리크루팅·업적 알림과<br>매일 아침 8시 오늘의 알림을 받습니다.', {icon:'🔔', title:'알림 켜짐'});
     }).catch(function(err){
       showAppAlert('알림 설정 중 문제가 발생했습니다.<br>잠시 후 다시 시도해 주세요.', {icon:'⚠️', title:'오류'});
       _setPushPref(false);
@@ -24061,6 +24069,96 @@ function _refreshPushMenu(){
   t.textContent = on ? '켜짐' : '꺼짐';
   t.style.color = on ? 'var(--gold2)' : 'var(--text3)';
   t.setAttribute('data-on', on ? '1' : '0');
+}
+
+// ── 토큰 자동 재동기화 ──
+// FCM 토큰은 브라우저/SW 업데이트, 장기 미접속 등으로 조용히 바뀐다.
+// 예전 토큰은 서버(FCM)에서 404가 나서 PushTokens 시트에서 지워지므로,
+// 한번 켠 뒤 재저장이 없으면 그 FP는 알림 대상에서 빠진다.
+// -> 로그인/앱 열 때마다 현재 토큰을 확인해서 바뀌었거나 12시간이 지났으면 다시 저장한다.
+function _syncPushToken(){
+  try {
+    if(!currentUser || !currentUser.id) return;
+    if(!_pushSupported() || !_fcmConfigured()) return;
+    if(!_getPushPref()) return;
+    if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    var messaging = _initFcm();
+    if(!messaging) return;
+    var uid = currentUser.id;
+    var savedTok = '';
+    var lastSync = 0;
+    try { savedTok = localStorage.getItem('unispace_push_token_' + uid) || ''; } catch(e){}
+    try { lastSync = parseInt(localStorage.getItem('unispace_push_sync_' + uid) || '0', 10) || 0; } catch(e){}
+    navigator.serviceWorker.ready.then(function(reg){
+      return messaging.getToken({ vapidKey: window.UNISPACE_FCM.vapidKey, serviceWorkerRegistration: reg });
+    }).then(function(token){
+      if(!token) return;
+      var stale = (Date.now() - lastSync) > 12 * 60 * 60 * 1000;
+      if(token !== savedTok || stale){
+        _savePushToken(token);
+        try { localStorage.setItem('unispace_push_sync_' + uid, String(Date.now())); } catch(e){}
+      }
+    }).catch(function(){});
+  } catch(e){}
+}
+
+// ── 알림 진단 (대표 전용) ──
+function openPushDiag(){
+  try { var um = document.getElementById('userMenu'); if(um) um.style.display = 'none'; } catch(e){}
+  if(!currentUser || !currentUser.id) return;
+  var perm = (typeof Notification !== 'undefined') ? Notification.permission : 'unsupported';
+  var pref = _getPushPref() ? '켜짐' : '꺼짐';
+  var myTok = '';
+  try { myTok = localStorage.getItem('unispace_push_token_' + currentUser.id) || ''; } catch(e){}
+  var html = '<div style="font-size:12.5px;line-height:1.7;text-align:left">'
+    + '<div><b>내 기기</b> · 권한 <b>' + perm + '</b> · 앱 설정 <b>' + pref + '</b> · 토큰 ' + (myTok ? '…' + myTok.slice(-8) : '없음') + '</div>'
+    + '<div id="pushDiagOut" style="margin-top:8px;color:var(--text3)">서버 확인 중…</div>'
+    + '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'
+    + '<button type="button" onclick="_pushDiagTest()" style="padding:8px 12px;border-radius:9px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer">🔔 내게 테스트 발송</button>'
+    + '<button type="button" onclick="_syncPushToken();showToast(\'토큰 재동기화 요청\')" style="padding:8px 12px;border-radius:9px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer">🔄 내 토큰 재저장</button>'
+    + '</div></div>';
+  showAppAlert(html, {icon:'🩺', title:'알림 진단'});
+  try {
+    fetch(UNISPACE_GAS_URL + '?action=pushStatus&fp=' + encodeURIComponent(currentUser.id) + '&_t=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        var out = document.getElementById('pushDiagOut');
+        if(!out) return;
+        if(!res || !res.ok){ out.textContent = '서버 응답 실패: ' + ((res && res.msg) || '?'); return; }
+        var h = '<div><b>서버</b> · FCM 키 ' + (res.fcmSa ? '✅' : '❌ 없음') + ' · 아침 트리거 ' + (res.morningTrigger ? '✅' : '❌ 없음') + ' · 토큰 등록 ' + res.tokenFps + '명 / ' + res.tokenRows + '기기</div>';
+        if(res.noToken && res.noToken.length){
+          h += '<div style="margin-top:6px"><b>알림 미등록 FP (' + res.noToken.length + ')</b><br><span style="color:var(--text3)">' + res.noToken.join(', ') + '</span></div>';
+        }
+        if(res.recent && res.recent.length){
+          h += '<div style="margin-top:8px"><b>최근 발송 로그</b></div><div style="max-height:180px;overflow:auto;font-size:11.5px">';
+          for(var i = 0; i < res.recent.length; i++){
+            var l = res.recent[i];
+            var okc = (l.sent > 0) ? 'var(--gold2)' : '#DC2626';
+            h += '<div style="padding:4px 0;border-bottom:1px solid var(--border2)"><span style="color:var(--text3)">' + l.at + '</span> ' + l.title
+               + ' <span style="color:' + okc + ';font-weight:700">' + l.sent + '/' + l.total + '</span>'
+               + (l.err ? ' <span style="color:#DC2626">' + l.err + '</span>' : '')
+               + (l.noTok ? ' <span style="color:var(--text3)">미등록: ' + l.noTok + '</span>' : '') + '</div>';
+          }
+          h += '</div>';
+        } else {
+          h += '<div style="margin-top:6px;color:var(--text3)">발송 로그 없음 (이번 배포 이후 발송 건이 없음)</div>';
+        }
+        out.innerHTML = h;
+      })
+      .catch(function(){ var out = document.getElementById('pushDiagOut'); if(out) out.textContent = '서버 연결 실패'; });
+  } catch(e){}
+}
+function _pushDiagTest(){
+  if(!currentUser || !currentUser.id) return;
+  showToast('테스트 발송 요청…');
+  try {
+    fetch(UNISPACE_GAS_URL + '?action=pushTest&fp=' + encodeURIComponent(currentUser.id) + '&_t=' + Date.now())
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if(res && res.ok) showToast('발송 ' + (res.sent||0) + '/' + (res.total||0) + (res.msg ? ' · ' + res.msg : ''));
+        else showToast('실패: ' + ((res && res.msg) || '?'));
+      }).catch(function(){ showToast('서버 연결 실패'); });
+  } catch(e){}
 }
 
 // 포그라운드(앱 보고 있을 때) 푸시 수신 → 토스트

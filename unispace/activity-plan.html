@@ -2039,7 +2039,7 @@ function _planOutboxFlush(){
   }).catch(function(){});
 }
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 73; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 74; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2692,10 +2692,57 @@ function _viewFpPlan(fpId){
       '<div style="font-size:12px;color:'+(reqTxt?'#2C2C2A':'#B4B2A9')+';white-space:pre-wrap">'+(reqTxt?_pvEsc(reqTxt):'(작성된 지원요청 내용 없음)')+'</div>'+
     '</div>';
 
+  var apprHtml='';
+  try{ apprHtml=_pvApprHistory(rec); }catch(e){ apprHtml=''; }
+
   var body=document.getElementById('planViewBody');
-  if(body) body.innerHTML=head+table+reqHtml;
+  if(body) body.innerHTML=head+apprHtml+table+reqHtml;
   var ov=document.getElementById('planViewOverlay');
   if(ov) ov.classList.add('on');
+}
+// 보기 모달: 검토 상태 + 보완요청 내용 (지점장/대표가 어떤 사유로 보완요청했는지 그대로 표시)
+function _pvApprTime(iso){
+  if(!iso) return '';
+  try{
+    var d=new Date(iso); if(isNaN(d.getTime())) return String(iso);
+    return _pad2(d.getMonth()+1)+'/'+_pad2(d.getDate())+' '+_pad2(d.getHours())+':'+_pad2(d.getMinutes());
+  }catch(e){ return String(iso); }
+}
+function _pvApprHistory(rec){
+  var st=_apprStatus(rec);
+  if(!st) return '';
+  var lg=(rec&&rec.apprLog)||{};
+  var h='<div style="margin-top:12px;border:0.5px solid #E3DCC8;border-radius:6px;background:#fff;padding:12px 14px">'
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700;color:#1A2744;margin-bottom:6px">검토 상태 '+_apprBadge(st)
+    +(lg.resubmit?'<span style="font-size:11px;color:#7A5A1E;font-weight:600">재제출 '+lg.resubmit+'회</span>':'')
+    +'</div>';
+  var lines=[];
+  var subAt=lg.submitAt||rec.submittedAt||'';
+  if(subAt) lines.push('<span style="color:#888780">'+_pvApprTime(subAt)+'</span> 제출');
+  if(lg.at1) lines.push('<span style="color:#888780">'+_pvApprTime(lg.at1)+'</span> 1차 승인 · '+_pvEsc(lg.by1Name||'지점장'));
+  if(lg.finalAt) lines.push('<span style="color:#888780">'+_pvApprTime(lg.finalAt)+'</span> 대표 최종 승인');
+  if(lines.length) h+='<div style="font-size:11.5px;color:#2C2C2A;line-height:1.7;margin-bottom:6px">'+lines.join('<br>')+'</div>';
+
+  // 대표 -> 지점장 보완요청 (현재 상태면 강조, 아니면 이력)
+  if(lg.repReason){
+    var curRep=(st==='fix_mgr');
+    h+='<div style="background:'+(curRep?'#EEF3FB':'#F7F8FA')+';border:1px solid '+(curRep?'#C7DCF0':'#E3E8F0')+';border-radius:9px;padding:10px 12px;font-size:12.5px;color:#153E75;margin-top:6px">'
+      +'🔺 <b>대표 보완 요청</b>'+(curRep?'':' <span style="font-size:11px;color:#888780">(이전 이력)</span>')
+      +(lg.repAt?' <span style="font-size:11px;color:#888780">'+_pvApprTime(lg.repAt)+'</span>':'')
+      +'<div style="margin-top:4px;white-space:pre-wrap;color:#2C2C2A">"'+_pvEsc(lg.repReason)+'"</div></div>';
+  }
+  // 지점장 -> FP 보완요청
+  if(lg.fixReason){
+    var curFix=(st==='fix_fp');
+    h+='<div style="background:'+(curFix?'#FFF7EA':'#F7F8FA')+';border:1px solid '+(curFix?'#F0D9AE':'#E3E8F0')+';border-radius:9px;padding:10px 12px;font-size:12.5px;color:#7A5A1E;margin-top:6px">'
+      +'🔶 <b>지점장 보완 요청</b>'+(curFix?'':' <span style="font-size:11px;color:#888780">(이전 이력 · 재제출됨)</span>')
+      +(lg.fixByName?' · '+_pvEsc(lg.fixByName):'')
+      +(lg.fixAt?' <span style="font-size:11px;color:#888780">'+_pvApprTime(lg.fixAt)+'</span>':'')
+      +'<div style="margin-top:4px;white-space:pre-wrap;color:#2C2C2A">"'+_pvEsc(lg.fixReason)+'"</div></div>';
+  }
+  if(!lines.length && !lg.repReason && !lg.fixReason) return '';
+  h+='</div>';
+  return h;
 }
 function _closePlanView(){
   var ov=document.getElementById('planViewOverlay');
