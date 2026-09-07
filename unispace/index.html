@@ -23832,7 +23832,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 76;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 77;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -24028,7 +24028,8 @@ function _savePushToken(token){
     fetch(UNISPACE_GAS_URL + '?action=savePushToken&fp=' + encodeURIComponent(currentUser.id)
       + '&token=' + encodeURIComponent(token)
       + '&name=' + encodeURIComponent(currentUser.name||'')
-      + '&branch=' + encodeURIComponent(currentUser.branch||''))
+      + '&branch=' + encodeURIComponent(currentUser.branch||'')
+      + '&dev=' + encodeURIComponent(_pushDeviceLabel()))
       .catch(function(){});
   } catch(e){}
 }
@@ -24071,6 +24072,17 @@ function _refreshPushMenu(){
   t.setAttribute('data-on', on ? '1' : '0');
 }
 
+// 기기 구분 (PushTokens 시트 '기기' 열) - 어느 기기가 등록돼 있는지 대표가 볼 수 있게
+function _pushDeviceLabel(){
+  var ua = navigator.userAgent || '';
+  var mob = /Android|iPhone|iPad|iPod/i.test(ua);
+  var os = /iPhone|iPad|iPod/i.test(ua) ? 'iOS' : (/Android/i.test(ua) ? 'Android' : (/Windows/i.test(ua) ? 'Win' : (/Mac/i.test(ua) ? 'Mac' : 'PC')));
+  var br = /SamsungBrowser/i.test(ua) ? 'Samsung' : (/Edg\//i.test(ua) ? 'Edge' : (/Whale/i.test(ua) ? 'Whale' : (/Chrome/i.test(ua) ? 'Chrome' : (/Safari/i.test(ua) ? 'Safari' : 'Etc'))));
+  var standalone = false;
+  try { standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (navigator.standalone === true); } catch(e){}
+  return (mob ? '모바일' : 'PC') + '/' + os + '/' + br + (standalone ? '/앱' : '');
+}
+
 // ── 토큰 자동 재동기화 ──
 // FCM 토큰은 브라우저/SW 업데이트, 장기 미접속 등으로 조용히 바뀐다.
 // 예전 토큰은 서버(FCM)에서 404가 나서 PushTokens 시트에서 지워지므로,
@@ -24080,11 +24092,28 @@ function _syncPushToken(){
   try {
     if(!currentUser || !currentUser.id) return;
     if(!_pushSupported() || !_fcmConfigured()) return;
-    if(!_getPushPref()) return;
-    if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if(typeof Notification === 'undefined') return;
+    var uid = currentUser.id;
+    var prefRaw = null;
+    try { prefRaw = localStorage.getItem('unispace_push_on_' + uid); } catch(e){}
+    // '0' = the person turned it off on this device on purpose -> leave it alone
+    if(prefRaw === '0') return;
+    if(Notification.permission !== 'granted'){
+      // mobile device that never turned notifications on: nudge once a week
+      if(Notification.permission === 'default' && prefRaw === null && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'')){
+        var lastNudge = 0;
+        try { lastNudge = parseInt(localStorage.getItem('unispace_push_nudge_' + uid) || '0', 10) || 0; } catch(e){}
+        if(Date.now() - lastNudge > 7 * 24 * 60 * 60 * 1000){
+          try { localStorage.setItem('unispace_push_nudge_' + uid, String(Date.now())); } catch(e){}
+          showAppAlert('이 휴대폰에는 아직 알림이 켜져 있지 않습니다.<br>업적·활동계획·리크루팅 알림을 받으려면<br>지금 켜주세요.', {icon:'🔔', title:'휴대폰 알림', okText:'🔔 알림 켜기', onClose:function(){ enablePush(); }});
+        }
+      }
+      return;
+    }
+    // permission already granted (e.g. app reinstalled / storage cleared) -> register silently
+    if(prefRaw !== '1'){ _setPushPref(true); if(typeof _updatePushUI === 'function') _updatePushUI(true); }
     var messaging = _initFcm();
     if(!messaging) return;
-    var uid = currentUser.id;
     var savedTok = '';
     var lastSync = 0;
     try { savedTok = localStorage.getItem('unispace_push_token_' + uid) || ''; } catch(e){}
@@ -24126,6 +24155,12 @@ function openPushDiag(){
         if(!out) return;
         if(!res || !res.ok){ out.textContent = '서버 응답 실패: ' + ((res && res.msg) || '?'); return; }
         var h = '<div><b>서버</b> · FCM 키 ' + (res.fcmSa ? '✅' : '❌ 없음') + ' · 아침 트리거 ' + (res.morningTrigger ? '✅' : '❌ 없음') + ' · 토큰 등록 ' + res.tokenFps + '명 / ' + res.tokenRows + '기기</div>';
+        if(res.mine){
+          h += '<div style="margin-top:6px"><b>내 등록 기기 (' + res.mine.length + ')</b>';
+          if(!res.mine.length) h += ' <span style="color:#DC2626">없음 - 이 기기에서 알림을 켜주세요</span>';
+          for(var mi = 0; mi < res.mine.length; mi++){ h += '<br><span style="color:var(--text3)">' + res.mine[mi].at + '</span> ' + res.mine[mi].dev + ' <span style="color:var(--text3)">…' + res.mine[mi].tail + '</span>'; }
+          h += '</div>';
+        }
         if(res.noToken && res.noToken.length){
           h += '<div style="margin-top:6px"><b>알림 미등록 FP (' + res.noToken.length + ')</b><br><span style="color:var(--text3)">' + res.noToken.join(', ') + '</span></div>';
         }
