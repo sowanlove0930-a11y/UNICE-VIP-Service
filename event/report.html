@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🌕 한가위 윷놀이 당첨 현황</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system,sans-serif;
+  background:linear-gradient(180deg,#150d3d 0%,#241560 35%,#3d2470 70%,#5a3468 100%); min-height:100vh; color:#2a1a4a; }
+.wrap { max-width:520px; margin:0 auto; padding:18px 14px 40px; }
+.head { text-align:center; color:#fff; margin-bottom:14px; }
+.head h1 { font-size:22px; font-weight:900; text-shadow:0 4px 14px rgba(20,5,60,.6); }
+.head h1 span { color:#ffd94d; }
+.head .asof { font-size:11px; font-weight:800; color:#c5b0e5; margin-top:4px; }
+.card { background:#fff; border-radius:18px; padding:14px 14px 12px; margin-bottom:12px; box-shadow:0 8px 24px rgba(20,5,60,.25); }
+.card.dark { background:linear-gradient(135deg,#3d2470,#241560); color:#fff; }
+.c-t { font-size:14px; font-weight:900; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+.c-t small { font-size:10.5px; font-weight:800; color:#8a7aa8; }
+.sec { padding:8px 0; border-bottom:1px solid #eee6f8; }
+.sec:last-child { border-bottom:none; }
+.sec-h { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:900; }
+.sec-h .cnt { margin-left:auto; color:#e0508a; font-size:12px; }
+.sec-h .gift { font-size:11px; color:#8a7aa8; font-weight:800; }
+.chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.chips span { background:#f3edfd; color:#4a2a90; border-radius:100px; padding:4px 10px; font-size:12px; font-weight:800; }
+.chips span.gold { background:#fff1c2; color:#7a4a00; }
+.chips span b { color:#e0508a; margin-left:3px; }
+.chips .none { background:none; color:#b8acd0; font-size:11px; padding:2px 0; }
+.btns { display:flex; flex-direction:column; gap:8px; margin-top:4px; }
+.btn { width:100%; padding:13px; border:none; border-radius:100px; font-size:14px; font-weight:900; cursor:pointer; font-family:inherit; }
+.btn.k { background:#fee500; color:#3a1d1d; }
+.loading { text-align:center; color:#c5b0e5; font-weight:800; padding:30px 0; }
+.toast { position:fixed; left:50%; bottom:30px; transform:translateX(-50%); background:#241560; color:#fff; padding:10px 18px; border-radius:100px; font-size:12px; font-weight:900; opacity:0; transition:opacity .3s; pointer-events:none; }
+.toast.on { opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>🌕 유니스 <span>한가위 윷놀이</span><br>당첨 현황</h1>
+    <div class="asof" id="asof">불러오는 중...</div>
+  </div>
+
+  <div id="body"><div class="loading">달빛 소식을 모으는 중... 🌙</div></div>
+
+  <div class="btns" id="btns" style="display:none">
+    <button class="btn k" id="kakaoBtn">💬 카톡으로 공유</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js"></script>
+<script>
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
+var REPORT_URL = 'https://unice-vip.co.kr/event/report.html';
+var MOON_URL = 'https://unice-vip.co.kr/event/';
+var MOON_IMG = 'https://unice-vip.co.kr/event/moon-share.png';
+var KAKAO_JS_KEY = 'cbfa60013e8c77c5a8c168d4d5862d51';
+var MOON_ICON = { '\ucd08\uc2b9\ub2ec':'\uD83C\uDF12', '\ubc18\ub2ec':'\uD83C\uDF13', '\ubcfc\ub85d\ub2ec':'\uD83C\uDF14', '\ub465\uadfc\ub2ec':'\uD83C\uDF14', '\ubcf4\ub984\ub2ec':'\uD83C\uDF15' };
+var DATA = null;
+
+function qs(id){ return document.getElementById(id); }
+function esc(s){ return String(s === null || s === undefined ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(m){ var t = qs('toast'); t.textContent = m; t.className = 'toast on'; setTimeout(function(){ t.className = 'toast'; }, 1800); }
+
+/* network: fetch + jsonp fallback */
+var JSONP_SEQ = 0;
+function jsonpGet(url, ms){
+  return new Promise(function(resolve, reject){
+    var name = '__rp_cb' + (++JSONP_SEQ) + '_' + new Date().getTime();
+    var done = false;
+    var s = document.createElement('script');
+    var t = setTimeout(function(){ finish(); reject(new Error('timeout')); }, ms || 20000);
+    function finish(){ if (done) return; done = true; clearTimeout(t); try { window[name] = undefined; } catch(e) {} if (s.parentNode) s.parentNode.removeChild(s); }
+    window[name] = function(d){ if (done) return; finish(); resolve(d); };
+    s.onerror = function(){ if (done) return; finish(); reject(new Error('jsonp')); };
+    s.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + name;
+    document.body.appendChild(s);
+  });
+}
+function fetchTimeout(url, ms){
+  return new Promise(function(resolve, reject){
+    var done = false;
+    var t = setTimeout(function(){ if (!done) { done = true; reject(new Error('timeout')); } }, ms);
+    fetch(url).then(function(r){ return r.json(); })
+      .then(function(d){ if (done) return; done = true; clearTimeout(t); resolve(d); })
+      .catch(function(e){ if (done) return; done = true; clearTimeout(t); reject(e); });
+  });
+}
+var IS_KAKAO_INAPP = (navigator.userAgent || '').indexOf('KAKAOTALK') >= 0;
+function gasGet(url){
+  if (IS_KAKAO_INAPP) return jsonpGet(url, 20000);
+  return fetchTimeout(url, 20000).catch(function(){ return jsonpGet(url, 20000); });
+}
+
+/* render */
+function render(d){
+  DATA = d;
+  qs('asof').textContent = (d.asOf || '') + ' \uae30\uc900 \u00b7 9/13 \uc5c5\uc801\uc73c\ub85c \ucd5c\uc885 \ud655\uc815';
+  var h = '', i, j;
+
+  /* gifts by tier */
+  h += '<div class="card"><div class="c-t">\uD83C\uDF81 \ucd94\uc11d\uc120\ubb3c \ud655\uc815 \ud604\ud669 <small>\ucc38\uc5ec ' + (d.total || 0) + '\uba85</small></div>';
+  for (i = 0; i < d.tiers.length; i++) {
+    var t = d.tiers[i];
+    var ns = t.names || [];
+    h += '<div class="sec"><div class="sec-h">' + (MOON_ICON[t.moon] || '\uD83C\uDF19') + ' ' + esc(t.moon)
+       + ' <span class="gift">' + esc(t.gift) + '</span><span class="cnt">' + ns.length + '\uba85</span></div><div class="chips">';
+    if (ns.length === 0) h += '<span class="none">\uc544\uc9c1 \uc5c6\uc74c</span>';
+    for (j = 0; j < ns.length; j++) h += '<span' + (i === 0 ? ' class="gold"' : '') + '>' + esc(ns[j].name) + '</span>';
+    h += '</div></div>';
+  }
+  h += '</div>';
+
+  /* snacks */
+  h += '<div class="card"><div class="c-t">\uD83D\uDC30 \uac04\uc2dd \ub2f9\ucca8 \ud604\ud669 <small>\uc737 \ub358\uc9c0\uae30 \ub204\uc801</small></div>';
+  for (i = 0; i < d.snacks.length; i++) {
+    var s = d.snacks[i];
+    if (s.yut === '\ub3c4') continue;
+    h += '<div class="sec"><div class="sec-h">' + esc(s.snack) + ' <span class="gift">(' + esc(s.yut) + ')</span><span class="cnt">' + s.total + '\uac74</span></div><div class="chips">';
+    if (s.list.length === 0) h += '<span class="none">\uc544\uc9c1 \uc5c6\uc74c</span>';
+    for (j = 0; j < s.list.length; j++) {
+      h += '<span>' + esc(s.list[j].name) + (s.list[j].count > 1 ? '<b>\u00d7' + s.list[j].count + '</b>' : '') + '</span>';
+    }
+    h += '</div></div>';
+  }
+  h += '</div>';
+
+  qs('body').innerHTML = h;
+  qs('btns').style.display = 'flex';
+}
+
+function copyText(txt){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = txt;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return true;
+  } catch(e) { return false; }
+}
+
+try { if (window.Kakao && !window.Kakao.isInitialized()) window.Kakao.init(KAKAO_JS_KEY); } catch(e) {}
+qs('kakaoBtn').addEventListener('click', function(){
+  var d = DATA;
+  var desc = '\ucd94\uc11d\uc120\ubb3c \ud655\uc815 ' + (d ? d.total : 0) + '\uba85 \u00b7 \uac04\uc2dd \ub2f9\ucca8 \ud604\ud669 \ubaa8\uc544\ubcf4\uae30 (' + (d ? d.asOf : '') + ' \uae30\uc900)';
+  try {
+    if (window.Kakao && window.Kakao.isInitialized()) {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: '\uD83C\uDF15 \ud55c\uac00\uc704 \uc737\ub180\uc774 \ub2f9\ucca8 \ud604\ud669',
+          description: desc,
+          imageUrl: MOON_IMG,
+          link: { mobileWebUrl: REPORT_URL, webUrl: REPORT_URL }
+        },
+        buttons: [{ title: '\ub2f9\ucca8 \ud604\ud669 \ubcf4\uae30', link: { mobileWebUrl: REPORT_URL, webUrl: REPORT_URL } }]
+      });
+      return;
+    }
+  } catch(e) {}
+  if (copyText(REPORT_URL)) toast('\ub9c1\ud06c \ubcf5\uc0ac\ub428! \uce74\ud1a1\uc5d0 \ubd99\uc5ec\ub123\uc5b4\uc8fc\uc138\uc694');
+});
+
+gasGet(GAS_URL + '?action=moonBoard').then(function(d){
+  if (!d || !d.ok) { qs('body').innerHTML = '<div class="loading">\ubd88\ub7ec\uc624\uae30 \uc2e4\ud328: ' + esc(d && d.msg ? d.msg : '\uc751\ub2f5 \uc5c6\uc74c') + '</div>'; return; }
+  if (!d.snacks) { qs('body').innerHTML = '<div class="loading">GAS \ubc84\uc804\uc774 \uc624\ub798\ub418\uc5c8\uc5b4\uc694 (snacks \uc5c6\uc74c). \uc7ac\ubc30\ud3ec \ud544\uc694</div>'; return; }
+  render(d);
+}).catch(function(e){
+  qs('body').innerHTML = '<div class="loading">\ubd88\ub7ec\uc624\uae30 \uc2e4\ud328 (' + esc(e && e.message) + ')</div>';
+});
+</script>
+</body>
+</html>
