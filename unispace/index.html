@@ -26217,6 +26217,7 @@ function _jdLinkRender(keep) {
       : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
         '<button type="button" style="padding:13px 4px;border:0;border-radius:11px;background:#F37321;color:#fff;font-weight:800;font-size:13px;font-family:inherit;cursor:pointer" onclick="_jdLinkCopy(\'call\')">📞 통화 중 문구</button>' +
         '<button type="button" style="padding:13px 4px;border:1.5px solid #F5C09A;border-radius:11px;background:#FFF1E8;color:#D95F12;font-weight:800;font-size:13px;font-family:inherit;cursor:pointer" onclick="_jdLinkCopy(\'miss\')">📵 부재 시 문구</button></div>';
+    copyBtns += '<button type="button" style="width:100%;margin-top:8px;padding:13px;border:0;border-radius:11px;background:#FAE100;color:#3A1D1D;font-weight:800;font-size:13.5px;font-family:inherit;cursor:pointer" onclick="_jdLinkKakao()">💬 카톡으로 보내기 (포스터 카드)</button>';
     el.innerHTML =
       '<div class="mw-card"><h3>링크가 만들어졌습니다</h3>' +
       '<div style="font-size:12px;color:#5C6678;word-break:break-all;background:#FBF9F4;border:1px solid #E8E0D0;border-radius:10px;padding:9px 11px;margin-bottom:10px">' + _mwEsc(_jdl.made.url) + '</div>' +
@@ -26273,18 +26274,57 @@ function _jdLinkMake() {
     _mwGet({ action:'jobLink', fp:currentUser.id, leadId:res.leadId }, function(){});
   });
 }
+// 문의 줄: 링크 만든 FP 본인 (소속 · 이름 · 휴대폰). 번호 없으면 대표번호.
+function _jdFmtPhone(p) {
+  var d = String(p || '').replace(/[^0-9]/g, '');
+  if (d.length === 11) return d.slice(0,3) + '-' + d.slice(3,7) + '-' + d.slice(7);
+  if (d.length === 10) return d.slice(0,3) + '-' + d.slice(3,6) + '-' + d.slice(6);
+  return d;
+}
+function _jdContactLine() {
+  if (!currentUser) return '문의 051-637-0931';
+  var br = String(currentUser.branch || '').replace('지점', '');
+  var ttl = String(currentUser.title || '');
+  if (!ttl) ttl = (currentUser.role === '지점장') ? '지점장' : ((currentUser.role === '대표') ? '대표' : 'FP');
+  var ph = _jdFmtPhone(currentUser.phone);
+  var who = (br ? br + '지점 ' : '') + (currentUser.name || '') + ' ' + ttl;
+  return '문의 ' + who.trim() + (ph ? ' ' + ph : ' 051-637-0931');
+}
+function _jdLinkKakao() {
+  if (!_jdl.made) return;
+  var url = _jdl.made.url;
+  var nm = _jdl.made.name ? _jdl.made.name + '님, ' : '';
+  _ckpKakaoReady(function(ok) {
+    if (!ok) { showToast('⚠️ 카카오 공유를 불러오지 못했어요'); return; }
+    try {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: '유니스 JOB談(잡담) · 직무 잡담 3개면 참가 지원비 3만원',
+          description: nm + '직무 5개 중 3개 골라 담당자와 15분씩 이야기하면 참가 지원비 3만원. 9/9~9/23 평일 11~16시 중 1시간 · 범일역 유니스지사',
+          imageUrl: 'https://unice-vip.co.kr/unispace/job/poster.png',
+          imageWidth: 941, imageHeight: 1672,
+          link: { mobileWebUrl: url, webUrl: url }
+        },
+        buttons: [
+          { title: '잡담 신청하기', link: { mobileWebUrl: url, webUrl: url } }
+        ]
+      });
+    } catch(e) { showToast('⚠️ 카카오 공유 오류'); }
+  });
+}
 function _jdLinkCopy(kind) {
   if (!_jdl.made) return;
   var txt = _jdl.made.url;
   var nm = _jdl.made.name ? _jdl.made.name + '님' : '안녕하세요';
   var srcKo = JD_SRC_KO[_jdl.src] || _jdl.src;
   if (kind === 'ref') {
-    var me = (currentUser && currentUser.name) ? currentUser.name + ' 드림\n' : '';
-    txt = '[유니스 JOB談(잡담)]\n' + nm + ',\nJOB 이야기를 잡담처럼 편하게 나누는 자리를 소개해요.\n' + '직무 5개 중 3개 골라 담당자와 15분씩 이야기하면\n참가 지원비 3만원을 드립니다.\n9/9~9/23 평일 11~16시 중 1시간 · 유니스지사(범일역)\n\n잡담 신청 ' + _jdl.made.url + '\n\n' + me + '문의 051-637-0931';
+    var me = '';
+    txt = '[유니스 JOB談(잡담)]\n' + nm + ',\nJOB 이야기를 잡담처럼 편하게 나누는 자리를 소개해요.\n' + '직무 5개 중 3개 골라 담당자와 15분씩 이야기하면\n참가 지원비 3만원을 드립니다.\n9/9~9/23 평일 11~16시 중 1시간 · 유니스지사(범일역)\n\n잡담 신청 ' + _jdl.made.url + '\n\n' + me + _jdContactLine();
   } else if (kind === 'call') {
-    txt = '[유니스 JOB談(잡담)]\n' + nm + ',\n방금 통화드린 잡담 안내입니다.\n' + '직무 5개 중 3개 골라 담당자와 15분씩 이야기하면\n참가 지원비 3만원을 드립니다.\n9/9~9/23 평일 11~16시 중 1시간 · 유니스지사(범일역)\n\n잡담 신청 ' + _jdl.made.url + '\n\n' + '문의 051-637-0931';
+    txt = '[유니스 JOB談(잡담)]\n' + nm + ',\n방금 통화드린 잡담 안내입니다.\n' + '직무 5개 중 3개 골라 담당자와 15분씩 이야기하면\n참가 지원비 3만원을 드립니다.\n9/9~9/23 평일 11~16시 중 1시간 · 유니스지사(범일역)\n\n잡담 신청 ' + _jdl.made.url + '\n\n' + _jdContactLine();
   } else if (kind === 'miss') {
-    txt = '[유니스 JOB談(잡담)]\n' + nm + ',\n' + srcKo + ' 이력서 확인 후 연락드렸습니다.\nJOB 이야기를 잡담처럼 편하게 나누는 자리예요.\n' + '직무 5개 중 3개 골라 담당자와 15분씩 이야기하면\n참가 지원비 3만원을 드립니다.\n9/9~9/23 평일 11~16시 중 1시간 · 유니스지사(범일역)\n\n잡담 신청 ' + _jdl.made.url + '\n\n' + '문의 051-637-0931';
+    txt = '[유니스 JOB談(잡담)]\n' + nm + ',\n' + srcKo + ' 이력서 확인 후 연락드렸습니다.\nJOB 이야기를 잡담처럼 편하게 나누는 자리예요.\n' + '직무 5개 중 3개 골라 담당자와 15분씩 이야기하면\n참가 지원비 3만원을 드립니다.\n9/9~9/23 평일 11~16시 중 1시간 · 유니스지사(범일역)\n\n잡담 신청 ' + _jdl.made.url + '\n\n' + _jdContactLine();
   }
   function fallback() {
     var ta = document.createElement('textarea');
