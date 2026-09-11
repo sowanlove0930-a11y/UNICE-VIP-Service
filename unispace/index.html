@@ -5998,7 +5998,7 @@ function showDashboard() {
   if(typeof perfLoadCurrentCyclesIfAdmin==='function') perfLoadCurrentCyclesIfAdmin();
   loadNotice();
   renderSmartCheckinBtn();
-  renderAttToday();
+  renderAttToday(true);
   renderRecruitStat();
   if (typeof refreshPartnerLeadBadge === 'function') setTimeout(refreshPartnerLeadBadge, 1200);
   if(typeof _ivLoadFromGas==='function') _ivLoadFromGas();
@@ -6059,14 +6059,12 @@ function showDashboard() {
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') renderAttToday();
   });
-  window.addEventListener('focus', renderAttToday);
 
-  // 30초마다 출결현황 자동 갱신 (GAS 연동 후 서버 데이터로 교체)
-  // TODO_GAS_ATT_2: setInterval 내부를 GAS GET 호출로 교체
+  // 2분마다 출결현황 자동 갱신 (throttle 90초와 함께 GAS 부하 완화)
   setInterval(function() {
     renderAttToday();
     renderSmartCheckinBtn();
-  }, 30000);
+  }, 120000);
 
   // 권한별 stat 2, 3번 표시 전환 (관리자 4명: 대표+지점장들+교육지점장)
   var isAdmin = _isManagerUser(currentUser);
@@ -16041,7 +16039,7 @@ function refreshAttendance() {
   if(icon) icon.classList.add('uni-spinning');
   if(txt) txt.textContent='새로고침 중';
   // renderAttToday fetches latest attendance from GAS internally
-  renderAttToday();
+  renderAttToday(true);
   setTimeout(function(){
     if(icon){ icon.classList.remove('uni-spinning'); icon.textContent='✓'; }
     if(txt) txt.textContent='완료';
@@ -16139,7 +16137,12 @@ function shareAttToday() {
   }
   _ptaCopyText(txt);
 }
-function renderAttToday() {
+// throttle: getDashboardStats was firing every 30s + on every focus/visibility change per user
+var _attLastAt = 0;
+function renderAttToday(force) {
+  var _now = Date.now();
+  if (!force && (_now - _attLastAt) < 90000) return;
+  _attLastAt = _now;
   var today = getTodayStr();
   var n = new Date(), days = ['일','월','화','수','목','금','토'];
   document.getElementById('attTodayDate').textContent =
@@ -22198,7 +22201,7 @@ function _checkinComplete(pend, srvTime, srvStatus, toastMsg) {
   localStorage.setItem('unispace_attendance', JSON.stringify(db));
   _checkinPendingSet(null);
   renderSmartCheckinBtn();
-  if (typeof renderAttToday === 'function') renderAttToday();
+  if (typeof renderAttToday === 'function') renderAttToday(true);
   if (toastMsg) showToast(toastMsg);
 }
 function _checkinFlush() {
@@ -23843,7 +23846,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 79;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 80;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
