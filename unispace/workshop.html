@@ -142,6 +142,7 @@ var currentUser = null;
 var ST = null;
 var L = null;
 var _animating = false;
+var _showMode = false;
 
 function $(id){ return document.getElementById(id); }
 function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); }, 2200); }
@@ -196,7 +197,7 @@ function roleTag(){
 }
 function render(){
   roleTag();
-  $('app').innerHTML = ST.role==='staff' ? gmView() : teamView();
+  $('app').innerHTML = (ST.role==='staff' && !_showMode) ? gmView() : teamView();
   setTimeout(function(){ var bars=document.querySelectorAll('.gauge i'); for(var i=0;i<bars.length;i++) bars[i].style.width=bars[i].getAttribute('data-w')+'%'; }, 40);
 }
 function dday(){
@@ -239,12 +240,13 @@ function ladderCard(){
   var b=ST.teams.blue, r=ST.teams.red;
   function tierIdx(avg){ return avg<ST.rule.start ? -1 : Math.floor((avg-ST.rule.start)/ST.rule.step); }
   var bi=tierIdx(b.avg), ri=tierIdx(r.avg);
-  var maxI=Math.max(5,bi,ri), start=Math.max(0,maxI-5);
-  var h='<div class="card" style="padding:12px 14px"><div class="disp" style="font-size:15px">실적칩 계단 <span class="muted" style="font-family:Noto Sans KR">· 팀 평균 · 10만마다 +2</span></div><div class="ladder">';
+  var lo=Math.min(bi,ri), start=Math.max(-1,Math.min(lo,Math.max(bi,ri)-5));
+  var h='<div class="card" style="padding:12px 14px"><div class="disp" style="font-size:15px">칩 획득 현황 <span class="muted" style="font-family:Noto Sans KR">· 팀 평균 · 10만마다 +2</span></div><div class="ladder">';
   for(var i=start;i<=start+5;i++){
     var cls=(bi===i&&ri===i)?'br':(bi===i?'b':(ri===i?'r':''));
     var who=(bi===i?'🔵':'')+(ri===i?'🔴':'');
-    h+='<div class="'+cls+'"><b>'+(2+i*2)+'</b>'+(30+i*10)+'만<span class="who">'+who+'</span></div>';
+    var lbl = i<0 ? '30만 미만' : (30+i*10)+'만';
+    h+='<div class="'+cls+'"><b>'+(i<0?0:2+i*2)+'</b>'+lbl+'<span class="who">'+who+'</span></div>';
   }
   h+='</div><div class="legend"><span>🔵 블루 · 🔴 레드 지금 위치</span><span><i class="coin base"></i>기본 2개는 공통</span></div></div>';
   return h;
@@ -259,6 +261,7 @@ function teamView(){
   var b=ST.teams.blue, r=ST.teams.red;
   var lead = b.chips===r.chips ? '' : (b.chips>r.chips?'blue':'red');
   var h='';
+  if(ST.role==='staff') h+='<div class="row" style="justify-content:space-between;margin-bottom:10px"><span class="muted">📺 공지 화면 · 매니저에게 보이는 그대로</span><button type="button" class="btn ghost sm" data-act="gm">운영진 화면</button></div>';
   if(!ST.ladderRevealed){
     h+='<div class="locked">팀 뽑기는 <b>9월 9일 조회</b>에서!<br>결과가 나오면 여기서 바로 볼 수 있어요</div>';
   } else {
@@ -271,7 +274,8 @@ function teamView(){
 }
 function gmView(){
   var b=ST.teams.blue, r=ST.teams.red;
-  var h='<div class="gmbar"><div class="t">운영진 · 전원 화면을 이 단계로</div><div class="seg"><button type="button" class="on">① 칩 획득</button><button type="button" data-act="soon">② 칩 마켓</button><button type="button" data-act="soon">③ 미션</button></div></div>';
+  var h='<button type="button" class="btn sea wide" data-act="show" style="margin-bottom:12px">📺 공지 화면 열기 · 칩 현황 · 사다리</button>';
+  h+='<div class="gmbar"><div class="t">운영진 · 전원 화면을 이 단계로</div><div class="seg"><button type="button" class="on">① 칩 획득</button><button type="button" data-act="soon">② 칩 마켓</button><button type="button" data-act="soon">③ 미션</button></div></div>';
   h+='<div class="card"><div class="disp" style="font-size:17px">🎲 팀 뽑기</div><div class="muted">'+(ST.ladderRevealed?'공개됨 · 전원이 사다리를 볼 수 있어요':'공개하면 전원 폰에 사다리 애니메이션 + 푸시')+'</div><div class="row" style="margin-top:8px">'+
      (ST.ladderRevealed?'<button type="button" class="btn sea" style="flex:1" data-act="ladder">사다리 보기</button><button type="button" class="btn ghost sm" data-act="hide">공개 취소</button>':'<button type="button" class="btn amber" style="flex:1" data-act="reveal">사다리 공개하기</button>')+'</div></div>';
   function sum(t){ var best=t.members[0]; return '<div class="team '+t.key+'" style="padding:12px 14px"><div class="nm disp">'+(t.key==='blue'?'🔵':'🔴')+' '+esc(t.name)+' · '+t.chips+'칩</div><div class="kv"><span>평균 보장월초</span><b>'+man(t.avg)+'</b></div><div class="kv"><span>다음 칩까지</span><b>팀 합계 '+man(t.toNext*t.members.length)+'</b></div><div class="kv"><span>개인 최고</span><b>'+(best?esc(best.name)+' '+man(best.amt):'-')+'</b></div></div>'; }
@@ -289,6 +293,8 @@ function onAct(e){
   var el=e.target.closest('[data-act]'); if(!el) return;
   var a=el.getAttribute('data-act');
   if(a==='refresh') load(true);
+  if(a==='show'){ _showMode=true; render(); window.scrollTo(0,0); }
+  if(a==='gm'){ _showMode=false; render(); window.scrollTo(0,0); }
   if(a==='ladder') openLadder();
   if(a==='soon') toast('9/18 전에 열립니다');
   if(a==='reveal'){ if(!confirm('사다리를 공개하고 전원에게 푸시를 보낼까요?')) return; gasGet({action:'swkReveal',fp:currentUser.id,on:1}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } toast('공개했어요'); load(false); }); }
