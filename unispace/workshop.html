@@ -107,6 +107,19 @@ html,body{margin:0;background:var(--sand);color:var(--ink);font-family:'Noto San
 .rb .tn{font-size:14px;font-family:'Jua'}.rb.blue .tn{color:var(--blue)}.rb.red .tn{color:var(--red)}.rb.judge .tn{color:var(--judge)}
 .rb .tm{font-size:14px;font-weight:700;margin-top:2px;line-height:1.6}
 .rb .td{font-size:12px;color:var(--ink2)}
+.set{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px}
+.set .h{font-size:16px;margin-bottom:4px}
+.set label{display:block;font-size:11px;font-weight:800;color:var(--ink3);margin:10px 0 3px}
+.set input,.set textarea{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 10px;font-family:inherit;font-size:14px;background:var(--sand);color:var(--ink)}
+.set textarea{min-height:56px;resize:vertical;line-height:1.5}
+.set input.code{font-family:'Jua';font-size:20px;width:130px;letter-spacing:.1em}
+.ph{display:flex;gap:8px}
+.ph .slot{flex:1;height:110px;border:2px dashed var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:var(--ink3);cursor:pointer;background:var(--sand);position:relative;overflow:hidden}
+.ph .slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ph .slot.has{border-style:solid;border-color:var(--sea)}
+.ph .slot .cap{position:relative;z-index:1;background:rgba(255,255,255,.85);border-radius:8px;padding:2px 8px;font-weight:800;color:var(--sea)}
+.ph .slot.busy .cap{color:var(--amber)}
+.savebar{position:sticky;bottom:12px;z-index:5}
 @media (prefers-reduced-motion:reduce){.gauge i{transition:none}}
 </style>
 </head>
@@ -121,6 +134,7 @@ html,body{margin:0;background:var(--sand);color:var(--ink);font-family:'Noto San
   <div id="app"></div>
 </div>
 <div class="toast" id="toast"></div>
+<input type="file" id="photoIn" accept="image/*" style="display:none">
 
 <div class="ov" id="ov">
   <div class="md">
@@ -143,6 +157,9 @@ var ST = null;
 var L = null;
 var _animating = false;
 var _showMode = false;
+var _setMode = false;
+var CFG = null;
+var _photoTarget = null;
 
 function $(id){ return document.getElementById(id); }
 function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); }, 2200); }
@@ -164,6 +181,11 @@ function jsonp(url, cb){
   s.src=url+'&callback='+name; s.onerror=function(){ cb({ok:false,msg:'서버 연결 실패'}); }; document.body.appendChild(s);
 }
 
+function gasPost(body, cb){
+  fetch(UNISPACE_GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) })
+    .then(function(r){ return r.json(); }).then(cb).catch(function(){ cb({ok:false,msg:'서버 연결 실패'}); });
+}
+
 /* ---------- init ---------- */
 function init(){
   try { currentUser = JSON.parse(localStorage.getItem('unispace_user') || 'null'); } catch(e){}
@@ -173,6 +195,8 @@ function init(){
   $('btnSkip').addEventListener('click', function(){ runLadder(true); });
   $('btnClose').addEventListener('click', closeLadder);
   $('app').addEventListener('click', onAct);
+  $('app').addEventListener('input', onInput);
+  $('photoIn').addEventListener('change', onPhotoPicked);
   window.addEventListener('resize', function(){ if($('ov').classList.contains('on') && !_animating) drawLadder(null); });
   load(false);
 }
@@ -197,7 +221,7 @@ function roleTag(){
 }
 function render(){
   roleTag();
-  $('app').innerHTML = (ST.role==='staff' && !_showMode) ? gmView() : teamView();
+  $('app').innerHTML = (ST.role==='staff' && _setMode) ? setView() : ((ST.role==='staff' && !_showMode) ? gmView() : teamView());
   setTimeout(function(){ var bars=document.querySelectorAll('.gauge i'); for(var i=0;i<bars.length;i++) bars[i].style.width=bars[i].getAttribute('data-w')+'%'; }, 40);
 }
 function dday(){
@@ -283,9 +307,65 @@ function gmView(){
   var lp = ST.lastPush && ST.lastPush.at ? ST.lastPush.at.slice(5,16).replace('T',' ') : '-';
   h+='<div class="card"><div class="disp" style="font-size:15px">📣 칩 현황 푸시</div><div class="tog"><span>매일 09:30 자동 발송</span><div class="sw on lockd"></div></div><div class="tog"><span>칩 수가 바뀌면 즉시 푸시<br><span class="muted">30분마다 확인, 늘거나 줄면 자동</span></span><div class="sw on lockd"></div></div><button type="button" class="btn ghost wide" style="margin-top:8px" data-act="push">지금 보내기</button><div class="muted" style="margin-top:6px">마지막 발송 '+lp+(ST.lastPush&&ST.lastPush.body?' · '+esc(ST.lastPush.body):'')+'</div></div>';
   h+='<div class="card"><div class="disp" style="font-size:15px">🛒 칩 마켓 미리보기</div><div class="tog"><span>매니저에게 마켓 상품 미리 보여주기<br><span class="muted">구매는 잠김 · 당일 11:00 오픈 표시</span></span><div class="sw '+(ST.preview?'on':'')+'" data-act="preview"></div></div></div>';
-  h+='<button type="button" class="btn ghost wide" data-act="soon">✏️ 힌트 · 사진 · 봉투 코드 설정</button>';
+  h+='<button type="button" class="btn ghost wide" data-act="settings">✏️ 힌트 · 사진 · 봉투 코드 · 미션 설정</button>';
   h+='<div class="muted" style="text-align:center;margin-top:10px"><span data-act="refresh" style="text-decoration:underline;cursor:pointer">업적 기준으로 새로고침</span></div>';
   return h;
+}
+
+/* ---------- settings (staff) ---------- */
+function openSettings(){
+  _setMode=true; render(); window.scrollTo(0,0);
+  if(CFG) return;
+  gasGet({action:'swkConfig',fp:currentUser.id}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'설정을 못 불러왔어요'); return; } CFG=res.config; render(); });
+}
+function fld(path,label,val,kind){
+  var id='f_'+path.replace(/[^a-z0-9]/gi,'_');
+  var h='<label for="'+id+'">'+label+'</label>';
+  if(kind==='ta') h+='<textarea id="'+id+'" data-path="'+path+'">'+esc(val)+'</textarea>';
+  else h+='<input id="'+id+'" data-path="'+path+'" value="'+esc(val).replace(/"/g,'&quot;')+'"'+(kind==='code'?' class="code" maxlength="4" inputmode="numeric"':'')+'>';
+  return h;
+}
+function slot(spotIdx,which,url,label){
+  var has=!!url;
+  return '<div class="slot'+(has?' has':'')+'" data-act="photo" data-spot="'+spotIdx+'" data-which="'+which+'">'+(has?'<img src="'+esc(url)+'" alt="">':'')+'<span class="cap">'+label+(has?' · 다시 찍기':' · 탭해서 찍기')+'</span></div>';
+}
+function setView(){
+  var h='<div class="row" style="justify-content:space-between;margin-bottom:10px"><span class="muted">✏️ 설정 · 운영진 전용</span><button type="button" class="btn ghost sm" data-act="gm">운영진 화면</button></div>';
+  if(!CFG){ return h+'<div class="muted" style="text-align:center;padding:30px 0">설정 불러오는 중…</div>'; }
+  h+='<div class="card" style="background:var(--amber-l);border-color:#F4C9A6"><div class="disp" style="font-size:16px">힌트 · 사진 · 봉투 코드 · 미션</div><div class="muted">답사하면서 폰으로 바로 찍어 넣으세요. 맨 아래 저장을 눌러야 반영됩니다.</div></div>';
+  h+='<div class="set"><div class="h disp">🔐 출발 4자리 코드</div>'+fld('start.q1','퀴즈 ① (숫자 1자리)',CFG.start.q1)+fld('start.q2','퀴즈 ② (숫자 1자리)',CFG.start.q2)+fld('start.q34','③④ 안내 문구',CFG.start.q34)+fld('start.answer','정답 4자리',CFG.start.answer,'code')+'</div>';
+  for(var i=0;i<CFG.spots.length;i++){ var sp=CFG.spots[i], rt=sp.route==='AB'?'공통':sp.route+'코스';
+    h+='<div class="set"><div class="h disp">📍 '+esc(sp.name)+' <span class="muted" style="font-family:Noto Sans KR">· '+rt+' '+sp.stage+'차</span></div>'
+      +fld('spots.'+i+'.riddle','수수께끼 힌트 (어디로 갈까?)',sp.riddle,'ta')
+      +fld('spots.'+i+'.keys','행선지 정답 · 쉼표로 여러 개',sp.keys)
+      +'<label>봉투 위치 사진 · 정답 맞히면 1장, 힌트 요청하면 2장</label><div class="ph">'+slot(i,'photo1',sp.photo1,'📷 넓게')+slot(i,'photo2',sp.photo2,'🔍 클로즈업')+'</div>'
+      +fld('spots.'+i+'.ans','정답 공개 문장 (칩 3개)',sp.ans)
+      +fld('spots.'+i+'.code','봉투 안 4자리 코드',sp.code,'code')
+      +fld('spots.'+i+'.mission','🎯 미션 (코드 입력 후 열림)',sp.mission,'ta')+'</div>'; }
+  h+='<div class="set"><div class="h disp">🍚 골인 · 점심 퀴즈</div>'+fld('finish.q','문제',CFG.finish.q,'ta')+fld('finish.answer','정답',CFG.finish.answer)+fld('finish.addr','정답 시 보여줄 주소',CFG.finish.addr)+'</div>';
+  h+='<div class="savebar"><button type="button" class="btn sea wide" data-act="save">💾 저장</button></div>';
+  return h;
+}
+function setPath(obj,path,val){ var ps=path.split('.'), o=obj; for(var i=0;i<ps.length-1;i++){ o=o[ps[i]]; } o[ps[ps.length-1]]=val; }
+function onInput(e){ var el=e.target; var path=el.getAttribute&&el.getAttribute('data-path'); if(!path||!CFG) return; setPath(CFG,path,el.value); }
+function onPhotoPicked(){
+  var f=$('photoIn').files&&$('photoIn').files[0]; if(!f||!_photoTarget) return;
+  var t=_photoTarget; _photoTarget=null;
+  var slotEl=document.querySelector('.slot[data-spot="'+t.spot+'"][data-which="'+t.which+'"]'); if(slotEl){ slotEl.classList.add('busy'); slotEl.querySelector('.cap').textContent='올리는 중…'; }
+  shrink(f, 1400, 0.82, function(dataUrl){
+    gasPost({action:'swkPhoto',fp:currentUser.id,data:{photoBase64:dataUrl,mimeType:'image/jpeg',spot:CFG.spots[t.spot].id,which:t.which}}, function(res){
+      $('photoIn').value='';
+      if(!res||!res.ok){ toast((res&&res.msg)||'업로드 실패'); render(); return; }
+      CFG.spots[t.spot][t.which]=res.url;
+      gasPost({action:'swkConfigSave',fp:currentUser.id,config:CFG}, function(r2){ toast(r2&&r2.ok?'사진 저장됨':'사진은 올라갔지만 저장 실패 · 저장 버튼을 눌러주세요'); render(); });
+    });
+  });
+}
+function shrink(file,maxW,q,cb){
+  var img=new Image(), url=URL.createObjectURL(file);
+  img.onload=function(){ var w=img.width,h=img.height,sc=Math.min(1,maxW/Math.max(w,h)); var cv=document.createElement('canvas'); cv.width=Math.round(w*sc); cv.height=Math.round(h*sc); cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url); cb(cv.toDataURL('image/jpeg',q)); };
+  img.onerror=function(){ URL.revokeObjectURL(url); toast('이미지를 읽지 못했어요'); render(); };
+  img.src=url;
 }
 
 /* ---------- actions ---------- */
@@ -294,7 +374,10 @@ function onAct(e){
   var a=el.getAttribute('data-act');
   if(a==='refresh') load(true);
   if(a==='show'){ _showMode=true; render(); window.scrollTo(0,0); }
-  if(a==='gm'){ _showMode=false; render(); window.scrollTo(0,0); }
+  if(a==='gm'){ _showMode=false; _setMode=false; render(); window.scrollTo(0,0); }
+  if(a==='settings') openSettings();
+  if(a==='photo'){ _photoTarget={spot:+el.getAttribute('data-spot'),which:el.getAttribute('data-which')}; $('photoIn').click(); }
+  if(a==='save'){ if(!CFG) return; el.disabled=true; gasPost({action:'swkConfigSave',fp:currentUser.id,config:CFG}, function(res){ el.disabled=false; if(!res||!res.ok){ toast((res&&res.msg)||'저장 실패'); return; } CFG=res.config; toast('저장했어요'); }); }
   if(a==='ladder') openLadder();
   if(a==='soon') toast('9/18 전에 열립니다');
   if(a==='reveal'){ if(!confirm('사다리를 공개하고 전원에게 푸시를 보낼까요?')) return; gasGet({action:'swkReveal',fp:currentUser.id,on:1}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } toast('공개했어요'); load(false); }); }
