@@ -441,7 +441,7 @@ function chipLine(t){
   return h;
 }
 function demoBar(){
-  var ph=ST.phase; var lb={chips:'① 칩',market:'② 마켓',race:'③ 미션'};
+  var ph=ST.phase; var lb={chips:'① 대기',market:'② 마켓',race:'③ 미션'};
   var h='<div class="demobar"><div class="t">🧪 데모 모드 · 나 = 블루팀 · 실제 데이터에 영향 없음</div><div class="seg">';
   var ks=['chips','market','race']; for(var i=0;i<3;i++) h+='<button type="button" data-act="phase" data-ph="'+ks[i]+'" class="'+(ph===ks[i]?'on':'')+'">'+lb[ks[i]]+'</button>';
   h+='</div><div class="row" style="margin-top:8px"><button type="button" class="btn ghost sm" style="flex:1" data-act="demoreset">↺ 처음부터</button><button type="button" class="btn ghost sm" style="flex:1" data-act="demooff">데모 나가기</button></div></div>';
@@ -465,7 +465,7 @@ function lane(team){
 function gmView(){
   var b=ST.teams.blue, r=ST.teams.red;
   var h='<div class="gmbar"><div class="t">운영진 · 전원 화면을 이 단계로</div><div class="seg">';
-  var ks=['chips','market','race'], lb=['① 칩 획득','② 칩 마켓','③ 미션'];
+  var ks=['chips','market','race'], lb=['① 대기 · 칩 현황','② 칩 마켓','③ 미션'];
   for(var i=0;i<3;i++) h+='<button type="button" data-act="phase" data-ph="'+ks[i]+'" class="'+(ST.phase===ks[i]?'on':'')+'">'+lb[i]+'</button>';
   h+='</div></div>';
   h+='<div class="row" style="margin-bottom:12px"><button type="button" class="btn sea" style="flex:1" data-act="show">📺 공지 화면</button><button type="button" class="btn ghost" data-act="demoon">🧪 데모 모드</button></div>';
@@ -581,7 +581,7 @@ function onAct(e){
   if(a==='preview'){ var on=!ST.preview; gasGet({action:'swkSet',fp:currentUser.id,key:'preview',value:on?'true':'false'}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } ST.preview=on; render(); toast(on?'매니저 화면에 미리보기 표시':'미리보기 숨김'); }); }
 }
 
-function lbPhase(ph){ return ph==='chips'?'① 칩 획득':(ph==='market'?'② 칩 마켓':'③ 미션'); }
+function lbPhase(ph){ return ph==='chips'?'① 대기 · 칩 현황':(ph==='market'?'② 칩 마켓':'③ 미션'); }
 function race(op,val,cb){
   gasGet({action:'swkRace',fp:currentUser.id,op:op,val:val}, function(res){
     if(!res||!res.ok){ toast((res&&res.msg)||'실패'); if(cb) cb(res); return; }
@@ -597,12 +597,17 @@ function race(op,val,cb){
 function livePoll(){
   if(_livePoll){ clearInterval(_livePoll); _livePoll=null; }
   if(!ST || _setMode) return;
-  if(ST.phase!=='market' && ST.phase!=='race') return;
+  var fast = (ST.phase==='market' || ST.phase==='race');
   _livePoll=setInterval(function(){
     if(document.visibilityState!=='visible') return;
-    if(document.activeElement && (document.activeElement.tagName==='INPUT')) return;
-    gasGet({action:'swkState',fp:currentUser.id}, function(res){ if(res&&res.ok){ ST=res; render(); } });
-  }, 12000);
+    if(document.activeElement && (document.activeElement.tagName==='INPUT' || document.activeElement.tagName==='TEXTAREA')) return;
+    if($('ov').classList.contains('on')) return;
+    gasGet({action:'swkState',fp:currentUser.id}, function(res){
+      if(!res||!res.ok) return;
+      if(!fast && res.phase===ST.phase && res.ladderRevealed===ST.ladderRevealed) return;
+      ST=res; render();
+    });
+  }, fast ? 12000 : 30000);
 }
 
 /* ---------- ladder ---------- */
