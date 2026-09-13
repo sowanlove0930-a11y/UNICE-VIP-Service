@@ -158,6 +158,15 @@ html,body{margin:0;background:var(--sand);color:var(--ink);font-family:'Noto San
 .prog{display:flex;gap:4px;margin:8px 0}
 .prog div{flex:1;text-align:center;font-size:11px;padding:6px 2px;border-radius:9px;background:var(--sand2);color:var(--ink3)}
 .prog div.done{background:var(--sea);color:#fff}.prog div.now{background:var(--amber);color:#fff;font-weight:900}
+.ibar{display:flex;gap:6px;background:#fff;border:2px solid #F2B93C;border-radius:16px;padding:8px 10px;margin-bottom:12px;align-items:center;overflow:auto}
+.ibar .chipn{font-family:'Jua';font-size:20px;color:var(--amber);line-height:1;padding-right:6px;border-right:1px dashed var(--line);white-space:nowrap}
+.ibar .chipn small{font-size:11px;font-family:'Noto Sans KR';color:var(--ink2);font-weight:700;margin-left:2px}
+.ibar .it{flex:1;display:flex;flex-direction:column;align-items:center;min-width:42px;padding:4px 2px;border-radius:10px;background:var(--sand);font-size:11px;font-weight:800;color:var(--ink2);cursor:pointer;border:1.5px solid transparent}
+.ibar .it b{font-size:18px;line-height:1.1}
+.ibar .it.zero{opacity:.35}
+.ibar .it.can{border-color:var(--sea);background:var(--sea-l);color:var(--sea)}
+.ibar .it .n{font-size:12px;color:var(--amber)}
+.item.busy{opacity:.6}
 .demobar{background:#1B2A41;color:#fff;border-radius:16px;padding:10px 14px;margin-bottom:12px}
 .demobar .t{font-size:12px;font-weight:900;color:#FFE6B0;margin-bottom:6px}
 .demobar .seg{background:rgba(255,255,255,.12)}
@@ -395,7 +404,7 @@ function marketListReadOnly(){ var ITEMS=ST.items||[]; var h='<div class="card">
 function raceView(){
   var t=myTeamPub(), me=ST.race&&ST.race.me;
   if(!t||!me) return feedCard()+'<div class="locked">운영진·심판은 중계로 지켜봐요</div>';
-  var h=feedCard();
+  var h=itemsBar(t,me)+feedCard();
   var it=t.items||{};
   if(me.stage===0){
     var sc=me.start||{};
@@ -431,6 +440,20 @@ function raceView(){
   h+='<div class="mission"><div class="lb">'+me.stage+'차 미션 · '+esc(sp.name)+'</div><div class="tx">'+esc(sp.mission||'')+'</div><div class="kt">📸 인증 영상은 단톡방에 올리기 · 차 안 촬영 무효 · 점수는 백사장에서 발표</div></div>';
   h+='<button type="button" class="btn sea wide" data-act="next">미션 끝! '+(me.stage===2?'골인 퀴즈':'다음 힌트')+' 열기</button>';
   return h+chipLine(t);
+}
+function itemsBar(t, me){
+  var it=t.items||{}; var canHint = me && me.stage>0 && me.stage<3 && me.guessed && !me.opened && me.hintLv<1 && (t.freeHint>0 || it.hint>0);
+  var canAns = me && me.stage>0 && me.stage<3 && me.guessed && !me.opened && me.hintLv<2 && it.answer>0;
+  var canCall = me && me.stage>0 && me.stage<3 && me.guessed && !me.opened && me.hintLv<2 && it.call>0;
+  function cell(k,ic,label,n,can,act){ return '<div class="it'+(n>0?(can?' can':''):' zero')+'" data-act="'+(can?act:'why')+'" data-k="'+k+'"><b>'+ic+'</b>'+label+'<span class="n">'+(n>0?n+'개':'없음')+'</span></div>'; }
+  var h='<div class="ibar"><div class="chipn">'+t.chips+'<small>칩</small></div>';
+  h+=cell('free','🆓','무료힌트',t.freeHint,canHint&&t.freeHint>0,'hint');
+  h+=cell('hint','🔍','힌트권',it.hint||0,canHint&&t.freeHint<=0,'hint');
+  h+=cell('answer','📍','정답권',it.answer||0,canAns,'answer');
+  h+=cell('call','📞','직통',it.call||0,canCall,'call');
+  h+=cell('pick','🏖️','지명권',it.pick||0,false,'why');
+  h+=cell('box','🎁','박스',it.box||0,(it.box||0)>0,'box');
+  return h+'</div>';
 }
 function pic(url,cap){ if(!url) return '<div class="pic"><div class="cap">'+cap+' · 사진 준비 중</div></div>'; return '<div class="pic"><img src="'+esc(url)+'" alt=""><div class="cap">'+cap+'</div></div>'; }
 function chipLine(t){
@@ -558,7 +581,18 @@ function onAct(e){
   if(a==='demoon'){ _demo=true; _showMode=false; _code=''; load(false); }
   if(a==='demooff'){ _demo=false; _code=''; load(false); }
   if(a==='demoreset'){ if(!confirm('데모 진행을 처음부터 다시 할까요?')) return; gasGet({action:'swkDemoReset',fp:currentUser.id}, function(){ _code=''; load(false); }); }
-  if(a==='cart'){ gasGet({action:'swkCart',fp:currentUser.id,item:el.getAttribute('data-k'),delta:el.getAttribute('data-d')}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } load(false); }); }
+  if(a==='why'){ var k=el.getAttribute('data-k'); var m=k==='pick'?'종목 지명권은 백사장에서 심판에게 말하면 돼요':(k==='box'?'미스터리 박스가 없어요':'행선지를 맞힌 뒤, 봉투를 찾는 단계에서 쓸 수 있어요'); toast(m); }
+  if(a==='cart'){
+    var mine=ST.race&&ST.race.mine, pub=mine&&ST.race.pub[mine]; if(!pub||el.disabled) return;
+    var k2=el.getAttribute('data-k'), d=parseInt(el.getAttribute('data-d'))||0;
+    pub.cart=pub.cart||{}; pub.cart[k2]=Math.max(0,(pub.cart[k2]||0)+d); pub.cartBy=pub.cartBy||{}; pub.cartBy[k2]=currentUser.name+' (담는 중…)';
+    render();
+    var row=el.closest('.item'); if(row) row.classList.add('busy');
+    gasGet({action:'swkCart',fp:currentUser.id,item:k2,delta:d}, function(res){
+      if(!res||!res.ok){ toast((res&&res.msg)||'실패'); load(false); return; }
+      pub.cart=res.cart||{}; pub.cartBy=res.cartBy||{}; render();
+    });
+  }
   if(a==='confirm'){ if(!confirm('구매를 확정할까요? 되돌릴 수 없어요')) return; gasGet({action:'swkConfirm',fp:currentUser.id}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } toast('확정! 미션 시작을 기다려요'); load(false); }); }
   if(a==='dg'){ if(_code.length<4){ _code+=el.getAttribute('data-d'); render(); } }
   if(a==='dgdel'){ _code=_code.slice(0,-1); render(); }
@@ -583,6 +617,7 @@ function onAct(e){
 
 function lbPhase(ph){ return ph==='chips'?'① 대기 · 칩 현황':(ph==='market'?'② 칩 마켓':'③ 미션'); }
 function race(op,val,cb){
+  toast('처리 중…');
   gasGet({action:'swkRace',fp:currentUser.id,op:op,val:val}, function(res){
     if(!res||!res.ok){ toast((res&&res.msg)||'실패'); if(cb) cb(res); return; }
     if(op==='code'){ _code=''; toast('🔓 열렸다! 첫 힌트'); }
