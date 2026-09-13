@@ -120,6 +120,25 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .foot { text-align:center; margin-top:18px; font-size:11px; font-weight:800; color:#c5b0e5; }
 .dev { position:absolute; top:16px; left:14px; z-index:3; background:#f0662a; color:#fff; font-size:10px; font-weight:900; padding:4px 9px; border-radius:100px; }
 
+/* report */
+.rep-btn { width:100%; margin-top:10px; padding:12px; border:none; border-radius:100px; font-size:13px; font-weight:900; color:#fff; background:linear-gradient(135deg,#8a5ae0,#6a35b0); cursor:pointer; font-family:inherit; }
+.rep { position:fixed; inset:0; z-index:70; background:linear-gradient(180deg,#1a1145,#3d2470 45%,#5a3468); overflow-y:auto; display:none; }
+.rep.show { display:block; }
+.rep-in { max-width:440px; margin:0 auto; padding:18px 0 20px; }
+.rep-head { text-align:center; position:relative; padding:12px 44px 6px; }
+.rep-t { font-size:19px; font-weight:900; color:#ffd94d; line-height:1.35; }
+.rep-sub { font-size:11px; font-weight:800; color:#d8c8f0; margin-top:6px; }
+.rep-x { position:absolute; top:8px; right:14px; width:34px; height:34px; border:none; border-radius:50%; background:rgba(255,255,255,.15); color:#fff; font-size:15px; font-weight:900; cursor:pointer; font-family:inherit; }
+.rt { padding:8px 2px 4px; border-bottom:1px solid #f0eaf8; }
+.rt:last-child { border-bottom:none; }
+.rt-head { display:flex; align-items:center; gap:6px; }
+.rt-name { font-size:13px; font-weight:900; color:#332255; }
+.rt-gift { font-size:11px; font-weight:800; color:#a08fc5; }
+.rt-cnt { margin-left:auto; font-size:12.5px; font-weight:900; color:#c2185b; }
+.rt-chips { display:flex; flex-wrap:wrap; gap:5px; padding:7px 0 8px; }
+.rchip { font-size:11px; font-weight:900; color:#443366; background:#f3edff; border-radius:100px; padding:4px 10px; }
+.rchip.gold { background:linear-gradient(135deg,#fff3d0,#ffe6a8); color:#8a5a10; }
+
 /* login */
 .login { position:fixed; inset:0; z-index:80; background:linear-gradient(180deg,#1a1145,#3d2470 45%,#5a3468); display:flex; align-items:center; justify-content:center; padding:24px; }
 .lbox { width:100%; max-width:340px; background:rgba(255,255,255,.97); border-radius:22px; padding:28px 22px; text-align:center; box-shadow:0 20px 50px rgba(10,0,40,.5); }
@@ -264,6 +283,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
   <div class="card">
     <div class="sec-t">🌕 보름달 완성 명단 <span style="font-size:10px;color:#c2185b;font-weight:900">한우 확정! 🥩</span></div>
     <div id="hall"><div class="empty">첫 보름달을 기다리는 중 🌕</div></div>
+    <button class="rep-btn" id="repBtn">📜 전체 당첨 현황 보기</button>
   </div>
 
   <!-- live feed -->
@@ -276,6 +296,26 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
   </div>
 
   <div class="foot">더도 말고 덜도 말고 한가위만 같아라 🌕 9/15(화)까지 연장! 달린다!</div>
+</div>
+
+<!-- report overlay -->
+<div class="rep" id="rep">
+  <div class="rep-in">
+    <div class="rep-head">
+      <div class="rep-t">🌕 유니스 한가위 윷놀이<br>당첨 현황</div>
+      <div class="rep-sub" id="repSub">불러오는 중...</div>
+      <button class="rep-x" id="repX">✕</button>
+    </div>
+    <div class="card">
+      <div class="sec-t">🎁 추석선물 확정 현황 <span style="font-size:10px;color:#a08fc5;font-weight:800" id="repTotal"></span></div>
+      <div id="repTiers"><div class="empty">불러오는 중...</div></div>
+    </div>
+    <div class="card">
+      <div class="sec-t">🐇 간식 당첨 현황 <span style="font-size:10px;color:#a08fc5;font-weight:800">윷 던지기 누적</span></div>
+      <div id="repSnacks"><div class="empty">불러오는 중...</div></div>
+    </div>
+    <div style="height:30px"></div>
+  </div>
 </div>
 
 <!-- yut throw overlay -->
@@ -613,6 +653,70 @@ function tickDday(){
   else if (diff === 0) el.textContent = '\uc624\ub298 \ub9c8\uac10!! \uD83C\uDF15';
   else el.textContent = '\uc9d1\uacc4 \uc644\ub8cc \uD83C\uDF81';
 }
+
+/* ---------- report overlay ---------- */
+var MOON_EMOJI = { '\ubcf4\ub984\ub2ec':'\uD83C\uDF15', '\ub465\uadfc\ub2ec':'\uD83C\uDF14', '\ubcfc\ub85d\ub2ec':'\uD83C\uDF13', '\ubc18\ub2ec':'\uD83C\uDF13', '\ucd08\uc2b9\ub2ec':'\uD83C\uDF12' };
+function openReport(){
+  qs('rep').classList.add('show');
+  gasGet(GAS_URL + '?action=moonBoard', 20000)
+    .then(renderReport)
+    .catch(function(){
+      qs('repSub').textContent = '\uc5f0\uacb0\uc774 \ub290\ub824\uc694. \ub2eb\uc558\ub2e4 \ub2e4\uc2dc \uc5f4\uc5b4\uc8fc\uc138\uc694';
+    });
+}
+function renderReport(d){
+  if (!d || !d.ok) return;
+  var asOf = d.asOf ? d.asOf : '';
+  qs('repSub').textContent = asOf + ' \uae30\uc900 \u00b7 9/15 \uc5c5\uc801\uc73c\ub85c \ucd5c\uc885 \ud655\uc815';
+  qs('repTotal').textContent = '\ucc38\uc5ec ' + d.total + '\uba85';
+  var i, j, htm = '';
+  var tiers = d.tiers || [];
+  for (i = 0; i < tiers.length; i++) {
+    var T = tiers[i];
+    var em = MOON_EMOJI[T.moon] || '\uD83C\uDF19';
+    htm += '<div class="rt"><div class="rt-head">'
+        + '<span>' + em + '</span>'
+        + '<span class="rt-name">' + esc(T.moon) + '</span>'
+        + '<span class="rt-gift">' + esc(T.gift) + '</span>'
+        + '<span class="rt-cnt">' + T.names.length + '\uba85</span></div>'
+        + '<div class="rt-chips">';
+    if (T.names.length === 0) {
+      htm += '<span class="rchip" style="background:#f5f2fa;color:#b0a5c8">\uc544\uc9c1 \uc5c6\uc74c</span>';
+    } else {
+      for (j = 0; j < T.names.length; j++) {
+        var cls = i === 0 ? 'rchip gold' : 'rchip';
+        htm += '<span class="' + cls + '">' + esc(T.names[j].name) + '</span>';
+      }
+    }
+    htm += '</div></div>';
+  }
+  qs('repTiers').innerHTML = htm || '<div class="empty">\uc9d1\uacc4 \uc804</div>';
+
+  var sh = '';
+  var snacks = d.snacks || [];
+  for (i = 0; i < snacks.length; i++) {
+    var S = snacks[i];
+    if (S.yut === '\ub3c4') continue;
+    sh += '<div class="rt"><div class="rt-head">'
+       + '<span class="rt-name">' + esc(S.snack) + '</span>'
+       + '<span class="rt-gift">(' + esc(S.yut) + ')</span>'
+       + '<span class="rt-cnt">' + S.total + '\uac74</span></div>'
+       + '<div class="rt-chips">';
+    if (S.list.length === 0) {
+      sh += '<span class="rchip" style="background:#f5f2fa;color:#b0a5c8">\uc544\uc9c1 \uc5c6\uc74c</span>';
+    } else {
+      for (j = 0; j < S.list.length; j++) {
+        var nm = esc(S.list[j].name);
+        if (S.list[j].count > 1) nm += ' \u00d7' + S.list[j].count;
+        sh += '<span class="rchip">' + nm + '</span>';
+      }
+    }
+    sh += '</div></div>';
+  }
+  qs('repSnacks').innerHTML = sh || '<div class="empty">\uc9d1\uacc4 \uc804</div>';
+}
+qs('repBtn').addEventListener('click', openReport);
+qs('repX').addEventListener('click', function(){ qs('rep').classList.remove('show'); });
 
 /* ---------- kakao share ---------- */
 try {
