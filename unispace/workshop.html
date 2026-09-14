@@ -620,21 +620,22 @@ function onAct(e){
 
 function syncCart(){
   _cartTimer=null;
-  var mine=ST.race&&ST.race.mine, pub=mine&&ST.race.pub[mine]; if(!pub||_cartBusy) { if(pub&&_cartBusy){ _cartTimer=setTimeout(syncCart,500); } return; }
-  var keys=[], base=_cartSynced||{};
-  for(var k in pub.cart){ if(pub.cart.hasOwnProperty(k) && (pub.cart[k]||0)!==(base[k]||0)) keys.push(k); }
-  if(!keys.length){ return; }
+  var mine=ST.race&&ST.race.mine, pub=mine&&ST.race.pub[mine]; if(!pub) return;
+  if(_cartBusy){ _cartTimer=setTimeout(syncCart,400); return; }
+  var base=_cartSynced||{}, diff=false;
+  for(var k in pub.cart){ if(pub.cart.hasOwnProperty(k)&&(pub.cart[k]||0)!==(base[k]||0)) diff=true; }
+  if(!diff) return;
   _cartBusy=true;
-  var k0=keys[0], delta=(pub.cart[k0]||0)-(base[k0]||0);
-  gasGet({action:'swkCart',fp:currentUser.id,item:k0,delta:delta}, function(res){
+  var sent=JSON.parse(JSON.stringify(pub.cart));
+  gasGet({action:'swkCartSet',fp:currentUser.id,cart:JSON.stringify(sent)}, function(res){
     _cartBusy=false;
-    if(!res||!res.ok){ toast((res&&res.msg)||'담기 실패'); _cartSynced=null; load(false); return; }
+    if(!res||!res.ok){ toast((res&&res.msg)||'담기 실패'); if(res&&res.cart){ pub.cart=res.cart; pub.cartBy=res.cartBy||{}; _cartSynced=JSON.parse(JSON.stringify(res.cart)); render(); } else { _cartSynced=null; load(false); } return; }
     _cartSynced=JSON.parse(JSON.stringify(res.cart||{}));
-    var changed=false; for(var kk in res.cart){ if(res.cart.hasOwnProperty(kk)&&(pub.cart[kk]||0)!==(res.cart[kk]||0)) changed=true; }
     pub.cartBy=res.cartBy||pub.cartBy;
+    var changed=false; for(var kk in res.cart){ if(res.cart.hasOwnProperty(kk)&&(pub.cart[kk]||0)!==(res.cart[kk]||0)) changed=true; }
+    if(_cartTimer){ return; }
     if(changed){ pub.cart=res.cart||{}; render(); }
     else { var bys=document.querySelectorAll('.item .by'); for(var b=0;b<bys.length;b++){ bys[b].textContent=bys[b].textContent.replace(' (담는 중…)',''); } }
-    if(keys.length>1) syncCart();
   });
 }
 function busy(el, label){ if(!el||el.tagName!=='BUTTON') return; el.disabled=true; el.setAttribute('data-orig', el.innerHTML); el.innerHTML=label||'처리 중…'; }
