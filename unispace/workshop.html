@@ -93,6 +93,17 @@ html,body{margin:0;background:var(--sand);color:var(--ink);font-family:'Noto San
 .err a{color:#9B2C2C}
 .locked{border:2px dashed var(--line);border-radius:18px;padding:28px 16px;text-align:center;color:var(--ink3);font-size:13px;line-height:1.7;margin-bottom:12px;background:#fff}
 .locked b{color:var(--amber)}
+.mo{position:fixed;inset:0;background:rgba(27,42,65,.6);z-index:80;display:none;align-items:center;justify-content:center;padding:20px}
+.mo.on{display:flex}
+.mo .bx{width:100%;max-width:380px;background:var(--sand);border-radius:22px;padding:22px 18px 16px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);animation:pop .18s ease-out}
+@keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.mo .ic{font-size:44px;line-height:1;margin-bottom:8px}
+.mo .tt{font-size:20px;color:var(--ink);font-family:'Jua'}
+.mo .ms{font-size:14px;color:var(--ink2);margin-top:6px;line-height:1.6;white-space:pre-line}
+.mo .bt{display:flex;gap:8px;margin-top:16px}
+.mo .bt .btn{flex:1}
+.mo .spin{font-size:56px;line-height:1;margin:10px 0;transition:transform .1s}
+.mo .res{font-size:22px;font-family:'Jua';color:var(--amber);margin-top:6px;min-height:30px}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:#fff;font-weight:700;font-size:13px;padding:10px 16px;border-radius:12px;opacity:0;transition:.25s;white-space:nowrap;z-index:99;pointer-events:none;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
 .toast.on{opacity:1}
 .ov{position:fixed;inset:0;background:rgba(27,42,65,.75);z-index:50;display:none;align-items:flex-start;justify-content:center;padding:20px 12px;overflow:auto}
@@ -200,6 +211,7 @@ html,body{margin:0;background:var(--sand);color:var(--ink);font-family:'Noto San
   <a class="btn ghost wide" href="index.html" style="margin-top:16px;text-decoration:none">← 유니스페이스 홈으로</a>
 </div>
 <div class="toast" id="toast"></div>
+<div class="mo" id="mo"><div class="bx" id="moBox"></div></div>
 <input type="file" id="photoIn" accept="image/*" style="display:none">
 
 <div class="ov" id="ov">
@@ -268,6 +280,7 @@ function init(){
   $('btnSkip').addEventListener('click', function(){ runLadder(true); });
   $('btnClose').addEventListener('click', closeLadder);
   $('app').addEventListener('click', onAct);
+  $('mo').addEventListener('click', function(e){ var b=e.target.closest('[data-mo]'); if(!b){ if(e.target===$('mo')) moClose(); return; } var yes=b.getAttribute('data-mo')==='1'; var cb=_moCb; moClose(); if(yes && cb) cb(); });
   $('app').addEventListener('input', onInput);
   $('photoIn').addEventListener('change', onPhotoPicked);
   window.addEventListener('resize', function(){ if($('ov').classList.contains('on') && !_animating) drawLadder(null); });
@@ -582,10 +595,10 @@ function onAct(e){
   if(a==='show'){ _showMode=true; render(); window.scrollTo(0,0); }
   if(a==='gm'){ _showMode=false; _setMode=false; render(); window.scrollTo(0,0); }
   if(a==='settings') openSettings();
-  if(a==='phase'){ var ph=el.getAttribute('data-ph'); if(ph===ST.phase) return; if(!_demo && !confirm(lbPhase(ph)+' 단계로 바꾸고 전원에게 푸시를 보낼까요?')) return; busy(el,'전환 중…'); gasGet({action:'swkPhase',fp:currentUser.id,phase:ph}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } _code=''; toast(lbPhase(ph)+' 단계로 전환'); apply(res); }); }
+  if(a==='phase'){ var ph=el.getAttribute('data-ph'); if(ph===ST.phase) return; var go=function(){ busy(el,'전환 중…'); gasGet({action:'swkPhase',fp:currentUser.id,phase:ph}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } _code=''; toast(lbPhase(ph)+' 단계로 전환'); apply(res); }); }; if(_demo) go(); else ask({icon:'📣',title:lbPhase(ph)+' 단계로',msg:'전원 화면이 바뀌고 푸시가 갑니다',ok:'전환',okCls:'amber'}, go); }
   if(a==='demoon'){ _demo=true; _showMode=false; _code=''; load(false); }
   if(a==='demooff'){ _demo=false; _code=''; load(false); }
-  if(a==='demoreset'){ if(!confirm('데모 진행을 처음부터 다시 할까요?')) return; var dc=$('demoChips')?$('demoChips').value:''; busy(el,'리셋 중…'); gasGet({action:'swkDemoReset',fp:currentUser.id,chips:dc}, function(res){ _code=''; _cartSynced=null; toast(res&&res.chips!=null?'시작 칩 '+res.chips+'개로 리셋':'실제 칩으로 리셋'); apply(res); }); }
+  if(a==='demoreset'){ var dc=$('demoChips')?$('demoChips').value:''; ask({icon:'🧪',title:'데모 처음부터',msg:dc?'시작 칩 '+dc+'개로 다시 시작합니다':'실제 업적 칩으로 다시 시작합니다',ok:'리셋'}, function(){ busy(el,'리셋 중…'); gasGet({action:'swkDemoReset',fp:currentUser.id,chips:dc}, function(res){ _code=''; _cartSynced=null; toast(res&&res.chips!=null?'시작 칩 '+res.chips+'개로 리셋':'실제 칩으로 리셋'); apply(res); }); }); }
   if(a==='why'){ var k=el.getAttribute('data-k'); var m=k==='pick'?'종목 지명권은 골인 후 심판에게 말하면 돼요':(k==='box'?'미스터리 박스가 없어요':'행선지를 맞힌 뒤, 봉투를 찾는 단계에서 쓸 수 있어요'); toast(m); }
   if(a==='cart'){
     var mine=ST.race&&ST.race.mine, pub=mine&&ST.race.pub[mine]; if(!pub||el.disabled) return;
@@ -596,25 +609,25 @@ function onAct(e){
     if(_cartTimer) clearTimeout(_cartTimer);
     _cartTimer=setTimeout(syncCart, 700);
   }
-  if(a==='confirm'){ if(!confirm('구매를 확정할까요? 되돌릴 수 없어요')) return; if(_cartTimer||_cartBusy){ toast('장바구니 저장 중… 1초 후 다시 눌러주세요'); if(_cartTimer){ clearTimeout(_cartTimer); syncCart(); } return; } busy(el,'확정 중…'); gasGet({action:'swkConfirm',fp:currentUser.id}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } _cartSynced=null; toast('확정! 미션 시작을 기다려요'); apply(res); }); }
+  if(a==='confirm'){ if(_cartTimer||_cartBusy){ toast('장바구니 저장 중… 1초 후 다시 눌러주세요'); if(_cartTimer){ clearTimeout(_cartTimer); syncCart(); } return; } ask({icon:'🛒',title:'구매 확정',msg:'확정하면 되돌릴 수 없어요.\n남은 칩은 골인 때 점수가 됩니다.',ok:'확정!',okCls:'amber'}, function(){ busy(el,'확정 중…'); gasGet({action:'swkConfirm',fp:currentUser.id}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } _cartSynced=null; toast('확정! 미션 시작을 기다려요'); apply(res); }); }); }
   if(a==='dg'){ if(_code.length<4){ _code+=el.getAttribute('data-d'); render(); } }
   if(a==='dgdel'){ _code=_code.slice(0,-1); render(); }
-  if(a==='dgok'){ if(_code.length<4){ toast('4자리를 입력하세요'); return; } race('code',_code, function(res){ if(res&&res.wrong){ var l=$('lock'); if(l) l.classList.add('shake'); setTimeout(function(){ _code=''; render(); },500); } }, el); }
-  if(a==='guess'){ race('guess',$('gs').value, null, el); }
-  if(a==='finish'){ race('finish',$('gs').value, null, el); }
+  if(a==='dgok'){ if(_code.length<4){ toast('4자리를 입력하세요'); return; } var me0=ST.race&&ST.race.me; if(me0&&me0.codeHash&&fnv(_code)!==me0.codeHash){ var l0=$('lock'); if(l0) l0.classList.add('shake'); toast('코드가 달라요'); setTimeout(function(){ _code=''; render(); },500); return; } toast('🔓 열렸다!'); race('code',_code, function(res){ if(res&&res.wrong){ var l=$('lock'); if(l) l.classList.add('shake'); setTimeout(function(){ _code=''; render(); },500); } }, el, '봉투 여는 중…'); }
+  if(a==='guess'){ var g=$('gs').value; if(!norm(g)){ toast('행선지를 적어주세요'); return; } var meG=ST.race&&ST.race.me; if(meG&&meG.keyHashes&&!hashIn(g,meG.keyHashes)){ toast('음… 거기 아니에요'); $('gs').select(); return; } toast('🎯 정답!'); race('guess',g, null, el, '사진 여는 중…'); }
+  if(a==='finish'){ var f=$('gs').value; if(!norm(f)){ toast('메뉴를 적어주세요'); return; } var meF=ST.race&&ST.race.me; if(meF&&meF.finishHashes&&!hashIn(f,meF.finishHashes)){ toast('음… 그 메뉴 아니에요'); $('gs').select(); return; } toast('🏁 정답!'); race('finish',f, null, el, '주소 여는 중…'); }
   if(a==='hint'){ race('hint','', null, el); }
-  if(a==='answer'){ if(!confirm('정답 공개권을 쓸까요?')) return; race('answer','', null, el); }
-  if(a==='call'){ if(!confirm('대표 긴급 미션을 통과했나요? 직통권이 소진되고 정답이 공개됩니다')) return; race('call','', null, el); }
-  if(a==='open'){ race('open',$('sc').value, null, el); }
-  if(a==='next'){ if(!confirm('미션 인증 영상을 단톡방에 올렸나요?')) return; race('next','', null, el); }
-  if(a==='box'){ race('box','', function(res){ if(res&&res.ok) alert('🎁 미스터리 박스\n\n'+res.boxResult); }, el); }
+  if(a==='answer'){ ask({icon:'📍',title:'정답 공개권 사용',msg:'봉투 위치 사진과 문장이 바로 열립니다',ok:'열기',okCls:'amber'}, function(){ race('answer','', null, el, '정답 여는 중…'); }); }
+  if(a==='call'){ ask({icon:'📞',title:'대표 긴급 미션 통과',msg:'대표 영상통화 미션을 통과했나요?\n직통권이 소진되고 정답이 공개됩니다',ok:'통과했어요',okCls:'amber'}, function(){ race('call','', null, el, '정답 여는 중…'); }); }
+  if(a==='open'){ var oc=$('sc').value; if(oc.length<4){ toast('4자리를 입력하세요'); return; } var meO=ST.race&&ST.race.me; if(meO&&meO.openHash&&fnv(oc)!==meO.openHash){ toast('코드가 달라요'); $('sc').select(); return; } toast('🧧 미션 오픈!'); race('open',oc, null, el, '미션 여는 중…'); }
+  if(a==='next'){ ask({icon:'📸',title:'미션 완료',msg:'인증 영상을 단톡방에 올렸나요?',ok:'올렸어요!',okCls:'amber'}, function(){ race('next','', null, el, '다음 힌트 준비 중…'); }); }
+  if(a==='box'){ ask({icon:'🎁',title:'미스터리 박스',msg:'칩+2 · 힌트 무료 · 미션+3점 · 꽝 · 벌칙 중 하나!\n한 번 열면 끝이에요',ok:'열기!',okCls:'amber'}, function(){ race('box','', function(res){ if(res&&res.ok) boxReveal(res.boxResult||'💨 꽝'); }, el, '박스 여는 중…'); }); }
   if(a==='photo'){ _photoTarget={spot:+el.getAttribute('data-spot'),which:el.getAttribute('data-which')}; $('photoIn').click(); }
   if(a==='save'){ if(!CFG) return; el.disabled=true; gasPost({action:'swkConfigSave',fp:currentUser.id,config:CFG}, function(res){ el.disabled=false; if(!res||!res.ok){ toast((res&&res.msg)||'저장 실패'); return; } CFG=res.config; toast('저장했어요'); }); }
   if(a==='ladder') openLadder();
   if(a==='soon') toast('9/18 전에 열립니다');
-  if(a==='reveal'){ if(!confirm('사다리를 공개하고 전원에게 푸시를 보낼까요?')) return; busy(el,'공개 중…'); gasGet({action:'swkReveal',fp:currentUser.id,on:1}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('공개했어요'); apply(res); }); }
-  if(a==='hide'){ if(!confirm('공개를 취소하고 다시 잠글까요?')) return; busy(el,'취소 중…'); gasGet({action:'swkReveal',fp:currentUser.id,on:0}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('다시 잠갔어요'); apply(res); }); }
-  if(a==='push'){ if(!confirm('지금 칩 현황 푸시를 보낼까요?')) return; busy(el,'보내는 중…'); gasGet({action:'swkPush',fp:currentUser.id}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('보냈어요: '+res.body); apply(res); }); }
+  if(a==='reveal'){ ask({icon:'🎲',title:'팀 뽑기 공개',msg:'전원에게 푸시가 가고 사다리가 열립니다',ok:'공개',okCls:'amber'}, function(){ busy(el,'공개 중…'); gasGet({action:'swkReveal',fp:currentUser.id,on:1}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('공개했어요'); apply(res); }); }); }
+  if(a==='hide'){ ask({icon:'🔒',title:'공개 취소',msg:'다시 잠금 상태로 돌아갑니다',ok:'취소하기'}, function(){ busy(el,'취소 중…'); gasGet({action:'swkReveal',fp:currentUser.id,on:0}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('다시 잠갔어요'); apply(res); }); }); }
+  if(a==='push'){ ask({icon:'📣',title:'칩 현황 푸시',msg:'대상자 전원에게 지금 보냅니다',ok:'보내기'}, function(){ busy(el,'보내는 중…'); gasGet({action:'swkPush',fp:currentUser.id}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('보냈어요: '+res.body); apply(res); }); }); }
   if(a==='preview'){ var on=!ST.preview; gasGet({action:'swkSet',fp:currentUser.id,key:'preview',value:on?'true':'false'}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } ST.preview=on; render(); toast(on?'매니저 화면에 미리보기 표시':'미리보기 숨김'); }); }
 }
 
@@ -638,18 +651,37 @@ function syncCart(){
     else { var bys=document.querySelectorAll('.item .by'); for(var b=0;b<bys.length;b++){ bys[b].textContent=bys[b].textContent.replace(' (담는 중…)',''); } }
   });
 }
+var _moCb=null;
+function ask(o, cb){
+  o=o||{}; _moCb=cb||null;
+  var h='<div class="ic">'+(o.icon||'❓')+'</div><div class="tt">'+esc(o.title||'')+'</div>'+(o.msg?'<div class="ms">'+esc(o.msg)+'</div>':'');
+  h+='<div class="bt">'+(o.cancel===false?'':'<button type="button" class="btn ghost" data-mo="0">'+esc(o.cancel||'취소')+'</button>')+'<button type="button" class="btn '+(o.okCls||'sea')+'" data-mo="1">'+esc(o.ok||'확인')+'</button></div>';
+  $('moBox').innerHTML=h; $('mo').classList.add('on');
+}
+function say(o, cb){ o=o||{}; o.cancel=false; o.ok=o.ok||'확인'; ask(o, cb); }
+function moClose(){ $('mo').classList.remove('on'); _moCb=null; }
+function boxReveal(result){
+  var faces=['🎉','🔍','⭐','💨','😈','🎁'], i=0, n=0;
+  $('moBox').innerHTML='<div class="tt">🎁 미스터리 박스</div><div class="spin" id="moSpin">🎁</div><div class="res" id="moRes">두구두구…</div><div class="bt"><button type="button" class="btn sea" data-mo="1" id="moOk" disabled>열어보는 중</button></div>';
+  $('mo').classList.add('on'); _moCb=null;
+  var t=setInterval(function(){ i=(i+1)%faces.length; n++; var sp=$('moSpin'); if(sp){ sp.textContent=faces[i]; sp.style.transform='rotate('+(n%2?8:-8)+'deg)'; }
+    if(n>=14){ clearInterval(t); var ic=result.charAt(0)==='\uD83C'||result.charAt(0)==='\uD83D'||result.charAt(0)==='\u2B50'?result.substring(0,2):'🎁';
+      if(sp){ sp.textContent=ic; sp.style.transform='scale(1.2)'; } var r=$('moRes'); if(r) r.textContent=result; var ok=$('moOk'); if(ok){ ok.disabled=false; ok.textContent='확인'; } } }, 110);
+}
+function norm(s){ return String(s||'').replace(/\s/g,'').toLowerCase(); }
+function fnv(str){ var h=0x811c9dc5, s2='swk2026|'+norm(str); for(var i=0;i<s2.length;i++){ h^=s2.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return ('00000000'+h.toString(16)).slice(-8); }
+function hashIn(v, list){ if(!list||!list.length) return false; var h=fnv(v); for(var i=0;i<list.length;i++) if(list[i]===h) return true; return false; }
 function busy(el, label){ if(!el||el.tagName!=='BUTTON') return; el.disabled=true; el.setAttribute('data-orig', el.innerHTML); el.innerHTML=label||'처리 중…'; }
 function unbusy(el){ if(!el||!el.getAttribute) return; el.disabled=false; var o=el.getAttribute('data-orig'); if(o!=null) el.innerHTML=o; }
 function apply(res){ if(res&&res.state&&res.state.ok){ ST=res.state; L=null; render(); } else load(false); }
 function lbPhase(ph){ return ph==='chips'?'① 대기 · 칩 현황':(ph==='market'?'② 칩 마켓':'③ 미션'); }
-function race(op,val,cb,el){
-  toast('처리 중…'); busy(el,'처리 중…');
+function race(op,val,cb,el,label){
+  var lb=label||({hint:'힌트 찾는 중…'}[op])||'처리 중…';
+  if(!label) toast(lb); busy(el,lb);
   gasGet({action:'swkRace',fp:currentUser.id,op:op,val:val}, function(res){
     if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); if(cb) cb(res); return; }
-    if(op==='code'){ _code=''; toast('🔓 열렸다! 첫 힌트'); }
-    else if(op==='guess') toast('🎯 정답! 봉투 위치 사진 오픈');
-    else if(op==='open') toast('🧧 미션 오픈!');
-    else if(op==='finish') toast('🏁 골인!');
+    if(op==='code') _code='';
+    else if(op==='guess'||op==='open'||op==='finish'||op==='box'){ }
     else toast(res.msg||'완료');
     if(cb) cb(res);
     apply(res);
