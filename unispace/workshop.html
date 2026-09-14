@@ -582,10 +582,10 @@ function onAct(e){
   if(a==='show'){ _showMode=true; render(); window.scrollTo(0,0); }
   if(a==='gm'){ _showMode=false; _setMode=false; render(); window.scrollTo(0,0); }
   if(a==='settings') openSettings();
-  if(a==='phase'){ var ph=el.getAttribute('data-ph'); if(ph===ST.phase) return; if(!_demo && !confirm(lbPhase(ph)+' 단계로 바꾸고 전원에게 푸시를 보낼까요?')) return; gasGet({action:'swkPhase',fp:currentUser.id,phase:ph}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } _code=''; load(false); }); }
+  if(a==='phase'){ var ph=el.getAttribute('data-ph'); if(ph===ST.phase) return; if(!_demo && !confirm(lbPhase(ph)+' 단계로 바꾸고 전원에게 푸시를 보낼까요?')) return; busy(el,'전환 중…'); gasGet({action:'swkPhase',fp:currentUser.id,phase:ph}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } _code=''; toast(lbPhase(ph)+' 단계로 전환'); apply(res); }); }
   if(a==='demoon'){ _demo=true; _showMode=false; _code=''; load(false); }
   if(a==='demooff'){ _demo=false; _code=''; load(false); }
-  if(a==='demoreset'){ if(!confirm('데모 진행을 처음부터 다시 할까요?')) return; var dc=$('demoChips')?$('demoChips').value:''; gasGet({action:'swkDemoReset',fp:currentUser.id,chips:dc}, function(res){ _code=''; toast(res&&res.chips!=null?'시작 칩 '+res.chips+'개로 리셋':'실제 칩으로 리셋'); load(false); }); }
+  if(a==='demoreset'){ if(!confirm('데모 진행을 처음부터 다시 할까요?')) return; var dc=$('demoChips')?$('demoChips').value:''; busy(el,'리셋 중…'); gasGet({action:'swkDemoReset',fp:currentUser.id,chips:dc}, function(res){ _code=''; _cartSynced=null; toast(res&&res.chips!=null?'시작 칩 '+res.chips+'개로 리셋':'실제 칩으로 리셋'); apply(res); }); }
   if(a==='why'){ var k=el.getAttribute('data-k'); var m=k==='pick'?'종목 지명권은 골인 후 심판에게 말하면 돼요':(k==='box'?'미스터리 박스가 없어요':'행선지를 맞힌 뒤, 봉투를 찾는 단계에서 쓸 수 있어요'); toast(m); }
   if(a==='cart'){
     var mine=ST.race&&ST.race.mine, pub=mine&&ST.race.pub[mine]; if(!pub||el.disabled) return;
@@ -596,25 +596,25 @@ function onAct(e){
     if(_cartTimer) clearTimeout(_cartTimer);
     _cartTimer=setTimeout(syncCart, 700);
   }
-  if(a==='confirm'){ if(!confirm('구매를 확정할까요? 되돌릴 수 없어요')) return; if(_cartTimer||_cartBusy){ toast('장바구니 저장 중… 1초 후 다시 눌러주세요'); if(_cartTimer){ clearTimeout(_cartTimer); syncCart(); } return; } gasGet({action:'swkConfirm',fp:currentUser.id}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } toast('확정! 미션 시작을 기다려요'); load(false); }); }
+  if(a==='confirm'){ if(!confirm('구매를 확정할까요? 되돌릴 수 없어요')) return; if(_cartTimer||_cartBusy){ toast('장바구니 저장 중… 1초 후 다시 눌러주세요'); if(_cartTimer){ clearTimeout(_cartTimer); syncCart(); } return; } busy(el,'확정 중…'); gasGet({action:'swkConfirm',fp:currentUser.id}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } _cartSynced=null; toast('확정! 미션 시작을 기다려요'); apply(res); }); }
   if(a==='dg'){ if(_code.length<4){ _code+=el.getAttribute('data-d'); render(); } }
   if(a==='dgdel'){ _code=_code.slice(0,-1); render(); }
-  if(a==='dgok'){ if(_code.length<4){ toast('4자리를 입력하세요'); return; } race('code',_code, function(res){ if(res&&res.wrong){ var l=$('lock'); if(l) l.classList.add('shake'); setTimeout(function(){ _code=''; render(); },500); } }); }
-  if(a==='guess'){ race('guess',$('gs').value); }
-  if(a==='finish'){ race('finish',$('gs').value); }
-  if(a==='hint'){ race('hint',''); }
-  if(a==='answer'){ if(!confirm('정답 공개권을 쓸까요?')) return; race('answer',''); }
-  if(a==='call'){ if(!confirm('대표 긴급 미션을 통과했나요? 직통권이 소진되고 정답이 공개됩니다')) return; race('call',''); }
-  if(a==='open'){ race('open',$('sc').value); }
-  if(a==='next'){ if(!confirm('미션 인증 영상을 단톡방에 올렸나요?')) return; race('next',''); }
-  if(a==='box'){ race('box','', function(res){ if(res&&res.ok) alert('🎁 미스터리 박스\n\n'+res.boxResult); }); }
+  if(a==='dgok'){ if(_code.length<4){ toast('4자리를 입력하세요'); return; } race('code',_code, function(res){ if(res&&res.wrong){ var l=$('lock'); if(l) l.classList.add('shake'); setTimeout(function(){ _code=''; render(); },500); } }, el); }
+  if(a==='guess'){ race('guess',$('gs').value, null, el); }
+  if(a==='finish'){ race('finish',$('gs').value, null, el); }
+  if(a==='hint'){ race('hint','', null, el); }
+  if(a==='answer'){ if(!confirm('정답 공개권을 쓸까요?')) return; race('answer','', null, el); }
+  if(a==='call'){ if(!confirm('대표 긴급 미션을 통과했나요? 직통권이 소진되고 정답이 공개됩니다')) return; race('call','', null, el); }
+  if(a==='open'){ race('open',$('sc').value, null, el); }
+  if(a==='next'){ if(!confirm('미션 인증 영상을 단톡방에 올렸나요?')) return; race('next','', null, el); }
+  if(a==='box'){ race('box','', function(res){ if(res&&res.ok) alert('🎁 미스터리 박스\n\n'+res.boxResult); }, el); }
   if(a==='photo'){ _photoTarget={spot:+el.getAttribute('data-spot'),which:el.getAttribute('data-which')}; $('photoIn').click(); }
   if(a==='save'){ if(!CFG) return; el.disabled=true; gasPost({action:'swkConfigSave',fp:currentUser.id,config:CFG}, function(res){ el.disabled=false; if(!res||!res.ok){ toast((res&&res.msg)||'저장 실패'); return; } CFG=res.config; toast('저장했어요'); }); }
   if(a==='ladder') openLadder();
   if(a==='soon') toast('9/18 전에 열립니다');
-  if(a==='reveal'){ if(!confirm('사다리를 공개하고 전원에게 푸시를 보낼까요?')) return; gasGet({action:'swkReveal',fp:currentUser.id,on:1}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } toast('공개했어요'); load(false); }); }
-  if(a==='hide'){ if(!confirm('공개를 취소하고 다시 잠글까요?')) return; gasGet({action:'swkReveal',fp:currentUser.id,on:0}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } toast('다시 잠갔어요'); load(false); }); }
-  if(a==='push'){ if(!confirm('지금 칩 현황 푸시를 보낼까요?')) return; gasGet({action:'swkPush',fp:currentUser.id}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } toast('보냈어요: '+res.body); load(false); }); }
+  if(a==='reveal'){ if(!confirm('사다리를 공개하고 전원에게 푸시를 보낼까요?')) return; busy(el,'공개 중…'); gasGet({action:'swkReveal',fp:currentUser.id,on:1}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('공개했어요'); apply(res); }); }
+  if(a==='hide'){ if(!confirm('공개를 취소하고 다시 잠글까요?')) return; busy(el,'취소 중…'); gasGet({action:'swkReveal',fp:currentUser.id,on:0}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('다시 잠갔어요'); apply(res); }); }
+  if(a==='push'){ if(!confirm('지금 칩 현황 푸시를 보낼까요?')) return; busy(el,'보내는 중…'); gasGet({action:'swkPush',fp:currentUser.id}, function(res){ if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } toast('보냈어요: '+res.body); apply(res); }); }
   if(a==='preview'){ var on=!ST.preview; gasGet({action:'swkSet',fp:currentUser.id,key:'preview',value:on?'true':'false'}, function(res){ if(!res||!res.ok){ toast((res&&res.msg)||'실패'); return; } ST.preview=on; render(); toast(on?'매니저 화면에 미리보기 표시':'미리보기 숨김'); }); }
 }
 
@@ -637,18 +637,21 @@ function syncCart(){
     if(keys.length>1) syncCart();
   });
 }
+function busy(el, label){ if(!el||el.tagName!=='BUTTON') return; el.disabled=true; el.setAttribute('data-orig', el.innerHTML); el.innerHTML=label||'처리 중…'; }
+function unbusy(el){ if(!el||!el.getAttribute) return; el.disabled=false; var o=el.getAttribute('data-orig'); if(o!=null) el.innerHTML=o; }
+function apply(res){ if(res&&res.state&&res.state.ok){ ST=res.state; L=null; render(); } else load(false); }
 function lbPhase(ph){ return ph==='chips'?'① 대기 · 칩 현황':(ph==='market'?'② 칩 마켓':'③ 미션'); }
-function race(op,val,cb){
-  toast('처리 중…');
+function race(op,val,cb,el){
+  toast('처리 중…'); busy(el,'처리 중…');
   gasGet({action:'swkRace',fp:currentUser.id,op:op,val:val}, function(res){
-    if(!res||!res.ok){ toast((res&&res.msg)||'실패'); if(cb) cb(res); return; }
+    if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); if(cb) cb(res); return; }
     if(op==='code'){ _code=''; toast('🔓 열렸다! 첫 힌트'); }
     else if(op==='guess') toast('🎯 정답! 봉투 위치 사진 오픈');
     else if(op==='open') toast('🧧 미션 오픈!');
     else if(op==='finish') toast('🏁 골인!');
     else toast(res.msg||'완료');
     if(cb) cb(res);
-    load(false);
+    apply(res);
   });
 }
 function livePoll(){
