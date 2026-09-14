@@ -371,7 +371,7 @@ function ladderCard(){
 }
 function previewCard(){
   var ITEMS=ST.items||[];
-  var h='<div class="card" style="border:2px solid #F2B93C"><div class="disp" style="font-size:16px">🛒 9/18 칩 마켓 미리보기</div><div class="muted" style="margin-bottom:6px">칩으로 살 수 있는 것들 · 남은 칩은 골인 때 1칩 = 2점</div>';
+  var h='<div class="card" style="border:2px solid #F2B93C"><div class="disp" style="font-size:16px">🛒 9/18 칩 마켓 미리보기</div><div class="muted" style="margin-bottom:6px">칩으로 살 수 있는 것들 · 남은 칩은 골인 때 1칩 = 10점</div>';
   for(var i=0;i<ITEMS.length;i++){ var it=ITEMS[i]; h+='<div class="shopli"><span class="ic">'+it.ic+'</span><div style="flex:1"><b>'+it.nm+'</b><div class="muted">'+it.ds+'</div></div><span class="pr">'+it.pr+'칩</span></div>'; }
   return h+'</div>';
 }
@@ -398,13 +398,15 @@ function chipsView(){
 function myTeamPub(){ var m=ST.race&&ST.race.mine; return m?ST.race.pub[m]:null; }
 function feedCard(){
   var f=(ST.race&&ST.race.feed)||[]; if(!f.length) return '';
-  var h='<div class="feed">📡 <b>중계</b>';
-  for(var i=0;i<Math.min(f.length,5);i++) h+='<div><span>'+esc(f[i].t)+'</span>'+(f[i].team==='blue'?'🔵':'🔴')+' '+esc(f[i].msg)+'</div>';
-  return h+'</div>';
+  function col(team,lbl){ var h='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:900;color:var(--'+team+');margin-bottom:4px">'+lbl+'</div>'; var n=0;
+    for(var i=0;i<f.length&&n<4;i++){ if(f[i].team!==team) continue; n++; h+='<div style="font-size:11.5px;color:var(--ink2);padding:3px 0;border-top:1px dashed var(--line)"><span style="color:var(--ink3)">'+esc(f[i].t)+'</span> '+esc(String(f[i].msg).replace(/^(블루|레드)\s*/,''))+'</div>'; }
+    if(!n) h+='<div class="muted" style="padding:3px 0">아직 없음</div>';
+    return h+'</div>'; }
+  return '<div class="feed" style="display:flex;gap:10px">'+col('blue','🔵 블루')+col('red','🔴 레드')+'</div>';
 }
 function marketView(){
   var t=myTeamPub(), ITEMS=ST.items||[];
-  var h='<div class="banner" style="background:linear-gradient(135deg,#F2A250,#E2782E 60%,#C9601F)"><div class="k">루프탑 · 칩 마켓</div><div class="t disp">칩 마켓 오픈</div><div class="muted" style="color:#fff;opacity:.85;margin-top:4px">팀원 누구나 담고 빼요 · 담는 즉시 팀원 폰에 같이 보여요 · 남은 칩은 골인 때 1칩 = 2점</div></div>';
+  var h='<div class="banner" style="background:linear-gradient(135deg,#F2A250,#E2782E 60%,#C9601F)"><div class="k">루프탑 · 칩 마켓</div><div class="t disp">칩 마켓 오픈</div><div class="muted" style="color:#fff;opacity:.85;margin-top:4px">팀원 누구나 담고 빼요 · 담는 즉시 팀원 폰에 같이 보여요 · 남은 칩은 골인 때 1칩 = 10점</div></div>';
   if(!t){ return h+'<div class="locked">운영진·심판은 마켓을 구경만 할 수 있어요</div>'+marketListReadOnly(); }
   var spent=0; for(var i=0;i<ITEMS.length;i++) spent+=(t.cart[ITEMS[i].k]||0)*ITEMS[i].pr;
   var left=t.chips-spent;
@@ -439,8 +441,9 @@ function raceView(){
   if(me.stage===3){
     var f=me.finish||{};
     h+='<div class="env"><div class="lb">골인 · 점심 퀴즈</div><div class="h">“'+esc(f.q||'')+'”</div></div>';
+    if(f.deadline) h+='<div class="card" style="border:2px solid var(--amber);text-align:center;padding:12px"><div class="muted">집결 마감</div><div class="disp" style="font-size:34px;color:var(--amber);line-height:1.1">'+esc(f.deadline)+'</div>'+(f.note?'<div class="muted" style="margin-top:4px">'+esc(f.note)+'</div>':'')+'</div>';
     if(!me.done) h+='<div class="card"><div class="disp" style="font-size:16px">🍚 점심 메뉴를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 김밥"><button type="button" class="btn sea" data-act="finish">정답?</button></div></div>';
-    else h+='<div class="env ok"><div class="lb">정답! 🍚</div><div class="h3" style="font-size:17px;margin-top:6px">📍 '+esc(f.addr||'')+'</div><a class="muted" style="display:block;margin-top:6px" href="https://map.naver.com/v5/search/'+encodeURIComponent((f.addr||'').split(' · ')[0])+'" target="_blank">지도 열기 ↗</a></div><div class="card" style="text-align:center"><div class="disp" style="font-size:20px;color:var(--sea)">🏁 골인!</div><div class="muted">전복죽 먹고 백사장으로 · 남은 칩 '+t.chips+' = '+(t.chips*2)+'점'+(t.bonus?' · 보너스 +'+t.bonus+'점':'')+'</div></div>';
+    else h+='<div class="env ok"><div class="lb">정답! 🍚</div><div class="h3" style="font-size:17px;margin-top:6px">📍 '+esc(f.addr||'')+'</div><a class="muted" style="display:block;margin-top:6px" href="https://map.naver.com/v5/search/'+encodeURIComponent((f.addr||'').split(' · ')[0])+'" target="_blank">지도 열기 ↗</a></div><div class="card" style="text-align:center"><div class="disp" style="font-size:22px;color:var(--sea)">🏁 골인!</div><div style="font-size:15px;margin-top:6px">남은 칩 <b>'+t.chips+'개</b> → <b style="color:var(--amber)">+'+(t.chips*10)+'점</b>'+(t.bonus?' · 미스터리 박스 보너스 <b>+'+t.bonus+'점</b>':'')+'</div><div class="muted" style="margin-top:4px">미션 점수는 집결 후 발표</div></div>';
     return h+chipLine(t);
   }
   var sp=me.spot||{};
@@ -475,9 +478,10 @@ function itemsBar(t, me){
 }
 function pic(url,cap){ if(!url) return '<div class="pic"><div class="cap">📷 '+cap+' · 사진 없음</div></div>'; return '<div class="pic"><img src="'+esc(url)+'" alt=""><div class="cap">📷 '+cap+'</div></div>'; }
 function chipLine(t){
-  var it=t.items||{}; var parts=[];
-  if(it.hint) parts.push('🔍×'+it.hint); if(it.answer) parts.push('📍×'+it.answer); if(it.call) parts.push('📞'); if(it.pick) parts.push('🏖️'); if(it.box) parts.push('🎁');
-  var h='<div class="muted" style="margin-top:12px;text-align:center">남은 칩 '+t.chips+' (골인 때 '+(t.chips*2)+'점)'+(parts.length?' · '+parts.join(' '):'')+(t.boxResult?'<br>🎁 '+esc(t.boxResult):'')+'</div>';
+  var it=t.items||{};
+  var h='<div class="card" style="text-align:center;padding:10px 14px;margin-top:12px"><div style="font-size:14px">남은 칩 <b>'+t.chips+'개</b> → 골인 때 <b style="color:var(--amber)">+'+(t.chips*10)+'점</b></div>';
+  if(t.boxResult) h+='<div class="muted" style="margin-top:2px">미스터리 박스 결과: '+esc(t.boxResult)+'</div>';
+  h+='</div>';
   if(it.box>0) h+='<button type="button" class="btn amber wide" style="margin-top:10px" data-act="box">🎁 미스터리 박스 열기</button>';
   return h;
 }
@@ -498,7 +502,7 @@ function lane(team){
   h+='<div class="kv"><span>지금</span><b>'+esc(now)+'</b></div>';
   if(p.last) h+='<div class="kv"><span>마지막</span><b>'+esc(p.last.t)+' '+esc(p.last.msg)+'</b></div>';
   var it=p.items||{}; var parts=[]; if(it.hint) parts.push('🔍×'+it.hint); if(it.answer) parts.push('📍×'+it.answer); if(it.call) parts.push('📞'); if(it.pick) parts.push('🏖️'); if(it.box) parts.push('🎁');
-  h+='<div class="kv"><span>보유</span><b>무료힌트 '+p.freeHint+(parts.length?' · '+parts.join(' '):'')+(p.bonus?' · 보너스 +'+p.bonus:'')+'</b></div>';
+  h+='<div class="kv"><span>보유</span><b>무료힌트 '+p.freeHint+(parts.length?' · '+parts.join(' '):'')+(p.bonus?' · 보너스 +'+p.bonus:'')+'</b></div><div class="kv"><span>칩 점수</span><b>'+p.chips+'개 = +'+(p.chips*10)+'점</b></div>';
   if(ST.phase==='market'&&!p.confirmed){ var ITEMS=ST.items||[]; var c=[]; for(var j=0;j<ITEMS.length;j++) if(p.cart&&p.cart[ITEMS[j].k]) c.push(ITEMS[j].ic+'×'+p.cart[ITEMS[j].k]); h+='<div class="kv"><span>장바구니</span><b>'+(c.length?c.join(' '):'비어 있음')+'</b></div>'; }
   if(ST.phase==='market') h+='<div class="kv"><span>확정</span><b>'+(p.confirmed?'✅':'아직')+'</b></div>';
   return h+'</div>';
@@ -561,7 +565,7 @@ function setView(){
       +fld('spots.'+i+'.ans','정답 공개 문장 (칩 3개)',sp.ans)
       +fld('spots.'+i+'.code','봉투 안 4자리 코드',sp.code,'code')
       +fld('spots.'+i+'.mission','🎯 미션 (코드 입력 후 열림)',sp.mission,'ta')+'</div>'; }
-  h+='<div class="set"><div class="h disp">🍚 골인 · 점심 퀴즈</div>'+fld('finish.q','문제',CFG.finish.q,'ta')+fld('finish.answer','정답',CFG.finish.answer)+fld('finish.addr','정답 시 보여줄 주소',CFG.finish.addr)+'</div>';
+  h+='<div class="set"><div class="h disp">🍚 골인 · 점심 퀴즈</div>'+fld('finish.q','문제',CFG.finish.q,'ta')+fld('finish.answer','정답',CFG.finish.answer)+fld('finish.addr','정답 시 보여줄 주소',CFG.finish.addr)+fld('finish.deadline','집결 마감 시각 (예: 13:30)',CFG.finish.deadline||'')+fld('finish.note','마감 안내 문구',CFG.finish.note||'')+'</div>';
   h+='<div class="savebar"><button type="button" class="btn sea wide" data-act="save">💾 저장</button></div>';
   return h;
 }
@@ -686,7 +690,7 @@ function race(op,val,cb,el,label){
     if(op==='code'){ me.stage=1; }
     else { me.stage=me.stage+1; }
     me.guessed=false; me.hintLv=0; me.opened=false;
-    if(nx.finish){ me.finish={q:nx.finish.q,addr:''}; me.finishHashes=nx.finishHashes; me.spot=null; }
+    if(nx.finish){ me.finish={q:nx.finish.q,addr:'',deadline:nx.finish.deadline||'',note:nx.finish.note||''}; me.finishHashes=nx.finishHashes; me.spot=null; }
     else { me.spot={name:'',riddle:nx.riddle}; me.keyHashes=nx.keyHashes; me.openHash=nx.openHash; me.finish=null; }
     me.next=null; if(pub){ pub.stage=me.stage; pub.guessed=false; pub.opened=false; }
     _code=''; render(); toast(op==='code'?'🔓 자물쇠 해제! 첫 힌트':'✅ 미션 클리어! 다음 힌트');
