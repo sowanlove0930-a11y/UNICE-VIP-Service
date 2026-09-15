@@ -61,7 +61,28 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .g-ico { font-size:34px; }
 .g-name { font-size:20px; font-weight:900; margin-top:4px; }
 .g-amt { font-size:16px; font-weight:800; color:#ffd94d; margin-top:2px; }
-.livebadge { position:absolute; top:150px; right:70px; font-size:15px; font-weight:900; color:#fff; padding:6px 16px; border-radius:100px; border:2px solid rgba(255,120,80,.8); background:rgba(255,120,80,.3); z-index:5; }
+.hdr-tools { position:absolute; top:118px; left:70px; display:flex; gap:12px; align-items:center; z-index:6; }
+.livebadge { font-size:15px; font-weight:900; color:#fff; padding:6px 16px; border-radius:100px; border:2px solid rgba(255,120,80,.8); background:rgba(255,120,80,.3); max-width:900px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rep-btn { font-family:inherit; font-size:16px; font-weight:900; color:#2a1a5e; background:linear-gradient(135deg,#ffe9a8,#ffd25e); border:none; border-radius:100px; padding:8px 20px; cursor:pointer; }
+.rep-btn.ghost { color:#fff; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.35); }
+.rep { position:absolute; inset:0; z-index:40; background:linear-gradient(180deg,#150d3d 0%,#241560 40%,#3d2470 100%); display:none; padding:40px 70px; }
+.rep.show { display:block; }
+.rep-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
+.rep-t { font-size:44px; font-weight:900; color:#ffd94d; }
+.rep-sub { font-size:20px; font-weight:800; color:#c5b0e5; margin-left:18px; }
+.rep-x { font-family:inherit; font-size:20px; font-weight:900; color:#fff; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.35); border-radius:100px; padding:10px 26px; cursor:pointer; }
+.rep-grid { display:grid; grid-template-columns:1.15fr 1fr; gap:26px; height:900px; }
+.rep-body { flex:1; overflow:hidden; }
+.rt { padding:12px 4px; border-bottom:1px solid rgba(255,255,255,.1); }
+.rt:last-child { border-bottom:none; }
+.rt-head { display:flex; align-items:center; gap:12px; margin-bottom:9px; }
+.rt-name { font-size:24px; font-weight:900; color:#fff; }
+.rt-gift { font-size:18px; font-weight:800; color:#c5b0e5; }
+.rt-cnt { margin-left:auto; font-size:22px; font-weight:900; color:#ff8fb0; }
+.rt-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.rchip { font-size:18px; font-weight:900; color:#fff; background:rgba(255,255,255,.12); border:1px solid rgba(200,160,255,.3); border-radius:100px; padding:6px 16px; }
+.rchip.gold { background:linear-gradient(135deg,rgba(255,217,77,.35),rgba(255,150,60,.25)); border-color:rgba(255,217,77,.7); color:#ffe9a8; }
+.rchip.dim { color:#9a8fb5; }
 .clock { position:absolute; bottom:24px; right:70px; font-size:20px; font-weight:800; color:#c5b0e5; }
 </style>
 </head>
@@ -76,7 +97,11 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
   <h1>🌕 유니스 <span class="y">한가위 윷놀이</span></h1>
   <div class="sub">"달이 차오른다, 가자!" · 9/1 ~ 9/15 연장!</div>
   <div class="dday" id="dday">마감</div>
-  <div class="livebadge" id="liveBadge">실데이터 연결 중...</div>
+  <div class="hdr-tools">
+    <button class="rep-btn" id="repBtn">📜 전체 당첨 현황</button>
+    <button class="rep-btn ghost" id="refreshBtn">🔄 지금 갱신</button>
+    <div class="livebadge" id="liveBadge">실데이터 연결 중...</div>
+  </div>
 </div>
 
 <div class="grid">
@@ -108,6 +133,24 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 </div>
 
 <div class="clock" id="clock"></div>
+
+<!-- full report overlay -->
+<div class="rep" id="rep">
+  <div class="rep-head">
+    <div class="rep-t">📜 전체 당첨 현황 <span class="rep-sub" id="repSub">집계 대기 중</span></div>
+    <button class="rep-x" id="repX">✕ 닫기</button>
+  </div>
+  <div class="rep-grid">
+    <div class="panel">
+      <div class="p-t">🎁 추석선물 확정 현황 <small id="repTotal"></small></div>
+      <div class="rep-body" id="repTiers"><div class="hall-empty">실데이터 연결 후 표시됩니다</div></div>
+    </div>
+    <div class="panel">
+      <div class="p-t">🐇 달토끼 간식 당첨 <small>윷 던지기 누적</small></div>
+      <div class="rep-body" id="repSnacks"><div class="hall-empty">실데이터 연결 후 표시됩니다</div></div>
+    </div>
+  </div>
+</div>
 
 <script>
 /* SAMPLE DATA - replace with GAS fetch on production hookup */
@@ -211,9 +254,12 @@ var lastFeedKey = '';
 
 function esc(s){ return String(s === null || s === undefined ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+var LAST_BOARD = null;
 function applyBoard(d) {
   if (!d || !d.ok) return;
   liveMode = true;
+  LAST_BOARD = d;
+  renderReport(d);
   var i;
   var dist = [];
   for (i = 0; i < d.dist.length; i++) {
@@ -279,18 +325,76 @@ function setLiveBadge(txt, ok) {
   el.style.background = ok ? 'rgba(80,200,120,.25)' : 'rgba(255,120,80,.3)';
   el.style.borderColor = ok ? 'rgba(80,200,120,.7)' : 'rgba(255,120,80,.8)';
 }
+var MOON_EMOJI = { '\uBCF4\uB984\uB2EC':'\uD83C\uDF15', '\uB465\uADFC\uB2EC':'\uD83C\uDF14', '\uBCFC\uB85D\uB2EC':'\uD83C\uDF13', '\uBC18\uB2EC':'\uD83C\uDF13', '\uCD08\uC2B9\uB2EC':'\uD83C\uDF12' };
+function renderReport(d) {
+  if (!d || !d.ok) return;
+  document.getElementById('repSub').textContent = (d.asOf || '') + ' \uAE30\uC900 \u00B7 9/15 \uC5C5\uC801\uC73C\uB85C \uCD5C\uC885 \uD655\uC815';
+  document.getElementById('repTotal').textContent = '\uCC38\uC5EC ' + d.total + '\uBA85';
+  var i, j, htm = '';
+  var tiers = d.tiers || [];
+  for (i = 0; i < tiers.length; i++) {
+    var T = tiers[i];
+    htm += '<div class="rt"><div class="rt-head"><span style="font-size:26px">' + (MOON_EMOJI[T.moon] || '') + '</span>'
+        + '<span class="rt-name">' + esc(T.moon) + '</span><span class="rt-gift">' + esc(T.gift) + '</span>'
+        + '<span class="rt-cnt">' + T.names.length + '\uBA85</span></div><div class="rt-chips">';
+    if (!T.names.length) htm += '<span class="rchip dim">\uC544\uC9C1 \uC5C6\uC74C</span>';
+    for (j = 0; j < T.names.length; j++) {
+      htm += '<span class="' + (i === 0 ? 'rchip gold' : 'rchip') + '">' + esc(T.names[j].name) + '</span>';
+    }
+    htm += '</div></div>';
+  }
+  document.getElementById('repTiers').innerHTML = htm;
+  var sh = '';
+  var snacks = d.snacks || [];
+  for (i = 0; i < snacks.length; i++) {
+    var S = snacks[i];
+    if (S.yut === '\uB3C4') continue;
+    sh += '<div class="rt"><div class="rt-head"><span class="rt-name">' + esc(S.snack) + '</span>'
+       + '<span class="rt-gift">(' + esc(S.yut) + ')</span><span class="rt-cnt">' + S.total + '\uAC74</span></div><div class="rt-chips">';
+    if (!S.list.length) sh += '<span class="rchip dim">\uC544\uC9C1 \uC5C6\uC74C</span>';
+    for (j = 0; j < S.list.length; j++) {
+      var nm = esc(S.list[j].name);
+      if (S.list[j].count > 1) nm += ' \u00D7' + S.list[j].count;
+      sh += '<span class="rchip">' + nm + '</span>';
+    }
+    sh += '</div></div>';
+  }
+  document.getElementById('repSnacks').innerHTML = sh;
+}
+document.getElementById('repBtn').addEventListener('click', function(){
+  document.getElementById('rep').classList.add('show');
+  if (LAST_BOARD) renderReport(LAST_BOARD);
+});
+document.getElementById('repX').addEventListener('click', function(){
+  document.getElementById('rep').classList.remove('show');
+});
+document.getElementById('refreshBtn').addEventListener('click', function(){ pollBoard(); });
+
+var polling = false;
 function pollBoard() {
-  if (!liveMode) setLiveBadge('\uC2E4\uB370\uC774\uD130 \uC5F0\uACB0 \uC911...', false);
+  if (polling) return;
+  polling = true;
   var url = GAS_URL + '?action=moonBoard';
+  var t0 = new Date().getTime();
+  if (!liveMode) setLiveBadge('\uC2E4\uB370\uC774\uD130 \uC5F0\uACB0 \uC911... (fetch)', false);
   fetch(url)
     .then(function(r){ return r.json(); })
-    .catch(function(){ return jsonpGet(url); })
-    .then(function(d){
-      applyBoard(d);
-      if (d && d.ok) setLiveBadge('LIVE \u00B7 ' + (d.asOf || ''), true);
+    .catch(function(e1){
+      if (!liveMode) setLiveBadge('fetch \uC2E4\uD328(' + (e1 && e1.message ? e1.message : 'err') + ') \u2192 JSONP \uC2DC\uB3C4 \uC911...', false);
+      return jsonpGet(url);
     })
-    .catch(function(){
-      setLiveBadge('\uC11C\uBC84 \uC751\uB2F5 \uC5C6\uC74C \u00B7 \uC7AC\uC2DC\uB3C4 \uC911', false);
+    .then(function(d){
+      polling = false;
+      if (d && d.ok) {
+        applyBoard(d);
+        setLiveBadge('LIVE \u00B7 ' + (d.asOf || '') + ' \u00B7 ' + Math.round((new Date().getTime() - t0) / 1000) + 's', true);
+      } else {
+        setLiveBadge('\uC751\uB2F5\uC740 \uC654\uC73C\uB098 ok \uC544\uB2D8: ' + String(d && d.msg ? d.msg : JSON.stringify(d)).slice(0, 80), false);
+      }
+    })
+    .catch(function(e2){
+      polling = false;
+      setLiveBadge('\uC11C\uBC84 \uC751\uB2F5 \uC5C6\uC74C \u00B7 ' + (e2 && e2.message ? e2.message : 'err') + ' \u00B7 60\uCD08 \uD6C4 \uC7AC\uC2DC\uB3C4', false);
     });
 }
 
