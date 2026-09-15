@@ -4004,7 +4004,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적유지</th><th>🎖️ 스탠다드</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
+          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적유지</th><th>🎖️ 스탠다드</th><th>📝 활동계획</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>제니스</th><th>🔔 리쿨푸쉬</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -4846,7 +4846,8 @@ function _adaptGasUser(g) {
     nohupai: (g.nohupai !== undefined) ? (g.nohupai !== false) : undefined,
     nohupai2: (g.nohupai2 !== undefined) ? (g.nohupai2 !== false) : undefined,
     carefit2: (g.carefit2 !== undefined) ? (g.carefit2 !== false) : undefined,
-    jenius: (g.jenius !== undefined) ? (g.jenius !== false) : undefined
+    jenius: (g.jenius !== undefined) ? (g.jenius !== false) : undefined,
+    actplan: (g.actplan !== undefined) ? (g.actplan !== false) : undefined
   };
   // 지점장 사번 안전망: GAS level 매핑이 어긋나도 강제 보정
   var _MGR = { 'H2502969':'알파지점', 'H2502965':'브라보지점' };
@@ -4926,7 +4927,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true, attend:f.attend!==false, std:f.std!==false };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true, attend:f.attend!==false, std:f.std!==false, actplan:f.actplan!==false };
     });
   } else {
     baseList = FP_LIST;
@@ -4948,11 +4949,12 @@ function getMergedFpList() {
       attend: ov.attend !== undefined ? ov.attend : fp.attend,
       perfKeep: ov.perfKeep !== undefined ? ov.perfKeep : fp.perfKeep,
       std: ov.std !== undefined ? ov.std : fp.std,
+      actplan: ov.actplan !== undefined ? ov.actplan : fp.actplan,
     });
   });
   // 활동계획수립 등 다른 페이지에서 쓰도록 명단 저장 (pw 제외)
   try {
-    var roster = list.map(function(fp){ return { id:fp.id, name:fp.name, role:fp.role, branch:fp.branch, active:fp.active }; });
+    var roster = list.map(function(fp){ return { id:fp.id, name:fp.name, role:fp.role, branch:fp.branch, active:fp.active, actplan:fp.actplan!==false }; });
     localStorage.setItem('unispace_fp_roster', JSON.stringify(roster));
   } catch(e) {}
   return list;
@@ -6580,6 +6582,9 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.std!==false?'on':'off') + '" onclick="toggleFpStd(\'' + fp.id + '\')">' +
         (fp.std!==false ? '🎖️ 집계' : '🚫 제외') +
       '</button></td>' +
+      '<td><button class="fp-active-toggle ' + (fp.actplan!==false?'on':'off') + '" onclick="toggleFpActPlan(\'' + fp.id + '\')">' +
+        (fp.actplan!==false ? '📝 대상' : '🚫 제외') +
+      '</button></td>' +
       '<td><button class="fp-active-toggle ' + (fp.carefit!==false?'on':'off') + '" onclick="toggleFpCarefit(\'' + fp.id + '\')">' +
         (fp.carefit!==false ? '🌿 사용' : '🚫 차단') +
       '</button></td>' +
@@ -6670,7 +6675,8 @@ var _FP_TOGGLE_DEFS = {
   attend:   { action:'setAttendAccess',   resKey:'attend',   icon:'\uD83D\uDCCB', label:'\uCD9C\uACB0 \uB300\uC0C1' },
   team:     { action:'setTeamFlag',       resKey:'team',     icon:'\uD83D\uDD14', label:'\uB9AC\uCFE8\uD478\uC26C', adminOnly:true, defFalse:true, by:true },
   perfKeep: { action:'setPerfKeep',       resKey:'perfKeep', icon:'\uD83D\uDCCA', label:'\uC5C5\uC801\uC720\uC9C0', adminOnly:true, defFalse:true, by:true },
-  std:      { action:'setStdAccess',      resKey:'std',      icon:'\uD83C\uDF96\uFE0F', label:'\uC2A4\uD0E0\uB2E4\uB4DCFP \uC9D1\uACC4', adminOnly:true, by:true }
+  std:      { action:'setStdAccess',      resKey:'std',      icon:'\uD83C\uDF96\uFE0F', label:'\uC2A4\uD0E0\uB2E4\uB4DCFP \uC9D1\uACC4', adminOnly:true, by:true },
+  actplan:  { action:'setActPlanAccess',  resKey:'actplan',  icon:'\uD83D\uDCDD', label:'\uD65C\uB3D9\uACC4\uD68D', adminOnly:true, by:true }
 };
 function _fpDoToggle(id, key) {
   var cfg = _FP_TOGGLE_DEFS[key];
@@ -6723,6 +6729,7 @@ function toggleFpAttend(id)   { _fpDoToggle(id, 'attend'); }
 function toggleFpTeam(id)     { _fpDoToggle(id, 'team'); }
 function toggleFpPerfKeep(id) { _fpDoToggle(id, 'perfKeep'); }
 function toggleFpStd(id)      { _fpDoToggle(id, 'std'); if (typeof _awlData !== 'undefined') _awlData = null; }
+function toggleFpActPlan(id)  { _fpDoToggle(id, 'actplan'); }
 function resetFpPw(id, name) {
   showConfirm({
     icon: '🔑', iconCls: 'confirm-icon-gold',
@@ -6757,6 +6764,8 @@ function buildMenuHtml(data) {
     // admin-only cards (manager matching)
     if (item.adminOnly && !_isPerfAdmin()) return;
     if (item.mwOnly && !(typeof _mwCanTouch === 'function' && _mwCanTouch())) return;
+    // activity plan: hidden for FPs switched off in account management
+    if (item.href === 'activity-plan.html' && currentUser && currentUser.actplan === false) return;
     var isHash   = item.href === '#';
     var action   = item.action || '';
     var onclick;
@@ -24002,7 +24011,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 82;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 83;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {

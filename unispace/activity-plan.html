@@ -588,12 +588,35 @@ function planGasGet(params){
   for(var k in params){ if(params.hasOwnProperty(k)) qs.push(k+'='+encodeURIComponent(params[k])); }
   return fetch(UNISPACE_GAS_URL+'?'+qs.join('&')).then(function(r){ return r.json(); });
 }
-function planGasPost(body){
-  return fetch(UNISPACE_GAS_URL, {
-    method:'POST',
-    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-    body: JSON.stringify(body)
-  }).then(function(r){ return r.json(); });
+function planGasPost(body, timeoutMs){
+  var ms = timeoutMs || 30000;
+  return new Promise(function(resolve, reject){
+    var done=false;
+    var timer=setTimeout(function(){ if(done) return; done=true; reject(new Error('timeout')); }, ms);
+    fetch(UNISPACE_GAS_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    }).then(function(r){ return r.json(); }).then(function(j){
+      if(done) return; done=true; clearTimeout(timer); resolve(j);
+    }).catch(function(e){ if(done) return; done=true; clearTimeout(timer); reject(e); });
+  });
+}
+// after a failed/timed-out submit: ask the server whether it actually stored this submit
+// (POST to Apps Script can succeed server-side while the redirect response is lost on the client)
+function _planConfirmSaved(payload){
+  var d=payload && payload.data;
+  if(!d) return Promise.resolve(false);
+  return planGasGet({ action:'getPlans', fp:d.fpCode, weekKey:d.weekKey }).then(function(res){
+    if(!res || !res.ok || !res.plans) return false;
+    for(var i=0;i<res.plans.length;i++){
+      var pl=res.plans[i];
+      if(String(pl.fpId)!==String(d.fpCode)) continue;
+      if(d.submittedAt && String(pl.submittedAt||'')===String(d.submittedAt)) return true;
+      if(pl.updatedAt && d.savedTs && String(pl.updatedAt) >= String(d.savedTs)) return true;
+    }
+    return false;
+  }).catch(function(){ return false; });
 }
 
 // ===== submission period custom setting =====
@@ -2015,6 +2038,15 @@ function saveDraft(submitted){
     submitNow: submitted ? 1 : 0,
     savedTs: new Date().toISOString()
   }};
+  function _submitFailed(){
+    if(!submitted) return;
+    // the request may have reached the server even though the reply was lost: check before queueing
+    _planConfirmSaved(_payload).then(function(saved){
+      if(saved){ _planOutboxClear(); showToast('✅ 제출 완료 — 서버 저장 확인됨'); try{ loadExisting(); }catch(e){} return; }
+      _planOutboxSave(_payload);
+      showToast('⚠️ 서버 저장이 확인되지 않았습니다 — 연결되면 자동으로 다시 제출됩니다');
+    });
+  }
   planGasPost(_payload).then(function(res){
     if(res && res.ok){
       if(submitted){
@@ -2022,12 +2054,8 @@ function saveDraft(submitted){
         showToast('✅ 제출 완료 — 서버 저장 확인됨');
         try{ loadExisting(); }catch(e){}
       }
-    } else {
-      if(submitted){ _planOutboxSave(_payload); showToast('⚠️ 서버 저장 실패 — 자동으로 재시도합니다'); }
-    }
-  }).catch(function(){
-    if(submitted){ _planOutboxSave(_payload); showToast('⚠️ 서버 연결 실패 — 연결되면 자동으로 다시 제출됩니다'); }
-  });
+    } else { _submitFailed(); }
+  }).catch(function(){ _submitFailed(); });
 }
 // 제출 실패분 재전송 큐: 앱 복귀/온라인 복구 시 자동 재시도
 function _planOutboxSave(pl){ try{ localStorage.setItem('unispace_plan_outbox', JSON.stringify(pl)); }catch(e){} }
@@ -2037,16 +2065,31 @@ function _planOutboxFlush(){
   if(!raw) return;
   var pl=null; try{ pl=JSON.parse(raw); }catch(e){ _planOutboxClear(); return; }
   if(!currentUser || !currentUser.id || !pl.data || pl.data.fpCode!==currentUser.id) return;
-  planGasPost(pl).then(function(res){
-    if(res && res.ok){
-      _planOutboxClear();
-      showToast('✅ 미전송 활동계획이 서버에 저장되었습니다');
-      try{ loadExisting(); }catch(e){}
-    }
+  // never replay a submit the server already has (that would reset a manager's fix request)
+  _planConfirmSaved(pl).then(function(saved){
+    if(saved){ _planOutboxClear(); try{ loadExisting(); }catch(e){} return; }
+    return planGasPost(pl).then(function(res){
+      if(res && res.ok){
+        _planOutboxClear();
+        showToast('✅ 미전송 활동계획이 서버에 저장되었습니다');
+        try{ loadExisting(); }catch(e){}
+      }
+    });
   }).catch(function(){});
 }
+// FP: refresh my plan (approval status / fix request) whenever the app comes back to the foreground
+var _planLastFgLoad=0;
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState!=='visible') return;
+  if(!currentUser || !currentUser.id) return;
+  if(typeof _isAdmin==='function' && _isAdmin()) return;
+  var now=Date.now();
+  if(now-_planLastFgLoad<30000) return;
+  _planLastFgLoad=now;
+  try{ loadExisting(); }catch(e){}
+});
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 75; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 76; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2371,7 +2414,15 @@ var FP_ROSTER_BUILTIN=[
 function _getRoster(){
   var r=[]; try{ r=JSON.parse(localStorage.getItem('unispace_fp_roster')||'[]'); }catch(e){}
   if(!r || !r.length) r=FP_ROSTER_BUILTIN; // 대시보드 명단 없으면 내장 명단 사용
-  return r;
+  // account management: activity plan switched off -> not part of any plan list
+  return r.filter(function(fp){ return !fp || fp.actplan!==false; });
+}
+function _actplanBlocked(){
+  if(!currentUser) return false;
+  if(currentUser.actplan===false) return true;
+  var r=[]; try{ r=JSON.parse(localStorage.getItem('unispace_fp_roster')||'[]'); }catch(e){}
+  for(var i=0;i<r.length;i++){ if(String(r[i].id)===String(currentUser.id)) return r[i].actplan===false; }
+  return false;
 }
 function _pBranchKey(b){ if((b||'').indexOf('알파')>=0) return 'al'; if((b||'').indexOf('브라보')>=0) return 'br'; return 'etc'; }
 
@@ -2543,6 +2594,7 @@ function renderStatus(){
       var st=_apprStatus(rec);
       var lg=rec.apprLog||{};
       if(st==='fix_fp' && lg.fixReason){ metaBits.push('"'+String(lg.fixReason).slice(0,20)+(String(lg.fixReason).length>20?'…':'')+'"'); }
+      if(st==='fix_fp' && lg.fixPush){ metaBits.push(lg.fixPush.sent>0 ? '푸시 전송됨' : '<span style="color:#C0392B;font-weight:700">푸시 미전송'+(lg.fixPush.noToken?' · 앱 재로그인 필요':'')+'</span>'); }
       if(st==='fix_mgr' && lg.repReason){ metaBits.push('대표: "'+String(lg.repReason).slice(0,18)+(String(lg.repReason).length>18?'…':'')+'"'); }
       if(st==='approved1' && lg.by1Name){ metaBits.push(lg.by1Name+' 승인'); }
       var _nm=fp.name.replace(/'/g,'');
@@ -3129,6 +3181,14 @@ function init(){
   if(saved){ try{ currentUser=JSON.parse(saved); }catch(e){} }
   if(!currentUser){
     currentUser={ id:'ktk01', name:'김태규', role:'대표', branch:'유니스지사' };
+  }
+  if(_actplanBlocked()){
+    document.body.innerHTML='<div style="max-width:420px;margin:60px auto;padding:24px;text-align:center;font-family:inherit;color:#4A5468">'
+      +'<div style="font-size:40px;margin-bottom:12px">📝</div>'
+      +'<div style="font-size:16px;font-weight:800;margin-bottom:8px">활동계획수립 대상이 아닙니다</div>'
+      +'<div style="font-size:13px;line-height:1.6">계정 설정에서 활동계획이 제외되어 있습니다.<br>필요하시면 대표님께 문의해주세요.</div>'
+      +'<a href="index.html" style="display:inline-block;margin-top:18px;padding:10px 18px;border-radius:9px;background:#153E75;color:#fff;font-size:13px;font-weight:700;text-decoration:none">유니스페이스로 돌아가기</a></div>';
+    return;
   }
   var _hu = document.getElementById('headerUser');
   if(_hu && currentUser && currentUser.name){
