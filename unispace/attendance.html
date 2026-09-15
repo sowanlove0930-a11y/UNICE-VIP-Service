@@ -225,6 +225,24 @@ body.theme-light .pr-actno{color:#854F0B;}
 .prc-btn{padding:7px 12px;border-radius:9px;border:none;background:linear-gradient(135deg,#34D399,#1F9268);color:#fff;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(31,146,104,.3);}
 .prc-btn:active{opacity:.75;}
 .att-cf-sub{display:inline-block;margin:3px 0;font-size:12.5px;color:var(--text2);font-weight:600;}
+.prc-btns{display:flex;gap:6px;flex-wrap:wrap;}
+.prc-btn.sub{background:#fff;color:#4A5468;border:1px solid #D8D0BC;box-shadow:none;}
+.theme-dark .prc-btn.sub{background:var(--sur);color:var(--text2);border-color:var(--bdr2);}
+.att-table td.prc-td-pending{background:#FFF1DC;box-shadow:inset 3px 0 0 #E8A23A;}
+.att-table tr:hover td.prc-td-pending{background:#FFE9C7;}
+.theme-dark .att-table td.prc-td-pending{background:rgba(244,163,38,.16);}
+.prc-mbtn{padding:6px 10px;border-radius:8px;border:1px solid #D8D0BC;background:#fff;color:#3B3524;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.prc-mbtn.pend{border-color:#E8A23A;color:#8A4B00;background:#FFF7EA;}
+.theme-dark .prc-mbtn{background:var(--sur);color:var(--text);border-color:var(--bdr2);}
+.prm-x{border:none;background:transparent;font-size:16px;color:var(--text3);cursor:pointer;padding:2px 6px;}
+.prm-list{max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;}
+.prm-row{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #E3DAC4;border-radius:11px;background:#fff;}
+.prm-row.pend{background:#FFF1DC;border-color:#F1C48A;}
+.prm-row-main{flex:1;min-width:0;}
+.prm-row-date{font-size:12px;font-weight:800;color:var(--text2);margin-bottom:2px;}
+.prm-row-btns{display:flex;flex-direction:column;gap:6px;flex:0 0 auto;}
+.theme-dark .prm-row{background:var(--sur);border-color:var(--bdr2);}
+.theme-dark .prm-row.pend{background:rgba(244,163,38,.16);}
 .proof-done{background:rgba(16,185,129,.12);color:#34D399;border:1px solid rgba(16,185,129,.2);}
 .proof-pending{background:rgba(244,163,38,.1);color:var(--orange);border:1px solid rgba(244,163,38,.2);}
 .proof-view-btn{font-size:10px;font-weight:700;padding:3px 9px;border-radius:7px;background:rgba(37,99,235,.1);color:#2563EB;border:1px solid rgba(37,99,235,.25);cursor:pointer;margin-left:6px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;}
@@ -358,7 +376,7 @@ textarea.prm-input{resize:vertical;}
   .att-table{min-width:560px;}
   .att-table th, .att-table td{padding:9px 8px;font-size:12px;white-space:nowrap;}
   .att-table td .ov-btn{padding:5px 8px;font-size:11px;}
-  .ov-sel{max-width:96px;font-size:10.5px;padding:4px 4px;}
+  .ov-sel{max-width:110px;font-size:10.5px;padding:4px 4px;}
   .pr-proof-badge{white-space:nowrap;}
   /* 필터 줄: 연/월/일 한 줄, 지점 칩은 다음 줄 */
   .filter-bar{flex-wrap:wrap;gap:6px !important;}
@@ -480,7 +498,7 @@ textarea.prm-input{resize:vertical;}
     <div class="att-table-wrap">
       <table class="att-table">
         <thead><tr id="statusTableHead">
-          <th></th><th>이름</th><th class="att-col-br">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트</th>
+          <th></th><th>이름</th><th class="att-col-br">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>출결율</th>
         </tr></thead>
         <tbody id="statusTableBody"></tbody>
       </table>
@@ -1231,7 +1249,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 2; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 4; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2451,9 +2469,9 @@ function renderStatus(){
   var head = document.getElementById('statusTableHead');
   var canOverride = _isAdminUser();
   if(isDayMode){
-    head.innerHTML='<th></th><th>이름</th><th class="att-col-br">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>'+(canOverride?'<th>직권</th>':'');
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-br">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>'+(canOverride?'<th>직권 출결인정</th>':'');
   } else {
-    head.innerHTML='<th></th><th>이름</th><th class="att-col-br">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(출근율 80% 이하)</span></th>'+(canOverride?'<th>직권</th>':'');
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-br">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>출결율</th>'+(canOverride?'<th>직권 출결인정</th>':'');
   }
 
   // 테이블 행 — 알파지점 먼저, 브라보지점 다음, 각 지점 내 디메리트 순
@@ -2470,6 +2488,8 @@ function renderStatus(){
     var rb=(b.rate===null||b.rate===undefined)?2:b.rate;
     return ra-rb; // lowest attendance rate first
   });
+  _stRowsById={};
+  for(var _ri=0;_ri<sortedRows.length;_ri++){ _stRowsById[String(sortedRows[_ri].fp.id)]=sortedRows[_ri]; }
   var tbody=document.getElementById('statusTableBody');
   tbody.innerHTML=sortedRows.map(function(r){
     var isAlpha = r.fp.branch==='알파지점';
@@ -2507,7 +2527,7 @@ function renderStatus(){
         '<td class="att-col-br" style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
         '<td>'+statusHtml+'</td>'+
         '<td style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums">'+(r.timeStr?r.timeStr.slice(0,5):'—')+'</td>'+
-        '<td class="att-col-opt">'+_prCellDay(r)+'</td>'+
+        '<td class="att-col-opt'+((r.prList&&r.prList.length&&!r.prList[0].proof)?' prc-td-pending':'')+'">'+_prCellDay(r)+'</td>'+
         ovTd+
       '</tr>';
     } else {
@@ -2517,7 +2537,7 @@ function renderStatus(){
       } else {
         var _pct = Math.round(r.rate * 100);
         if(r.rate <= 0.8){
-          demeritHtml = '<span class="demerit-badge">⚠️ 디메리트</span> <span style="font-size:11px;color:var(--orange);font-weight:700">' + _pct + '%</span>';
+          demeritHtml = '<span style="color:#C0392B;font-weight:800;font-size:14px">' + _pct + '%</span> <span class="demerit-badge">⚠️ 80% 이하</span>';
         } else if(r.rate < 0.9){
           demeritHtml = '<span style="color:var(--orange);font-weight:700;font-size:13px">' + _pct + '% ⚡</span>';
         } else {
@@ -2531,7 +2551,7 @@ function renderStatus(){
         '<td style="color:#34D399;font-weight:700">'+(r.normalCnt?r.normalCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
         '<td style="color:#FCA5A5;font-weight:700">'+(r.lateCnt?r.lateCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
         '<td style="color:#94A3B8;font-weight:600">'+(r.absentCnt?r.absentCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
-        '<td class="att-col-opt" style="color:var(--orange)">'+(r.prList.length?(r.prList.length+'건'+(r.prPend?' <span style="color:#C0392B;font-weight:700">· 미인정 '+r.prPend+'</span>':'')):'—')+'</td>'+
+        '<td class="att-col-opt'+(r.prPend?' prc-td-pending':'')+'">'+(r.prList.length?('<button type="button" class="prc-mbtn'+(r.prPend?' pend':'')+'" onclick="openPrMonthList(\''+r.fp.id+'\')">📋 '+r.prList.length+'건'+(r.prPend?' · 미증빙 '+r.prPend:'')+'</button>'):'<span style="color:var(--text3)">—</span>')+'</td>'+
         '<td>'+demeritHtml+'</td>'+
         (canOverride ? '<td>'+_ovMonthSel(r)+'</td>' : '')+
       '</tr>';
@@ -2539,6 +2559,39 @@ function renderStatus(){
   }).join('');
 }
 
+// month view: one FP's prereports for the month, each with its state and an approve button
+var _stRowsById={};
+function openPrMonthList(fpId){
+  var r=_stRowsById[String(fpId)];
+  if(!r || !r.prList || !r.prList.length) return;
+  var old=document.getElementById('prMonthOv'); if(old&&old.parentNode) old.parentNode.removeChild(old);
+  var isAdm=_isAdminUser();
+  var brOk = (currentUser.role!=='지점장') || (String(r.fp.branch||'').indexOf(String(currentUser.branch||'').replace('지점',''))>=0);
+  var nm=String(r.fp.name).replace(/'/g,'');
+  var h='';
+  for(var i=0;i<r.prList.length;i++){
+    var p=r.prList[i];
+    h+='<div class="prm-row'+(p.proof?'':' pend')+'">'
+      +'<div class="prm-row-main"><div class="prm-row-date">'+p.ds.slice(5).replace('-','/')+'</div>'
+      +'<div class="prc-type">📋 '+_escHtml(p.type||'사전보고')+'</div>'
+      +(p.note?'<div class="prc-note">'+_escHtml(p.note)+'</div>':'')
+      +(p.proof?'<span class="prc-st ok">✅ 증빙 완료 · 출결 반영</span>':'<span class="prc-st no">미증빙 · 출결율 미반영</span>')
+      +'</div><div class="prm-row-btns">'
+      +(isAdm?'<button type="button" class="prc-btn sub" onclick="_prMonthClose();openPrManage(\''+p.ds+'\',\''+r.fp.id+'\')">📄 사유 확인</button>':'')
+      +((isAdm&&brOk&&!p.proof)?'<button type="button" class="prc-btn" onclick="_prMonthClose();adminApprovePr(\''+r.fp.id+'\',\''+nm+'\',\''+p.ds+'\')">✅ 출결 인정</button>':'')
+      +'</div></div>';
+  }
+  var ov=document.createElement('div');
+  ov.id='prMonthOv'; ov.className='att-cf-ov open';
+  ov.innerHTML='<div class="att-cf-box" style="max-width:400px;text-align:left">'
+    +'<div class="att-cf-tt" style="display:flex;justify-content:space-between;align-items:center">'
+    +'<span>📋 '+_escHtml(r.fp.name)+' 사전보고 '+r.prList.length+'건'+(r.prPend?' <span style="color:#B4560B;font-size:13px">· 미증빙 '+r.prPend+'</span>':'')+'</span>'
+    +'<button type="button" class="prm-x" onclick="_prMonthClose()">✕</button></div>'
+    +'<div class="prm-list">'+h+'</div></div>';
+  ov.addEventListener('click', function(e){ if(e.target===ov) _prMonthClose(); });
+  document.body.appendChild(ov);
+}
+function _prMonthClose(){ var o=document.getElementById('prMonthOv'); if(o&&o.parentNode) o.parentNode.removeChild(o); }
 // day view: prereport type/note + approval state; admins can open the manage modal or approve in one tap
 function _prCellDay(r){
   if(!r.prList || !r.prList.length) return '<span style="color:var(--text3)">—</span>';
@@ -2548,14 +2601,16 @@ function _prCellDay(r){
   var label='<div class="prc-type">📋 '+_escHtml(p.type||'사전보고')+'</div>'
     +(p.note?'<div class="prc-note">'+_escHtml(p.note)+'</div>':'');
   var st = p.proof
-    ? '<span class="prc-st ok">✅ 인정됨 · 출결 반영</span>'
-    : '<span class="prc-st no">⏳ 미인정 · 출결율 미반영</span>';
-  var btn='';
-  if(isAdm && brOk && !p.proof){
-    btn='<button type="button" class="prc-btn" onclick="adminApprovePr(\''+r.fp.id+'\',\''+String(r.fp.name).replace(/'/g,'')+'\',\''+p.ds+'\')">✅ 출결 인정</button>';
+    ? '<span class="prc-st ok">✅ 증빙 완료 · 출결 반영</span>'
+    : '<span class="prc-st no">미증빙 · 출결율 미반영</span>';
+  var btns='';
+  if(isAdm){
+    btns+='<button type="button" class="prc-btn sub" onclick="openPrManage(\''+p.ds+'\',\''+r.fp.id+'\')">📄 사유 확인</button>';
+    if(brOk && !p.proof){
+      btns+='<button type="button" class="prc-btn" onclick="adminApprovePr(\''+r.fp.id+'\',\''+String(r.fp.name).replace(/'/g,'')+'\',\''+p.ds+'\')">✅ 출결 인정</button>';
+    }
   }
-  var open = isAdm ? ' onclick="openPrManage(\''+p.ds+'\',\''+r.fp.id+'\')" style="cursor:pointer" title="눌러서 내용 확인 · 수정"' : '';
-  return '<div class="prc-wrap"><div'+open+'>'+label+st+'</div>'+btn+'</div>';
+  return '<div class="prc-wrap"><div>'+label+st+'</div>'+(btns?'<div class="prc-btns">'+btns+'</div>':'')+'</div>';
 }
 function _escHtml(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 // one-tap approval: server first, local only after the server confirms (attendance rate is computed server-side)
@@ -2590,10 +2645,10 @@ function adminApprovePr(fpId, fpName, ds){
 function _ovMonthSel(r){
   var brOk = (currentUser.role!=='지점장') || (String(r.fp.branch||'').indexOf(String(currentUser.branch||'').replace('지점',''))>=0);
   if(!brOk || !r.missDays || !r.missDays.length) return '<span style="color:var(--text3)">—</span>';
-  var o = '<option value="">직권 ('+r.missDays.length+'일)</option>';
+  var o = '<option value="">출결 인정 ('+r.missDays.length+'일)</option>';
   for(var i=0;i<r.missDays.length;i++){
     var ds = r.missDays[i];
-    o += '<option value="'+ds+'">'+parseInt(ds.slice(8,10),10)+'일 → 정상처리</option>';
+    o += '<option value="'+ds+'">'+parseInt(ds.slice(5,7),10)+'/'+parseInt(ds.slice(8,10),10)+' 출결 인정</option>';
   }
   return '<select class="ov-sel" onchange="if(this.value){adminOverrideAtt(\''+r.fp.id+'\',\''+String(r.fp.name).replace(/'/g,'')+'\',this.value);this.value=\'\';}">'+o+'</select>';
 }
