@@ -1289,7 +1289,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 8; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 9; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2599,7 +2599,10 @@ function renderStatus(){
       } else {
         var _pct = Math.round(r.rate * 100);
         if(r.rate < 0.8){
-          demeritHtml = '<span style="color:#C0392B;font-weight:800;font-size:15px">' + _pct + '%</span> <span class="demerit-badge">⚠️ 80% 미만</span>';
+          // days that must become 정상 (proof / override) to reach 80% on the elapsed workdays
+          var _tot = r.normalCnt + r.lateCnt + r.absentCnt;
+          var _need = Math.max(0, Math.ceil(_tot * 0.8 - 1e-9) - r.normalCnt);
+          demeritHtml = '<span style="color:#C0392B;font-weight:800;font-size:15px">' + _pct + '%</span> <span class="demerit-badge">⚠️ 80% 미만' + (_need>0 ? ' · ' + _need + '일 필요' : '') + '</span>';
         } else if(r.rate < 0.9){
           demeritHtml = '<span style="color:var(--orange);font-weight:700;font-size:13px">' + _pct + '% ⚡</span>';
         } else {
