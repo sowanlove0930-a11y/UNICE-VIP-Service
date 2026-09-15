@@ -1217,6 +1217,43 @@ function _ciResumePending(){
 }
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
+// ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
+var ATT_BUILD = 1; // deploy: set version.json { "att": N } to the same number
+function _attHardUpdate(){
+  var p = (window.caches && caches.keys)
+    ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+    : Promise.resolve();
+  function _go(){ location.replace(location.pathname + '?u=' + Date.now()); }
+  p.then(_go).catch(_go);
+}
+try {
+  if (location.search.indexOf('u=') >= 0 && window.history && history.replaceState) {
+    history.replaceState(null, '', location.pathname);
+  }
+} catch(e) {}
+function _attShowUpdBanner(newV){
+  if(document.getElementById('attUpdBanner')) return;
+  var b=document.createElement('div');
+  b.id='attUpdBanner';
+  b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(135deg,#C9A84C,#BA7517);color:#fff;font-size:13px;font-weight:800;text-align:center;padding:12px 14px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.28);font-family:inherit';
+  b.textContent='🔄 출결 앱 새 버전(v'+newV+')이 나왔습니다 — 여기를 눌러 업데이트해주세요';
+  b.addEventListener('click', function(){ b.textContent='업데이트 중...'; _attHardUpdate(); });
+  document.body.appendChild(b);
+  document.body.style.paddingTop='44px';
+}
+function _attCheckVersion(){
+  fetch('version.json?_='+Date.now(), { cache:'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j || j.att===undefined || j.att===null) return;
+      var remote=parseInt(j.att)||0;
+      if(remote > ATT_BUILD) _attShowUpdBanner(remote);
+    })['catch'](function(){});
+}
+setInterval(_attCheckVersion, 600000);
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _attCheckVersion(); });
+setTimeout(_attCheckVersion, 4000);
+
 // ── 사전근태보고 날짜 제한 ───────────────────────────
 function checkPrDateLimit() {
   var block = document.getElementById('prTodayBlock');
