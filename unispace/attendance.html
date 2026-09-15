@@ -339,9 +339,21 @@ textarea.prm-input{resize:vertical;}
   .header-icon{width:30px;height:30px;font-size:14px;}
   .header-title-text{font-size:11px;letter-spacing:.05em;}
   .header-fp{font-size:11px;}
-  /* 출석현황 표: 모바일에선 지점·사전보고 숨겨 핵심만 한눈에 */
-  .att-table .att-col-opt{display:none;}
-  .att-table th, .att-table td{padding:9px 8px;font-size:12px;}
+  /* 출석현황 표: 모바일에선 지점 열만 숨기고(뱃지로 대체) 나머지는 가로 스크롤 */
+  .att-table .att-col-br{display:none;}
+  .att-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .att-table{min-width:560px;}
+  .att-table th, .att-table td{padding:9px 8px;font-size:12px;white-space:nowrap;}
+  .att-table td .ov-btn{padding:5px 8px;font-size:11px;}
+  .ov-sel{max-width:96px;font-size:10.5px;padding:4px 4px;}
+  .pr-proof-badge{white-space:nowrap;}
+  /* 필터 줄: 연/월/일 한 줄, 지점 칩은 다음 줄 */
+  .filter-bar{flex-wrap:wrap;gap:6px !important;}
+  .filter-bar .filter-select{flex:1 1 28%;min-width:0;padding:8px 26px 8px 10px;font-size:12px;background-position:right 8px center;}
+  .filter-bar .branch-chip-wrap{flex:1 1 100%;}
+  .filter-bar .branch-chip{flex:1;text-align:center;padding:8px 6px;}
+  .att-sum-val{font-size:20px;}
+  .toast{white-space:normal;max-width:calc(100vw - 32px);text-align:center;}
   /* ── 근태보고 화면 모바일 최적화 ── */
   .pr-section{padding:16px 14px;border-radius:14px;}
   /* 사전보고 등록 헤더: 제목과 컨트롤을 위아래로 분리 */
@@ -455,7 +467,7 @@ textarea.prm-input{resize:vertical;}
     <div class="att-table-wrap">
       <table class="att-table">
         <thead><tr id="statusTableHead">
-          <th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트</th>
+          <th></th><th>이름</th><th class="att-col-br">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트</th>
         </tr></thead>
         <tbody id="statusTableBody"></tbody>
       </table>
@@ -581,7 +593,7 @@ textarea.prm-input{resize:vertical;}
 
     <!-- 이번달 내역 -->
     <div class="pr-section" style="padding-bottom:8px">
-      <div class="pr-section-title acc-head" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleAcc('accPrelist',this)">📅 이번 달 사전보고 내역 <span class="acc-arrow" style="transition:transform .2s">▾</span></div>
+      <div class="pr-section-title acc-head" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleAcc('accPrelist',this)">📅 <span id="prListTitle">이번 달 사전보고 내역</span> <span class="acc-arrow" style="transition:transform .2s">▾</span></div>
       <div id="accPrelist" class="acc-body">
         <div class="pr-brtab" id="prListBrTab" style="display:none">
           <button type="button" class="branch-chip on" data-br="" onclick="setPrListBranch('',this)">전체</button>
@@ -1220,7 +1232,12 @@ function _pad2(n){ return ('0'+n).slice(-2); }
 function _ymd(y,m,d){ return y+'-'+_pad2(m)+'-'+_pad2(d); }
 function prCalMove(delta){
   _prCalDate.setMonth(_prCalDate.getMonth()+delta);
-  renderPrCalendar();
+  renderPrereportTab();
+  // months other than the current one are not in the local cache until pulled once
+  var ym=getYMStr(_prCalDate);
+  if(!_attLoadedYm[ym]){
+    loadAttFromGas(ym).then(function(ok){ if(ok && getYMStr(_prCalDate)===ym) renderPrereportTab(); });
+  }
 }
 function renderPrCalendar(){
   var grid=document.getElementById('prCalGrid');
@@ -1614,13 +1631,16 @@ function prmSave(){
   if(!proof) r.proofUrl='';
   db[date][fpCode]=r;
   savePrDB(db);
-  // 로컬 저장 즉시 반영 (GAS는 백그라운드 동기화)
-  showToast('✅ 저장했습니다');
   closePrManage();
   _renderPrAdminList(); renderPrereportTab();
+  if(typeof renderStatus==='function'){ var _sp=document.getElementById('pageStatus'); if(_sp && _sp.classList.contains('active')) renderStatus(); }
+  // server result decides the toast: the attendance rate only moves when the sheet has proof=Y
   attGasGet({ action:'savePrereport', date:date, fp:fpCode, name:r.name, branch:r.branch, type:type, note:note, proof:proof?'Y':'N', reportedAt:r.reportedAt||new Date().toISOString() }).then(function(){
     return attGasGet({ action:'setPrereportProof', date:date, fp:fpCode, proof:proof?'Y':'N' });
-  }).catch(function(){});
+  }).then(function(res){
+    if(res && res.ok) showToast(proof?'✅ 저장 · 출결 인정이 서버에 반영되었습니다':'✅ 저장했습니다');
+    else showToast('⚠️ 서버 반영 실패 — 잠시 후 다시 저장해주세요');
+  }).catch(function(){ showToast('⚠️ 서버 반영 실패 — 잠시 후 다시 저장해주세요'); });
 }
 function prmDelete(){
   if(!_prmCtx) return;
@@ -1822,8 +1842,11 @@ function _prTypeEmoji(t){
 }
 function renderPrereportTab(){
   renderPrCalendar();
-  var db=getPrDB(),now=new Date();
+  // the proof dropdown and the list follow the month shown on the calendar
+  var db=getPrDB(),now=_prCalDate||new Date();
   var ym=getYMStr(now);
+  var _lt=document.getElementById('prListTitle');
+  if(_lt) _lt.textContent=(now.getMonth()+1)+'월 사전보고 내역';
 
   // 증빙 처리 드롭다운 — 이번달 사전보고 중 미증빙 건
   var _isAdminPR = currentUser.role==='대표'||currentUser.role==='지점장'||currentUser.role==='교육지점장';
@@ -1910,7 +1933,7 @@ function renderPrereportTab(){
     items=_fi;
   }
 
-  if(!items.length){listEl.innerHTML='<div class="pr-empty">이번 달 사전보고 내역이 없습니다</div>';return;}
+  if(!items.length){listEl.innerHTML='<div class="pr-empty">'+(now.getMonth()+1)+'월 사전보고 내역이 없습니다</div>';return;}
 
   // 정렬: 알파 먼저 → 브라보 → 기타, 같은 지점 내 인증샷 있는 사람 위, 그다음 날짜 최신순
   if(_isAdminPR){
@@ -2308,11 +2331,14 @@ function renderStatus(){
   var rows=fpList.map(function(fp){
     var normalCnt=0, lateCnt=0, absentCnt=0, prCnt=0, demerit=0;
     var missDays=[]; // days an admin can override (absent / late without proof / prereport without proof)
+    var prList=[];   // prereports in range: {ds, type, note, proof}
+    var prPend=0;    // prereports not yet approved (do not count toward attendance until approved)
     targetDays.forEach(function(d){
       var ds=year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
       var attRec=attDb[ds]&&attDb[ds][fp.id];
       var prRec=prDb[ds]&&prDb[ds][fp.id];
       var proofDone=prRec&&prRec.proof;
+      if(prRec){ prList.push({ds:ds,type:prRec.type||'',note:prRec.note||'',proof:!!prRec.proof}); if(!prRec.proof) prPend++; }
       if(!attRec){
         if(proofDone) normalCnt++;
         else if(prRec) { prCnt++; missDays.push(ds); }
@@ -2330,7 +2356,7 @@ function renderStatus(){
     var _days = normalCnt + lateCnt + absentCnt;
     var _rate = _days > 0 ? (normalCnt / _days) : null;
     if(!isDayMode && _rate !== null && _rate <= 0.8) demeritFps++;
-    return {fp,normalCnt,lateCnt,absentCnt,prCnt,demerit,rate:_rate,missDays:missDays,
+    return {fp,normalCnt,lateCnt,absentCnt,prCnt,demerit,rate:_rate,missDays:missDays,prList:prList,prPend:prPend,
             timeStr: isDayMode && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')]
                      && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id]
                      ? attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id].time : ''};
@@ -2370,9 +2396,9 @@ function renderStatus(){
   var head = document.getElementById('statusTableHead');
   var canOverride = _isAdminUser();
   if(isDayMode){
-    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>'+(canOverride?'<th>직권</th>':'');
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-br">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>'+(canOverride?'<th>직권</th>':'');
   } else {
-    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(출근율 80% 이하)</span></th>'+(canOverride?'<th>직권</th>':'');
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-br">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(출근율 80% 이하)</span></th>'+(canOverride?'<th>직권</th>':'');
   }
 
   // 테이블 행 — 알파지점 먼저, 브라보지점 다음, 각 지점 내 디메리트 순
@@ -2423,10 +2449,10 @@ function renderStatus(){
       return '<tr>'+
         '<td>'+brLabelHtml+'</td>'+
         '<td style="font-weight:700">'+r.fp.name+'</td>'+
-        '<td class="att-col-opt" style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
+        '<td class="att-col-br" style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
         '<td>'+statusHtml+'</td>'+
         '<td style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums">'+(r.timeStr?r.timeStr.slice(0,5):'—')+'</td>'+
-        '<td class="att-col-opt" style="color:var(--orange)">'+(r.prCnt?'📋 있음':'—')+'</td>'+
+        '<td class="att-col-opt">'+_prCellDay(r)+'</td>'+
         ovTd+
       '</tr>';
     } else {
@@ -2446,11 +2472,11 @@ function renderStatus(){
       return '<tr>'+
         '<td>'+brLabelHtml+'</td>'+
         '<td style="font-weight:700">'+r.fp.name+'</td>'+
-        '<td class="att-col-opt" style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
+        '<td class="att-col-br" style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
         '<td style="color:#34D399;font-weight:700">'+(r.normalCnt?r.normalCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
         '<td style="color:#FCA5A5;font-weight:700">'+(r.lateCnt?r.lateCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
         '<td style="color:#94A3B8;font-weight:600">'+(r.absentCnt?r.absentCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
-        '<td class="att-col-opt" style="color:var(--orange)">'+r.prCnt+'건</td>'+
+        '<td class="att-col-opt" style="color:var(--orange)">'+(r.prList.length?(r.prList.length+'건'+(r.prPend?' <span style="color:#C0392B;font-weight:700">· 미인정 '+r.prPend+'</span>':'')):'—')+'</td>'+
         '<td>'+demeritHtml+'</td>'+
         (canOverride ? '<td>'+_ovMonthSel(r)+'</td>' : '')+
       '</tr>';
@@ -2458,6 +2484,43 @@ function renderStatus(){
   }).join('');
 }
 
+// day view: prereport type/note + approval state; admins can open the manage modal or approve in one tap
+function _prCellDay(r){
+  if(!r.prList || !r.prList.length) return '<span style="color:var(--text3)">—</span>';
+  var p=r.prList[0];
+  var isAdm=_isAdminUser();
+  var brOk = (currentUser.role!=='지점장') || (String(r.fp.branch||'').indexOf(String(currentUser.branch||'').replace('지점',''))>=0);
+  var label='<span style="color:var(--orange);font-weight:700">📋 '+_escHtml(p.type||'사전보고')+'</span>'
+    +(p.note?'<div style="font-size:11px;color:var(--text2);margin-top:2px;min-width:110px;max-width:200px;white-space:normal;word-break:keep-all">'+_escHtml(p.note)+'</div>':'');
+  var st = p.proof
+    ? '<span class="pr-proof-badge proof-done" style="margin-top:4px;display:inline-block">✅ 인정됨</span>'
+    : '<span class="pr-proof-badge proof-pending" style="margin-top:4px;display:inline-block">⏳ 미인정 · 출결율 미반영</span>';
+  var btn='';
+  if(isAdm && brOk && !p.proof){
+    btn='<button type="button" class="ov-btn" style="margin-top:5px" onclick="adminApprovePr(\''+r.fp.id+'\',\''+String(r.fp.name).replace(/'/g,'')+'\',\''+p.ds+'\')">✅ 출결 인정</button>';
+  }
+  var open = isAdm ? ' onclick="openPrManage(\''+p.ds+'\',\''+r.fp.id+'\')" style="cursor:pointer" title="눌러서 내용 확인 · 수정"' : '';
+  return '<div'+open+'>'+label+'<div>'+st+'</div></div>'+btn;
+}
+function _escHtml(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// one-tap approval: server first, local only after the server confirms (attendance rate is computed server-side)
+var _prApprBusy=false;
+function adminApprovePr(fpId, fpName, ds){
+  if(!_isAdminUser()) return;
+  if(_prApprBusy) return;
+  if(!confirm(fpName+' · '+ds+' 사전보고를 출결 인정 처리할까요?\n(인정 후 출결율에 반영됩니다)')) return;
+  _prApprBusy=true;
+  showToast('처리 중...');
+  attGasGetTimeout({ action:'setPrereportProof', date:ds, fp:fpId, proof:'Y' }, 20000, 2).then(function(res){
+    _prApprBusy=false;
+    if(!res || !res.ok){ showToast('⚠️ 서버 반영 실패: '+((res&&res.msg)||'잠시 후 다시 시도해주세요')); return; }
+    var db=getPrDB();
+    if(db[ds] && db[ds][fpId]){ db[ds][fpId].proof=true; savePrDB(db); }
+    showToast('✅ '+fpName+' 출결 인정 완료');
+    renderStatus();
+    if(typeof _renderPrAdminList==='function') _renderPrAdminList();
+  }).catch(function(){ _prApprBusy=false; showToast('⚠️ 네트워크 오류 — 반영되지 않았습니다'); });
+}
 // month view: one select per FP listing every day still open for an admin override
 function _ovMonthSel(r){
   var brOk = (currentUser.role!=='지점장') || (String(r.fp.branch||'').indexOf(String(currentUser.branch||'').replace('지점',''))>=0);
