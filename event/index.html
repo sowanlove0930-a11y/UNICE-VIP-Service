@@ -612,7 +612,9 @@ function throwYut(){
     sticks[i].textContent = 'I';
   }
 
-  gasGet(GAS_URL + '?action=moonThrow&fp=' + encodeURIComponent(ME.id), 20000)
+  var throwUrl = GAS_URL + '?action=moonThrow&fp=' + encodeURIComponent(ME.id);
+  var throwReq = IS_KAKAO_INAPP ? jsonpGet(throwUrl, 60000) : fetchTimeout(throwUrl, 60000);
+  throwReq
     .then(function(sp){
       if (!sp.ok) {
         ov.classList.remove('show');
@@ -641,9 +643,9 @@ function throwYut(){
     })
     .catch(function(){
       ov.classList.remove('show');
-      alert('\uc5f0\uacb0\uc774 \ub290\ub824\uc694. \uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \ub358\uc838\uc8fc\uc138\uc694!');
+      alert('\uc751\ub2f5\uc774 \ub2a6\uc5b4\uc694. \ub358\uc9c0\uae30\uac00 \uc774\ubbf8 \ubc18\uc601\ub410\uc744 \uc218 \uc788\uc73c\ub2c8 \uc7a0\uc2dc \ud6c4 \uc8fc\uba38\ub2c8\ub97c \ud655\uc778\ud574\uc8fc\uc138\uc694!');
       throwBusy = false;
-      loadState(false);
+      setTimeout(function(){ loadState(false); }, 3000);
     });
 }
 
@@ -653,9 +655,10 @@ function closeOv(){
 
 /* ---------- dday ---------- */
 function tickDday(){
-  var end = new Date(2026, 8, 15, 23, 59, 59);
   var now = new Date();
-  var diff = Math.ceil((end.getTime() - now.getTime()) / 86400000);
+  var today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var end0 = new Date(2026, 8, 15);
+  var diff = Math.round((end0.getTime() - today0.getTime()) / 86400000);
   var el = qs('dday');
   if (diff > 1) el.textContent = '\ub9c8\uac10 D-' + diff + ' \u00b7 ~9/15';
   else if (diff === 1) el.textContent = '\ub0b4\uc77c \ub9c8\uac10! \uD83C\uDF15';
@@ -667,19 +670,25 @@ function tickDday(){
 var MOON_EMOJI = { '\ubcf4\ub984\ub2ec':'\uD83C\uDF15', '\ub465\uadfc\ub2ec':'\uD83C\uDF14', '\ubcfc\ub85d\ub2ec':'\uD83C\uDF13', '\ubc18\ub2ec':'\uD83C\uDF13', '\ucd08\uc2b9\ub2ec':'\uD83C\uDF12' };
 function openReport(){
   qs('rep').classList.add('show');
-  gasGet(GAS_URL + '?action=moonBoard', 20000)
+  if (STATE && STATE.tiers) {
+    renderTiersInto(STATE.tiers, STATE.total);
+    qs('repSub').textContent = '\uac04\uc2dd \uc9d1\uacc4 \ubd88\ub7ec\uc624\ub294 \uc911... \u00b7 9/15 \uc5c5\uc801\uc73c\ub85c \ucd5c\uc885 \ud655\uc815';
+  }
+  fetchBoard(2);
+}
+function fetchBoard(tries){
+  gasGet(GAS_URL + '?action=moonBoard', 45000)
     .then(renderReport)
     .catch(function(){
-      qs('repSub').textContent = '\uc5f0\uacb0\uc774 \ub290\ub824\uc694. \ub2eb\uc558\ub2e4 \ub2e4\uc2dc \uc5f4\uc5b4\uc8fc\uc138\uc694';
+      if (tries > 1) { fetchBoard(tries - 1); return; }
+      qs('repSub').textContent = '\uc11c\ubc84\uac00 \ubc14\uc058\ub124\uc694 \u3160\u3160 \uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \uc5f4\uc5b4\uc8fc\uc138\uc694';
+      qs('repSnacks').innerHTML = '<div class="empty">\uac04\uc2dd \uc9d1\uacc4\ub97c \ubabb \ubd88\ub7ec\uc654\uc5b4\uc694. \ub2e4\uc2dc \uc5f4\uc5b4\uc8fc\uc138\uc694 \uD83D\uDE4F</div>';
     });
 }
-function renderReport(d){
-  if (!d || !d.ok) return;
-  var asOf = d.asOf ? d.asOf : '';
-  qs('repSub').textContent = asOf + ' \uae30\uc900 \u00b7 9/15 \uc5c5\uc801\uc73c\ub85c \ucd5c\uc885 \ud655\uc815';
-  qs('repTotal').textContent = '\ucc38\uc5ec ' + d.total + '\uba85';
+function renderTiersInto(tiers, total){
+  qs('repTotal').textContent = '\ucc38\uc5ec ' + total + '\uba85';
   var i, j, htm = '';
-  var tiers = d.tiers || [];
+  tiers = tiers || [];
   for (i = 0; i < tiers.length; i++) {
     var T = tiers[i];
     var em = MOON_EMOJI[T.moon] || '\uD83C\uDF19';
@@ -700,7 +709,12 @@ function renderReport(d){
     htm += '</div></div>';
   }
   qs('repTiers').innerHTML = htm || '<div class="empty">\uc9d1\uacc4 \uc804</div>';
-
+}
+function renderReport(d){
+  if (!d || !d.ok) return;
+  var asOf = d.asOf ? d.asOf : '';
+  qs('repSub').textContent = asOf + ' \uae30\uc900 \u00b7 9/15 \uc5c5\uc801\uc73c\ub85c \ucd5c\uc885 \ud655\uc815';
+  renderTiersInto(d.tiers, d.total);
   var sh = '';
   var snacks = d.snacks || [];
   for (i = 0; i < snacks.length; i++) {

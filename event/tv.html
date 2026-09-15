@@ -61,6 +61,7 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 .g-ico { font-size:34px; }
 .g-name { font-size:20px; font-weight:900; margin-top:4px; }
 .g-amt { font-size:16px; font-weight:800; color:#ffd94d; margin-top:2px; }
+.livebadge { position:absolute; top:150px; right:70px; font-size:15px; font-weight:900; color:#fff; padding:6px 16px; border-radius:100px; border:2px solid rgba(255,120,80,.8); background:rgba(255,120,80,.3); z-index:5; }
 .clock { position:absolute; bottom:24px; right:70px; font-size:20px; font-weight:800; color:#c5b0e5; }
 </style>
 </head>
@@ -74,7 +75,8 @@ body { font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system
 <div class="head">
   <h1>🌕 유니스 <span class="y">한가위 윷놀이</span></h1>
   <div class="sub">"달이 차오른다, 가자!" · 9/1 ~ 9/15 연장!</div>
-  <div class="dday" id="dday">마감 D-13</div>
+  <div class="dday" id="dday">마감</div>
+  <div class="livebadge" id="liveBadge">실데이터 연결 중...</div>
 </div>
 
 <div class="grid">
@@ -189,12 +191,14 @@ function tickClock() {
 }
 
 function tickDday() {
-  var end = new Date(2026, 8, 15, 23, 59, 59);
+  /* date-based diff: deadline day itself must show 0 */
   var now = new Date();
-  var diff = Math.ceil((end.getTime() - now.getTime()) / 86400000);
+  var today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var end0 = new Date(2026, 8, 15);
+  var diff = Math.round((end0.getTime() - today0.getTime()) / 86400000);
   var el = document.getElementById('dday');
   if (diff > 0) el.textContent = '\uB9C8\uAC10 D-' + diff;
-  else if (diff === 0) el.textContent = '\uC624\uB298 \uB9C8\uAC10!';
+  else if (diff === 0) el.textContent = '\uD83D\uDD25 \uC624\uB298 \uB9C8\uAC10!';
   else el.textContent = '\uC9D1\uACC4 \uC644\uB8CC \uD83C\uDF15';
 }
 
@@ -254,11 +258,40 @@ function applyBoard(d) {
   }
 }
 
+var JSONP_SEQ = 0;
+function jsonpGet(url) {
+  return new Promise(function(resolve, reject){
+    var name = '__tv_cb' + (++JSONP_SEQ) + '_' + new Date().getTime();
+    var s = document.createElement('script');
+    var done = false;
+    var t = setTimeout(function(){ if (!done) { done = true; cleanup(); reject(new Error('timeout')); } }, 90000);
+    function cleanup(){ clearTimeout(t); try { window[name] = undefined; } catch(e) {} if (s.parentNode) s.parentNode.removeChild(s); }
+    window[name] = function(data){ if (done) return; done = true; cleanup(); resolve(data); };
+    s.onerror = function(){ if (done) return; done = true; cleanup(); reject(new Error('jsonp error')); };
+    s.src = url + '&callback=' + name;
+    document.body.appendChild(s);
+  });
+}
+function setLiveBadge(txt, ok) {
+  var el = document.getElementById('liveBadge');
+  if (!el) return;
+  el.textContent = txt;
+  el.style.background = ok ? 'rgba(80,200,120,.25)' : 'rgba(255,120,80,.3)';
+  el.style.borderColor = ok ? 'rgba(80,200,120,.7)' : 'rgba(255,120,80,.8)';
+}
 function pollBoard() {
-  fetch(GAS_URL + '?action=moonBoard')
+  if (!liveMode) setLiveBadge('\uC2E4\uB370\uC774\uD130 \uC5F0\uACB0 \uC911...', false);
+  var url = GAS_URL + '?action=moonBoard';
+  fetch(url)
     .then(function(r){ return r.json(); })
-    .then(applyBoard)
-    .catch(function(){});
+    .catch(function(){ return jsonpGet(url); })
+    .then(function(d){
+      applyBoard(d);
+      if (d && d.ok) setLiveBadge('LIVE \u00B7 ' + (d.asOf || ''), true);
+    })
+    .catch(function(){
+      setLiveBadge('\uC11C\uBC84 \uC751\uB2F5 \uC5C6\uC74C \u00B7 \uC7AC\uC2DC\uB3C4 \uC911', false);
+    });
 }
 
 renderDist();
@@ -269,7 +302,8 @@ setInterval(function(){ if (!liveMode) pushFeed(); }, 6000);
 setInterval(tickClock, 30000);
 setInterval(tickDday, 60000);
 pollBoard();
-setInterval(pollBoard, 60000);
+setInterval(function(){ pollBoard(); }, 60000);
+setTimeout(function(){ if (!liveMode) pollBoard(); }, 25000);
 </script>
 </body>
 </html>
