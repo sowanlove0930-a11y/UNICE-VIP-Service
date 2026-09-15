@@ -1898,6 +1898,21 @@ body.theme-light .awl-wrap { background:#fff; }
 .awm-trkh .k.a { background:#1E7A50; }
 .awm-trkh .k.b { background:#2F53A8; }
 .awm-trkh .k.g { background:#B5820B; }
+.awm-trkh .k.n { background:#8B8574; }
+.awm-trkbox.n { border-color:#D8D0BC; background:#FBF9F3; }
+.awm-arow { flex-wrap:nowrap; gap:9px; }
+.awm-arow.done { border-color:#BFE3D2; }
+.awm-amain { flex:1; min-width:0; }
+.awm-anm { font-size:13px; font-weight:700; color:#22314A; }
+.awm-asub { font-size:10.5px; color:#8B8574; margin-top:2px; font-variant-numeric:tabular-nums; line-height:1.35; }
+.awm-asub b { color:#16294A; font-weight:800; }
+.awm-tags { display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex:0 0 auto; }
+.awm-tag { display:inline-block; font-size:10px; font-weight:800; border-radius:6px; padding:3px 7px; white-space:nowrap; }
+.awm-tag.ok { background:#DFF3EC; color:#177A55; }
+.awm-tag.ok2 { background:#EEF3EF; color:#4F8A6C; font-weight:700; }
+.awm-tag.no { background:#FBE4E1; color:#B23A2B; }
+.awm-tag.att { background:#FBEFD6; color:#9A6108; }
+.awm-route { font-size:9px; color:#A9A392; font-weight:600; }
 .awm-trkh .t { font-size:13px; font-weight:800; color:#22314A; }
 .awm-trkh .sub { font-size:10.5px; color:#8B8574; font-weight:600; }
 .awm-trkh .cnt { margin-left:auto; font-size:12px; color:#5B5540; font-weight:800; }
@@ -7322,23 +7337,22 @@ function _awmPaint() {
   var ic, title, sub;
   if (key === 'uni') { ic = '🦄'; title = '유니콘즈클럽'; sub = mn + '월 · 보장월초 100만 이상'; }
   else if (key === 'holi') { ic = '✈️'; title = '워킹홀리데이'; sub = mn + '월 · 보장월초 70만 이상'; }
-  else { ic = '🎖️'; title = '스탠다드FP · ' + qn + '월 자격'; sub = mn + '월 실적 기준'; }
+  else {
+    ic = '🎖️'; title = '스탠다드FP · ' + qn + '월 자격';
+    sub = d.bOpen
+      ? (mn + '월 50만↑ 출결 ' + d.attFloorA + '%↑  또는  ' + _awlMon(d.prevYm) + '~' + mn + '월 합산 100만↑ 출결 ' + d.attFloorB + '%↑')
+      : (mn + '월 50만↑ · 출결 ' + d.attFloorA + '%↑');
+  }
 
   document.getElementById('awmIc').textContent = ic;
   document.getElementById('awmTitle').textContent = title;
   document.getElementById('awmSub').textContent = sub;
 
   var tabs = document.getElementById('awmTabs');
-  if (isStd) {
-    tabs.style.display = 'flex';
-    tabs.innerHTML =
-      '<button type="button" class="awm-tab' + (_awlTab === 'list' ? ' on' : '') + '" onclick="_awmSetTab(\'list\')">달성자 ' + d.standard.count + '명</button>' +
-      '<button type="button" class="awm-tab' + (_awlTab === 'prog' ? ' on' : '') + '" onclick="_awmSetTab(\'prog\')">진행현황</button>' +
-      '<button type="button" class="awm-tab' + (_awlTab === 'near' ? ' on' : '') + '" onclick="_awmSetTab(\'near\')">달성 유력</button>';
-  } else {
-    tabs.style.display = 'none';
-    _awlTab = 'list';
-  }
+  // standard modal: one screen (achieved + not yet, with shortfall) - no tabs
+  tabs.style.display = 'none';
+  tabs.innerHTML = '';
+  _awlTab = 'list';
 
   if (_awlTab === 'prog') { _awmProg(); return; }
   if (_awlTab === 'near') { _awmNear(); return; }
@@ -7427,6 +7441,8 @@ function _awmList(key) {
   var bAll = s.trackA.bravo.length + s.trackB.bravo.length + s.grace.bravo.length;
   kpi.innerHTML = _awmKpi(s.count + '명', aAll + '명', bAll + '명', '전체 자격', '알파지점', '브라보지점');
 
+  if (d.all && d.all.length) { body.innerHTML = _awmAllHtml(d); return; }
+
   var h = _awmTrackBlock('A', 'a', '각월 달성',
       mn + '월 50만↑ · 출결 ' + d.attFloorA + '%↑',
       s.trackA, true, d.attFloorA, d.fullDays || 0);
@@ -7449,6 +7465,78 @@ function _awmList(key) {
       s.trackB, true, d.attFloorB, (d.fullDays || 0) + (d.prevFullDays || 0));
   }
   body.innerHTML = h;
+}
+
+/* -- standard fp single screen: achieved / not yet (with shortfall) -- */
+function _awmAllRow(x, d) {
+  var mn = _awlMon(d.ym), pn = _awlMon(d.prevYm);
+  var ini = _awlEsc(String(x.name).charAt(0));
+  var brCls = String(x.branch).indexOf('알파') >= 0 ? 'a' : 'b';
+  var line2;
+  if (d.bOpen) {
+    line2 = pn + '월 ' + _manTxt(x.prevAmount) + ' + ' + mn + '월 ' + _manTxt(x.curAmount)
+          + ' = <b>' + _manTxt(x.sum) + '</b>'
+          + ' · 출결 ' + mn + '월 ' + x.curAtt + '% / 평균 ' + x.avgAtt + '%';
+  } else {
+    line2 = mn + '월 <b>' + _manTxt(x.curAmount) + '</b> · 출결 ' + x.curAtt + '%';
+  }
+  var right = '';
+  if (x.ok) {
+    right = '<span class="awm-tag ok">' + (x.via === 'B' ? '합산 달성' : mn + '월 달성') + '</span>';
+  } else {
+    // pick the cheaper route by amount (tie -> single month)
+    var useB = d.bOpen && (x.amountNeedB < x.amountNeedA);
+    var amtNeed = useB ? x.amountNeedB : x.amountNeedA;
+    var attNeed = useB ? x.attNeedDaysB : x.attNeedDaysA;
+    var tags = '';
+    tags += amtNeed > 0
+      ? '<span class="awm-tag no">업적 -' + _manTxt(amtNeed) + '</span>'
+      : '<span class="awm-tag ok2">업적 OK</span>';
+    tags += attNeed > 0
+      ? '<span class="awm-tag att">출결 -' + attNeed + '일</span>'
+      : '<span class="awm-tag ok2">출결 OK</span>';
+    right = '<div class="awm-tags">' + tags
+          + '<span class="awm-route">' + (useB ? '합산 기준' : mn + '월 기준') + '</span></div>';
+  }
+  return '<div class="awm-item awm-arow' + (x.ok ? ' done' : '') + '">'
+    + '<span class="awm-av ' + brCls + '">' + ini + '</span>'
+    + '<div class="awm-amain"><div class="awm-anm">' + _awlEsc(x.name) + '</div>'
+    + '<div class="awm-asub">' + line2 + '</div></div>'
+    + right + '</div>';
+}
+function _awmAllGroup(label, cls, arr, d) {
+  var h = '<div class="awm-grp"><div class="awm-grp-h">'
+    + '<span class="c ' + cls + '">' + label + '</span>'
+    + '<span class="cnt">' + arr.length + '명</span></div>';
+  if (!arr.length) return h + '<div class="awm-empty">해당자가 없습니다</div></div>';
+  h += '<div class="awm-list">';
+  for (var i = 0; i < arr.length; i++) h += _awmAllRow(arr[i], d);
+  return h + '</div></div>';
+}
+function _awmAllHtml(d) {
+  var mn = _awlMon(d.ym), pn = _awlMon(d.prevYm);
+  var okA = [], okB = [], noA = [], noB = [];
+  for (var i = 0; i < d.all.length; i++) {
+    var x = d.all[i];
+    var isA = String(x.branch).indexOf('알파') >= 0;
+    if (x.ok) { if (isA) okA.push(x); else okB.push(x); }
+    else { if (isA) noA.push(x); else noB.push(x); }
+  }
+  var nOk = okA.length + okB.length, nNo = noA.length + noB.length;
+  var h = '';
+  h += '<div class="awm-trkbox a">'
+    + '<div class="awm-trkh"><span class="k a">✓</span><span class="t">달성</span>'
+    + '<span class="sub">알파 ' + okA.length + ' · 브라보 ' + okB.length + '</span>'
+    + '<span class="cnt">' + nOk + '명</span></div>'
+    + _awmAllGroup('알파', 'a', okA, d) + _awmAllGroup('브라보', 'b', okB, d)
+    + '</div>';
+  h += '<div class="awm-trkbox n">'
+    + '<div class="awm-trkh"><span class="k n">-</span><span class="t">미달성</span>'
+    + '<span class="sub">부족분은 ' + (d.bOpen ? (mn + '월 50만 / ' + pn + '~' + mn + '월 합산 100만 중 가까운 쪽') : (mn + '월 50만')) + ' 기준</span>'
+    + '<span class="cnt">' + nNo + '명</span></div>'
+    + _awmAllGroup('알파', 'a', noA, d) + _awmAllGroup('브라보', 'b', noB, d)
+    + '</div>';
+  return h;
 }
 
 /* ── 진행현황 ── */
@@ -23846,7 +23934,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 80;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 81;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {

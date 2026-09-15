@@ -303,6 +303,7 @@ textarea.prm-input{resize:vertical;}
 .ov-btn { font-size:11px; font-weight:700; border:1px solid rgba(46,158,107,.4); background:rgba(46,158,107,.1);
   color:#1E7A50; border-radius:7px; padding:5px 9px; cursor:pointer; font-family:inherit; white-space:nowrap; }
 .ov-btn:active { opacity:.7; }
+.ov-sel { font-size:11px; font-weight:700; border:1px solid rgba(46,158,107,.4); background:rgba(46,158,107,.1); color:#1E7A50; border-radius:8px; padding:5px 6px; max-width:120px; font-family:inherit; }
 /* 커스텀 확인 모달 (직권 출결 등) */
 .att-cf-ov { position:fixed; inset:0; z-index:100050; background:rgba(43,38,28,.5);
   backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:20px; }
@@ -922,6 +923,7 @@ window.addEventListener('DOMContentLoaded',function(){
     // 데이터 도착 후 화면 무조건 갱신 (체크인 상태 반영)
     renderCheckinTab();
     renderPrereportTab();
+    _ciResumePending();
     if(typeof renderStatus==='function'){
       var sp=document.getElementById('pageStatus');
       if(sp && sp.classList.contains('active')) renderStatus();
@@ -1012,7 +1014,10 @@ function renderCheckinTab(){
     btn.disabled=true;
     btn.className='checkin-btn '+(isLate?'done-late':'done-normal');
   }else{
-    btn.textContent='📍 출근 체크인'; btn.disabled=false; btn.className='checkin-btn';
+    var _pd=(typeof _ciPendingGet==='function')?_ciPendingGet():null;
+    if(_pd && _ciBusy){ btn.textContent='확인 중... ('+_ciHHMM(_pd.sentAt)+' 기준)'; btn.disabled=true; btn.className='checkin-btn'; }
+    else if(_pd){ btn.textContent='📍 다시 시도 ('+_ciHHMM(_pd.sentAt)+' 기준 유지)'; btn.disabled=false; btn.className='checkin-btn'; }
+    else { btn.textContent='📍 출근 체크인'; btn.disabled=false; btn.className='checkin-btn'; }
   }
 
   // 이번달 요약 (디메리트 포함)
@@ -1075,52 +1080,130 @@ function renderCheckinTab(){
 }
 
 // ── 출근 체크인 실행 ─────────────────────────────────
+// ── checkin (2026-09 rewrite) ─────────────────────────────
+// 1. the FIRST click is stored locally as a pending request {date, sentAt, reqId}
+//    before anything is sent. any later press (even hours later, even after
+//    reopening the app) re-sends that same sentAt, so the server judges by
+//    the first click time.
+// 2. one request at a time (no parallel retries). on timeout the client asks
+//    checkinStatus (read only) whether the row exists before re-sending.
+// 3. nothing is written locally until the server confirms.
+var ATT_PENDING_KEY = 'unispace_att_pending';
+var _ciBusy = false;
+
+function _ciPendingGet(){
+  try {
+    var v = JSON.parse(localStorage.getItem(ATT_PENDING_KEY) || 'null');
+    if(v && v.date === getTodayStr() && String(v.fp) === String(currentUser.id)) return v;
+  } catch(e){}
+  return null;
+}
+function _ciPendingSet(v){ try { localStorage.setItem(ATT_PENDING_KEY, JSON.stringify(v)); } catch(e){} }
+function _ciPendingClear(){ try { localStorage.removeItem(ATT_PENDING_KEY); } catch(e){} }
+
+function _ciSaveLocal(today, time, status){
+  var db=getAttDB();
+  if(!db[today]) db[today]={};
+  db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:time||'',status:status||'정상'};
+  saveAttDB(db);
+  _ciPendingClear();
+  renderCheckinTab();
+}
+function _ciBtn(txt, disabled){
+  var btn=document.getElementById('checkinBtn');
+  if(!btn) return;
+  btn.disabled=!!disabled; btn.textContent=txt; btn.className='checkin-btn';
+}
+function _ciHHMM(ms){
+  var d=new Date(ms); var h=d.getHours(), m=d.getMinutes();
+  return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+}
+
+// single request, single timeout, no retry inside
+function _ciSend(pend, timeoutMs){
+  return attGasGetTimeout({ action:'checkin', date:pend.date, fp:currentUser.id, name:currentUser.name,
+    branch:currentUser.branch, sentAt:pend.sentAt, reqId:pend.reqId }, timeoutMs, 1);
+}
+function _ciStatus(pend){
+  return attGasGetTimeout({ action:'checkinStatus', fp:currentUser.id, date:pend.date }, 12000, 1);
+}
+
+// resolves true when the server has the row (and local is synced)
+function _ciResolve(pend, silent){
+  var today=pend.date;
+  return _ciSend(pend, 40000).then(function(res){
+    if(res && res.ok===true){
+      _ciSaveLocal(today, res.time, res.status);
+      if(!silent){
+        if(res.dup) showToast('오늘 이미 체크인되어 있습니다 (' + String(res.time||'').slice(0,5) + ')');
+        else if(res.status==='지각') showToast('⚠️ '+String(res.time||'').slice(0,5)+' 지각 처리되었습니다'+(res.memo?' · '+res.memo:''));
+        else showToast('✅ '+String(res.time||'').slice(0,5)+' 정상 출근 완료!');
+      }
+      return true;
+    }
+    if(res && res.ok===false && res.msg && res.msg.indexOf('이미')>=0){
+      _ciSaveLocal(today, res.time, res.status);
+      if(!silent) showToast('오늘 이미 체크인하셨습니다');
+      return true;
+    }
+    // timeout / network / server busy -> ask before re-sending
+    return _ciStatus(pend).then(function(st){
+      if(st && st.ok && st.exists){
+        _ciSaveLocal(today, st.time, st.status);
+        if(!silent) showToast('✅ 체크인이 확인되었습니다 ('+String(st.time||'').slice(0,5)+')');
+        return true;
+      }
+      return false;
+    });
+  });
+}
+
 function doCheckin(){
   var today=getTodayStr(),db=getAttDB();
   if(db[today]&&db[today][currentUser.id]){showToast('오늘 이미 체크인하셨습니다');return;}
+  if(_ciBusy) return;
+  _ciBusy=true;
 
-  var btn=document.getElementById('checkinBtn');
-  if(btn){ btn.disabled=true; btn.textContent='확인 중...'; }
+  // keep the very first click time; a later press must not move it
+  var pend=_ciPendingGet();
+  if(!pend){
+    pend={ date:today, fp:currentUser.id, sentAt:Date.now(), reqId:currentUser.id+'_'+today+'_'+Date.now() };
+    _ciPendingSet(pend);
+  }
+  _ciBtn('확인 중... ('+_ciHHMM(pend.sentAt)+' 기준)', true);
 
-  var now=new Date();
-  // 시간·지각 판정은 서버(GAS)가 한국시간 기준으로 결정 — PC 시계 무관
-  var rec={ date:today, fpCode:currentUser.id, name:currentUser.name, branch:currentUser.branch };
-
-  // GAS에 먼저 저장 시도 -> 이미 체크인됐으면 서버가 막음
-  // sentAt = 버튼 누른 시각. 서버가 큐 지연으로 늦게 실행돼도 이 시각으로 지각 판정 (2분 한도)
-  var _sentAt = Date.now();
-  attGasGetTimeout({ action:'checkin', date:today, fp:currentUser.id, name:currentUser.name, branch:currentUser.branch, sentAt:_sentAt }, 15000, 3).then(function(res){
-    if(res && res.ok===false && res.msg && res.msg.indexOf('이미')>=0){
-      // 서버에 이미 있음 -> 로컬도 동기화하고 차단
-      if(!db[today]) db[today]={};
-      var _t0=(res.time||'');
-      db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:_t0,status:res.status||'정상'};
-      saveAttDB(db);
-      renderCheckinTab();
-      showToast('오늘 이미 체크인하셨습니다');
-      return;
-    }
-    if(res && res.ok===true){
-      // 서버 저장 성공 -> 서버가 돌려준 time/status 사용
-      var srvTime=res.time||'';
-      var srvStatus=res.status||'정상';
-      var srvLate=(srvStatus==='지각');
-      if(!db[today]) db[today]={};
-      db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:srvTime,status:srvStatus};
-      saveAttDB(db);
-      renderCheckinTab();
-      showToast(srvLate?'⚠️ '+srvTime.slice(0,5)+' 지각 처리되었습니다':'✅ '+srvTime.slice(0,5)+' 정상 출근 완료!');
-      return;
-    }
-    // 그 외 응답 -> 실패로 간주
-    if(btn){ btn.disabled=false; btn.textContent='📍 출근 체크인'; btn.className='checkin-btn'; }
-    showToast('⚠️ 저장에 실패했습니다. 다시 눌러주세요 (지각 판정은 처음 누른 시각 기준으로 보정됩니다)');
+  _ciResolve(pend, false).then(function(ok){
+    if(ok){ _ciBusy=false; return; }
+    // second try with the same request id, then give up for now (pending stays)
+    return _ciResolve(pend, false).then(function(ok2){
+      _ciBusy=false;
+      if(ok2) return;
+      _ciBtn('📍 다시 시도 ('+_ciHHMM(pend.sentAt)+' 기준 유지)', false);
+      showToast('⚠️ 서버 응답이 늦어 아직 확인되지 않았습니다. 처음 누른 '+_ciHHMM(pend.sentAt)+' 기준으로 자동 재시도됩니다');
+    });
   }).catch(function(){
-    // 네트워크/요청 실패 -> 로컬 저장 안 함, 실패 안내 (시트와 불일치 방지)
-    if(btn){ btn.disabled=false; btn.textContent='📍 출근 체크인'; btn.className='checkin-btn'; }
-    showToast('⚠️ 네트워크 오류로 체크인이 저장되지 않았습니다. 다시 시도해 주세요');
+    _ciBusy=false;
+    _ciBtn('📍 다시 시도 ('+_ciHHMM(pend.sentAt)+' 기준 유지)', false);
+    showToast('⚠️ 네트워크 오류. 처음 누른 시각은 저장되어 있으니 잠시 후 다시 눌러주세요');
   });
 }
+
+// on open / when the app comes back to the foreground: finish any pending checkin
+function _ciResumePending(){
+  if(!currentUser || !currentUser.id) return;
+  var pend=_ciPendingGet();
+  if(!pend) return;
+  var db=getAttDB();
+  if(db[pend.date]&&db[pend.date][currentUser.id]){ _ciPendingClear(); return; }
+  if(_ciBusy) return;
+  _ciBusy=true;
+  _ciBtn('확인 중... ('+_ciHHMM(pend.sentAt)+' 기준)', true);
+  _ciResolve(pend, false).then(function(ok){
+    _ciBusy=false;
+    if(!ok) _ciBtn('📍 다시 시도 ('+_ciHHMM(pend.sentAt)+' 기준 유지)', false);
+  }).catch(function(){ _ciBusy=false; _ciBtn('📍 다시 시도 ('+_ciHHMM(pend.sentAt)+' 기준 유지)', false); });
+}
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ── 사전근태보고 날짜 제한 ───────────────────────────
 function checkPrDateLimit() {
@@ -2224,6 +2307,7 @@ function renderStatus(){
   var totalNormal=0, totalPossible=0, lateFpSet={}, absentFpSet={}, demeritFps=0;
   var rows=fpList.map(function(fp){
     var normalCnt=0, lateCnt=0, absentCnt=0, prCnt=0, demerit=0;
+    var missDays=[]; // days an admin can override (absent / late without proof / prereport without proof)
     targetDays.forEach(function(d){
       var ds=year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
       var attRec=attDb[ds]&&attDb[ds][fp.id];
@@ -2231,11 +2315,11 @@ function renderStatus(){
       var proofDone=prRec&&prRec.proof;
       if(!attRec){
         if(proofDone) normalCnt++;
-        else if(prRec) prCnt++;
-        else { absentCnt++; demerit++; }
+        else if(prRec) { prCnt++; missDays.push(ds); }
+        else { absentCnt++; demerit++; missDays.push(ds); }
       } else if(attRec.status==='지각'){
         if(proofDone) normalCnt++;
-        else { lateCnt++; demerit++; }
+        else { lateCnt++; demerit++; missDays.push(ds); }
       } else { normalCnt++; }
     });
     totalNormal += normalCnt;
@@ -2246,7 +2330,7 @@ function renderStatus(){
     var _days = normalCnt + lateCnt + absentCnt;
     var _rate = _days > 0 ? (normalCnt / _days) : null;
     if(!isDayMode && _rate !== null && _rate <= 0.8) demeritFps++;
-    return {fp,normalCnt,lateCnt,absentCnt,prCnt,demerit,rate:_rate,
+    return {fp,normalCnt,lateCnt,absentCnt,prCnt,demerit,rate:_rate,missDays:missDays,
             timeStr: isDayMode && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')]
                      && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id]
                      ? attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id].time : ''};
@@ -2288,7 +2372,7 @@ function renderStatus(){
   if(isDayMode){
     head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>출결 상태</th><th>체크인</th><th class="att-col-opt">사전보고</th>'+(canOverride?'<th>직권</th>':'');
   } else {
-    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(출근율 80% 이하)</span></th>';
+    head.innerHTML='<th></th><th>이름</th><th class="att-col-opt">지점</th><th>정상</th><th>지각</th><th>미출결</th><th class="att-col-opt">사전보고</th><th>디메리트 <span class="att-col-opt" style="font-size:10px;color:var(--text3);font-weight:400">(출근율 80% 이하)</span></th>'+(canOverride?'<th>직권</th>':'');
   }
 
   // 테이블 행 — 알파지점 먼저, 브라보지점 다음, 각 지점 내 디메리트 순
@@ -2368,11 +2452,23 @@ function renderStatus(){
         '<td style="color:#94A3B8;font-weight:600">'+(r.absentCnt?r.absentCnt+'일':'<span style="color:var(--text3)">0일</span>')+'</td>'+
         '<td class="att-col-opt" style="color:var(--orange)">'+r.prCnt+'건</td>'+
         '<td>'+demeritHtml+'</td>'+
+        (canOverride ? '<td>'+_ovMonthSel(r)+'</td>' : '')+
       '</tr>';
     }
   }).join('');
 }
 
+// month view: one select per FP listing every day still open for an admin override
+function _ovMonthSel(r){
+  var brOk = (currentUser.role!=='지점장') || (String(r.fp.branch||'').indexOf(String(currentUser.branch||'').replace('지점',''))>=0);
+  if(!brOk || !r.missDays || !r.missDays.length) return '<span style="color:var(--text3)">—</span>';
+  var o = '<option value="">직권 ('+r.missDays.length+'일)</option>';
+  for(var i=0;i<r.missDays.length;i++){
+    var ds = r.missDays[i];
+    o += '<option value="'+ds+'">'+parseInt(ds.slice(8,10),10)+'일 → 정상처리</option>';
+  }
+  return '<select class="ov-sel" onchange="if(this.value){adminOverrideAtt(\''+r.fp.id+'\',\''+String(r.fp.name).replace(/'/g,'')+'\',this.value);this.value=\'\';}">'+o+'</select>';
+}
 function absentTotal(rows){
   return rows.reduce(function(acc,r){ return acc+r.absentCnt; }, 0);
 }
