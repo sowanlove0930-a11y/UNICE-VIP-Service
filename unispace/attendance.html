@@ -1249,7 +1249,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 4; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 5; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -1702,6 +1702,7 @@ function prmSave(){
   closePrManage();
   _renderPrAdminList(); renderPrereportTab();
   if(typeof renderStatus==='function'){ var _sp=document.getElementById('pageStatus'); if(_sp && _sp.classList.contains('active')) renderStatus(); }
+  if(document.getElementById('prMonthOv')) openPrMonthList(fpCode);
   // server result decides the toast: the attendance rate only moves when the sheet has proof=Y
   attGasGet({ action:'savePrereport', date:date, fp:fpCode, name:r.name, branch:r.branch, type:type, note:note, proof:proof?'Y':'N', reportedAt:r.reportedAt||new Date().toISOString() }).then(function(){
     return attGasGet({ action:'setPrereportProof', date:date, fp:fpCode, proof:proof?'Y':'N' });
@@ -2577,12 +2578,12 @@ function openPrMonthList(fpId){
       +(p.note?'<div class="prc-note">'+_escHtml(p.note)+'</div>':'')
       +(p.proof?'<span class="prc-st ok">✅ 증빙 완료 · 출결 반영</span>':'<span class="prc-st no">미증빙 · 출결율 미반영</span>')
       +'</div><div class="prm-row-btns">'
-      +(isAdm?'<button type="button" class="prc-btn sub" onclick="_prMonthClose();openPrManage(\''+p.ds+'\',\''+r.fp.id+'\')">📄 사유 확인</button>':'')
-      +((isAdm&&brOk&&!p.proof)?'<button type="button" class="prc-btn" onclick="_prMonthClose();adminApprovePr(\''+r.fp.id+'\',\''+nm+'\',\''+p.ds+'\')">✅ 출결 인정</button>':'')
+      +(isAdm?'<button type="button" class="prc-btn sub" onclick="openPrManage(\''+p.ds+'\',\''+r.fp.id+'\')">📄 사유 확인</button>':'')
+      +((isAdm&&brOk&&!p.proof)?'<button type="button" class="prc-btn" onclick="adminApprovePr(\''+r.fp.id+'\',\''+nm+'\',\''+p.ds+'\')">✅ 출결 인정</button>':'')
       +'</div></div>';
   }
   var ov=document.createElement('div');
-  ov.id='prMonthOv'; ov.className='att-cf-ov open';
+  ov.id='prMonthOv'; ov.className='att-cf-ov open'; ov.style.zIndex='1500';
   ov.innerHTML='<div class="att-cf-box" style="max-width:400px;text-align:left">'
     +'<div class="att-cf-tt" style="display:flex;justify-content:space-between;align-items:center">'
     +'<span>📋 '+_escHtml(r.fp.name)+' 사전보고 '+r.prList.length+'건'+(r.prPend?' <span style="color:#B4560B;font-size:13px">· 미증빙 '+r.prPend+'</span>':'')+'</span>'
@@ -2638,6 +2639,7 @@ function adminApprovePr(fpId, fpName, ds){
       showToast('✅ '+fpName+' 출결 인정 완료');
       renderStatus();
       if(typeof _renderPrAdminList==='function') _renderPrAdminList();
+      if(document.getElementById('prMonthOv')) openPrMonthList(fpId);
     }).catch(function(){ _prApprBusy=false; showToast('⚠️ 네트워크 오류 — 반영되지 않았습니다'); });
   });
 }
