@@ -412,14 +412,14 @@ function myTeamPub(){ var m=ST.race&&ST.race.mine; return m?ST.race.pub[m]:null;
 function feedCard(){
   var f=(ST.race&&ST.race.feed)||[]; if(!f.length) return '';
   function col(team,lbl){ var h='<div style="flex:1;min-width:0;border:none;padding:0"><div style="font-size:12px;font-weight:900;color:var(--'+team+');margin-bottom:4px">'+lbl+'</div>'; var n=0;
-    for(var i=0;i<f.length&&n<4;i++){ if(f[i].team!==team) continue; n++; h+='<div style="font-size:11.5px;color:var(--ink2);padding:3px 0;border-top:1px dashed var(--line)"><span style="color:var(--ink3)">'+esc(f[i].t)+'</span> '+esc(String(f[i].msg).replace(/^(블루|레드)\s*/,''))+'</div>'; }
+    for(var i=0;i<f.length&&n<4;i++){ if(f[i].team!==team) continue; if(String(f[i].msg).indexOf('마켓 확정')>=0) continue; n++; h+='<div style="font-size:11.5px;color:var(--ink2);padding:3px 0;border-top:1px dashed var(--line);display:grid;grid-template-columns:34px 1fr;column-gap:4px"><span style="color:var(--ink3)">'+esc(f[i].t)+'</span><span>'+esc(String(f[i].msg).replace(/^(블루|레드)\s*/,''))+'</span></div>'; }
     if(!n) h+='<div class="muted" style="padding:3px 0">아직 없음</div>';
     return h+'</div>'; }
   return '<div class="feed" style="display:flex;gap:10px">'+col('blue','🔵 블루')+col('red','🔴 레드')+'</div>';
 }
 function marketView(){
   var t=myTeamPub(), ITEMS=ST.items||[];
-  var h='<div class="banner" style="background:linear-gradient(135deg,#F2A250,#E2782E 60%,#C9601F)"><div class="k">루프탑 · 칩 마켓</div><div class="t disp">칩 마켓 오픈</div><div class="muted" style="color:#fff;opacity:.85;margin-top:4px">팀원 누구나 담고 빼요 · 담는 즉시 팀원 폰에 같이 보여요 · 남은 칩은 골인 때 1칩 = 10점</div></div>';
+  var h='<div class="banner" style="background:linear-gradient(135deg,#F2A250,#E2782E 60%,#C9601F)"><div class="k">루프탑 · 칩 마켓</div><div class="t disp">칩 마켓 오픈</div><div style="color:#fff;opacity:.9;margin-top:6px;font-size:12.5px;line-height:1.6">· 팀원 누구나 담고 빼기 (실시간 공유)<br>· 남은 칩은 골인 때 1칩 = 10점</div></div>';
   if(!t){ return h+'<div class="locked">운영진·심판은 마켓을 구경만 할 수 있어요</div>'+marketListReadOnly(); }
   var spent=0; for(var i=0;i<ITEMS.length;i++) spent+=(t.cart[ITEMS[i].k]||0)*ITEMS[i].pr;
   var left=t.chips-spent;
@@ -455,7 +455,7 @@ function raceView(){
       h+='<div style="display:flex;gap:10px;align-items:flex-start;text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:8px"><span class="disp" style="width:26px;height:26px;border-radius:50%;background:var(--sea);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:14px">'+(qi+1)+'</span><span style="font-size:15px;font-weight:700;line-height:1.6;color:var(--ink)">'+esc(qs[qi])+'</span></div>'; }
     if((me.sHintLv||0)>=1) h+='<div style="text-align:left;margin-top:8px;background:#FFF1C2;color:#7A4E00;border-radius:12px;padding:8px 12px;font-size:13.5px;font-weight:800;line-height:1.5">🔍 힌트 1 · '+esc(sc.h1||'')+'</div>';
     if((me.sHintLv||0)>=2) h+='<div style="text-align:left;margin-top:6px;background:#FFF1C2;color:#7A4E00;border-radius:12px;padding:8px 12px;font-size:13.5px;font-weight:800;line-height:1.5">🔍 힌트 2 · '+esc(sc.h2||'')+'</div>';
-    h+='<div class="muted" style="margin-top:8px">각 문제의 답(숫자 한 자리)을 순서대로 넣으세요 · 막히면 위 아이템 바에서 🔍 힌트</div>';
+    h+='<div class="card" style="padding:8px 12px;margin-top:8px">'+tip([['🔢','각 문제의 답(숫자 한 자리)을 ①②③④ 순서로 입력'],['🔍','막히면 위 아이템 바 → 힌트 (2회)']])+'</div>';
     return h;
   }
   h+='<div class="stage"><div class="'+(me.stage>1?'done':'now')+'">1차</div><div class="'+(me.stage>2?'done':(me.stage===2?'now':''))+'">2차</div><div class="'+(me.stage===3?(me.done?'done':'now'):'')+'">골인</div></div>';
@@ -473,15 +473,15 @@ function raceView(){
   h+='<div class="stepg"><div class="'+(stp>1?'done':'now')+'"><b>1</b>행선지 추리</div><div class="'+(stp>2?'done':(stp===2?'now':''))+'"><b>2</b>이동 · 봉투 찾기</div><div class="'+(stp===3?'now':'')+'"><b>3</b>미션 수행</div></div>';
   if(!me.guessed){
     h+='<div class="env"><div class="lb">'+me.stage+'차 · 어디로 갈까?</div><div class="h">“'+esc(sp.riddle||'')+'”</div>'+((me.rHintLv||0)>=1?'<div class="h3" style="color:#8B5E0B;font-size:14px">🔍 힌트 1 · '+esc(sp.rh1||'')+'</div>':'')+((me.rHintLv||0)>=2?'<div class="h3" style="color:#8B5E0B;font-size:14px">🔍 힌트 2 · '+esc(sp.rh2||'')+'</div>':'')+'</div>';
-    h+='<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">📍 행선지를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 광안리"><button type="button" class="btn sea glow" data-act="guess">정답?</button></div><div class="muted" style="margin-top:6px">틀려도 감점 없음 · 막히면 위 아이템 바에서 🔍 힌트(2회) · 📍 정답권 · 📞 직통</div></div>';
+    h+='<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">📍 행선지를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 광안리"><button type="button" class="btn sea glow" data-act="guess">정답?</button></div>'+tip([['✅','틀려도 감점 없음'],['🔍','막히면 위 아이템 바 → 힌트 (2회)'],['📍','정답권 · 📞 직통도 아이템 바에서']])+'</div>';
     return h;
   }
   if(!me.opened){
     var tm=ST.race.mine, tnm=(tm==='red'?'레드':'블루'), tcol=(tm==='red'?'#E04848':'#2F6FE4');
-    h+='<div class="win"><div class="k">🎯 행선지 정답!</div><div class="t">'+esc(sp.name)+'(으)로 이동하세요</div><div class="s">도착하면 아래 사진을 보고 봉투를 찾으세요.</div><div style="margin-top:10px;background:#fff;color:var(--ink);border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:12px"><div style="flex:none;width:52px;height:38px;border-radius:6px;background:'+tcol+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">✉️</div><div style="flex:1"><div class="muted" style="font-size:11px">찾아야 할 봉투</div><div class="disp" style="font-size:19px;line-height:1.25">「'+esc(sp.name)+'」이 적혀 있는 <span style="color:'+tcol+'">'+tnm+' 봉투</span></div></div></div></div>';
+    h+='<div class="win"><div class="k">🎯 행선지 정답!</div><div class="t">'+esc(sp.name)+'(으)로 이동하세요</div><div class="s">도착하면 아래 사진을 보고 봉투를 찾으세요.</div><div style="margin-top:10px;background:#fff;color:var(--ink);border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:12px"><div style="flex:none;width:52px;height:38px;border-radius:6px;background:'+tcol+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">✉️</div><div style="flex:1"><div class="muted" style="font-size:11px">찾아야 할 봉투</div><div class="disp" style="font-size:18px;line-height:1.25">「'+esc(sp.name)+'」이 적혀 있는<br><span style="color:'+tcol+';font-size:22px">'+tnm+' 봉투</span></div></div></div></div>';
     h+=travelCard(me.travel);
     h+='<div class="env ok"><div class="lb">🧧 「'+esc(sp.name)+'」 '+tnm+' 봉투는 어디?</div>'+pic(sp.photo1,'힌트 1',sp.pc1)+(me.hintLv>=1?pic(sp.photo2,'힌트 2',sp.pc2):'')+(me.hintLv>=2?pic(sp.photo3,'힌트 3',sp.pc3):'')+(me.hintLv>=3?'<div class="pic" style="border:2px solid var(--amber)"><div class="cap" style="color:var(--amber)">📍 정답</div>'+(sp.photo4?'<img src="'+esc(sp.photo4)+'" alt="">':'')+'<div style="font-size:16px;font-weight:900;color:#B3400F;padding:8px 10px 4px">📍 '+esc(sp.ans||'')+'</div></div>':'')+'</div>';
-    h+='<div class="muted" style="margin:-4px 0 10px;text-align:center">못 찾겠으면 위 아이템 바에서 🔍 힌트 (3회째는 정답 문장) · 📍 정답권 · 📞 직통</div>';
+    h+='<div class="card" style="padding:8px 12px;margin-top:-4px">'+tip([['🔍','못 찾겠으면 위 아이템 바 → 힌트 (3회째는 정답 문장)'],['📍','정답권 · 📞 직통도 아이템 바에서']])+'</div>';
     h+='<div class="card"><div class="nx">👉 도착해서 봉투를 찾으면</div><div class="disp" style="font-size:17px">🔐 「'+esc(sp.name)+'」 '+tnm+' 봉투 안 코드</div><div class="codein" style="margin-top:8px"><input id="sc" placeholder="0000" maxlength="4" inputmode="numeric"><button type="button" class="btn sea glow" data-act="open">열기</button></div><div class="muted" style="margin-top:6px">「'+esc(sp.name)+'」이 적혀 있는 '+tnm+' 봉투 안의 4자리</div></div>';
     return h;
   }
@@ -516,6 +516,11 @@ function travelCard(tv){
   if(!tv) return '';
   return '<div class="nx">👉 이동하면서</div><button type="button" class="btn wide glow" data-act="travel" style="background:linear-gradient(180deg,#FFE3A3,#F2C560);color:#3A2600;margin-bottom:12px;justify-content:space-between;padding:14px 16px"><span>🚗 '+esc(tv.title||'이동 미션')+'</span><span style="font-family:Noto Sans KR;font-size:12px;font-weight:800;background:rgba(255,255,255,.7);border-radius:99px;padding:3px 10px">보기 ›</span></button>';
 }
+function tip(rows, cls){
+  var h='<div class="'+(cls||'muted')+'" style="display:grid;grid-template-columns:22px 1fr;row-gap:3px;column-gap:4px;text-align:left;line-height:1.5;margin-top:6px">';
+  for(var i=0;i<rows.length;i++) h+='<span style="text-align:center">'+rows[i][0]+'</span><span>'+rows[i][1]+'</span>';
+  return h+'</div>';
+}
 function travelBlocks(body){
   var blocks=String(body||'').replace(/\r/g,'').split(/\n\s*\n/), out=[];
   for(var i=0;i<blocks.length;i++){
@@ -538,7 +543,7 @@ function travelModal(){
     for(var sc=0;sc<x.score.length;sc++) h+='<div style="margin:8px 0 0 36px;display:inline-block;background:#FFF1C2;color:#7A4E00;font-size:12.5px;font-weight:800;border-radius:99px;padding:3px 10px">🏆 '+esc(x.score[sc])+'</div>';
     h+='</div>'; }
   if(tv.chosung){ var cs=String(tv.chosung).split(/\s*[·,]\s*/).filter(function(c){ return c; }); h+='<div style="margin-top:10px;background:#fff;border:1.5px dashed #F2B93C;border-radius:14px;padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px">'; for(var c=0;c<cs.length;c++) h+='<div style="display:flex;gap:8px;align-items:center;background:var(--sand);border-radius:10px;padding:6px 10px"><span class="disp" style="color:var(--amber);font-size:13px;width:18px">'+(c+1)+'</span><span class="disp" style="font-size:18px;letter-spacing:.12em;color:var(--ink)">'+esc(cs[c])+'</span></div>'; h+='</div>'; }
-  if(tv.proof) h+='<div style="margin-top:10px;background:#FCE7D6;color:#7A4E00;font-size:12.5px;border-radius:10px;padding:8px 10px;text-align:left;line-height:1.5">📸 <b>인증</b> · '+esc(tv.proof)+'<br>🚘 운전자는 말로만 참여 · 촬영은 조수석</div>';
+  if(tv.proof) h+='<div style="margin-top:10px;background:#FCE7D6;color:#7A4E00;font-size:12.5px;border-radius:10px;padding:8px 10px">'+tip([['📸','<b>인증</b> · '+esc(tv.proof)],['🚘','운전자는 말로만 참여 · 촬영은 조수석']],'')+'</div>';
   h+='<div class="bt"><button type="button" class="btn sea" data-mo="0">닫기</button></div>';
   $('moBox').innerHTML=h; $('mo').classList.add('on'); _moCb=null;
 }
@@ -582,7 +587,7 @@ function gmView(){
   h+='<div class="row" style="margin-bottom:12px"><button type="button" class="btn sea" style="flex:1" data-act="show">📺 공지 화면</button><button type="button" class="btn ghost" data-act="demoon">🧪 데모 모드</button></div>';
   if(ST.phase!=='chips'){
     h+=lane('blue')+lane('red');
-    var f=(ST.race&&ST.race.feed)||[]; if(f.length){ h+='<div class="feed">'; for(var q=0;q<f.length;q++) h+='<div><span>'+esc(f[q].t)+'</span>'+(f[q].team==='blue'?'🔵':'🔴')+' '+esc(f[q].msg)+'</div>'; h+='</div>'; }
+    var f=(ST.race&&ST.race.feed)||[]; if(f.length){ h+='<div class="feed">'; for(var q=0;q<f.length;q++){ if(String(f[q].msg).indexOf('마켓 확정')>=0) continue; h+='<div style="display:grid;grid-template-columns:38px 1fr;column-gap:4px"><span>'+esc(f[q].t)+'</span><span>'+(f[q].team==='blue'?'🔵':'🔴')+' '+esc(f[q].msg)+'</span></div>'; } h+='</div>'; }
     if(ST.phase==='race'&&ST.race&&ST.race.codes){ h+='<div class="card"><div class="disp" style="font-size:15px">🧧 코드표 (전화로 불러줄 때)</div><div class="kv"><span>출발 블루 / 레드</span><b>'+esc(ST.race.startCodes.blue||'-')+' / '+esc(ST.race.startCodes.red||'-')+'</b></div>'; for(var c=0;c<ST.race.codes.length;c++) h+='<div class="kv"><span>'+esc(ST.race.codes[c].name)+'</span><b>'+esc(ST.race.codes[c].code||'미설정')+'</b></div>'; h+='<div class="kv"><span>점심 정답</span><b>'+esc(ST.race.finishAnswer||'')+'</b></div></div>'; }
     h+='<button type="button" class="btn ghost wide" data-act="settings">✏️ 힌트 · 사진 · 봉투 코드 · 미션 설정</button><div class="muted" style="text-align:center;margin-top:10px"><span data-act="refresh" style="text-decoration:underline;cursor:pointer">새로고침</span></div>';
     return h;
