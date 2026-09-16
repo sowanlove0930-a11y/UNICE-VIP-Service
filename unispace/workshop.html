@@ -95,7 +95,7 @@ html,body{margin:0;background:var(--sand);color:var(--ink);font-family:'Noto San
 .locked b{color:var(--amber)}
 .mo{position:fixed;inset:0;background:rgba(27,42,65,.6);z-index:80;display:none;align-items:center;justify-content:center;padding:20px}
 .mo.on{display:flex}
-.mo .bx{width:100%;max-width:380px;background:var(--sand);border-radius:22px;padding:22px 18px 16px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);animation:pop .18s ease-out}
+.mo .bx{width:100%;max-width:380px;max-height:92vh;overflow:auto;background:var(--sand);border-radius:22px;padding:22px 18px 16px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);animation:pop .18s ease-out}
 @keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
 .mo .ic{font-size:44px;line-height:1;margin-bottom:8px}
 .mo .tt{font-size:20px;color:var(--ink);font-family:'Jua'}
@@ -187,6 +187,13 @@ html,body{margin:0;background:var(--sand);color:var(--ink);font-family:'Noto San
 .stepg div b{display:block;font-size:14px;font-family:'Jua';font-weight:400}
 .win{background:linear-gradient(135deg,#2AA6A0,#1F8C8C);color:#fff;border-radius:18px;padding:14px 16px;margin-bottom:10px}
 .win .k{font-size:12px;opacity:.85}.win .t{font-size:22px;font-family:'Jua';line-height:1.2;margin-top:2px}.win .s{font-size:13px;margin-top:6px;opacity:.95}
+.glow{animation:glow 1.5s ease-in-out infinite;position:relative}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(226,120,46,.55)}50%{box-shadow:0 0 0 10px rgba(226,120,46,0)}}
+.glow.sea{animation-name:glowsea}
+@keyframes glowsea{0%,100%{box-shadow:0 0 0 0 rgba(31,140,140,.55)}50%{box-shadow:0 0 0 10px rgba(31,140,140,0)}}
+.nx{display:inline-block;font-size:11px;font-weight:900;color:#fff;background:var(--amber);border-radius:99px;padding:2px 9px;margin-bottom:6px;animation:bob 1.2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){.glow,.nx{animation:none}}
 .demobar{background:#1B2A41;color:#fff;border-radius:16px;padding:10px 14px;margin-bottom:12px}
 .demobar .t{font-size:12px;font-weight:900;color:#FFE6B0;margin-bottom:6px}
 .demobar .seg{background:rgba(255,255,255,.12)}
@@ -425,7 +432,8 @@ function marketView(){
   }
   for(var k=0;k<ITEMS.length;k++){ var it=ITEMS[k], q=t.cart[it.k]||0, by=(t.cartBy&&t.cartBy[it.k])||'';
     h+='<div class="item'+(q?' own':'')+'"><div class="ic">'+it.ic+'</div><div style="flex:1"><div class="nm disp">'+esc(it.nm)+'</div><div class="ds">'+esc(it.ds)+'</div>'+(q&&by?'<div class="by">'+esc(by)+' 담음</div>':'')+'</div><div class="qty"><button type="button" data-act="cart" data-k="'+it.k+'" data-d="-1" '+(q?'':'disabled')+'>−</button><b>'+q+'</b><button type="button" data-act="cart" data-k="'+it.k+'" data-d="1" '+(q>=it.max||left<it.pr?'disabled':'')+'>＋</button><span class="pr">'+it.pr+'칩</span></div></div>'; }
-  h+='<button type="button" class="btn sea wide" data-act="confirm" style="margin-top:6px">구매 확정 · 남은 칩 '+left+'</button><div class="muted" style="text-align:center;margin-top:6px">확정하면 되돌릴 수 없어요 · 팀원 중 한 명이 누르면 끝</div>';
+  var hasCart=false; for(var ck in t.cart){ if(t.cart.hasOwnProperty(ck)&&t.cart[ck]>0) hasCart=true; }
+  h+=(hasCart?'<div class="nx">👉 다 담았으면</div>':'')+'<button type="button" class="btn sea wide'+(hasCart?' glow':'')+'" data-act="confirm" style="margin-top:6px">구매 확정 · 남은 칩 '+left+'</button><div class="muted" style="text-align:center;margin-top:6px">확정하면 되돌릴 수 없어요 · 팀원 중 한 명이 누르면 끝</div>';
   return h+feedCard();
 }
 function marketListReadOnly(){ var ITEMS=ST.items||[]; var h='<div class="card">'; for(var i=0;i<ITEMS.length;i++){ var it=ITEMS[i]; h+='<div class="shopli"><span class="ic">'+it.ic+'</span><div style="flex:1"><b>'+esc(it.nm)+'</b><div class="muted">'+esc(it.ds)+'</div></div><span class="pr">'+it.pr+'칩</span></div>'; } return h+'</div>'; }
@@ -439,7 +447,7 @@ function raceView(){
     h+='<div class="lock" id="lock"><div class="disp" style="font-size:22px;color:var(--sea)">🔐 출발 4자리 코드</div><div class="muted">맞추면 첫 힌트 봉투가 열립니다</div><div class="digits">';
     for(var i=0;i<4;i++){ var c=_code.charAt(i); h+='<div class="dg '+(c?'':'q')+'">'+(c||'·')+'</div>'; }
     h+='</div><div class="pad">'; for(var d=1;d<=9;d++) h+='<button type="button" data-act="dg" data-d="'+d+'">'+d+'</button>';
-    h+='<button type="button" data-act="dgdel">⌫</button><button type="button" data-act="dg" data-d="0">0</button><button type="button" class="ok" data-act="dgok">확인</button></div>';
+    h+='<button type="button" data-act="dgdel">⌫</button><button type="button" data-act="dg" data-d="0">0</button><button type="button" class="ok'+(_code.length===4?' glow':'')+'" data-act="dgok">확인</button></div>';
     h+='<div class="clue">'+(sc.intro?'<div style="font-weight:700;color:var(--ink);margin-bottom:6px">'+esc(sc.intro)+'</div>':'')+'<div>① '+esc(sc.q1||'')+'</div><div>② '+esc(sc.q2||'')+'</div><div>③ '+esc(sc.q3||'')+'</div><div>④ '+esc(sc.q4||'')+'</div>'+((me.sHintLv||0)>=1?'<div style="margin-top:8px;color:#B3400F;font-weight:700">🔍 힌트 1 · '+esc(sc.h1||'')+'</div>':'')+((me.sHintLv||0)>=2?'<div style="color:#B3400F;font-weight:700">🔍 힌트 2 · '+esc(sc.h2||'')+'</div>':'')+'<div class="muted" style="margin-top:6px">막히면 위 아이템 바에서 🔍 힌트 (2회)</div></div></div>';
     return h;
   }
@@ -449,7 +457,7 @@ function raceView(){
     h+=travelCard(me.travel);
     h+='<div class="env"><div class="lb">골인 · 점심 퀴즈</div><div class="h">“'+esc(f.q||'')+'”</div></div>';
     var dead = f.deadline ? '<div class="card" style="border:2px solid var(--amber);text-align:center;padding:12px;margin-top:12px"><div class="muted">집결 마감</div><div class="disp" style="font-size:34px;color:var(--amber);line-height:1.1">'+esc(f.deadline)+'</div>'+(f.note?'<div class="muted" style="margin-top:4px">'+esc(f.note)+'</div>':'')+'</div>' : '';
-    if(!me.done) return h+'<div class="card"><div class="disp" style="font-size:16px">🍚 점심 메뉴를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 김밥"><button type="button" class="btn sea" data-act="finish">정답?</button></div></div>'+dead;
+    if(!me.done) return h+'<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">🍚 점심 메뉴를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 김밥"><button type="button" class="btn sea glow" data-act="finish">정답?</button></div></div>'+dead;
     h+='<div class="env ok"><div class="lb">정답! 🍚</div><div class="h3" style="font-size:17px;margin-top:6px">📍 '+esc(f.addr||'')+'</div><a class="muted" style="display:block;margin-top:6px" href="https://map.naver.com/v5/search/'+encodeURIComponent((f.addr||'').split(' · ')[0])+'" target="_blank">지도 열기 ↗</a></div><div class="card" style="text-align:center"><div class="disp" style="font-size:22px;color:var(--sea)">🏁 골인!</div><div style="font-size:14px;margin-top:8px;text-align:left;display:inline-block">남은 칩 <b>'+t.chips+'개</b> → +'+(t.chips*10)+'점<br>안 쓴 아이템 → 칩 <b>'+(t.refund||0)+'개</b> 환산 → +'+((t.refund||0)*10)+'점'+(t.bonus?'<br>미스터리 박스 보너스 → +'+t.bonus+'점':'')+'</div><div class="disp" style="font-size:26px;color:var(--amber);margin-top:6px">합계 +'+((t.chips+(t.refund||0))*10+(t.bonus||0))+'점</div>'+(t.boxResult?'<div class="muted" style="margin-top:2px">미스터리 박스 결과: '+esc(t.boxResult)+'</div>':'')+'<div class="muted" style="margin-top:4px">미션 점수는 집결 후 발표</div></div>';
     return h+dead;
   }
@@ -458,7 +466,7 @@ function raceView(){
   h+='<div class="stepg"><div class="'+(stp>1?'done':'now')+'"><b>1</b>행선지 추리</div><div class="'+(stp>2?'done':(stp===2?'now':''))+'"><b>2</b>이동 · 봉투 찾기</div><div class="'+(stp===3?'now':'')+'"><b>3</b>미션 수행</div></div>';
   if(!me.guessed){
     h+='<div class="env"><div class="lb">'+me.stage+'차 · 어디로 갈까?</div><div class="h">“'+esc(sp.riddle||'')+'”</div>'+((me.rHintLv||0)>=1?'<div class="h3" style="color:#8B5E0B;font-size:14px">🔍 힌트 1 · '+esc(sp.rh1||'')+'</div>':'')+((me.rHintLv||0)>=2?'<div class="h3" style="color:#8B5E0B;font-size:14px">🔍 힌트 2 · '+esc(sp.rh2||'')+'</div>':'')+'</div>';
-    h+='<div class="card"><div class="disp" style="font-size:16px">📍 행선지를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 광안리"><button type="button" class="btn sea" data-act="guess">정답?</button></div><div class="muted" style="margin-top:6px">틀려도 감점 없음 · 막히면 위 아이템 바에서 🔍 힌트(2회) · 📍 정답권 · 📞 직통</div></div>';
+    h+='<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">📍 행선지를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 광안리"><button type="button" class="btn sea glow" data-act="guess">정답?</button></div><div class="muted" style="margin-top:6px">틀려도 감점 없음 · 막히면 위 아이템 바에서 🔍 힌트(2회) · 📍 정답권 · 📞 직통</div></div>';
     return h;
   }
   if(!me.opened){
@@ -467,7 +475,7 @@ function raceView(){
     h+=travelCard(me.travel);
     h+='<div class="env ok"><div class="lb">🧧 「'+esc(sp.name)+'」 '+tnm+' 봉투는 어디?</div>'+pic(sp.photo1,'힌트 1',sp.pc1)+(me.hintLv>=1?pic(sp.photo2,'힌트 2',sp.pc2):'')+(me.hintLv>=2?pic(sp.photo3,'힌트 3',sp.pc3):'')+(me.hintLv>=3?'<div class="pic" style="border:2px solid var(--amber)"><div class="cap" style="color:var(--amber)">📍 정답</div>'+(sp.photo4?'<img src="'+esc(sp.photo4)+'" alt="">':'')+'<div style="font-size:16px;font-weight:900;color:#B3400F;padding:8px 10px 4px">📍 '+esc(sp.ans||'')+'</div></div>':'')+'</div>';
     h+='<div class="muted" style="margin:-4px 0 10px;text-align:center">못 찾겠으면 위 아이템 바에서 🔍 힌트 (3회째는 정답 문장) · 📍 정답권 · 📞 직통</div>';
-    h+='<div class="card"><div class="disp" style="font-size:17px">🔐 「'+esc(sp.name)+'」 '+tnm+' 봉투 안 코드</div><div class="codein" style="margin-top:8px"><input id="sc" placeholder="0000" maxlength="4" inputmode="numeric"><button type="button" class="btn sea" data-act="open">열기</button></div><div class="muted" style="margin-top:6px">「'+esc(sp.name)+'」이 적혀 있는 '+tnm+' 봉투 안의 4자리</div></div>';
+    h+='<div class="card"><div class="nx">👉 도착해서 봉투를 찾으면</div><div class="disp" style="font-size:17px">🔐 「'+esc(sp.name)+'」 '+tnm+' 봉투 안 코드</div><div class="codein" style="margin-top:8px"><input id="sc" placeholder="0000" maxlength="4" inputmode="numeric"><button type="button" class="btn sea glow" data-act="open">열기</button></div><div class="muted" style="margin-top:6px">「'+esc(sp.name)+'」이 적혀 있는 '+tnm+' 봉투 안의 4자리</div></div>';
     return h;
   }
   h+='<div class="win" style="padding:12px 16px"><div class="k">🔓 코드 정답!</div><div class="t">'+me.stage+'차 미션 · '+esc(sp.name)+'</div></div>';
@@ -476,7 +484,7 @@ function raceView(){
     +'<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--line)"><span class="disp" style="width:24px;height:24px;border-radius:50%;background:var(--sea);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:13px">1</span><span style="font-size:14px">미션 수행 · <span class="muted">차 안 촬영 무효</span></span></div>'
     +'<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--line)"><span class="disp" style="width:24px;height:24px;border-radius:50%;background:var(--sea);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:13px">2</span><span style="font-size:14px">인증 영상을 <b>단톡방</b>에 올리기</span></div>'
     +'<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--line)"><span class="disp" style="width:24px;height:24px;border-radius:50%;background:var(--amber);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:13px">3</span><span style="font-size:14px">아래 <b>미션 클리어</b> 버튼 · <span class="muted">점수는 집결 후 발표</span></span></div></div>';
-  h+='<button type="button" class="btn amber wide" data-act="next" style="font-size:18px;padding:16px">✅ 미션 클리어 → '+(me.stage===2?'골인 퀴즈':'다음 힌트')+'</button>';
+  h+='<div class="nx">👉 인증 영상 올린 뒤</div><button type="button" class="btn amber wide glow" data-act="next" style="font-size:18px;padding:16px">✅ 미션 클리어 → '+(me.stage===2?'골인 퀴즈':'다음 힌트')+'</button>';
   return h;
 }
 function itemsBar(t, me){
@@ -499,14 +507,31 @@ function itemsBar(t, me){
 }
 function travelCard(tv){
   if(!tv) return '';
-  return '<button type="button" class="btn wide" data-act="travel" style="background:linear-gradient(180deg,#FFE3A3,#F2C560);color:#3A2600;margin-bottom:12px;justify-content:space-between;padding:14px 16px"><span>🚗 '+esc(tv.title||'이동 미션')+'</span><span style="font-family:Noto Sans KR;font-size:12px;font-weight:800;background:rgba(255,255,255,.7);border-radius:99px;padding:3px 10px">보기 ›</span></button>';
+  return '<div class="nx">👉 이동하면서</div><button type="button" class="btn wide glow" data-act="travel" style="background:linear-gradient(180deg,#FFE3A3,#F2C560);color:#3A2600;margin-bottom:12px;justify-content:space-between;padding:14px 16px"><span>🚗 '+esc(tv.title||'이동 미션')+'</span><span style="font-family:Noto Sans KR;font-size:12px;font-weight:800;background:rgba(255,255,255,.7);border-radius:99px;padding:3px 10px">보기 ›</span></button>';
+}
+function travelBlocks(body){
+  var blocks=String(body||'').replace(/\r/g,'').split(/\n\s*\n/), out=[];
+  for(var i=0;i<blocks.length;i++){
+    var lines=blocks[i].split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l; });
+    if(!lines.length) continue;
+    var title=lines[0].replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*|^\d+[.)]\s*/,''), desc=[], score=[];
+    for(var k=1;k<lines.length;k++){ if(/^(→|➡|=>|\*|점수)/.test(lines[k])) score.push(lines[k].replace(/^(→|➡|=>|\*|점수[:：]?)\s*/,'')); else desc.push(lines[k]); }
+    out.push({title:title, desc:desc, score:score});
+  }
+  return out;
 }
 function travelModal(){
   var tv=ST.race&&ST.race.me&&ST.race.me.travel; if(!tv) return;
   var h='<div class="ic">🚗</div><div class="tt">'+esc(tv.title||'이동 미션')+'</div>';
-  h+='<div style="text-align:left;font-size:15px;line-height:1.7;margin-top:10px;white-space:pre-line;background:#fff;border-radius:14px;padding:12px 14px">'+esc(tv.body||'')+'</div>';
-  if(tv.chosung) h+='<div style="margin-top:8px;background:#fff;border:1.5px dashed #F2B93C;border-radius:12px;padding:10px 12px;font-family:Jua;font-size:17px;line-height:1.8;letter-spacing:.04em;color:var(--ink);text-align:left">'+esc(tv.chosung)+'</div>';
-  if(tv.proof) h+='<div style="margin-top:8px;background:#FCE7D6;color:#7A4E00;font-size:12.5px;border-radius:10px;padding:8px 10px;text-align:left">📸 '+esc(tv.proof)+' · 운전자는 말로만 참여</div>';
+  var bl=travelBlocks(tv.body);
+  for(var b=0;b<bl.length;b++){ var x=bl[b];
+    h+='<div style="text-align:left;background:#fff;border-radius:14px;padding:12px 14px;margin-top:10px;border:1px solid var(--line)">';
+    h+='<div style="display:flex;gap:10px;align-items:center"><span class="disp" style="width:26px;height:26px;border-radius:50%;background:var(--amber);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:14px">'+(b+1)+'</span><span style="font-size:16px;font-weight:900;color:var(--ink);line-height:1.3">'+esc(x.title)+'</span></div>';
+    if(x.desc.length){ h+='<div style="font-size:14px;line-height:1.65;color:var(--ink2);margin:8px 0 0 36px">'; for(var d=0;d<x.desc.length;d++) h+='<div>'+esc(x.desc[d])+'</div>'; h+='</div>'; }
+    for(var sc=0;sc<x.score.length;sc++) h+='<div style="margin:8px 0 0 36px;display:inline-block;background:#FFF1C2;color:#7A4E00;font-size:12.5px;font-weight:800;border-radius:99px;padding:3px 10px">🏆 '+esc(x.score[sc])+'</div>';
+    h+='</div>'; }
+  if(tv.chosung){ var cs=String(tv.chosung).split(/\s*[·,]\s*/).filter(function(c){ return c; }); h+='<div style="margin-top:10px;background:#fff;border:1.5px dashed #F2B93C;border-radius:14px;padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px">'; for(var c=0;c<cs.length;c++) h+='<div style="display:flex;gap:8px;align-items:center;background:var(--sand);border-radius:10px;padding:6px 10px"><span class="disp" style="color:var(--amber);font-size:13px;width:18px">'+(c+1)+'</span><span class="disp" style="font-size:18px;letter-spacing:.12em;color:var(--ink)">'+esc(cs[c])+'</span></div>'; h+='</div>'; }
+  if(tv.proof) h+='<div style="margin-top:10px;background:#FCE7D6;color:#7A4E00;font-size:12.5px;border-radius:10px;padding:8px 10px;text-align:left;line-height:1.5">📸 <b>인증</b> · '+esc(tv.proof)+'<br>🚘 운전자는 말로만 참여 · 촬영은 조수석</div>';
   h+='<div class="bt"><button type="button" class="btn sea" data-mo="0">닫기</button></div>';
   $('moBox').innerHTML=h; $('mo').classList.add('on'); _moCb=null;
 }
