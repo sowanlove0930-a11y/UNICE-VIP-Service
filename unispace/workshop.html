@@ -267,18 +267,33 @@ function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,
 function coins(perf, base){ var h='<div class="coins">'; for(var i=0;i<Math.min(perf,14);i++) h+='<i class="coin"></i>'; for(var j=0;j<base;j++) h+='<i class="coin base"></i>'; return h+'</div>'; }
 
 /* ---------- GAS ---------- */
-function gasGet(params, cb){
+function gasGet(params, cb, _try){
   if(_demo) params.demo='1';
+  _try=_try||1;
   var qs=[]; for(var k in params){ if(params.hasOwnProperty(k)) qs.push(encodeURIComponent(k)+'='+encodeURIComponent(params[k])); }
   var url = UNISPACE_GAS_URL + '?' + qs.join('&') + '&_=' + Date.now();
-  var done=false; function finish(res){ if(done) return; done=true; cb(res); }
-  try { fetch(url,{method:'GET',cache:'no-store'}).then(function(r){ return r.json(); }).then(finish).catch(function(){ jsonp(url, finish); }); }
-  catch(e){ jsonp(url, finish); }
+  var done=false;
+  function finish(res){ if(done) return; done=true; cb(res); }
+  function fail(){
+    if(done) return;
+    if(_try<3){ done=true; toast('연결이 불안정해요 · 다시 시도 중 ('+(_try+1)+'/3)'); setTimeout(function(){ gasGet(params, cb, _try+1); }, _try*2000); return; }
+    finish({ok:false,msg:'서버 연결 실패',net:true});
+  }
+  var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, 20000);
+  try {
+    fetch(url,{method:'GET',cache:'no-store',signal:ctrl?ctrl.signal:undefined}).then(function(r){ return r.json(); })
+      .then(function(res){ clearTimeout(timer); finish(res); })
+      .catch(function(){ clearTimeout(timer); jsonp(url, finish, fail); });
+  } catch(e){ clearTimeout(timer); jsonp(url, finish, fail); }
 }
-function jsonp(url, cb){
-  var name='swk_cb_'+Math.floor(Math.random()*1e9), s=document.createElement('script');
-  window[name]=function(res){ cb(res); try{ delete window[name]; }catch(e){ window[name]=null; } if(s.parentNode) s.parentNode.removeChild(s); };
-  s.src=url+'&callback='+name; s.onerror=function(){ cb({ok:false,msg:'서버 연결 실패'}); }; document.body.appendChild(s);
+function jsonp(url, cb, onerr){
+  var name='swk_cb_'+Math.floor(Math.random()*1e9), s=document.createElement('script'), fired=false;
+  window[name]=function(res){ fired=true; cb(res); try{ delete window[name]; }catch(e){ window[name]=null; } if(s.parentNode) s.parentNode.removeChild(s); };
+  s.src=url+'&callback='+name;
+  s.onerror=function(){ if(s.parentNode) s.parentNode.removeChild(s); if(onerr) onerr(); else cb({ok:false,msg:'서버 연결 실패'}); };
+  setTimeout(function(){ if(!fired && window[name]){ window[name]=function(){}; if(s.parentNode) s.parentNode.removeChild(s); if(onerr) onerr(); else cb({ok:false,msg:'서버 연결 실패'}); } }, 20000);
+  document.body.appendChild(s);
 }
 
 function gasPost(body, cb){
@@ -305,7 +320,7 @@ function showErr(html){ $('errBox').innerHTML=html; $('errBox').style.display=''
 function load(quiet){
   gasGet({action:'swkState', fp:currentUser.id}, function(res){
     $('loading').style.display='none';
-    if(!res || !res.ok){ showErr(esc((res&&res.msg)||'불러오지 못했습니다')); return; }
+    if(!res || !res.ok){ showErr(esc((res&&res.msg)||'불러오지 못했습니다')+(res&&res.net?'<div class="muted" style="margin-top:4px">폰 통신이 잠깐 끊겼어요. Wi-Fi/5G를 바꾸거나 잠시 후 다시 시도해 주세요.</div>':'')+'<div style="margin-top:10px"><button type="button" class="btn sea" id="btnRetry">↻ 다시 시도</button></div>'); var rb=$('btnRetry'); if(rb) rb.addEventListener('click', function(){ $('errBox').style.display='none'; $('loading').style.display=''; load(false); }); return; }
     $('errBox').style.display='none';
     ST=res; L=null; render();
     if(quiet) toast('업적 기준으로 다시 계산했어요');
@@ -540,7 +555,7 @@ function travelModal(){
     h+='<div style="text-align:left;background:#fff;border-radius:14px;padding:12px 14px;margin-top:10px;border:1px solid var(--line)">';
     h+='<div style="display:flex;gap:10px;align-items:center"><span class="disp" style="width:26px;height:26px;border-radius:50%;background:var(--amber);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:14px">'+(b+1)+'</span><span style="font-size:16px;font-weight:900;color:var(--ink);line-height:1.3">'+esc(x.title)+'</span></div>';
     if(x.desc.length){ h+='<div style="font-size:14px;line-height:1.65;color:var(--ink2);margin:8px 0 0 36px">'; for(var d=0;d<x.desc.length;d++) h+='<div>'+esc(x.desc[d])+'</div>'; h+='</div>'; }
-    for(var sc=0;sc<x.score.length;sc++) h+='<div style="margin:8px 0 0 36px;display:inline-block;background:#FFF1C2;color:#7A4E00;font-size:12.5px;font-weight:800;border-radius:99px;padding:3px 10px">🏆 '+esc(x.score[sc])+'</div>';
+    if(x.score.length){ h+='<div style="margin:8px 0 0 36px;display:grid;grid-template-columns:20px 1fr;row-gap:4px;column-gap:4px;background:#FFF1C2;color:#7A4E00;font-size:12.5px;font-weight:800;border-radius:12px;padding:6px 10px">'; for(var sc=0;sc<x.score.length;sc++) h+='<span>🏆</span><span>'+esc(x.score[sc])+'</span>'; h+='</div>'; }
     h+='</div>'; }
   if(tv.chosung){ var cs=String(tv.chosung).split(/\s*[·,]\s*/).filter(function(c){ return c; }); h+='<div style="margin-top:10px;background:#fff;border:1.5px dashed #F2B93C;border-radius:14px;padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px">'; for(var c=0;c<cs.length;c++) h+='<div style="display:flex;gap:8px;align-items:center;background:var(--sand);border-radius:10px;padding:6px 10px"><span class="disp" style="color:var(--amber);font-size:13px;width:18px">'+(c+1)+'</span><span class="disp" style="font-size:18px;letter-spacing:.12em;color:var(--ink)">'+esc(cs[c])+'</span></div>'; h+='</div>'; }
   if(tv.proof) h+='<div style="margin-top:10px;background:#FCE7D6;color:#7A4E00;font-size:12.5px;border-radius:10px;padding:8px 10px">'+tip([['📸','<b>인증</b> · '+esc(tv.proof)],['🚘','운전자는 말로만 참여 · 촬영은 조수석']],'')+'</div>';
