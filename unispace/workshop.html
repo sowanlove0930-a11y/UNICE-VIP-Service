@@ -447,9 +447,9 @@ function raceView(){
     return h+dead;
   }
   var sp=me.spot||{};
-  h+='<div class="env"><div class="lb">'+me.stage+'차 힌트 · 어디로 갈까?</div><div class="h">“'+esc(sp.riddle||'')+'”</div></div>';
+  h+='<div class="env"><div class="lb">'+me.stage+'차 힌트 · 어디로 갈까?</div><div class="h">“'+esc(sp.riddle||'')+'”</div>'+(!me.guessed&&(me.rHintLv||0)>=1?'<div class="h3" style="color:#8B5E0B;font-size:14px">🔍 힌트 1 · '+esc(sp.rh1||'')+'</div>':'')+(!me.guessed&&(me.rHintLv||0)>=2?'<div class="h3" style="color:#8B5E0B;font-size:14px">🔍 힌트 2 · '+esc(sp.rh2||'')+'</div>':'')+'</div>';
   if(!me.guessed){
-    h+='<div class="card"><div class="disp" style="font-size:16px">📍 행선지를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 광안리"><button type="button" class="btn sea" data-act="guess">정답?</button></div><div class="muted" style="margin-top:6px">맞으면 봉투 위치 사진이 바로 열려요 · 틀려도 감점 없음</div></div>';
+    h+='<div class="card"><div class="disp" style="font-size:16px">📍 행선지를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 광안리"><button type="button" class="btn sea" data-act="guess">정답?</button></div><div class="muted" style="margin-top:6px">맞으면 봉투 위치 사진이 바로 열려요 · 틀려도 감점 없음<br>막히면 위 아이템 바에서 🔍 힌트(2회까지) · 📍 정답권 · 📞 직통</div></div>';
     return h+chipLine(t);
   }
   if(!me.opened){
@@ -463,13 +463,16 @@ function raceView(){
   return h+chipLine(t);
 }
 function itemsBar(t, me){
-  var it=t.items||{}; var canHint = me && me.stage>0 && me.stage<3 && me.guessed && !me.opened && me.hintLv<2 && (t.freeHint>0 || it.hint>0);
-  var canAns = me && me.stage>0 && me.stage<3 && me.guessed && !me.opened && me.hintLv<3 && it.answer>0;
-  var canCall = me && me.stage>0 && me.stage<3 && me.guessed && !me.opened && me.hintLv<3 && it.call>0;
+  var it=t.items||{}; var inSpot = me && me.stage>0 && me.stage<3 && !me.opened; var rl=me?(me.rHintLv||0):0;
+  var canRHint = inSpot && !me.guessed && rl<2 && (t.freeHint>0 || it.hint>0);
+  var canHint = inSpot && me.guessed && me.hintLv<2 && (t.freeHint>0 || it.hint>0);
+  var canAns = inSpot && (!me.guessed || me.hintLv<3) && it.answer>0;
+  var canCall = inSpot && (!me.guessed || me.hintLv<3) && it.call>0;
   function cell(k,ic,label,n,can,act){ return '<div class="it'+(n>0?(can?' can':''):' zero')+'" data-act="'+(can?act:'why')+'" data-k="'+k+'"><b>'+ic+'</b>'+label+'<span class="n">'+(n>0?n+'개':'없음')+'</span></div>'; }
   var h='<div class="ibar"><div class="chipn">'+t.chips+'<small>칩</small></div>';
-  h+=cell('free','🆓','무료힌트',t.freeHint,canHint&&t.freeHint>0,'hint');
-  h+=cell('hint','🔍','힌트권',it.hint||0,canHint&&t.freeHint<=0,'hint');
+  var hintAct = (me&&!me.guessed)?'rhint':'hint', anyHint = canRHint||canHint;
+  h+=cell('free','🆓','무료힌트',t.freeHint,anyHint&&t.freeHint>0,hintAct);
+  h+=cell('hint','🔍','힌트권',it.hint||0,anyHint&&t.freeHint<=0,hintAct);
   h+=cell('answer','📍','정답권',it.answer||0,canAns,'answer');
   h+=cell('call','📞','직통',it.call||0,canCall,'call');
   h+=cell('pick','🏖️','지명권',it.pick||0,false,'why');
@@ -479,7 +482,7 @@ function itemsBar(t, me){
 function pic(url,cap){ if(!url) return '<div class="pic"><div class="cap">📷 '+cap+' · 사진 없음</div></div>'; return '<div class="pic"><img src="'+esc(url)+'" alt=""><div class="cap">📷 '+cap+'</div></div>'; }
 function chipLine(t){
   var it=t.items||{};
-  var h='<div class="card" style="text-align:center;padding:10px 14px;margin-top:12px"><div style="font-size:14px">남은 칩 <b>'+t.chips+'개</b> → 골인 때 <b style="color:var(--amber)">+'+(t.chips*10)+'점</b></div>';
+  var h='<div class="card" style="text-align:center;padding:10px 14px;margin-top:12px"><div style="font-size:14px">남은 칩 <b>'+t.chips+'개</b> × 10점 = 골인 때 <b style="color:var(--amber)">+'+(t.chips*10)+'점</b></div>';
   if(t.boxResult) h+='<div class="muted" style="margin-top:2px">미스터리 박스 결과: '+esc(t.boxResult)+'</div>';
   h+='</div>';
   if(it.box>0) h+='<button type="button" class="btn amber wide" style="margin-top:10px" data-act="box">🎁 미스터리 박스 열기</button>';
@@ -560,7 +563,7 @@ function setView(){
   for(var i=0;i<CFG.spots.length;i++){ var sp=CFG.spots[i], rt=sp.route==='AB'?'공통':sp.route+'코스';
     h+='<div class="set"><div class="h disp">📍 '+esc(sp.name)+' <span class="muted" style="font-family:Noto Sans KR">· '+rt+' '+sp.stage+'차</span></div>'
       +fld('spots.'+i+'.riddle','수수께끼 힌트 (어디로 갈까?)',sp.riddle,'ta')
-      +fld('spots.'+i+'.keys','행선지 정답 · 쉼표로 여러 개',sp.keys)
+      +fld('spots.'+i+'.rh1','행선지 힌트 1 (힌트 요청 1회)',sp.rh1||'')+fld('spots.'+i+'.rh2','행선지 힌트 2 (힌트 요청 2회)',sp.rh2||'')+fld('spots.'+i+'.keys','행선지 정답 · 쉼표로 여러 개 (정답권 쓰면 첫 번째가 공개됨)',sp.keys)
       +'<label>봉투 위치 사진 · 정답 맞히면 ① · 힌트 요청 ② · 정답 공개 ③+문장</label><div class="ph">'+slot(i,'photo1',sp.photo1,'① 넓게')+slot(i,'photo2',sp.photo2,'② 클로즈업')+slot(i,'photo3',sp.photo3||'','③ 정답')+'</div>'
       +fld('spots.'+i+'.ans','정답 공개 문장 (칩 3개)',sp.ans)
       +fld('spots.'+i+'.code','봉투 안 4자리 코드',sp.code,'code')
@@ -603,7 +606,7 @@ function onAct(e){
   if(a==='demoon'){ _demo=true; _showMode=false; _code=''; load(false); }
   if(a==='demooff'){ _demo=false; _code=''; load(false); }
   if(a==='demoreset'){ var dc=$('demoChips')?$('demoChips').value:''; ask({icon:'🧪',title:'데모 처음부터',msg:dc?'시작 칩 '+dc+'개로 다시 시작합니다':'실제 업적 칩으로 다시 시작합니다',ok:'리셋'}, function(){ busy(el,'리셋 중…'); gasGet({action:'swkDemoReset',fp:currentUser.id,chips:dc}, function(res){ _code=''; _cartSynced=null; toast(res&&res.chips!=null?'시작 칩 '+res.chips+'개로 리셋':'실제 칩으로 리셋'); apply(res); }); }); }
-  if(a==='why'){ var k=el.getAttribute('data-k'); var m=k==='pick'?'종목 지명권은 골인 후 심판에게 말하면 돼요':(k==='box'?'미스터리 박스가 없어요':'행선지를 맞힌 뒤, 봉투를 찾는 단계에서 쓸 수 있어요'); toast(m); }
+  if(a==='why'){ var k=el.getAttribute('data-k'); var meW=ST.race&&ST.race.me; var m=k==='pick'?'종목 지명권은 골인 후 심판에게 말하면 돼요':(k==='box'?'미스터리 박스가 없어요':((k==='free'||k==='hint')?(meW&&meW.stage>0&&meW.stage<3?'이 단계 힌트는 다 썼어요 (행선지 2회 · 봉투 2회)':'미션이 시작되면 쓸 수 있어요'):(k==='answer'?'정답권이 없어요':'직통권이 없어요'))); toast(m); }
   if(a==='cart'){
     var mine=ST.race&&ST.race.mine, pub=mine&&ST.race.pub[mine]; if(!pub||el.disabled) return;
     var k2=el.getAttribute('data-k'), d=parseInt(el.getAttribute('data-d'))||0;
@@ -620,7 +623,8 @@ function onAct(e){
   if(a==='guess'){ var g=$('gs').value; if(!norm(g)){ toast('행선지를 적어주세요'); return; } var meG=ST.race&&ST.race.me; if(meG&&meG.keyHashes&&!hashIn(g,meG.keyHashes)){ toast('음… 거기 아니에요'); $('gs').select(); return; } race('guess',g, null, el, '🎯 행선지 정답! 힌트 여는 중…'); }
   if(a==='finish'){ var f=$('gs').value; if(!norm(f)){ toast('메뉴를 적어주세요'); return; } var meF=ST.race&&ST.race.me; if(meF&&meF.finishHashes&&!hashIn(f,meF.finishHashes)){ toast('음… 그 메뉴 아니에요'); $('gs').select(); return; } race('finish',f, null, el, '🏁 골인! 주소 여는 중…'); }
   if(a==='hint'){ race('hint','', null, el); }
-  if(a==='answer'){ ask({icon:'📍',title:'정답 공개권 사용',msg:'봉투 위치 사진과 문장이 바로 열립니다',ok:'열기',okCls:'amber'}, function(){ race('answer','', null, el, '정답 여는 중…'); }); }
+  if(a==='rhint'){ race('rhint','', null, el, '행선지 힌트 여는 중…'); }
+  if(a==='answer'){ var meA=ST.race&&ST.race.me; ask({icon:'📍',title:'정답 공개권 사용',msg:(meA&&!meA.guessed)?'행선지 이름이 바로 공개됩니다':'봉투 위치 사진과 문장이 바로 열립니다',ok:'열기',okCls:'amber'}, function(){ race('answer','', null, el, '정답 여는 중…'); }); }
   if(a==='call'){ ask({icon:'📞',title:'대표 긴급 미션 통과',msg:'대표 영상통화 미션을 통과했나요?\n직통권이 소진되고 정답이 공개됩니다',ok:'통과했어요',okCls:'amber'}, function(){ race('call','', null, el, '정답 여는 중…'); }); }
   if(a==='open'){ var oc=$('sc').value; if(oc.length<4){ toast('4자리를 입력하세요'); return; } var meO=ST.race&&ST.race.me; if(meO&&meO.openHash&&fnv(oc)!==meO.openHash){ toast('코드가 달라요'); $('sc').select(); return; } race('open',oc, null, el, '🎯 코드 정답! 미션 클리어 준비 중…'); }
   if(a==='next'){ ask({icon:'📸',title:'미션 클리어',msg:'인증 영상을 단톡방에 올렸나요?',ok:'올렸어요!',okCls:'amber'}, function(){ race('next','', null, el, '✅ 미션 클리어! 다음 힌트 준비 중…'); }); }
@@ -701,7 +705,7 @@ function race(op,val,cb,el,label){
   gasGet({action:'swkRace',fp:currentUser.id,op:op,val:val}, function(res){
     if(!optimistic) waitOff();
     if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); if(cb) cb(res); if(optimistic) load(false); return; }
-    if(op==='hint'||op==='answer'||op==='call') toast(res.msg||'완료');
+    if(op==='hint'||op==='rhint'||op==='answer'||op==='call') toast(res.msg||'완료');
     if(cb) cb(res);
     if(res.state&&res.state.ok){ ST=res.state; L=null; if(!optimistic || !(document.activeElement&&document.activeElement.tagName==='INPUT')) render(); }
     else if(!optimistic) load(false);
