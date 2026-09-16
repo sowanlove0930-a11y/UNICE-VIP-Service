@@ -6081,7 +6081,7 @@ function showDashboard() {
 
   // attendance.html에서 돌아왔을 때 출결현황 자동 갱신
   document.addEventListener('visibilitychange', function() {
-    if (document.visibilityState === 'visible') renderAttToday();
+    if (document.visibilityState === 'visible') { renderAttToday(); _dashForegroundRefresh(); }
   });
 
   // 2분마다 출결현황 자동 갱신 (throttle 90초와 함께 GAS 부하 완화)
@@ -7141,11 +7141,16 @@ var _dashBundle = null;
 function loadDashboardBundle(cb){
   if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ if(cb) cb(); return; }
   var ym = (typeof getCurrentYM==='function') ? getCurrentYM() : '';
+  // paint the last good bundle immediately; the fetch below replaces it
+  if(!_dashBundle){
+    try { var _bc = JSON.parse(localStorage.getItem('unispace_dashbundle_' + ym) || 'null'); if(_bc && _bc.ok){ _dashBundle = _bc; if(typeof renderTop10==='function') renderTop10(); if(typeof renderStdFp==='function') renderStdFp(); } } catch(e) {}
+  }
   function _try(attempt){
     var url = UNISPACE_GAS_URL + '?action=getDashboardBundle&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
     fetch(url).then(function(r){return r.json();}).then(function(res){
       if(res && res.ok){
         _dashBundle = res;
+        try { localStorage.setItem('unispace_dashbundle_' + ym, JSON.stringify(res)); } catch(e) {}
         if(typeof renderTop10==='function') renderTop10();
         if(typeof renderStdFp==='function') renderStdFp();
         if(cb) cb();
@@ -7235,12 +7240,41 @@ function _awlYm() {
 
 function _awlMon(ym) { return parseInt(String(ym).slice(5, 7), 10); }
 
+// foreground refresh: the mobile PWA keeps the page in memory, so returning to the app
+// used to show whatever was loaded last time. re-pull the dashboard numbers (throttled).
+var _dashFgLast = 0;
+function _dashForegroundRefresh(force){
+  if (!currentUser || !currentUser.id) return;
+  if (typeof UNISPACE_GAS_URL === 'undefined') return;
+  var now = Date.now();
+  if (!force && now - _dashFgLast < 45000) return;
+  _dashFgLast = now;
+  if (typeof _perfIsPast === 'function' && _perfIsPast()) return; // past month view: leave as is
+  if (typeof loadPerfFromGas === 'function') loadPerfFromGas(function(){
+    if (typeof renderBojangCard === 'function') renderBojangCard();
+    if (typeof renderGoals === 'function') renderGoals();
+    if (typeof renderTop10 === 'function') renderTop10();
+    if (typeof renderStdFp === 'function') renderStdFp();
+  });
+  if (typeof loadDashboardBundle === 'function') loadDashboardBundle();
+  if (typeof loadActivitiesFromGas === 'function') loadActivitiesFromGas(function(){
+    if (typeof renderActTop4 === 'function') renderActTop4();
+    if (typeof renderRecruitTop4 === 'function') renderRecruitTop4();
+  });
+  if (typeof loadUnicornClub === 'function') loadUnicornClub();
+  if (typeof loadAwardStatus === 'function') loadAwardStatus();
+}
+// last good award result per month, so the ladder paints instantly and refreshes in the background
+function _awlCacheGet(ym){ try { var v = JSON.parse(localStorage.getItem('unispace_award_' + ym) || 'null'); return (v && v.ok) ? v : null; } catch(e) { return null; } }
+function _awlCacheSet(ym, res){ try { localStorage.setItem('unispace_award_' + ym, JSON.stringify(res)); } catch(e) {} }
 function loadAwardStatus() {
   var host = document.getElementById('awardLadder');
   if (!host) return;
   if (!currentUser || !currentUser.id) return;
   var ym = _awlYm();
-  host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오는 중...</div></div>';
+  var _cached = _awlCacheGet(ym);
+  if (_cached) { _awlData = _cached; _renderAwardLadder(_cached); }
+  else host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오는 중...</div></div>';
   var url = UNISPACE_GAS_URL + '?action=getAwardStatus&fp=' + encodeURIComponent(currentUser.id)
           + '&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
   // 20초 안에 응답 없으면 1회 자동 재시도 — 서버 큐 밀림으로 '불러오는 중' 고착 방지
@@ -7251,7 +7285,7 @@ function loadAwardStatus() {
       if(settled) return;
       settled = true;
       if(!_awTried){ _awTried = true; _awFetch(); }
-      else { host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">서버 응답이 지연되고 있습니다. 잠시 후 새로고침해 주세요</div></div>'; }
+      else if(!_cached){ host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">서버 응답이 지연되고 있습니다. 잠시 후 새로고침해 주세요</div></div>'; }
     }, 20000);
     fetch(url + '&r=' + (_awTried?1:0)).then(function(r) { return r.json(); }).then(function(res) {
       if(settled) return;
@@ -7261,12 +7295,12 @@ function loadAwardStatus() {
       if(settled) return;
       settled = true; clearTimeout(tmr);
       if(!_awTried){ _awTried = true; setTimeout(_awFetch, 1000); }
-      else { host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오지 못했습니다</div></div>'; }
+      else if(!_cached){ host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오지 못했습니다</div></div>'; }
     });
   }
   function _awDone(res){
-    if (res && res.ok) { _awlData = res; _renderAwardLadder(res); }
-    else { host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오지 못했습니다</div></div>'; }
+    if (res && res.ok) { _awlData = res; _awlCacheSet(ym, res); _renderAwardLadder(res); }
+    else if(!_cached){ host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오지 못했습니다</div></div>'; }
   }
   _awFetch();
   return;
@@ -24014,7 +24048,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 84;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 85;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
