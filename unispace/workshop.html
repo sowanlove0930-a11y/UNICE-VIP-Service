@@ -148,11 +148,19 @@ html,body{margin:0;background:var(--sand);color:var(--ink);font-family:'Noto San
 .env{border-radius:20px;padding:16px;background:linear-gradient(160deg,#FFF3D6,#F6DFA6);border:2px solid #E9C979;margin-bottom:10px}
 .env.ok{background:linear-gradient(160deg,#E4F7F4,#CFEDE8);border-color:#8FD1C8}
 .env .lb{font-size:11px;font-weight:900;color:#8B5E0B}.env.ok .lb{color:var(--sea)}
-.env .h{font-size:17px;font-weight:700;line-height:1.5;margin-top:4px;color:#3A2600}
+.env .h{font-size:17px;font-weight:700;line-height:1.6;margin-top:4px;color:#3A2600;white-space:pre-line;text-align:left}
+.env .h.poem{font-family:'Jua';font-size:18px;letter-spacing:.2px}
+.lockbar{margin-top:8px;background:#FDE3E3;color:#B3261E;border:1.5px solid #F3B3B3;border-radius:12px;padding:8px 12px;font-size:13.5px;font-weight:900;text-align:center}
+.lockbar b{font-size:18px}
+input:disabled,.codein input:disabled{background:#F1EDE4;color:#A09888}
 .env .pic{margin-top:10px;border-radius:12px;overflow:hidden;background:#fff;border:1px solid rgba(0,0,0,.08)}
 .env .pic img{display:block;width:100%;max-height:340px;object-fit:contain;background:#fff}
 .env .pic .cap{font-size:11px;font-weight:800;color:var(--ink2);padding:6px 10px}
 .env .h3{margin-top:10px;font-size:15px;font-weight:900;color:#B3400F}
+.env .hint{margin-top:10px;background:#fff;border:2px dashed #E0A33A;border-radius:14px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start;text-align:left;box-shadow:0 2px 0 #E9C979}
+.env .hint .bd{flex:none;background:#E0A33A;color:#fff;font-size:12px;font-weight:900;border-radius:999px;padding:4px 9px;margin-top:2px;white-space:nowrap}
+.env .hint .tx{font-size:16px;font-weight:900;color:#7A4E00;line-height:1.5;white-space:pre-line}
+.env .hint.h2{border-color:#B3400F}.env .hint.h2 .bd{background:#B3400F}.env .hint.h2 .tx{color:#B3400F}
 .hb{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
 .hb .btn{font-family:'Noto Sans KR';font-weight:800;font-size:13px;padding:12px 6px;flex-direction:column;gap:1px}
 .hb .btn small{font-size:10px;opacity:.75;font-weight:500}
@@ -336,6 +344,7 @@ function roleTag(){
   else { t.className='tag '+r; t.textContent=(r==='blue'?'블루팀':'레드팀')+' · '+currentUser.name; }
 }
 function render(){
+  if(_hold) return;
   roleTag();
   var html;
   if(ST.role==='staff' && _setMode) html=setView();
@@ -343,6 +352,7 @@ function render(){
   else if(ST.role==='staff' && !_showMode) html=gmView();
   else html=teamView();
   $('app').innerHTML = html;
+  if(!_lockTimer){ var qs0=['code','guess','open','finish']; for(var qi0=0;qi0<qs0.length;qi0++) if(lockLeft(qs0[qi0])>0){ lockTick(); break; } }
   livePoll();
   setTimeout(function(){ var bars=document.querySelectorAll('.gauge i'); for(var i=0;i<bars.length;i++) bars[i].style.width=bars[i].getAttribute('data-w')+'%'; }, 40);
 }
@@ -462,9 +472,9 @@ function raceView(){
     h+='<div class="lock" id="lock"><div class="disp" style="font-size:22px;color:var(--sea)">🔐 출발 4자리 코드</div><div class="muted">맞추면 첫 힌트 봉투가 열립니다</div><div class="digits">';
     for(var i=0;i<4;i++){ var c=_code.charAt(i); h+='<div class="dg '+(c?'':'q')+'">'+(c||'·')+'</div>'; }
     h+='</div><div class="pad">'; for(var d=1;d<=9;d++) h+='<button type="button" data-act="dg" data-d="'+d+'">'+d+'</button>';
-    h+='<button type="button" data-act="dgdel">⌫</button><button type="button" data-act="dg" data-d="0">0</button><button type="button" class="ok'+(_code.length===4?' glow':'')+'" data-act="dgok">확인</button></div>';
-    h+='</div>';
-    if(sc.intro) h+='<div style="font-size:13px;color:var(--ink2);line-height:1.6;margin:4px 0 10px;text-align:left">'+esc(sc.intro)+'</div>';
+    h+='<button type="button" data-act="dgdel">⌫</button><button type="button" data-act="dg" data-d="0">0</button><button type="button" class="ok'+(_code.length===4&&!lockLeft('code')?' glow':'')+'" data-act="dgok"'+(lockLeft('code')?' disabled':'')+'>확인</button></div>';
+    h+=lockBar('code')+'</div>';
+    if(sc.intro) h+='<div style="font-size:13px;color:var(--ink2);line-height:1.6;margin:4px 0 10px;text-align:left;white-space:pre-line">'+esc(sc.intro)+'</div>';
     var qs=[sc.q1,sc.q2,sc.q3,sc.q4];
     for(var qi=0;qi<4;qi++){ if(!qs[qi]) continue;
       h+='<div style="display:flex;gap:10px;align-items:flex-start;text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:8px"><span class="disp" style="width:26px;height:26px;border-radius:50%;background:var(--sea);color:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:14px">'+(qi+1)+'</span><span style="font-size:15px;font-weight:700;line-height:1.6;color:var(--ink)">'+esc(qs[qi])+'</span></div>'; }
@@ -477,9 +487,9 @@ function raceView(){
   if(me.stage===3){
     var f=me.finish||{};
     h+=travelCard(me.travel);
-    h+='<div class="env"><div class="lb">골인 · 점심 퀴즈</div><div class="h">“'+esc(f.q||'')+'”</div></div>';
+    h+='<div class="env"><div class="lb">골인 · 점심 퀴즈</div><div class="h'+(String(f.q||'').indexOf('\n')>=0?' poem':'')+'">'+esc(f.q||'')+'</div></div>';
     var dead = f.deadline ? '<div class="card" style="border:2px solid var(--amber);text-align:center;padding:12px;margin-top:12px"><div class="muted">집결 마감</div><div class="disp" style="font-size:34px;color:var(--amber);line-height:1.1">'+esc(f.deadline)+'</div>'+(f.note?'<div class="muted" style="margin-top:4px">'+esc(f.note)+'</div>':'')+'</div>' : '';
-    if(!me.done) return h+'<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">🍚 점심 메뉴를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 김밥"><button type="button" class="btn sea glow" data-act="finish">정답?</button></div></div>'+dead;
+    if(!me.done) return h+'<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">🍚 점심 메뉴를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 김밥"'+(lockLeft('finish')?' disabled':'')+'><button type="button" class="btn sea'+(lockLeft('finish')?'':' glow')+'" data-act="finish"'+(lockLeft('finish')?' disabled':'')+'>정답?</button></div>'+lockBar('finish')+'</div>'+dead;
     h+='<div class="env ok"><div class="lb">정답! 🍚</div><div class="h3" style="font-size:17px;margin-top:6px">📍 '+esc(f.addr||'')+'</div><a class="muted" style="display:block;margin-top:6px" href="https://map.naver.com/v5/search/'+encodeURIComponent((f.addr||'').split(' · ')[0])+'" target="_blank">지도 열기 ↗</a></div><div class="card" style="text-align:center"><div class="disp" style="font-size:22px;color:var(--sea)">🏁 골인!</div><div style="font-size:14px;margin-top:8px;text-align:left;display:inline-block">남은 칩 <b>'+t.chips+'개</b> → +'+(t.chips*10)+'점<br>안 쓴 아이템 → 칩 <b>'+(t.refund||0)+'개</b> 환산 → +'+((t.refund||0)*10)+'점'+(t.bonus?'<br>미스터리 박스 보너스 → +'+t.bonus+'점':'')+'</div><div class="disp" style="font-size:26px;color:var(--amber);margin-top:6px">합계 +'+((t.chips+(t.refund||0))*10+(t.bonus||0))+'점</div>'+(t.boxResult?'<div class="muted" style="margin-top:2px">미스터리 박스 결과: '+esc(t.boxResult)+'</div>':'')+'<div class="muted" style="margin-top:4px">미션 점수는 집결 후 발표</div></div>';
     return h+dead;
   }
@@ -487,8 +497,8 @@ function raceView(){
   var stp = !me.guessed?1:(!me.opened?2:3);
   h+='<div class="stepg"><div class="'+(stp>1?'done':'now')+'"><b>1</b>행선지 추리</div><div class="'+(stp>2?'done':(stp===2?'now':''))+'"><b>2</b>이동 · 봉투 찾기</div><div class="'+(stp===3?'now':'')+'"><b>3</b>미션 수행</div></div>';
   if(!me.guessed){
-    h+='<div class="env"><div class="lb">'+me.stage+'차 · 어디로 갈까?</div><div class="h">“'+esc(sp.riddle||'')+'”</div>'+((me.rHintLv||0)>=1?'<div class="h3" style="color:#8B5E0B;font-size:14px">🔍 힌트 1 · '+esc(sp.rh1||'')+'</div>':'')+((me.rHintLv||0)>=2?'<div class="h3" style="color:#8B5E0B;font-size:14px">🔍 힌트 2 · '+esc(sp.rh2||'')+'</div>':'')+'</div>';
-    h+='<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">📍 행선지를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 광안리"><button type="button" class="btn sea glow" data-act="guess">정답?</button></div>'+tip([['✅','틀려도 감점 없음'],['🔍','막히면 위 아이템 바 → 힌트 (2회)'],['📍','정답권 · 📞 직통도 아이템 바에서']])+'</div>';
+    h+='<div class="env"><div class="lb">'+me.stage+'차 · 어디로 갈까?</div><div class="h'+(String(sp.riddle||'').indexOf('\n')>=0?' poem':'')+'">'+esc(sp.riddle||'')+'</div>'+((me.rHintLv||0)>=1?'<div class="hint"><span class="bd">🔍 힌트 1</span><span class="tx">'+esc(sp.rh1||'')+'</span></div>':'')+((me.rHintLv||0)>=2?'<div class="hint h2"><span class="bd">🔍 힌트 2</span><span class="tx">'+esc(sp.rh2||'')+'</span></div>':'')+'</div>';
+    h+='<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">📍 행선지를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 광안리"'+(lockLeft('guess')?' disabled':'')+'><button type="button" class="btn sea'+(lockLeft('guess')?'':' glow')+'" data-act="guess"'+(lockLeft('guess')?' disabled':'')+'>정답?</button></div>'+lockBar('guess')+tip([['⛔','틀리면 5초·10초·15초… 잠금 (감점은 없음)'],['🔍','막히면 위 아이템 바 → 힌트 (2회)'],['📍','정답권 · 📞 직통도 아이템 바에서']])+'</div>';
     return h;
   }
   if(!me.opened){
@@ -497,7 +507,7 @@ function raceView(){
     h+=travelCard(me.travel);
     h+='<div class="env ok"><div class="lb">🧧 「'+esc(sp.name)+'」 '+tnm+' 봉투는 어디?</div>'+pic(sp.photo1,'힌트 1',sp.pc1)+(me.hintLv>=1?pic(sp.photo2,'힌트 2',sp.pc2):'')+(me.hintLv>=2?pic(sp.photo3,'힌트 3',sp.pc3):'')+(me.hintLv>=3?'<div class="pic" style="border:2px solid var(--amber)"><div class="cap" style="color:var(--amber)">📍 정답</div>'+(sp.photo4?'<img src="'+esc(sp.photo4)+'" alt="">':'')+'<div style="font-size:16px;font-weight:900;color:#B3400F;padding:8px 10px 4px">📍 '+esc(sp.ans||'')+'</div></div>':'')+'</div>';
     h+='<div class="card" style="padding:8px 12px;margin-top:-4px">'+tip([['🔍','못 찾겠으면 위 아이템 바 → 힌트 (3회째는 정답 문장)'],['📍','정답권 · 📞 직통도 아이템 바에서']])+'</div>';
-    h+='<div class="card"><div class="nx">👉 도착해서 봉투를 찾으면</div><div class="disp" style="font-size:17px">🔐 「'+esc(sp.name)+'」 '+tnm+' 봉투 안 코드</div><div class="codein" style="margin-top:8px"><input id="sc" placeholder="0000" maxlength="4" inputmode="numeric"><button type="button" class="btn sea glow" data-act="open">열기</button></div><div class="muted" style="margin-top:6px">「'+esc(sp.name)+'」이 적혀 있는 '+tnm+' 봉투 안의 4자리</div></div>';
+    h+='<div class="card"><div class="nx">👉 도착해서 봉투를 찾으면</div><div class="disp" style="font-size:17px">🔐 「'+esc(sp.name)+'」 '+tnm+' 봉투 안 코드</div><div class="codein" style="margin-top:8px"><input id="sc" placeholder="0000" maxlength="4" inputmode="numeric"'+(lockLeft('open')?' disabled':'')+'><button type="button" class="btn sea'+(lockLeft('open')?'':' glow')+'" data-act="open"'+(lockLeft('open')?' disabled':'')+'>열기</button></div>'+lockBar('open')+'<div class="muted" style="margin-top:6px">「'+esc(sp.name)+'」이 적혀 있는 '+tnm+' 봉투 안의 4자리</div></div>';
     return h;
   }
   h+='<div class="win" style="padding:12px 16px"><div class="k">🔓 코드 정답!</div><div class="t">'+me.stage+'차 미션 · '+esc(sp.name)+'</div></div>';
@@ -557,7 +567,7 @@ function travelModal(){
     if(x.desc.length){ h+='<div style="font-size:14px;line-height:1.65;color:var(--ink2);margin:8px 0 0 36px">'; for(var d=0;d<x.desc.length;d++) h+='<div>'+esc(x.desc[d])+'</div>'; h+='</div>'; }
     if(x.score.length){ h+='<div style="margin:8px 0 0 36px;display:grid;grid-template-columns:20px 1fr;row-gap:4px;column-gap:4px;background:#FFF1C2;color:#7A4E00;font-size:12.5px;font-weight:800;border-radius:12px;padding:6px 10px">'; for(var sc=0;sc<x.score.length;sc++) h+='<span>🏆</span><span>'+esc(x.score[sc])+'</span>'; h+='</div>'; }
     h+='</div>'; }
-  if(tv.chosung){ var cs=String(tv.chosung).split(/\s*[·,]\s*/).filter(function(c){ return c; }); h+='<div style="margin-top:10px;background:#fff;border:1.5px dashed #F2B93C;border-radius:14px;padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px">'; for(var c=0;c<cs.length;c++) h+='<div style="display:flex;gap:8px;align-items:center;background:var(--sand);border-radius:10px;padding:6px 10px"><span class="disp" style="color:var(--amber);font-size:13px;width:18px">'+(c+1)+'</span><span class="disp" style="font-size:18px;letter-spacing:.12em;color:var(--ink)">'+esc(cs[c])+'</span></div>'; h+='</div>'; }
+  if(tv.chosung){ var cs=String(tv.chosung).split(/\s*[·,]\s*/).filter(function(c){ return c; }); var one=cs.length<=6; h+='<div style="margin-top:10px;background:#fff;border:1.5px dashed #F2B93C;border-radius:14px;padding:10px;display:grid;grid-template-columns:'+(one?'1fr':'1fr 1fr')+';gap:'+(one?'8px':'6px')+'">'; for(var c=0;c<cs.length;c++) h+='<div style="display:flex;gap:'+(one?'12px':'8px')+';align-items:center;background:var(--sand);border-radius:12px;padding:'+(one?'10px 14px':'6px 10px')+'"><span class="disp" style="color:#fff;background:var(--amber);border-radius:50%;font-size:'+(one?'14px':'12px')+';width:'+(one?'26px':'20px')+';height:'+(one?'26px':'20px')+';display:inline-flex;align-items:center;justify-content:center;flex:none">'+(c+1)+'</span><span class="disp" style="font-size:'+(one?'24px':'18px')+';letter-spacing:.16em;color:var(--ink)">'+esc(cs[c])+'</span></div>'; h+='</div>'; }
   if(tv.proof) h+='<div style="margin-top:10px;background:#FCE7D6;color:#7A4E00;font-size:12.5px;border-radius:10px;padding:8px 10px">'+tip([['📸','<b>인증</b> · '+esc(tv.proof)],['🚘','운전자는 말로만 참여 · 촬영은 조수석']],'')+'</div>';
   h+='<div class="bt"><button type="button" class="btn sea" data-mo="0">닫기</button></div>';
   $('moBox').innerHTML=h; $('mo').classList.add('on'); _moCb=null;
@@ -654,7 +664,7 @@ function setView(){
   var TR=CFG.travel||{}, legs=[['leg1','🚗 1차 이동 미션 (출발 → 1차 스팟)'],['leg2','🚗 2차 이동 미션 (1차 → 2차 스팟)'],['leg3','🚗 3차 이동 미션 (2차 → 집결지)']];
   for(var L2=0;L2<legs.length;L2++){ var lg=TR[legs[L2][0]]||{};
     h+='<div class="set"><div class="h disp">'+legs[L2][1]+'</div>'+fld('travel.'+legs[L2][0]+'.title','제목',lg.title||'')+fld('travel.'+legs[L2][0]+'.body','미션 내용 (줄바꿈 그대로 표시)',lg.body||'','ta')+fld('travel.'+legs[L2][0]+'.proof','인증 방법',lg.proof||'');
-    if(legs[L2][0]==='leg3') h+=fld('travel.leg3.blue','🔵 블루팀 초성 10개 (· 로 구분)',lg.blue||'')+fld('travel.leg3.red','🔴 레드팀 초성 10개 (· 로 구분)',lg.red||'');
+    if(legs[L2][0]==='leg3') h+=fld('travel.leg3.blue','🔵 블루팀 초성 (· 로 구분, 6개 이하면 한 줄씩 크게 표시)',lg.blue||'')+fld('travel.leg3.red','🔴 레드팀 초성 (· 로 구분, 6개 이하면 한 줄씩 크게 표시)',lg.red||'');
     h+='</div>'; }
   h+='<div class="set"><div class="h disp">🍚 골인 · 점심 퀴즈</div>'+fld('finish.q','문제',CFG.finish.q,'ta')+fld('finish.answer','정답',CFG.finish.answer)+fld('finish.addr','정답 시 보여줄 주소',CFG.finish.addr)+fld('finish.deadline','집결 마감 시각 (예: 13:30)',CFG.finish.deadline||'')+fld('finish.note','마감 안내 문구',CFG.finish.note||'')+'</div>';
   h+='<div class="savebar"><button type="button" class="btn sea wide" data-act="save">💾 저장</button></div>';
@@ -708,15 +718,15 @@ function onAct(e){
   if(a==='confirm'){ if(_cartTimer||_cartBusy){ toast('장바구니 저장 중… 1초 후 다시 눌러주세요'); if(_cartTimer){ clearTimeout(_cartTimer); syncCart(); } return; } ask({icon:'🛒',title:'구매 확정',msg:'확정하면 되돌릴 수 없어요.\n남은 칩은 골인 때 점수가 됩니다.',ok:'확정!',okCls:'amber'}, function(){ wait('구매 확정 중…'); busy(el,'확정 중…'); gasGet({action:'swkConfirm',fp:currentUser.id}, function(res){ waitOff(); if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); return; } _cartSynced=null; toast('확정! 미션 시작을 기다려요'); apply(res); }); }); }
   if(a==='dg'){ if(_code.length<4){ _code+=el.getAttribute('data-d'); render(); } }
   if(a==='dgdel'){ _code=_code.slice(0,-1); render(); }
-  if(a==='dgok'){ if(_code.length<4){ toast('4자리를 입력하세요'); return; } var me0=ST.race&&ST.race.me; if(me0&&me0.codeHash&&fnv(_code)!==me0.codeHash){ var l0=$('lock'); if(l0) l0.classList.add('shake'); toast('코드가 달라요'); setTimeout(function(){ _code=''; render(); },500); return; } race('code',_code, function(res){ if(res&&res.wrong){ var l=$('lock'); if(l) l.classList.add('shake'); setTimeout(function(){ _code=''; render(); },500); } }, el, '🔓 자물쇠 해제! 힌트 여는 중…'); }
-  if(a==='guess'){ var g=$('gs').value; if(!norm(g)){ toast('행선지를 적어주세요'); return; } var meG=ST.race&&ST.race.me; if(meG&&meG.keyHashes&&!hashIn(g,meG.keyHashes)){ toast('음… 거기 아니에요'); $('gs').select(); return; } race('guess',g, function(res){ if(res&&res.ok){ var nm=res.state&&res.state.race&&res.state.race.me&&res.state.race.me.spot?res.state.race.me.spot.name:''; cheer('🎯','행선지 정답!',nm?nm+'(으)로 출발!':'출발!'); } }, el, '🎯 행선지 정답! 힌트 여는 중…'); }
-  if(a==='finish'){ var f=$('gs').value; if(!norm(f)){ toast('메뉴를 적어주세요'); return; } var meF=ST.race&&ST.race.me; if(meF&&meF.finishHashes&&!hashIn(f,meF.finishHashes)){ toast('음… 그 메뉴 아니에요'); $('gs').select(); return; } race('finish',f, function(res){ if(res&&res.ok) cheer('🏁','골인!','점심 장소가 열렸어요'); }, el, '🏁 골인! 주소 여는 중…'); }
+  if(a==='dgok'){ if(lockCheck('code')) return; if(_code.length<4){ toast('4자리를 입력하세요'); return; } var me0=ST.race&&ST.race.me; if(me0&&me0.codeHash&&fnv(_code)!==me0.codeHash){ var l0=$('lock'); if(l0) l0.classList.add('shake'); setTimeout(function(){ _code=''; wrongAns('code','코드가 달라요'); },450); return; } lockClear('code'); race('code',_code, function(res){ if(res&&res.wrong){ var l=$('lock'); if(l) l.classList.add('shake'); setTimeout(function(){ _code=''; wrongAns('code','코드가 달라요'); },450); } }, el, '🔓 자물쇠 해제! 힌트 여는 중…'); }
+  if(a==='guess'){ if(lockCheck('guess')) return; var g=$('gs').value; if(!norm(g)){ toast('행선지를 적어주세요'); return; } var meG=ST.race&&ST.race.me; if(meG&&meG.keyHashes&&!hashIn(g,meG.keyHashes)){ wrongAns('guess','음… 거기 아니에요','gs'); return; } lockClear('guess'); race('guess',g, function(res){ if(res&&res.ok){ var nm=res.state&&res.state.race&&res.state.race.me&&res.state.race.me.spot?res.state.race.me.spot.name:''; cheer('🎯','행선지 정답!',nm?nm+'(으)로 출발!':'출발!'); } }, el, '🎯 행선지 정답! 힌트 여는 중…'); }
+  if(a==='finish'){ if(lockCheck('finish')) return; var f=$('gs').value; if(!norm(f)){ toast('메뉴를 적어주세요'); return; } var meF=ST.race&&ST.race.me; if(meF&&meF.finishHashes&&!hashIn(f,meF.finishHashes)){ wrongAns('finish','음… 그 메뉴 아니에요','gs'); return; } lockClear('finish'); race('finish',f, function(res){ if(res&&res.ok) cheer('🏁','골인!','점심 장소가 열렸어요'); }, el, '🏁 골인! 주소 여는 중…'); }
   if(a==='hint'){ race('hint','', null, el); }
   if(a==='rhint'){ race('rhint','', null, el, '행선지 힌트 여는 중…'); }
   if(a==='shint'){ race('shint','', null, el, '출발 힌트 여는 중…'); }
   if(a==='answer'){ var meA=ST.race&&ST.race.me; ask({icon:'📍',title:'정답 공개권 사용',msg:(meA&&!meA.guessed)?'행선지 이름이 바로 공개됩니다':'봉투 위치 사진과 문장이 바로 열립니다',ok:'열기',okCls:'amber'}, function(){ race('answer','', null, el, '정답 여는 중…'); }); }
   if(a==='call'){ ask({icon:'📞',title:'대표 긴급 미션 통과',msg:'대표 영상통화 미션을 통과했나요?\n직통권이 소진되고 정답이 공개됩니다',ok:'통과했어요',okCls:'amber'}, function(){ race('call','', null, el, '정답 여는 중…'); }); }
-  if(a==='open'){ var oc=$('sc').value; if(oc.length<4){ toast('4자리를 입력하세요'); return; } var meO=ST.race&&ST.race.me; if(meO&&meO.openHash&&fnv(oc)!==meO.openHash){ toast('코드가 달라요'); $('sc').select(); return; } race('open',oc, function(res){ if(res&&res.ok) cheer('🔓','코드 정답!','미션이 열렸어요'); }, el, '🔓 코드 정답! 미션 여는 중…'); }
+  if(a==='open'){ if(lockCheck('open')) return; var oc=$('sc').value; if(oc.length<4){ toast('4자리를 입력하세요'); return; } var meO=ST.race&&ST.race.me; if(meO&&meO.openHash&&fnv(oc)!==meO.openHash){ wrongAns('open','코드가 달라요','sc'); return; } lockClear('open'); race('open',oc, function(res){ if(res&&res.ok) cheer('🔓','코드 정답!','미션이 열렸어요'); }, el, '🔓 코드 정답! 미션 여는 중…'); }
   if(a==='next'){ ask({icon:'📸',title:'미션 클리어',msg:'인증 영상을 단톡방에 올렸나요?',ok:'올렸어요!',okCls:'amber'}, function(){ race('next','', null, el, '✅ 미션 클리어! 다음 힌트 준비 중…'); }); }
   if(a==='box'){ ask({icon:'🎁',title:'미스터리 박스',msg:'칩+2 · 힌트 무료 · 미션+3점 · 꽝 · 벌칙 중 하나!\n한 번 열면 끝이에요',ok:'열기!',okCls:'amber'}, function(){ race('box','', function(res){ if(res&&res.ok) boxReveal(res.boxResult||'💨 꽝'); }, el, '박스 여는 중…'); }); }
   if(a==='photo'){ _photoTarget={spot:+el.getAttribute('data-spot'),which:el.getAttribute('data-which')}; $('photoIn').click(); }
@@ -758,9 +768,10 @@ function ask(o, cb){
   h+='<div class="bt">'+(o.cancel===false?'':'<button type="button" class="btn ghost" data-mo="0">'+esc(o.cancel||'취소')+'</button>')+'<button type="button" class="btn '+(o.okCls||'sea')+'" data-mo="1">'+esc(o.ok||'확인')+'</button></div>';
   $('moBox').innerHTML=h; $('mo').classList.add('on');
 }
-function cheer(icon,title,msg){ say({icon:icon,title:title,msg:msg,ok:'계속'}); setTimeout(function(){ if($('moBox').textContent.indexOf(title)>=0) moClose(); }, 1400); }
+var _hold=false;
+function cheer(icon,title,msg){ _hold=true; say({icon:icon,title:title,msg:msg,ok:'계속'}); }
 function say(o, cb){ o=o||{}; o.cancel=false; o.ok=o.ok||'확인'; ask(o, cb); }
-function moClose(){ $('mo').classList.remove('on'); _moCb=null; }
+function moClose(){ $('mo').classList.remove('on'); _moCb=null; if(_hold){ _hold=false; render(); } }
 function boxReveal(result){
   var faces=['🎉','🔍','⭐','💨','😈','🎁'], i=0, n=0;
   $('moBox').innerHTML='<div class="tt">🎁 미스터리 박스</div><div class="spin" id="moSpin">🎁</div><div class="res" id="moRes">두구두구…</div><div class="bt"><button type="button" class="btn sea" data-mo="1" id="moOk" disabled>열어보는 중</button></div>';
@@ -770,6 +781,16 @@ function boxReveal(result){
       if(sp){ sp.textContent=ic; sp.style.transform='scale(1.2)'; } var r=$('moRes'); if(r) r.textContent=result; var ok=$('moOk'); if(ok){ ok.disabled=false; ok.textContent='확인'; } } }, 110);
 }
 function norm(s){ return String(s||'').replace(/\s/g,'').toLowerCase(); }
+var _lockTimer=null;
+function lockKey(q){ var mine=ST.race&&ST.race.mine, me=ST.race&&ST.race.me; return 'swk_lock|'+(currentUser&&currentUser.id)+'|'+(mine||'')+'|'+(_demo?'demo':'real')+'|'+q+'|'+(me?me.stage:''); }
+function lockGet(q){ try{ return JSON.parse(localStorage.getItem(lockKey(q))||'null'); }catch(e){ return null; } }
+function lockLeft(q){ var o=lockGet(q); if(!o||!o.until) return 0; return Math.max(0, Math.ceil((o.until-Date.now())/1000)); }
+function lockAdd(q){ var o=lockGet(q)||{n:0}; o.n=(o.n||0)+1; o.until=Date.now()+o.n*5000; try{ localStorage.setItem(lockKey(q),JSON.stringify(o)); }catch(e){} lockTick(); return o; }
+function lockClear(q){ try{ localStorage.removeItem(lockKey(q)); }catch(e){} }
+function lockTick(){ if(_lockTimer) clearInterval(_lockTimer); _lockTimer=setInterval(function(){ var any=false, qs=['code','guess','open','finish']; for(var i=0;i<qs.length;i++) if(lockLeft(qs[i])>0) any=true; render(); if(!any){ clearInterval(_lockTimer); _lockTimer=null; } },1000); }
+function lockBar(q){ var s=lockLeft(q); if(s<=0) return ''; var o=lockGet(q)||{n:1}; return '<div class="lockbar">⛔ 오답 '+o.n+'회 · <b>'+s+'</b>초 후 다시 입력할 수 있어요</div>'; }
+function lockCheck(q){ var s=lockLeft(q); if(s>0){ toast(s+'초 후에 다시 시도하세요'); return true; } return false; }
+function wrongAns(q,msg,inpId){ var o=lockAdd(q); toast(msg+' · '+(o.n*5)+'초 잠금'); if(inpId&&$(inpId)) $(inpId).value=''; render(); }
 function fnv(str){ var h=0x811c9dc5, s2='swk2026|'+norm(str); for(var i=0;i<s2.length;i++){ h^=s2.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return ('00000000'+h.toString(16)).slice(-8); }
 function hashIn(v, list){ if(!list||!list.length) return false; var h=fnv(v); for(var i=0;i<list.length;i++) if(list[i]===h) return true; return false; }
 function busy(el, label){ if(!el||el.tagName!=='BUTTON') return; el.disabled=true; el.setAttribute('data-orig', el.innerHTML); el.innerHTML=label||'처리 중…'; }
@@ -788,7 +809,7 @@ function race(op,val,cb,el,label){
     if(nx.finish){ me.finish={q:nx.finish.q,addr:'',deadline:nx.finish.deadline||'',note:nx.finish.note||''}; me.finishHashes=nx.finishHashes; me.spot=null; }
     else { me.spot={name:'',riddle:nx.riddle}; me.keyHashes=nx.keyHashes; me.openHash=nx.openHash; me.finish=null; }
     me.next=null; me.travel=null; if(pub){ pub.stage=me.stage; pub.guessed=false; pub.opened=false; }
-    _code=''; render(); if(op==='code') cheer('🔓','자물쇠 해제!','첫 번째 수수께끼가 열렸어요'); else cheer('✅','미션 클리어!',(me.stage===3?'골인 퀴즈':me.stage+'차 수수께끼')+'가 열렸어요');
+    _code=''; if(op==='code') cheer('🔓','자물쇠 해제!','첫 번째 수수께끼가 열렸어요'); else cheer('✅','미션 클리어!',(me.stage===3?'골인 퀴즈':me.stage+'차 수수께끼')+'가 열렸어요'); render();
   } else {
     var lb=label||({hint:'힌트 찾는 중…',answer:'정답 여는 중…',call:'정답 여는 중…',box:'박스 여는 중…'}[op])||'처리 중…';
     wait(lb); busy(el,lb);
@@ -797,9 +818,11 @@ function race(op,val,cb,el,label){
     if(!optimistic) waitOff();
     if(!res||!res.ok){ unbusy(el); toast((res&&res.msg)||'실패'); if(cb) cb(res); if(optimistic) load(false); return; }
     if(op==='hint'||op==='rhint'||op==='shint'||op==='answer'||op==='call') toast(res.msg||'완료');
-    if(res.state&&res.state.ok){ ST=res.state; L=null; if(!optimistic || !(document.activeElement&&document.activeElement.tagName==='INPUT')) render(); }
-    else if(!optimistic) load(false);
+    var stOk=!!(res.state&&res.state.ok);
+    if(stOk){ ST=res.state; L=null; }
     if(cb) cb(res);
+    if(stOk){ if(!optimistic || !(document.activeElement&&document.activeElement.tagName==='INPUT')) render(); }
+    else if(!optimistic) load(false);
   });
 }
 function livePoll(){
