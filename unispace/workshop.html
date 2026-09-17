@@ -220,9 +220,30 @@ input:disabled,.codein input:disabled{background:#F1EDE4;color:#A09888}
 .ph .slot.busy .cap{color:var(--amber)}
 .savebar{position:sticky;bottom:12px;z-index:5}
 @media (prefers-reduced-motion:reduce){.gauge i{transition:none}}
+#ps{display:none;position:fixed;inset:0;z-index:100;background:#fff;color:#111;overflow:auto;font-family:'Noto Sans KR',sans-serif}
+#ps.on{display:block}
+.ps-bar{position:sticky;top:0;background:#1a2744;color:#fff;padding:8px 12px;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.ps-bar button{border:0;border-radius:8px;padding:8px 12px;font-weight:900;font-size:13px}
+.ps-page{width:210mm;min-height:297mm;margin:0 auto;padding:7mm 8mm;box-sizing:border-box;font-size:8.6pt;line-height:1.3;color:#111}
+.ps-page h1{font-size:14pt;margin:0 0 2mm;display:flex;justify-content:space-between;align-items:baseline}
+.ps-page h1 small{font-size:8pt;font-weight:400;color:#555}
+.ps-cols{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+.ps-box{border:1.2px solid #333;border-radius:2mm;padding:1.6mm 2mm;margin-bottom:2.2mm;break-inside:avoid}
+.ps-box h2{font-size:9.5pt;margin:0 0 1mm;padding-bottom:.6mm;border-bottom:1px solid #999}
+.ps-box h2 .k{float:right;font-size:11pt;letter-spacing:.08em;font-family:'Jua',monospace;background:#111;color:#fff;padding:0 2mm;border-radius:1mm}
+.ps-box p{margin:.5mm 0;white-space:pre-line}
+.ps-box .lb{display:inline-block;min-width:8mm;font-weight:900;color:#444;margin-right:1mm}
+.ps-ans{background:#fff3c4;font-weight:900;padding:0 1mm;border-radius:.6mm}
+.ps-code{font-family:'Jua',monospace;font-size:10.5pt;letter-spacing:.12em;background:#111;color:#fff;padding:0 1.5mm;border-radius:1mm}
+.ps-blue{border-color:#2563EB}.ps-red{border-color:#E04848}
+.ps-blue h2{color:#2563EB}.ps-red h2{color:#E04848}
+.ps-ops{font-size:8pt}.ps-ops li{margin:.3mm 0}
+.ps-poem{font-family:'Jua';font-size:9.5pt;line-height:1.25;background:#f3f3f3;padding:1mm 1.5mm;border-radius:1mm;margin:.6mm 0;white-space:pre-line}
+@media print{ body>*{display:none!important} #ps{display:block!important;position:static;overflow:visible} .ps-bar{display:none!important} .ps-page{width:auto;min-height:auto;padding:0} @page{size:A4;margin:9mm} }
 </style>
 </head>
 <body>
+<div id="ps"></div>
 <div class="wrap">
   <div class="head">
     <div class="row" style="gap:10px"><a class="back" href="index.html">←</a><span class="t disp">🌊 일광 레이스<small>9.18 목</small></span></div>
@@ -319,6 +340,7 @@ function init(){
   $('btnSkip').addEventListener('click', function(){ runLadder(true); });
   $('btnClose').addEventListener('click', closeLadder);
   $('app').addEventListener('click', onAct);
+  $('ps').addEventListener('click', onAct);
   $('mo').addEventListener('click', function(e){ var b=e.target.closest('[data-mo]'); if(!b){ if(e.target===$('mo')) moClose(); return; } var yes=b.getAttribute('data-mo')==='1'; var cb=_moCb; moClose(); if(yes && cb) cb(); });
   $('app').addEventListener('input', onInput);
   $('photoIn').addEventListener('change', onPhotoPicked);
@@ -652,7 +674,7 @@ function slot(spotIdx,which,url,label){
   return '<div class="slot'+(has?' has':'')+'" data-act="photo" data-spot="'+spotIdx+'" data-which="'+which+'">'+(has?'<img src="'+esc(url)+'" alt="">':'')+'<span class="cap">'+label+(has?' · 다시 찍기':' · 탭해서 찍기')+'</span></div>';
 }
 function setView(){
-  var h='<div class="row" style="justify-content:space-between;margin-bottom:10px"><span class="muted">✏️ 설정 · 운영진 전용</span><button type="button" class="btn ghost sm" data-act="gm">운영진 화면</button></div>';
+  var h='<div class="row" style="justify-content:space-between;margin-bottom:10px"><span class="muted">✏️ 설정 · 운영진 전용</span><span><button type="button" class="btn ghost sm" data-act="printsheet">🖨️ 진행표 A4</button> <button type="button" class="btn ghost sm" data-act="gm">운영진 화면</button></span></div>';
   if(!CFG){ return h+'<div class="muted" style="text-align:center;padding:30px 0">설정 불러오는 중…</div>'; }
   h+='<div class="card" style="background:var(--amber-l);border-color:#F4C9A6"><div class="disp" style="font-size:16px">힌트 · 사진 · 봉투 코드 · 미션</div><div class="muted">답사하면서 폰으로 바로 찍어 넣으세요. 맨 아래 저장을 눌러야 반영됩니다.</div></div>';
   var tms=[['blue','🔵 블루팀'],['red','🔴 레드팀']];
@@ -670,10 +692,51 @@ function setView(){
   var TR=CFG.travel||{}, legs=[['leg1','🚗 1차 이동 미션 (출발 → 1차 스팟)'],['leg2','🚗 2차 이동 미션 (1차 → 2차 스팟)'],['leg3','🚗 3차 이동 미션 (2차 → 집결지)']];
   for(var L2=0;L2<legs.length;L2++){ var lg=TR[legs[L2][0]]||{};
     h+='<div class="set"><div class="h disp">'+legs[L2][1]+'</div>'+fld('travel.'+legs[L2][0]+'.title','제목',lg.title||'')+fld('travel.'+legs[L2][0]+'.body','미션 내용 (줄바꿈 그대로 표시)',lg.body||'','ta')+fld('travel.'+legs[L2][0]+'.proof','인증 방법',lg.proof||'');
-    if(legs[L2][0]==='leg3') h+=fld('travel.leg3.blue','🔵 블루팀 초성 (· 로 구분, 6개 이하면 한 줄씩 크게 표시)',lg.blue||'')+fld('travel.leg3.red','🔴 레드팀 초성 (· 로 구분, 6개 이하면 한 줄씩 크게 표시)',lg.red||'');
+    if(legs[L2][0]==='leg3') h+=fld('travel.leg3.blue','🔵 블루팀 초성 (· 로 구분, 6개 이하면 한 줄씩 크게 표시)',lg.blue||'')+fld('travel.leg3.red','🔴 레드팀 초성 (· 로 구분, 6개 이하면 한 줄씩 크게 표시)',lg.red||'')+fld('travel.leg3.blueAns','🔵 블루 초성 정답 (진행표에만 · 팀에겐 안 보임)',lg.blueAns||'')+fld('travel.leg3.redAns','🔴 레드 초성 정답 (진행표에만 · 팀에겐 안 보임)',lg.redAns||'');
     h+='</div>'; }
   h+='<div class="set"><div class="h disp">🍚 골인 · 점심 퀴즈</div>'+fld('finish.q','문제',CFG.finish.q,'ta')+fld('finish.answer','정답',CFG.finish.answer)+fld('finish.addr','정답 시 보여줄 주소',CFG.finish.addr)+fld('finish.deadline','집결 마감 시각 (예: 13:30)',CFG.finish.deadline||'')+fld('finish.note','마감 안내 문구',CFG.finish.note||'')+'</div>';
   h+='<div class="savebar"><button type="button" class="btn sea wide" data-act="save">💾 저장</button></div>';
+  return h;
+}
+function printSheet(){
+  var c=CFG, e=esc, tk=['blue','red'], tn={blue:'🔵 블루',red:'🔴 레드'};
+  function box(cls,title,code,body){ return '<div class="ps-box '+cls+'"><h2>'+title+(code?'<span class="k">'+e(code)+'</span>':'')+'</h2>'+body+'</div>'; }
+  function ln(lb,v,cls){ if(!v) return ''; return '<p><span class="lb">'+lb+'</span>'+(cls?'<span class="'+cls+'">':'')+e(v)+(cls?'</span>':'')+'</p>'; }
+  var h='<div class="ps-bar"><b>🖨️ 운영진 진행표 · 설정값 그대로 생성</b><span><button type="button" data-act="psprint" style="background:#E2782E;color:#fff">인쇄 / PDF 저장</button> <button type="button" data-act="psclose" style="background:#fff;color:#1a2744">닫기</button></span></div>';
+  h+='<div class="ps-page"><h1>🌊 일광 레이스 · 운영진 진행표 <small>9/18(목) · 집결 '+e((c.finish||{}).deadline||'')+' · 시작 칩 '+((ST&&ST.rule)?ST.rule.base:'')+' · 무료힌트 2 · 오답 잠금 5/10/15초</small></h1>';
+  h+='<div class="ps-cols">';
+  for(var t=0;t<2;t++){ var sc=c.start[tk[t]]||{}; var b='';
+    b+=ln('①',sc.q1)+ln('②',sc.q2)+ln('③',sc.q3||sc.q34)+ln('④',sc.q4)+ln('힌1',sc.h1,'ps-ans')+ln('힌2',sc.h2,'ps-ans');
+    h+=box('ps-'+tk[t],'🔐 출발 코드 · '+tn[tk[t]],sc.answer,b); }
+  h+='</div>';
+  var s1='', s2='';
+  for(var i=0;i<c.spots.length;i++){ var sp=c.spots[i]; var b2='';
+    var st=sp.stage+'차 · '+(sp.route==='AB'?'공통':(sp.route==='A'?'🔵 블루 코스':'🔴 레드 코스'));
+    b2+='<div class="ps-poem">'+e(sp.riddle||'')+'</div>';
+    b2+=ln('행선지 정답',sp.keys,'ps-ans')+ln('힌1',sp.rh1)+ln('힌2',sp.rh2);
+    b2+=ln('봉투 힌1',sp.pc1)+ln('봉투 힌2',sp.pc2)+ln('봉투 힌3',sp.pc3)+ln('봉투 정답',sp.ans,'ps-ans');
+    if(sp.route==='AB'&&(sp.pc1_r||sp.ans_r||sp.code_r)) b2+='<p style="color:#E04848"><b>🔴 레드 봉투</b> '+e([sp.pc1_r,sp.pc2_r,sp.pc3_r].filter(function(x){return x;}).join(' / '))+(sp.ans_r?' · 정답: '+e(sp.ans_r):'')+(sp.code_r?' · 코드 <span class="ps-code">'+e(sp.code_r)+'</span>':'')+'</p>';
+    b2+=ln('🎯 미션 ',sp.mission);
+    var bx=box('','📍 '+e(sp.name)+' <span style="font-weight:400;font-size:8pt;color:#555">'+st+'</span>','봉투 '+(sp.code||'—'),b2); if(sp.route==='AB') s2+=bx; else s1+=bx; }
+  h+='<div class="ps-cols">'+s1+'</div>'+s2;
+  var tr=c.travel||{}, legs=['leg1','leg2','leg3']; var b3='';
+  for(var g=0;g<legs.length;g++){ var lg=tr[legs[g]]; if(!lg) continue; b3+='<p><b>'+e(lg.title||legs[g])+'</b> '+e((lg.body||'').replace(/\n+/g,' / '))+(lg.proof?' <i>('+e(lg.proof)+')</i>':'')+'</p>';
+    if(legs[g]==='leg3'){ b3+=ln('🔵 초성',lg.blue)+ln('🔵 정답',lg.blueAns,'ps-ans')+ln('🔴 초성',lg.red)+ln('🔴 정답',lg.redAns,'ps-ans'); } }
+  var f=c.finish||{};
+  h+='<div class="ps-cols">'+box('','🚗 이동 미션 (차 안 · 단톡 인증)','',b3)
+    +box('','🏁 골인 퀴즈','',('<div class="ps-poem">'+e(f.q||'')+'</div>')+ln('정답',f.answer,'ps-ans')+ln('주소',f.addr)+ln('마감',f.deadline)+ln('메모',f.note)+'<p>📞 골인 직통 → 정답 자동 공개 · 힌트·정답권은 골인에서 사용 불가</p>')+'</div>';
+  var items=(ST&&ST.items)||[]; var b4='<p>';
+  for(var k=0;k<items.length;k++) b4+=items[k].ic+' '+e(items[k].nm)+' <b>'+items[k].pr+'칩</b>(최대 '+items[k].max+') · ';
+  b4+='</p><p>점수: 마켓에서 안 쓴 칩 ×10 · 안 쓴 아이템 → 칩 환불 ×10 · 안 쓴 무료힌트 ×'+FREE_HINT_PT+' · 박스 보너스 +3</p><p>박스: 칩+2 / 힌트 무료 1회 / 미션+3점 / 꽝×2 / 벌칙(대표에게 전화해 미션 하달)</p>';
+  var ops='<ul class="ps-ops"><li><b>단계 전환</b>은 대표 실전 화면 ① 대기 → ② 마켓 → ③ 미션. 마켓 여는 순간 칩 확정. 데모 탭은 데모만 바뀜</li>'
+    +'<li><b>화면이 안 바뀔 때</b>: 폰 화면 껐다 켜기(즉시 갱신) → 그래도 안 되면 앱 완전 종료 후 재실행</li>'
+    +'<li><b>"서버가 바빠요"</b> = 동시 입력 충돌. 3초 뒤 한 번 더. <b>"서버 오류(GAS)"</b> = 대표에게 즉시</li>'
+    +'<li><b>오답 잠금</b>은 폰마다 따로 → 정답 입력은 팀당 1명(내비게이터)만</li>'
+    +'<li>힌트 순서: 무료 2회 먼저 차감 → 힌트권. 봉투 힌트 3회째는 정답 문장. 정답권/직통은 행선지·봉투 어디서든</li>'
+    +'<li>팀이 완전히 막히면 GM이 위 정답을 <b>말로</b> 알려주고 팀이 직접 입력 (서버 강제 진행 기능 없음)</li>'
+    +'<li>운영진 코드표: 운영진 화면 하단 (봉투 코드 · 출발 코드 · 골인 정답)</li></ul>';
+  h+='<div class="ps-cols">'+box('','🛒 칩 마켓 · 점수','',b4)+box('','🆘 현장 대응','',ops)+'</div>';
+  h+='</div>';
   return h;
 }
 function setPath(obj,path,val){ var ps=path.split('.'), o=obj; for(var i=0;i<ps.length-1;i++){ if(o[ps[i]]==null) o[ps[i]]={}; o=o[ps[i]]; } o[ps[ps.length-1]]=val; }
@@ -706,6 +769,9 @@ function onAct(e){
   if(a==='show'){ _showMode=true; render(); window.scrollTo(0,0); }
   if(a==='gm'){ _showMode=false; _setMode=false; render(); window.scrollTo(0,0); }
   if(a==='settings') openSettings();
+  if(a==='printsheet'){ if(!CFG){ toast('설정을 먼저 불러오는 중이에요'); return; } $('ps').innerHTML=printSheet(); $('ps').classList.add('on'); window.scrollTo(0,0); }
+  if(a==='psclose'){ $('ps').classList.remove('on'); }
+  if(a==='psprint'){ window.print(); }
   if(a==='travel') travelModal();
   if(a==='phase'){ var ph=el.getAttribute('data-ph'); if(ph===ST.phase) return; var go=function(){ wait(lbPhase(ph)+' 단계로 전환 중…'); busy(el,'전환 중…'); gasGet({action:'swkPhase',fp:currentUser.id,phase:ph}, function(res){ if(!res||!res.ok){ waitOff(); unbusy(el); toast((res&&res.msg)||'실패'); return; } _code=''; waitOff(); toast(lbPhase(ph)+' 단계로 전환'); apply(res); }); }; if(_demo) go(); else ask({icon:'📣',title:lbPhase(ph)+' 단계로',msg:'전원 화면이 바뀌고 푸시가 갑니다',ok:'전환',okCls:'amber'}, go); }
   if(a==='demoon'){ _demo=true; _showMode=false; _code=''; load(false); }
