@@ -491,7 +491,7 @@ function raceView(){
     h+='<div class="env"><div class="lb">골인 · 점심 퀴즈</div><div class="h'+(String(f.q||'').indexOf('\n')>=0?' poem':'')+'">'+esc(f.q||'')+'</div></div>';
     var dead = f.deadline ? '<div class="card" style="border:2px solid var(--amber);text-align:center;padding:12px;margin-top:12px"><div class="muted">집결 마감</div><div class="disp" style="font-size:34px;color:var(--amber);line-height:1.1">'+esc(f.deadline)+'</div>'+(f.note?'<div class="muted" style="margin-top:4px">'+esc(f.note)+'</div>':'')+'</div>' : '';
     if(!me.done) return h+'<div class="card"><div class="nx">👉 지금 할 일</div><div class="disp" style="font-size:16px">🍚 점심 메뉴를 적어보세요</div><div class="codein" style="margin-top:8px"><input id="gs" class="txt" placeholder="예: 김밥"'+(lockLeft('finish')?' disabled':'')+'><button type="button" class="btn sea'+(lockLeft('finish')?'':' glow')+'" data-act="finish"'+(lockLeft('finish')?' disabled':'')+'>정답?</button></div>'+lockBar('finish')+'</div>'+dead;
-    h+='<div class="env ok"><div class="lb">정답! 🍚</div><div class="h3" style="font-size:17px;margin-top:6px">📍 '+esc(f.addr||'')+'</div><a class="muted" style="display:block;margin-top:6px" href="https://map.naver.com/v5/search/'+encodeURIComponent((f.addr||'').split(' · ')[0])+'" target="_blank">지도 열기 ↗</a></div><div class="card" style="text-align:center"><div class="disp" style="font-size:22px;color:var(--sea)">🏁 골인!</div><div style="font-size:14px;margin-top:8px;text-align:left;display:inline-block">남은 칩 <b>'+t.chips+'개</b> → +'+(t.chips*10)+'점<br>안 쓴 아이템 → 칩 <b>'+(t.refund||0)+'개</b> 환산 → +'+((t.refund||0)*10)+'점'+(t.bonus?'<br>미스터리 박스 보너스 → +'+t.bonus+'점':'')+'</div><div class="disp" style="font-size:26px;color:var(--amber);margin-top:6px">합계 +'+((t.chips+(t.refund||0))*10+(t.bonus||0))+'점</div>'+(t.boxResult?'<div class="muted" style="margin-top:2px">미스터리 박스 결과: '+esc(t.boxResult)+'</div>':'')+'<div class="muted" style="margin-top:4px">미션 점수는 집결 후 발표</div></div>';
+    h+='<div class="env ok"><div class="lb">정답! 🍚</div><div class="h3" style="font-size:17px;margin-top:6px">📍 '+esc(f.addr||'')+'</div><a class="muted" style="display:block;margin-top:6px" href="https://map.naver.com/v5/search/'+encodeURIComponent((f.addr||'').split(' · ')[0])+'" target="_blank">지도 열기 ↗</a></div><div class="card" style="text-align:center"><div class="disp" style="font-size:22px;color:var(--sea)">🏁 골인!</div><div style="font-size:14px;margin-top:8px;text-align:left;display:inline-block">남은 칩 <b>'+t.chips+'개</b> → +'+(t.chips*10)+'점<br>안 쓴 아이템 → 칩 <b>'+(t.refund||0)+'개</b> 환산 → +'+((t.refund||0)*10)+'점'+(t.freeHint>0?'<br>안 쓴 무료힌트 <b>'+t.freeHint+'개</b> × '+FREE_HINT_PT+'점 → +'+freePts(t)+'점':'')+(t.bonus?'<br>미스터리 박스 보너스 → +'+t.bonus+'점':'')+'</div><div class="disp" style="font-size:26px;color:var(--amber);margin-top:6px">합계 +'+((t.chips+(t.refund||0))*10+freePts(t)+(t.bonus||0))+'점</div>'+(t.boxResult?'<div class="muted" style="margin-top:2px">미스터리 박스 결과: '+esc(t.boxResult)+'</div>':'')+'<div class="muted" style="margin-top:4px">미션 점수는 집결 후 발표</div></div>';
     return h+dead;
   }
   var sp=me.spot||{};
@@ -531,7 +531,7 @@ function itemsBar(t, me){
   var h='<div class="ibar"><div class="chipn">'+t.chips+'<small>칩</small></div>';
   var hintAct = (me&&me.stage===0)?'shint':((me&&!me.guessed)?'rhint':'hint'), anyHint = canSHint||canRHint||canHint;
   h+=cell('free','🆓','무료힌트',t.freeHint,anyHint&&t.freeHint>0,hintAct);
-  h+=cell('hint','🔍','힌트권',it.hint||0,anyHint&&t.freeHint<=0,hintAct);
+  h+=cell('hint','🔍','힌트권',it.hint||0,anyHint&&(it.hint||0)>0,hintAct);
   h+=cell('answer','📍','정답권',it.answer||0,canAns,'answer');
   h+=cell('call','📞','직통',it.call||0,canCall,'call');
   h+=cell('pick','🏖️','지명권',it.pick||0,false,'why');
@@ -574,9 +574,11 @@ function travelModal(){
   $('moBox').innerHTML=h; $('mo').classList.add('on'); _moCb=null;
 }
 function pic(url,cap,txt){ var t=txt?'<div style="font-size:14px;font-weight:700;color:#3A2600;padding:8px 10px 2px;line-height:1.5">“'+esc(txt)+'”</div>':''; if(!url) return '<div class="pic"><div class="cap">📷 '+cap+(txt?'':' · 사진 없음')+'</div>'+t+'</div>'; return '<div class="pic"><div class="cap">📷 '+cap+'</div><img src="'+esc(url)+'" alt="">'+t+'</div>'; }
+var FREE_HINT_PT=5;
+function freePts(t){ return (t&&t.freeHint>0?t.freeHint:0)*FREE_HINT_PT; }
 function chipLine(t){
   var it=t.items||{};
-  var h='<div class="card" style="text-align:center;padding:10px 14px;margin-top:12px"><div style="font-size:14px">남은 칩 <b>'+t.chips+'개</b> × 10점 = 골인 때 <b style="color:var(--amber)">+'+(t.chips*10)+'점</b></div>';
+  var h='<div class="card" style="text-align:center;padding:10px 14px;margin-top:12px"><div style="font-size:14px">남은 칩 <b>'+t.chips+'개</b> × 10점 = 골인 때 <b style="color:var(--amber)">+'+(t.chips*10)+'점</b></div>'+(t.freeHint>0?'<div class="muted" style="margin-top:2px">안 쓴 무료힌트 '+t.freeHint+'개 × '+FREE_HINT_PT+'점 = +'+freePts(t)+'점</div>':'');
   if(t.boxResult) h+='<div class="muted" style="margin-top:2px">미스터리 박스 결과: '+esc(t.boxResult)+'</div>';
   h+='</div>';
   if(it.box>0) h+='<button type="button" class="btn amber wide" style="margin-top:10px" data-act="box">🎁 미스터리 박스 열기</button>';
@@ -599,7 +601,7 @@ function lane(team){
   h+='<div class="kv"><span>지금</span><b>'+esc(now)+'</b></div>';
   if(p.last) h+='<div class="kv"><span>마지막</span><b>'+esc(p.last.t)+' '+esc(p.last.msg)+'</b></div>';
   var it=p.items||{}; var parts=[]; if(it.hint) parts.push('🔍×'+it.hint); if(it.answer) parts.push('📍×'+it.answer); if(it.call) parts.push('📞'); if(it.pick) parts.push('🏖️'); if(it.box) parts.push('🎁');
-  h+='<div class="kv"><span>보유</span><b>무료힌트 '+p.freeHint+(parts.length?' · '+parts.join(' '):'')+(p.bonus?' · 보너스 +'+p.bonus:'')+'</b></div><div class="kv"><span>칩 점수</span><b>칩 '+p.chips+' + 아이템 환산 '+(p.refund||0)+' = +'+((p.chips+(p.refund||0))*10)+'점</b></div>';
+  h+='<div class="kv"><span>보유</span><b>무료힌트 '+p.freeHint+(parts.length?' · '+parts.join(' '):'')+(p.bonus?' · 보너스 +'+p.bonus:'')+'</b></div><div class="kv"><span>칩 점수</span><b>칩 '+p.chips+' + 아이템 환산 '+(p.refund||0)+' = +'+((p.chips+(p.refund||0))*10)+'점'+(p.freeHint>0?' · 무료힌트 +'+freePts(p)+'점':'')+(p.bonus?' · 보너스 +'+p.bonus+'점':'')+' → <span style="color:var(--amber)">합계 +'+((p.chips+(p.refund||0))*10+freePts(p)+(p.bonus||0))+'점</span></b></div>';
   if(ST.phase==='market'&&!p.confirmed){ var ITEMS=ST.items||[]; var c=[]; for(var j=0;j<ITEMS.length;j++) if(p.cart&&p.cart[ITEMS[j].k]) c.push(ITEMS[j].ic+'×'+p.cart[ITEMS[j].k]); h+='<div class="kv"><span>장바구니</span><b>'+(c.length?c.join(' '):'비어 있음')+'</b></div>'; }
   if(ST.phase==='market') h+='<div class="kv"><span>확정</span><b>'+(p.confirmed?'✅':'아직')+'</b></div>';
   return h+'</div>';
@@ -706,7 +708,7 @@ function onAct(e){
   if(a==='demoon'){ _demo=true; _showMode=false; _code=''; load(false); }
   if(a==='demooff'){ _demo=false; _code=''; load(false); }
   if(a==='demoreset'){ var dc=$('demoChips')?$('demoChips').value:''; ask({icon:'🧪',title:'데모 처음부터',msg:dc?'시작 칩 '+dc+'개로 다시 시작합니다':'실제 업적 칩으로 다시 시작합니다',ok:'리셋'}, function(){ busy(el,'리셋 중…'); gasGet({action:'swkDemoReset',fp:currentUser.id,chips:dc}, function(res){ _code=''; _cartSynced=null; toast(res&&res.chips!=null?'시작 칩 '+res.chips+'개로 리셋':'실제 칩으로 리셋'); apply(res); }); }); }
-  if(a==='why'){ var k=el.getAttribute('data-k'); var meW=ST.race&&ST.race.me; var m=k==='pick'?'종목 지명권은 골인 후 심판에게 말하면 돼요':(k==='box'?'미스터리 박스가 없어요':((k==='free'||k==='hint')?(meW&&meW.stage<3?'이 단계 힌트는 다 썼어요':'미션이 시작되면 쓸 수 있어요'):(k==='answer'?'정답권이 없어요':'직통권이 없어요'))); toast(m); }
+  if(a==='why'){ var k=el.getAttribute('data-k'); var meW=ST.race&&ST.race.me; var m=k==='pick'?'종목 지명권은 골인 후 심판에게 말하면 돼요':(k==='box'?'미스터리 박스가 없어요':((k==='free'||k==='hint')?(meW&&meW.stage<3?(k==='hint'&&!(ST.race.pub[ST.race.mine].items||{}).hint?'힌트권이 없어요':'이 단계 힌트는 다 썼어요'):'미션이 시작되면 쓸 수 있어요'):(k==='answer'?'정답권이 없어요':'직통권이 없어요'))); toast(m); }
   if(a==='cart'){
     var mine=ST.race&&ST.race.mine, pub=mine&&ST.race.pub[mine]; if(!pub||el.disabled) return;
     var k2=el.getAttribute('data-k'), d=parseInt(el.getAttribute('data-d'))||0;
