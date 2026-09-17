@@ -321,6 +321,7 @@ function init(){
   $('mo').addEventListener('click', function(e){ var b=e.target.closest('[data-mo]'); if(!b){ if(e.target===$('mo')) moClose(); return; } var yes=b.getAttribute('data-mo')==='1'; var cb=_moCb; moClose(); if(yes && cb) cb(); });
   $('app').addEventListener('input', onInput);
   $('photoIn').addEventListener('change', onPhotoPicked);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible' && ST && !_setMode && !_hold && !$('ov').classList.contains('on')) pollOnce(ST.phase==='market'||ST.phase==='race'); });
   window.addEventListener('resize', function(){ if($('ov').classList.contains('on') && !_animating) drawLadder(null); });
   load(false);
 }
@@ -825,6 +826,17 @@ function race(op,val,cb,el,label){
     else if(!optimistic) load(false);
   });
 }
+function raceSig(st){ var m=st&&st.race&&st.race.me; if(!m) return ''; return [m.stage,m.guessed?1:0,m.opened?1:0,m.done?1:0].join('|'); }
+function pollOnce(fast){
+  gasGet({action:'swkState',fp:currentUser.id}, function(res){
+    if(!res||!res.ok) return;
+    if(!fast && res.phase===ST.phase && res.ladderRevealed===ST.ladderRevealed) return;
+    var before=raceSig(ST), after=raceSig(res), adv=(ST.phase==='race' && res.phase==='race' && before && after && before!==after);
+    ST=res;
+    if(adv && !_hold){ var m=res.race.me; var t=m.done?'골인!':(m.stage===0?'출발 코드 통과!':(!m.guessed?(m.stage===3?'골인 퀴즈 열림':m.stage+'차 수수께끼 열림'):(!m.opened?'행선지 정답!':'봉투 코드 정답!'))); cheer('🎉','팀원이 맞혔어요!',t+' · 계속을 누르면 화면이 넘어가요'); }
+    render();
+  });
+}
 function livePoll(){
   if(_livePoll){ clearInterval(_livePoll); _livePoll=null; }
   if(!ST || _setMode) return;
@@ -834,11 +846,7 @@ function livePoll(){
     if(document.activeElement && (document.activeElement.tagName==='INPUT' || document.activeElement.tagName==='TEXTAREA')) return;
     if($('ov').classList.contains('on')) return;
     if(_cartTimer||_cartBusy) return;
-    gasGet({action:'swkState',fp:currentUser.id}, function(res){
-      if(!res||!res.ok) return;
-      if(!fast && res.phase===ST.phase && res.ladderRevealed===ST.ladderRevealed) return;
-      ST=res; render();
-    });
+    pollOnce(fast);
   }, fast ? 12000 : 30000);
 }
 
