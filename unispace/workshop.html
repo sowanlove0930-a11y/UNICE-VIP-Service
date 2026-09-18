@@ -428,7 +428,7 @@ function ladderCard(){
     var lbl = i<0 ? '30만 미만' : (30+i*10)+'만';
     h+='<div class="'+cls+'"><b>'+(i<0?0:2+i*2)+'</b>'+lbl+'<span class="who">'+who+'</span></div>';
   }
-  h+='</div><div class="legend"><span>🔵 블루 · 🔴 레드 지금 위치</span><span><i class="coin base"></i>기본 2개는 공통</span></div></div>';
+  h+='</div><div class="legend"><span>🔵 블루 · 🔴 레드 지금 위치</span><span><i class="coin base"></i>기본 '+(ST.rule&&ST.rule.base||8)+'개는 공통</span></div></div>';
   return h;
 }
 function previewCard(){
@@ -493,7 +493,7 @@ function raceView(){
   var it=t.items||{};
   if(me.stage===0){
     var sc=me.start||{};
-    h+='<div class="lock" id="lock"><div class="disp" style="font-size:22px;color:var(--sea)">🔐 출발 4자리 코드</div><div class="muted">맞추면 첫 힌트 봉투가 열립니다</div><div class="digits">';
+    h+='<div class="lock" id="lock"><div class="disp" style="font-size:22px;color:var(--sea)">🔐 출발 4자리 코드</div><div class="muted">맞추면 첫 힌트 봉투가 열립니다</div>'+(sc.reveal?'<div class="env ok" style="margin:8px 0"><div class="lb">📍 정답 공개권 · 출발 코드</div><div class="h" style="font-size:28px;letter-spacing:.3em;text-align:center">'+esc(sc.reveal)+'</div><div class="muted" style="text-align:center">아래에 입력하면 출발!</div></div>':'')+'<div class="digits">';
     for(var i=0;i<4;i++){ var c=_code.charAt(i); h+='<div class="dg '+(c?'':'q')+'">'+(c||'·')+'</div>'; }
     h+='</div><div class="pad">'; for(var d=1;d<=9;d++) h+='<button type="button" data-act="dg" data-d="'+d+'">'+d+'</button>';
     h+='<button type="button" data-act="dgdel">⌫</button><button type="button" data-act="dg" data-d="0">0</button><button type="button" class="ok'+(_code.length===4&&!lockLeft('code')?' glow':'')+'" data-act="dgok"'+(lockLeft('code')?' disabled':'')+'>확인</button></div>';
@@ -548,9 +548,10 @@ function itemsBar(t, me){
   var sl=me?(me.sHintLv||0):0; var canSHint = me && me.stage===0 && sl<2 && (t.freeHint>0 || it.hint>0);
   var canRHint = inSpot && !me.guessed && rl<2 && (t.freeHint>0 || it.hint>0);
   var canHint = inSpot && me.guessed && me.hintLv<3 && (t.freeHint>0 || it.hint>0);
-  var canAns = inSpot && (!me.guessed || me.hintLv<3) && it.answer>0;
+  var canAns = ((inSpot && (!me.guessed || me.hintLv<3)) || (me && me.stage===0 && !(me.start&&me.start.reveal))) && it.answer>0;
   var atFin = me && me.stage===3 && !me.done;
-  var canCall = ((inSpot && (!me.guessed || me.hintLv<3)) || (atFin && !(me.finish&&me.finish.reveal))) && it.call>0;
+  var atStart = me && me.stage===0 && !(me.start&&me.start.reveal);
+  var canCall = ((inSpot && (!me.guessed || me.hintLv<3)) || (atFin && !(me.finish&&me.finish.reveal)) || atStart) && it.call>0;
   function cell(k,ic,label,n,can,act){ return '<div class="it'+(n>0?(can?' can':''):' zero')+'" data-act="'+(can?act:'why')+'" data-k="'+k+'"><b>'+ic+'</b>'+label+'<span class="n">'+(n>0?n+'개':'없음')+'</span></div>'; }
   var h='<div class="ibar"><div class="chipn">'+t.chips+'<small>칩</small></div>';
   var hintAct = (me&&me.stage===0)?'shint':((me&&!me.guessed)?'rhint':'hint'), anyHint = canSHint||canRHint||canHint;
@@ -808,10 +809,10 @@ function onAct(e){
   if(a==='hint'){ race('hint','', null, el); }
   if(a==='rhint'){ race('rhint','', null, el, '행선지 힌트 여는 중…'); }
   if(a==='shint'){ race('shint','', null, el, '출발 힌트 여는 중…'); }
-  if(a==='answer'){ var meA=ST.race&&ST.race.me; ask({icon:'📍',title:'정답 공개권 사용',msg:(meA&&!meA.guessed)?'행선지 이름이 바로 공개됩니다':'봉투 위치 사진과 문장이 바로 열립니다',ok:'열기',okCls:'amber'}, function(){ race('answer','', null, el, '정답 여는 중…'); }); }
-  if(a==='call'){ var meC=ST.race&&ST.race.me; if(meC&&meC.stage===3){ ask({icon:'📞',title:'대표 직통 · 골인 퀴즈',msg:'대표 영상통화 미션을 통과했나요?\n직통권이 소진되고 점심 정답이 공개됩니다',ok:'통과했어요',okCls:'amber'}, function(){ race('call','', null, el, '정답 여는 중…'); }); } else ask({icon:'📞',title:'대표 긴급 미션 통과',msg:'대표 영상통화 미션을 통과했나요?\n직통권이 소진되고 정답이 공개됩니다',ok:'통과했어요',okCls:'amber'}, function(){ race('call','', null, el, '정답 여는 중…'); }); }
+  if(a==='answer'){ var meA=ST.race&&ST.race.me; ask({icon:'📍',title:'정답 공개권 사용',msg:(meA&&meA.stage===0)?'출발 4자리 코드가 바로 공개됩니다':((meA&&!meA.guessed)?'행선지 이름이 바로 공개됩니다':'봉투 위치 사진과 문장이 바로 열립니다'),ok:'열기',okCls:'amber'}, function(){ race('answer','', null, el, '정답 여는 중…'); }); }
+  if(a==='call'){ var meC=ST.race&&ST.race.me; if(meC&&meC.stage===0){ ask({icon:'📞',title:'대표 직통 · 출발 코드',msg:'대표 영상통화 미션을 통과했나요?\n직통권이 소진되고 출발 코드가 공개됩니다',ok:'통과했어요',okCls:'amber'}, function(){ race('call','', null, el, '코드 여는 중…'); }); } else if(meC&&meC.stage===3){ ask({icon:'📞',title:'대표 직통 · 골인 퀴즈',msg:'대표 영상통화 미션을 통과했나요?\n직통권이 소진되고 점심 정답이 공개됩니다',ok:'통과했어요',okCls:'amber'}, function(){ race('call','', null, el, '정답 여는 중…'); }); } else ask({icon:'📞',title:'대표 긴급 미션 통과',msg:'대표 영상통화 미션을 통과했나요?\n직통권이 소진되고 정답이 공개됩니다',ok:'통과했어요',okCls:'amber'}, function(){ race('call','', null, el, '정답 여는 중…'); }); }
   if(a==='open'){ if(lockCheck('open')) return; var oc=$('sc').value; if(oc.length<4){ toast('4자리를 입력하세요'); return; } var meO=ST.race&&ST.race.me; if(meO&&meO.openHash&&fnv(oc)!==meO.openHash){ wrongAns('open','코드가 달라요','sc'); return; } lockClear('open'); race('open',oc, function(res){ if(res&&res.ok) cheer('🔓','코드 정답!','미션이 열렸어요'); }, el, '🔓 코드 정답! 미션 여는 중…'); }
-  if(a==='next'){ ask({icon:'📸',title:'미션 클리어',msg:'인증 영상을 단톡방에 올렸나요?',ok:'올렸어요!',okCls:'amber'}, function(){ race('next','', null, el, '✅ 미션 클리어! 다음 힌트 준비 중…'); }); }
+  if(a==='next'){ var meN=ST.race&&ST.race.me; var tvN=meN&&meN.travel; ask({icon:'📸',title:'미션 클리어',msg:'✅ 스팟 미션 인증 영상, 단톡방에 올렸나요?'+(tvN?'\n🚗 '+(tvN.title||'이동 미션')+'도 인증 올렸나요?':''),ok:tvN?'둘 다 올렸어요!':'올렸어요!',okCls:'amber'}, function(){ race('next','', null, el, '✅ 미션 클리어! 다음 힌트 준비 중…'); }); }
   if(a==='box'){ ask({icon:'🎁',title:'미스터리 박스',msg:'칩+2 · 힌트 무료 · 미션+3점 · 꽝 · 벌칙 중 하나!\n박스 1개가 열려요',ok:'열기!',okCls:'amber'}, function(){ race('box','', function(res){ if(res&&res.ok) boxReveal(res.boxResult||'💨 꽝'); }, el, '박스 여는 중…'); }); }
   if(a==='photo'){ _photoTarget={spot:+el.getAttribute('data-spot'),which:el.getAttribute('data-which')}; $('photoIn').click(); }
   if(a==='save'){ if(!CFG) return; el.disabled=true; gasPost({action:'swkConfigSave',fp:currentUser.id,config:CFG}, function(res){ el.disabled=false; if(!res||!res.ok){ toast((res&&res.msg)||'저장 실패'); return; } CFG=res.config; toast('저장했어요'); }); }
@@ -893,7 +894,7 @@ function race(op,val,cb,el,label){
     me.guessed=false; me.hintLv=0; me.opened=false;
     if(nx.finish){ me.finish={q:nx.finish.q,addr:'',deadline:nx.finish.deadline||'',note:nx.finish.note||''}; me.finishHashes=nx.finishHashes; me.spot=null; }
     else { me.spot={name:'',riddle:nx.riddle}; me.keyHashes=nx.keyHashes; me.openHash=nx.openHash; me.finish=null; }
-    me.next=null; me.travel=null; if(pub){ pub.stage=me.stage; pub.guessed=false; pub.opened=false; }
+    me.next=null; me.travel=(op==='next'&&me.stage===3&&me.travelNext)?me.travelNext:null; if(pub){ pub.stage=me.stage; pub.guessed=false; pub.opened=false; }
     _code=''; if(op==='code') cheer('🔓','자물쇠 해제!','첫 번째 수수께끼가 열렸어요'); else cheer('✅','미션 클리어!',(me.stage===3?'골인 퀴즈':me.stage+'차 수수께끼')+'가 열렸어요'); render();
   } else {
     var lb=label||({hint:'힌트 찾는 중…',answer:'정답 여는 중…',call:'정답 여는 중…',box:'박스 여는 중…'}[op])||'처리 중…';
