@@ -24048,7 +24048,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 85;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 87;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -24058,7 +24058,10 @@ var APP_BUILD = 85;   // ← 배포할 때 version.json 의 v 와 같은 숫자�
   var _updNotified = false;
   var _updShowing = false;
   // clear all caches + refresh SW, then reload - guarantees latest build
-  function _doHardUpdate(){
+  var _UPD_TRY_KEY = 'unispace_upd_try';
+  function _doHardUpdate(targetV){
+    // remember this attempt so a stale server file cannot cause an endless reload/modal loop
+    try { localStorage.setItem(_UPD_TRY_KEY, JSON.stringify({ t: parseInt(targetV) || 0, at: Date.now() })); } catch(e) {}
     var p = (window.caches && caches.keys)
       ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
       : Promise.resolve();
@@ -24097,7 +24100,7 @@ var APP_BUILD = 85;   // ← 배포할 때 version.json 의 v 와 같은 숫자�
     document.getElementById('updGoBtn').addEventListener('click', function(){
       this.textContent = '\uC5C5\uB370\uC774\uD2B8 \uC911...';
       this.disabled = true;
-      _doHardUpdate();
+      _doHardUpdate(newV);
     });
     document.getElementById('updLaterBtn').addEventListener('click', function(){
       if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
@@ -24124,15 +24127,25 @@ var APP_BUILD = 85;   // ← 배포할 때 version.json 의 v 와 같은 숫자�
       .then(function(r){ return r.json(); })
       .then(function(v){
         if (!v || !v.v) return;
-        if (parseInt(v.v) <= APP_BUILD) return;
+        var newV = parseInt(v.v);
+        if (newV <= APP_BUILD) {
+          try { localStorage.removeItem(_UPD_TRY_KEY); } catch(e) {}
+          return;
+        }
+        // already tried updating to this version recently and still on the old build:
+        // the server file is not refreshed yet - wait 30 min before asking again
+        try {
+          var tr = JSON.parse(localStorage.getItem(_UPD_TRY_KEY) || 'null');
+          if (tr && tr.t >= newV && (Date.now() - tr.at) < 1800000) return;
+        } catch(e) {}
         var loginVisible = false;
         try {
           // 로그인 오버레이가 열려 있으면 (hidden 클래스 없음) 작성 중 데이터가 없다고 판단
           var ls = document.getElementById('loginOverlay');
           loginVisible = !!(ls && ls.className.indexOf('hidden') < 0);
         } catch(e) {}
-        if (loginVisible) { _doHardUpdate(); return; }
-        _showUpdateModal(parseInt(v.v));
+        if (loginVisible) { _doHardUpdate(newV); return; }
+        _showUpdateModal(newV);
       })['catch'](function(){});
   }
   setInterval(_checkVersion, 600000);   // 30분마다
