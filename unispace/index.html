@@ -6519,20 +6519,41 @@ function resolveConfirm(result) {
     logout();
   });
 })();
+function _doLogoutNow() {
+  try { localStorage.removeItem('unispace_user'); } catch(e) {}
+  try { localStorage.removeItem('unispace_customers'); } catch(e) {}
+  try { localStorage.removeItem('unispace_attendance'); } catch(e) {}
+  try { localStorage.removeItem('unispace_prereport'); } catch(e) {}
+  location.reload();
+}
 function logout() {
-  showConfirm({
-    icon: '🚪', iconCls: 'confirm-icon-warn',
-    title: '로그아웃',
-    msg: '<b>' + currentUser.name + '</b>님, 로그아웃 하시겠어요?',
-    okLabel: '로그아웃', okCls: 'red'
-  }).then(function(ok) {
-    if (!ok) return;
-    localStorage.removeItem('unispace_user');
-    localStorage.removeItem('unispace_customers');
-    localStorage.removeItem('unispace_attendance');
-    localStorage.removeItem('unispace_prereport');
-    location.reload();
-  });
+  var nm = (currentUser && currentUser.name) ? currentUser.name : '';
+  var done = false;
+  try {
+    showConfirm({
+      icon: '🚪', iconCls: 'confirm-icon-warn',
+      title: '로그아웃',
+      msg: '<b>' + nm + '</b>님, 로그아웃 하시겠어요?',
+      okLabel: '로그아웃', okCls: 'red'
+    }).then(function(ok) {
+      done = true;
+      if (!ok) return;
+      _doLogoutNow();
+    });
+  } catch(e) {
+    if (window.confirm('로그아웃 하시겠어요?')) _doLogoutNow();
+    return;
+  }
+  // fallback: if the styled confirm did not actually appear on screen, use the native confirm
+  setTimeout(function(){
+    if (done) return;
+    var ov = document.getElementById('confirmOverlay');
+    var visible = false;
+    try { visible = !!(ov && ov.classList.contains('open') && getComputedStyle(ov).display !== 'none' && ov.offsetWidth > 0); } catch(e) {}
+    if (visible) return;
+    if (typeof resolveConfirm === 'function') { try { resolveConfirm(false); } catch(e) {} }
+    if (window.confirm('로그아웃 하시겠어요?')) _doLogoutNow();
+  }, 250);
 }
 
 // ── 비밀번호 변경 ────────────────────────────────────
@@ -24074,7 +24095,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 88;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 89;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
