@@ -2089,7 +2089,7 @@ document.addEventListener('visibilitychange', function(){
   try{ loadExisting(); }catch(e){}
 });
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 76; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 78; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2112,7 +2112,7 @@ function _planShowUpdBanner(newV, strict){
   b.innerHTML='\uD83D\uDD04 \uC0C8 \uBC84\uC804(v'+newV+')\uC774 \uB098\uC654\uC2B5\uB2C8\uB2E4 \u2014 \uC5EC\uAE30\uB97C \uB20C\uB7EC \uC5C5\uB370\uC774\uD2B8 \uD6C4 \uC791\uC131\uD574\uC8FC\uC138\uC694';
   b.addEventListener('click', function(){
     b.textContent='\uC5C5\uB370\uC774\uD2B8 \uC911...';
-    try{ localStorage.setItem('unispace_plan_upd_try', String(newV)); }catch(e){}
+    try{ localStorage.setItem('unispace_plan_upd_try', JSON.stringify({ t: parseInt(newV)||0, at: Date.now() })); }catch(e){}
     _planHardUpdate();
   });
   document.body.appendChild(b);
@@ -2125,12 +2125,14 @@ function _planCheckVersion(){
       if(!j) return;
       var strict = (j.plan!==undefined && j.plan!==null);
       var remote = parseInt(strict ? j.plan : j.v)||0;
-      if(remote <= PLAN_BUILD) return;
-      if(!strict){
-        // 공용 v 사용 시: 같은 버전으로 이미 업데이트 시도했으면 반복 배너 방지
-        var tried=0; try{ tried=parseInt(localStorage.getItem('unispace_plan_upd_try'))||0; }catch(e){}
-        if(tried===remote) return;
-      }
+      if(remote <= PLAN_BUILD){ try{ localStorage.removeItem('unispace_plan_upd_try'); }catch(e){} return; }
+      // already tried updating to this version and still on the old build:
+      // the server file is not refreshed yet - do not nag again for 30 minutes
+      try{
+        var raw=localStorage.getItem('unispace_plan_upd_try'); var tr=null;
+        if(raw){ if(raw.charAt(0)==='{'){ tr=JSON.parse(raw); } else { tr={ t:parseInt(raw)||0, at:0 }; } }
+        if(tr && tr.t>=remote && (Date.now()-tr.at) < 1800000) return;
+      }catch(e){}
       _planShowUpdBanner(remote, strict);
     })['catch'](function(){});
 }
@@ -2419,6 +2421,8 @@ function _getRoster(){
 }
 function _actplanBlocked(){
   if(!currentUser) return false;
+  // admins / branch managers decide the plans: never blocked by the roster flag
+  if(typeof _isAdmin==='function' && _isAdmin()) return false;
   if(currentUser.actplan===false) return true;
   var r=[]; try{ r=JSON.parse(localStorage.getItem('unispace_fp_roster')||'[]'); }catch(e){}
   for(var i=0;i<r.length;i++){ if(String(r[i].id)===String(currentUser.id)) return r[i].actplan===false; }
