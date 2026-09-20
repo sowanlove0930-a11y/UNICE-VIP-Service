@@ -2231,6 +2231,7 @@ body.theme-light .cc-partners .cc-name{ color: #9A7418; }
     position: relative;
   }
   /* 계정칩: 헤더 우측 상단(브랜드 옆)으로 작게 */
+  #userMenu > div { padding: 16px 20px !important; font-size: 14px !important; min-height: 50px; box-sizing: border-box; }
   .header .user-chip {
     position: absolute; top: 8px; right: 0; z-index: 5;
     padding: 5px 10px 5px 7px; gap: 6px;
@@ -3974,8 +3975,8 @@ window.UNISPACE_FCM = {
           onmouseover="this.style.background='rgba(201,168,76,.08)'" onmouseout="this.style.background=''">
           👥 FP 계정 관리
         </div>
-        <div onclick="logout()" style="padding:13px 18px;font-size:13px;font-weight:600;cursor:pointer;
-          color:#FCA5A5;transition:background .15s;"
+        <div id="logoutMenu" style="padding:13px 18px;font-size:13px;font-weight:600;cursor:pointer;
+          color:#FCA5A5;transition:background .15s;touch-action:manipulation;-webkit-tap-highlight-color:rgba(239,68,68,.18);user-select:none;-webkit-user-select:none;"
           onmouseover="this.style.background='rgba(239,68,68,.08)'" onmouseout="this.style.background=''">
           🚪 로그아웃
         </div>
@@ -6493,6 +6494,31 @@ function resolveConfirm(result) {
   if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
 }
 
+(function(){
+  var el = document.getElementById('logoutMenu');
+  if(!el) return;
+  var tx = 0, ty = 0, lastTouch = 0;
+  el.addEventListener('touchstart', function(e){
+    var t = e.touches && e.touches[0]; if(!t) return;
+    tx = t.clientX; ty = t.clientY;
+    el.style.background = 'rgba(239,68,68,.12)';
+  }, {passive:true});
+  el.addEventListener('touchend', function(e){
+    el.style.background = '';
+    var t = e.changedTouches && e.changedTouches[0]; if(!t) return;
+    if(Math.abs(t.clientX - tx) > 12 || Math.abs(t.clientY - ty) > 12) return;
+    e.preventDefault(); e.stopPropagation();
+    lastTouch = Date.now();
+    try { document.getElementById('userMenu').style.display = 'none'; } catch(err){}
+    logout();
+  }, {passive:false});
+  el.addEventListener('touchcancel', function(){ el.style.background = ''; }, {passive:true});
+  el.addEventListener('click', function(e){
+    if(Date.now() - lastTouch < 1000){ e.stopPropagation(); return; }
+    try { document.getElementById('userMenu').style.display = 'none'; } catch(err){}
+    logout();
+  });
+})();
 function logout() {
   showConfirm({
     icon: '🚪', iconCls: 'confirm-icon-warn',
@@ -24048,7 +24074,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 87;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 88;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
