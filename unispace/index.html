@@ -6751,6 +6751,7 @@ function _fpDoToggle(id, key) {
       _fpApplyServerVal(id, key, v);
       renderFpMgmtTable();
       if (key === 'perfKeep' && typeof renderFpPerf === 'function') { try { renderFpPerf(); } catch (e) {} }
+      if (key === 'std' && typeof loadAwardStatus === 'function') { try { _awlData = null; loadAwardStatus(); } catch (e) {} } // re-filter the standard fp ladder/share list
       if (key === 'active') {
         showToast((v ? '\u2705 ' : '\uD83D\uDEAB ') + fp.name + ' ' + (v ? cfg.onMsg : cfg.offMsg));
       } else if (cfg.defFalse) {
@@ -7316,13 +7317,49 @@ function _dashForegroundRefresh(force){
 // last good award result per month, so the ladder paints instantly and refreshes in the background
 function _awlCacheGet(ym){ try { var v = JSON.parse(localStorage.getItem('unispace_award_' + ym) || 'null'); return (v && v.ok) ? v : null; } catch(e) { return null; } }
 function _awlCacheSet(ym, res){ try { localStorage.setItem('unispace_award_' + ym, JSON.stringify(res)); } catch(e) {} }
+// account management "스탠다드" toggle (std=false) must also hide the FP from the award
+// ladder, the achieved/not-yet list and the kakao share text. the server list is filtered here.
+function _awlStdExcluded(){
+  var ex = { ids:{}, names:{} }, r = [];
+  try { r = JSON.parse(localStorage.getItem('unispace_fp_roster') || '[]'); } catch(e) {}
+  for (var i = 0; i < r.length; i++) {
+    if (r[i] && r[i].std === false) { if (r[i].id) ex.ids[String(r[i].id)] = 1; if (r[i].name) ex.names[String(r[i].name).replace(/\s+/g,'')] = 1; }
+  }
+  return ex;
+}
+function _awlApplyStdFlag(res){
+  if (!res || !res.ok) return res;
+  var ex = _awlStdExcluded();
+  if (!Object.keys(ex.ids).length && !Object.keys(ex.names).length) return res;
+  var d; try { d = JSON.parse(JSON.stringify(res)); } catch(e) { return res; }
+  function keep(x){
+    if (!x) return false;
+    var id = x.id || x.fpId || x.fp || '';
+    if (id && ex.ids[String(id)]) return false;
+    var nm = String(x.name || '').replace(/\s+/g,'');
+    return !(nm && ex.names[nm]);
+  }
+  if (d.all && d.all.length) d.all = d.all.filter(keep);
+  var st = d.standard;
+  if (st) {
+    ['trackA','trackB','grace'].forEach(function(k){
+      if (!st[k]) return;
+      ['alpha','bravo'].forEach(function(b){ if (st[k][b] && st[k][b].length) st[k][b] = st[k][b].filter(keep); });
+    });
+    var n = 0;
+    if (d.all && d.all.length) { for (var i = 0; i < d.all.length; i++) if (d.all[i].ok) n++; }
+    else { ['trackA','trackB','grace'].forEach(function(k){ if (st[k]) ['alpha','bravo'].forEach(function(b){ n += (st[k][b] || []).length; }); }); }
+    st.count = n;
+  }
+  return d;
+}
 function loadAwardStatus() {
   var host = document.getElementById('awardLadder');
   if (!host) return;
   if (!currentUser || !currentUser.id) return;
   var ym = _awlYm();
   var _cached = _awlCacheGet(ym);
-  if (_cached) { _awlData = _cached; _renderAwardLadder(_cached); }
+  if (_cached) { _cached = _awlApplyStdFlag(_cached); _awlData = _cached; _renderAwardLadder(_cached); }
   else host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오는 중...</div></div>';
   var url = UNISPACE_GAS_URL + '?action=getAwardStatus&fp=' + encodeURIComponent(currentUser.id)
           + '&ym=' + encodeURIComponent(ym) + '&_=' + Date.now();
@@ -7348,7 +7385,7 @@ function loadAwardStatus() {
     });
   }
   function _awDone(res){
-    if (res && res.ok) { _awlData = res; _awlCacheSet(ym, res); _renderAwardLadder(res); }
+    if (res && res.ok) { _awlCacheSet(ym, res); res = _awlApplyStdFlag(res); _awlData = res; _renderAwardLadder(res); }
     else if(!_cached){ host.innerHTML = '<div class="awl-wrap"><div class="awl-sub" style="margin:18px 0">불러오지 못했습니다</div></div>'; }
   }
   _awFetch();
@@ -24097,7 +24134,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 91;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 92;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
