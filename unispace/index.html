@@ -5782,7 +5782,7 @@ function renderBojangCard() {
       var _br = String(_r.branch || '');
       var _amt = parseInt(_r.total) || 0;
       // 입력건 = 상품 입력 1줄. 상품이 2개면 2건 (업적조회 / 일보와 동일 기준)
-      var _cnt = (_r.products && _r.products.length) ? _r.products.length : 1;
+      var _cnt = _perfCntOf(_r);
       var _isAlpha = _br.indexOf('알파') >= 0;
       var _isBravo = _br.indexOf('브라보') >= 0;
       if (_isAlpha) { AMT_ALPHA += _amt; CNT_ALPHA += _cnt; }
@@ -5791,7 +5791,7 @@ function renderBojangCard() {
       if ((_isAlpha || _isBravo) && _r.products && _r.products.length) {
         for (var _qi = 0; _qi < _r.products.length; _qi++) {
           var _pp = _r.products[_qi];
-          if (!_pp) continue;
+          if (!_pp || _perfIsLump(_pp)) continue;
           var _pamt = parseInt(_pp.amount) || 0;
           var _kind = (typeof _perfClassify === 'function') ? _perfClassify(_pp.co) : 'etc';
           if (_isAlpha) {
@@ -8360,6 +8360,7 @@ function _stdFpCompute(){
     var dd = parseInt((r.date||'').slice(8,10))||0;
     if(dd>=1 && dd<=10) agg[key].hasEarly = true;
     (r.products||[]).forEach(function(p){
+      if(_perfIsLump(p)) return;
       var amt = parseInt(p.amount)||0;
       var co = (p.co||'');
       var cat = (p.cat||'');
@@ -8951,7 +8952,7 @@ function openPerfModal() {
 
   _perfSetDate(getTodayStr());
   var pc=document.getElementById('perfCal'); if(pc) pc.classList.remove('open');
-  _perfProducts = [{co:'', cat:'', amount:''}];
+  _perfProducts = [{co:'', cat:'', amount:'', lump:false}];
   _perfPtnReset();
   renderPerfProds();
   document.getElementById('perfModalOverlay').classList.add('open');
@@ -8998,10 +8999,10 @@ function openPerfEdit(id){
   // 상품 채우기
   if(rec.products && rec.products.length){
     _perfProducts = rec.products.map(function(p){
-      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||'') };
+      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||''), lump:_perfIsLump(p) };
     });
   } else {
-    _perfProducts = [{co:'', cat:'', amount:''}];
+    _perfProducts = [{co:'', cat:'', amount:'', lump:false}];
   }
   // 파트너 소개 정보 복원
   _perfPtnReset();
@@ -9151,14 +9152,28 @@ function closePerfModal(e) {
   }
 }
 
-function addPerfProd(){ _perfSyncProds(); _perfProducts.push({co:'',cat:'',amount:''}); renderPerfProds(); }
-function removePerfProd(i){ _perfSyncProds(); _perfProducts.splice(i,1); if(!_perfProducts.length) _perfProducts=[{co:'',cat:'',amount:''}]; renderPerfProds(); }
+// 일시납(lump) 상품: 기록·개인 공유에는 남기되 지점 합산·목표·시상·건수 집계에서는 제외
+function _perfIsLump(p){ return !!(p && (p.lump===true || p.lump==='Y' || p.lump==='true')); }
+function _perfCntOf(r){
+  if(!r || !r.products || !r.products.length) return 1;
+  var n=0; for(var i=0;i<r.products.length;i++){ if(!_perfIsLump(r.products[i])) n++; }
+  return n;
+}
+function _perfLumpOf(r){
+  var t=0; ((r&&r.products)||[]).forEach(function(p){ if(_perfIsLump(p)) t+=(parseInt(p.amount)||0); });
+  return t;
+}
+function addPerfProd(){ _perfSyncProds(); _perfProducts.push({co:'',cat:'',amount:'',lump:false}); renderPerfProds(); }
+function removePerfProd(i){ _perfSyncProds(); _perfProducts.splice(i,1); if(!_perfProducts.length) _perfProducts=[{co:'',cat:'',amount:'',lump:false}]; renderPerfProds(); }
+function togglePerfLump(i){ _perfSyncProds(); _perfProducts[i].lump = !_perfProducts[i].lump; renderPerfProds(); }
 function _perfSyncProds(){
   for(var i=0;i<_perfProducts.length;i++){
     var a=document.getElementById('perfAmt'+i);
     var cu=document.getElementById('perfCoCustom'+i);
     if(a) _perfProducts[i].amount=(a.value||'').replace(/[^0-9]/g,'');
     if(cu && cu.style.display!=='none' && cu.value.trim()) _perfProducts[i].co=cu.value.trim();
+    var lk=document.getElementById('perfLump'+i);
+    if(lk) _perfProducts[i].lump=!!lk.checked;
   }
 }
 function renderPerfProds(){
@@ -9168,6 +9183,10 @@ function renderPerfProds(){
   for(var i=0;i<_perfProducts.length;i++){
     var p=_perfProducts[i];
     var delBtn = _perfProducts.length>1 ? '<span onclick="removePerfProd('+i+')" style="position:absolute;top:9px;right:11px;color:#C0392B;font-size:12px;cursor:pointer">✕</span>' : '';
+    var isLump = _perfIsLump(p);
+    var lumpChk = '<label style="position:absolute;top:7px;right:'+(_perfProducts.length>1?'34px':'11px')+';display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:'+(isLump?'#854F0B':'var(--text3)')+';cursor:pointer;user-select:none">'
+      +'<input type="checkbox" id="perfLump'+i+'" '+(isLump?'checked':'')+' onchange="togglePerfLump('+i+')" style="width:15px;height:15px;margin:0;accent-color:#BA7517">일시납</label>';
+    var lumpNote = isLump ? '<div style="font-size:10px;color:#854F0B;margin-top:7px;line-height:1.5">💰 일시납 — 기록·개인 공유에는 남고, 지점 합산·목표·시상 집계에는 들어가지 않습니다</div>' : '';
     // 분류 칩 (건강상해/종신/저축/기타)
     var catChips='';
     for(var ki=0;ki<PERF_CATS.length;ki++){
@@ -9187,8 +9206,8 @@ function renderPerfProds(){
     var customInput = (p.co && PERF_COMPANIES.indexOf(p.co)<0)
       ? '<input type="text" class="perf-input" id="perfCoCustom'+i+'" placeholder="보험사 직접 입력" value="'+(p.co||'').replace(/"/g,'&quot;')+'" oninput="_perfSyncProds()" style="margin-top:6px;font-size:12px">'
       : '<input type="text" class="perf-input" id="perfCoCustom'+i+'" placeholder="보험사 직접 입력" style="display:none;margin-top:6px;font-size:12px" oninput="_perfSyncProds()">';
-    h+='<div style="border:1px solid var(--bdr);border-radius:11px;padding:11px;margin-bottom:8px;position:relative;background:var(--sur)">'+
-      '<div style="font-size:10px;font-weight:800;color:var(--gold2);margin-bottom:7px">상품 '+(i+1)+'</div>'+delBtn+
+    h+='<div style="border:1px solid '+(isLump?'#EF9F27':'var(--bdr)')+';border-radius:11px;padding:11px;margin-bottom:8px;position:relative;background:'+(isLump?'#FAEEDA':'var(--sur)')+'">'+
+      '<div style="font-size:10px;font-weight:800;color:'+(isLump?'#633806':'var(--gold2)')+';margin-bottom:7px">상품 '+(i+1)+(isLump?' <span style="font-size:9px;padding:1px 7px;border-radius:8px;background:#FAC775;color:#412402;margin-left:4px">집계 제외</span>':'')+'</div>'+delBtn+lumpChk+
       '<div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:5px">보험사</div>'+
       '<div class="perf-co-wrap">'+chips+'</div>'+
       customInput+
@@ -9197,6 +9216,7 @@ function renderPerfProds(){
       '</div>'+
       '<div style="font-size:10px;font-weight:700;color:var(--text3);margin:8px 0 5px">분류</div>'+
       '<div class="perf-co-wrap">'+catChips+'</div>'+
+      lumpNote+
     '</div>';
   }
   wrap.innerHTML=h;
@@ -9232,9 +9252,12 @@ function onPerfAmtInput(i){
 function updatePerfProdSum(){
   var el=document.getElementById('perfProdSum');
   if(!el) return;
-  var total=0,cnt=0;
-  _perfProducts.forEach(function(p){ var n=parseInt((String(p.amount)||'').replace(/[^0-9]/g,''))||0; if(n>0){ total+=n; cnt++; } });
-  if(cnt>0){ el.textContent='합계 '+total.toLocaleString()+'원 · '+cnt+'건'; el.style.display=''; }
+  var total=0,cnt=0,lump=0,lcnt=0;
+  _perfProducts.forEach(function(p){ var n=parseInt((String(p.amount)||'').replace(/[^0-9]/g,''))||0; if(n>0){ if(_perfIsLump(p)){ lump+=n; lcnt++; } else { total+=n; cnt++; } } });
+  if(cnt>0 || lcnt>0){
+    el.textContent='집계 '+total.toLocaleString()+'원 · '+cnt+'건'+(lcnt?'  |  일시납(제외) '+lump.toLocaleString()+'원 · '+lcnt+'건':'');
+    el.style.display='';
+  }
   else el.style.display='none';
 }
 
@@ -9256,11 +9279,15 @@ function confirmPerfInput() {
     if(!co){ showToast('⚠️ 상품 '+(i+1)+'의 보험사를 선택해 주세요'); return; }
     if(!p.cat){ showToast('⚠️ 상품 '+(i+1)+'의 분류를 선택해 주세요'); return; }
     if(!amt){ showToast('⚠️ 상품 '+(i+1)+'의 금액을 입력해 주세요'); return; }
-    products.push({co:co, cat:p.cat, amount:amt});
+    var prod={co:co, cat:p.cat, amount:amt};
+    if(_perfIsLump(p)) prod.lump=true;
+    products.push(prod);
   }
   if(!products.length){ showToast('⚠️ 상품 내역을 입력해 주세요'); return; }
   if(_perfPtnOn && !_perfPtnPid){ showToast('⚠️ 파트너를 선택해 주세요 (또는 파트너스 칩을 해제)'); return; }
-  var total=products.reduce(function(s,x){ return s+x.amount; },0);
+  // total = 집계용 보장월초 (일시납 제외). 일시납 금액은 products 안에만 남는다
+  var total=products.reduce(function(s,x){ return s+(x.lump?0:x.amount); },0);
+  var lumpTotal=products.reduce(function(s,x){ return s+(x.lump?x.amount:0); },0);
 
   var log=getPerfLog();
   var isEdit = !!_editingPerfId;
@@ -9296,7 +9323,8 @@ function confirmPerfInput() {
   _perfPendingAdd(newPerf);
   _perfLockSubmit(true);
 
-  var amtTxt = fpName+' '+total.toLocaleString()+'원 ('+products.length+'건)';
+  var _cntN = products.filter(function(x){ return !x.lump; }).length;
+  var amtTxt = fpName+' '+total.toLocaleString()+'원 ('+_cntN+'건)'+(lumpTotal?' + 일시납 '+lumpTotal.toLocaleString()+'원':'');
 
   _perfSubmitToGas(newPerf, 1, function(okFlag, res){
     _perfLockSubmit(false);
@@ -9328,7 +9356,7 @@ function confirmPerfInput() {
   }
 
   // 모달 유지 + 다음 입력 위해 상품 내역만 초기화 (FP·날짜는 그대로)
-  _perfProducts = [{co:'', cat:'', amount:''}];
+  _perfProducts = [{co:'', cat:'', amount:'', lump:false}];
   _perfPtnReset();
   renderPerfProds();
   renderGoals();
@@ -9768,7 +9796,7 @@ function renderPerfView(){
   rangeRecs.forEach(function(r){
     var t=parseInt(r.total)||0;
     // 입력건 = 상품 입력 1줄
-    var _n=(r.products && r.products.length) ? r.products.length : 1;
+    var _n=_perfCntOf(r);
     tot.amt+=t; tot.cnt+=_n;
     var bk=_pvBranchKey(r.branch);
     var tgt = (bk==='al') ? al : (bk==='br' ? br : null);
@@ -9778,6 +9806,7 @@ function renderPerfView(){
     // 상품별 생보/손보 분류
     var recHasLife=false, recHasNon=false;
     (r.products||[]).forEach(function(p){
+      if(_perfIsLump(p)) return;
       var a=parseInt(p.amount)||0;
       var kind=(typeof _perfClassify==='function')?_perfClassify(p.co):'etc';
       if(kind==='life'){ tot.life+=a; if(tgt) tgt.life+=a; if(isSelf) self.life+=a; recHasLife=true; }
@@ -9874,7 +9903,7 @@ function renderPerfView(){
   }
   // 필터된 합계 (합계줄용)
   var fSum=0, fCnt=0;
-  listRecs.forEach(function(r){ fSum+=(parseInt(r.total)||0); fCnt+=((r.products&&r.products.length)?r.products.length:1); });
+  listRecs.forEach(function(r){ fSum+=(parseInt(r.total)||0); fCnt+=_perfCntOf(r); });
   var brLabel = _pvBranch==='al'?' · 알파':_pvBranch==='br'?' · 브라보':'';
 
   var listEl = document.getElementById('pvList');
@@ -9890,14 +9919,15 @@ function renderPerfView(){
       var cats = (r.products||[]).map(function(p){
         var kind=(typeof _perfClassify==='function')?_perfClassify(p.co):'etc';
         var badge = kind==='life' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#2E6E8E;color:#fff;margin-right:4px">생</span>' : (kind==='non' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#A85532;color:#fff;margin-right:4px">손</span>' : '');
-        return '<span style="display:inline-block;white-space:nowrap">'+badge+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원</span>';
+        var lumpB = _perfIsLump(p) ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FAC775;color:#412402;margin-right:4px">일시납</span>' : '';
+        return '<span style="display:inline-block;white-space:nowrap'+(_perfIsLump(p)?';color:#854F0B':'')+'">'+lumpB+badge+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원</span>';
       }).join('<br>');
       var dateCol = (_pvRange!=='today') ? '<td style="white-space:nowrap;color:var(--text3)">'+(r.date?r.date.slice(5):'')+'</td>' : '';
       var delCol = canDel ? '<td class="pv-edit-col" style="text-align:center;width:46px;white-space:nowrap;padding-left:2px;padding-right:2px"><span onclick="event.stopPropagation();openPerfEdit(\''+r.id+'\')" style="color:#2563EB;font-size:13px;cursor:pointer;padding:2px" title="수정">✏️</span><span onclick="event.stopPropagation();deletePerfRec(\''+r.id+'\')" style="color:#C0392B;font-size:13px;cursor:pointer;padding:2px" title="삭제">🗑️</span></td>' : '';
       var isSelfRow = currentUser && (r.fpId === currentUser.id);
       var meBadge = isSelfRow ? '<span style="font-size:9px;color:#854F0B;background:rgba(201,168,76,.15);padding:1px 5px;border-radius:4px;margin-left:4px">나</span>' : '';
       var rowClick = canDel ? ' onclick="openPerfEdit(\''+r.id+'\')" style="cursor:pointer"' : '';
-      var _pLen = (r.products && r.products.length) ? r.products.length : 1;
+      var _pLen = _perfCntOf(r);
       var _nums = [];
       for(var _nk=0; _nk<_pLen; _nk++) _nums.push(_numAcc + 1 + _nk);
       _numAcc += _pLen;
@@ -10189,6 +10219,7 @@ function _pvCoAggr(log){
   var map={};
   log.forEach(function(r){
     (r.products||[]).forEach(function(p){
+      if(_perfIsLump(p)) return;
       var co=String(p.co||'').trim(); if(!co) return;
       var k=_pvCoKey(co);
       if(!map[k]) map[k]={ co:co, life:0, non:0, cnt:0, fps:{} };
@@ -10213,6 +10244,7 @@ function _pvCoBranchTotals(coName){
     var tgt = bk==='al'?al : bk==='br'?br : null;
     var rHit=false;
     (r.products||[]).forEach(function(p){
+      if(_perfIsLump(p)) return;
       if(_pvCoKey(p.co)!==ck) return;
       rHit=true;
       var amt=parseInt(p.amount)||0;
@@ -10233,6 +10265,7 @@ function _pvCoFpRows(coName){
   var map={};
   log.forEach(function(r){
     (r.products||[]).forEach(function(p){
+      if(_perfIsLump(p)) return;
       if(_pvCoKey(p.co)!==ck) return;
       if(!map[r.fpId]) map[r.fpId]={ id:r.fpId, name:r.fpName||'', bk:_pvBranchKey(r.branch), life:0, non:0, cnt:0, dates:{}, items:[] };
       var amt=parseInt(p.amount)||0;
@@ -10270,7 +10303,7 @@ function _pvTrendLog(){
   var out=[];
   log.forEach(function(r){
     var t=0;
-    (r.products||[]).forEach(function(p){ if(_pvCoKey(p.co)===ck) t+=(parseInt(p.amount)||0); });
+    (r.products||[]).forEach(function(p){ if(!_perfIsLump(p) && _pvCoKey(p.co)===ck) t+=(parseInt(p.amount)||0); });
     if(t>0) out.push({ date:r.date, branch:r.branch, total:t });
   });
   return out;
@@ -10284,6 +10317,7 @@ function _pvCoItems(coName){
   var items=[];
   log.forEach(function(r){
     (r.products||[]).forEach(function(p){
+      if(_perfIsLump(p)) return;
       if(_pvCoKey(p.co)!==ck) return;
       items.push({ date:r.date||'', fpName:r.fpName||'', bk:_pvBranchKey(r.branch), kind:_perfClassify(p.co), amount:parseInt(p.amount)||0, cat:p.cat||'', co:String(p.co||'') });
     });
@@ -12574,8 +12608,9 @@ function renderFpPerf(){
   });
   recs.forEach(function(r){
     var f=byFp[r.fpId]; if(!f) return;
-    f.cnt += ((r.products && r.products.length) ? r.products.length : 1); f.total += (parseInt(r.total)||0);
+    f.cnt += _perfCntOf(r); f.total += (parseInt(r.total)||0);
     (r.products||[]).forEach(function(p){
+      if(_perfIsLump(p)) return;
       var amt=parseInt(p.amount)||0; var cls=_perfClassify(p.co);
       if(cls==='life'){ f.life+=amt; f.lifeCnt++; }
       else if(cls==='non'){ f.non+=amt; f.nonCnt++; }
@@ -13085,12 +13120,13 @@ function _fpAllRows(){
       _goalMan=_fpPlanGoalMan(fp.id);
     }
     byFp[fp.id]={ id:fp.id, name:fp.name, branch:fp.branch, title:(fp.title||''), mgr:g.mgr||'', goal:_goalMan||0,
-      life:0, non:0, cnt:0, total:0 };
+      life:0, non:0, cnt:0, total:0, lump:0 };
   });
   recs.forEach(function(r){
     var f=byFp[r.fpId]; if(!f) return;
-    f.cnt += ((r.products && r.products.length) ? r.products.length : 1); f.total += (parseInt(r.total)||0);
+    f.cnt += _perfCntOf(r); f.total += (parseInt(r.total)||0); f.lump += _perfLumpOf(r);
     (r.products||[]).forEach(function(p){
+      if(_perfIsLump(p)) return;
       var amt=parseInt(p.amount)||0; var cls=_perfClassify(p.co);
       if(cls==='life') f.life+=amt; else if(cls==='non') f.non+=amt;
     });
@@ -13170,9 +13206,9 @@ function _buildFpExcel(){
   }
   function buildSheet(title, scopeKey, scopeLabel){
     var ws=wb.addWorksheet(title);
-    ws.columns=[{width:7},{width:11},{width:10},{width:8},{width:13},{width:6},{width:12},{width:12},{width:13},{width:11},{width:13},{width:11}];
+    ws.columns=[{width:7},{width:11},{width:10},{width:8},{width:13},{width:6},{width:12},{width:12},{width:12},{width:13},{width:11},{width:13},{width:11}];
     ws.pageSetup={ orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:1, paperSize:9, horizontalCentered:true, margins:{ left:0.25, right:0.25, top:0.35, bottom:0.35, header:0.2, footer:0.2 } };
-    var headers=['\uC9C0\uC810','FP','\uC0AC\uBC88','\uBAA9\uD45C(\uB9CC)','\uD604\uC7AC\uC5C5\uC801(\uC6D0)','\uAC74\uC218','\uC0DD\uBCF4(\uC6D0)','\uC190\uBCF4(\uC6D0)'];
+    var headers=['\uC9C0\uC810','FP','\uC0AC\uBC88','\uBAA9\uD45C(\uB9CC)','\uD604\uC7AC\uC5C5\uC801(\uC6D0)','\uAC74\uC218','\uC0DD\uBCF4(\uC6D0)','\uC190\uBCF4(\uC6D0)','\uC77C\uC2DC\uB0A9(\uC6D0)'];
     var stdHeaders=['\uD83C\uDF96 \uC2A4\uD0E0\uB2E4\uB4DC\n50\uB9CC','\u2708 \uC6CC\uD640\n70\uB9CC','\uD83E\uDD84 \uC720\uB2C8\uCF58\uC988\n100\uB9CC'];
     function bd(){ return {top:{style:'thin',color:{argb:BD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}}; }
 
@@ -13183,20 +13219,20 @@ function _buildFpExcel(){
     rows.sort(function(a,b){ return (a.name||'').localeCompare((b.name||''),'ko'); });
 
     var titleTxt = scopeKey==='all' ? 'Unice \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4' : scopeLabel+' \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4';
-    ws.mergeCells('A1:L1');
+    ws.mergeCells('A1:M1');
     var t=ws.getCell('A1'); t.value=titleTxt;
     t.font={bold:true,size:20,color:{argb:'FF111111'},name:FNT};
     t.alignment={vertical:'middle',horizontal:'center'};
     ws.getRow(1).height=40;
-    ws.mergeCells('A2:L2');
+    ws.mergeCells('A2:M2');
     var st=ws.getCell('A2'); st.value=baseStr;
     st.font={size:11,color:{argb:'FF5F5E5A'},name:FNT};
     st.alignment={vertical:'middle',horizontal:'right',indent:1};
     ws.getRow(2).height=20;
 
-    var sumGoal=0,sumTot=0,sumLife=0,sumNon=0,sumCnt=0;
-    rows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumCnt+=f.cnt; });
-    ws.mergeCells('A4:L4');
+    var sumGoal=0,sumTot=0,sumLife=0,sumNon=0,sumCnt=0,sumLump=0;
+    rows.forEach(function(f){ sumGoal+=f.goal; sumTot+=f.total; sumLife+=f.life; sumNon+=f.non; sumCnt+=f.cnt; sumLump+=(f.lump||0); });
+    ws.mergeCells('A4:M4');
     var sm=ws.getCell('A4');
     var _LBL={size:9,name:FNT,bold:false,color:{argb:'FF5F5E5A'}};
     var _SEP={text:'    \u2502    ', font:{size:11,name:FNT,color:{argb:'FFB4B2A9'}}};
@@ -13210,6 +13246,7 @@ function _buildFpExcel(){
     _srt.push(_lab('\uC190\uBCF4 ')); _srt.push(_num(sumNon.toLocaleString(),'FF185FA5',12));
     _srt.push(_SEP);
     _srt.push(_lab('\uCD1D ')); _srt.push(_num(sumCnt+'\uAC74','FF1A2744',12));
+    if(sumLump>0){ _srt.push(_SEP); _srt.push(_lab('\uC77C\uC2DC\uB0A9(\uBCC4\uB3C4) ')); _srt.push(_num(sumLump.toLocaleString(),'FF854F0B',12)); }
     var _tc=_tierCnt(rows);
     _srt.push(_SEP);
     _srt.push(_lab('\uD83E\uDD84 \uC720\uB2C8\uCF58\uC988 ')); _srt.push(_num(_tc.uni+'\uBA85','FF0C447C',12));
@@ -13230,119 +13267,6 @@ function _buildFpExcel(){
       c.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR}};
       c.alignment={vertical:'middle',horizontal:'center'};
       c.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
-    }
-    ws.mergeCells(HR1,9,HR1,11);
-    var sh=ws.getCell(HR1,9); sh.value='\uD83C\uDFC5 \uC2DC\uC0C1 \uB2EC\uC131 \uD604\uD669 (\uBBF8\uB2EC \uC2DC \uC794\uC5EC)';
-    sh.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
-    sh.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
-    sh.alignment={vertical:'middle',horizontal:'center'};
-    sh.border=bd();
-    for(var s2=0;s2<stdHeaders.length;s2++){
-      var sc=ws.getCell(HR2,9+s2); sc.value=stdHeaders[s2];
-      sc.font={bold:true,size:10,name:FNT,color:{argb:'FFFFFFFF'}};
-      sc.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
-      sc.alignment={vertical:'middle',horizontal:'center',wrapText:true};
-      sc.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
-    }
-    ws.mergeCells(HR1,12,HR2,12);
-    var th5=ws.getCell(HR1,12); th5.value='\uC5C5\uC801TOP5';
-    th5.font={bold:true,size:11,name:FNT,color:{argb:'FFFFFFFF'}};
-    th5.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR}};
-    th5.alignment={vertical:'middle',horizontal:'center'};
-    th5.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
-    ws.getRow(HR1).height=24; ws.getRow(HR2).height=30;
-
-    var rn=8;
-    rows.forEach(function(f){
-      var bk=_pvBranchKey(f.branch);
-      var bLabel=bk==='al'?'\uC54C\uD30C':bk==='br'?'\uBE0C\uB77C\uBCF4':'';
-      var vals=[bLabel,f.name,f.id||'-',f.goal||'-',f.total,f.cnt,f.life,f.non];
-      for(var i=0;i<vals.length;i++){
-        var c=ws.getCell(rn,i+1); c.value=vals[i];
-        c.font={size:11,name:FNT,bold:(i===4)};
-        c.alignment={vertical:'middle',horizontal:'center'};
-        c.border=bd();
-        if(i===0 && bk==='al'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ALBG}}; c.font={size:11,name:FNT,bold:true,color:{argb:ALTX}}; }
-        else if(i===0 && bk==='br'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:BRBG}}; c.font={size:11,name:FNT,bold:true,color:{argb:BRTX}}; }
-        if(i===2){ c.font={size:10,name:FNT,color:{argb:'FF888780'}}; }
-        if(i===4){
-          var tier=null, tcol=null;
-          if(f.total>=1000000){ tier=AMT100; tcol='FF0C447C'; }
-          else if(f.total>=700000){ tier=AMT70; tcol='FF3B6D11'; }
-          else if(f.total>=500000){ tier=AMT50; tcol='FF9A4F0F'; }
-          if(tier){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:tier}}; c.font={size:11,name:FNT,bold:true,color:{argb:tcol}}; }
-        }
-        if(i===3||i===4||i===6||i===7) c.numFmt='#,##0';
-      }
-      var _lv=_tierOf(f.total);
-      _tierCell(ws, rn, 9, 1, bd, _lv, f.total);
-      _tierCell(ws, rn, 10, 2, bd, _lv, f.total);
-      _tierCell(ws, rn, 11, 3, bd, _lv, f.total);
-      _rankCell(ws, rn, 12, _perfRank[f.id]||0, bd);
-      ws.getRow(rn).height=24;
-      rn++;
-    });
-
-    var svals=['\uD569\uACC4','','',sumGoal||'-',sumTot,sumCnt,sumLife,sumNon];
-    for(var i=0;i<svals.length;i++){
-      var c=ws.getCell(rn,i+1); c.value=svals[i];
-      c.font={bold:true,size:(i===6||i===7?11:12),name:FNT,color:{argb:'FF1A2744'}};
-      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
-      c.alignment={vertical:'middle',horizontal:'center'};
-      c.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
-      if(i===3||i===4||i===6||i===7) c.numFmt='#,##0';
-    }
-    var _tcb=_tierCnt(rows);
-    var _tvv=[_tcb.std,_tcb.hol,_tcb.uni];
-    var _tcc=['FF9A4F0F','FF3B6D11','FF0C447C'];
-    for(var ti=0;ti<3;ti++){
-      var sc2=ws.getCell(rn,9+ti); sc2.value=_tvv[ti]+'\uBA85';
-      sc2.font={bold:true,size:11,name:FNT,color:{argb:_tcc[ti]}};
-      sc2.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
-      sc2.alignment={vertical:'middle',horizontal:'center'};
-      sc2.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
-    }
-    var sc3=ws.getCell(rn,12); sc3.value='';
-    sc3.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
-    sc3.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
-    ws.getRow(rn).height=26;
-  }
-
-  buildSheet('\uc804\uccb4','all','\uc804\uccb4');
-  buildSheet('\uc54c\ud30c\uc9c0\uc810','al','\uc54c\ud30c\uc9c0\uc810');
-  buildSheet('\ube0c\ub77c\ubcf4\uc9c0\uc810','br','\ube0c\ub77c\ubcf4\uc9c0\uc810');
-  buildMgrSheet();
-
-  function buildMgrSheet(){
-    var teamsDB=getTeamsDB();
-    if(!teamsDB || !teamsDB.length) return;
-    var byId={};
-    allRows.forEach(function(f){ byId[f.id]=f; });
-    var ws=wb.addWorksheet('\uB9E4\uB2C8\uC800');
-    ws.columns=[{width:7},{width:11},{width:10},{width:10},{width:8},{width:13},{width:6},{width:12},{width:12},{width:13},{width:11},{width:13},{width:11}];
-    ws.pageSetup={ orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:1, paperSize:9, horizontalCentered:true, margins:{ left:0.25, right:0.25, top:0.35, bottom:0.35, header:0.2, footer:0.2 } };
-    function bd(){ return {top:{style:'thin',color:{argb:BD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}}; }
-    ws.mergeCells('A1:M1');
-    var t=ws.getCell('A1'); t.value='Unice \uB9E4\uB2C8\uC800\u00B7\uD300\uBCC4 \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4';
-    t.font={bold:true,size:20,color:{argb:'FF111111'},name:FNT};
-    t.alignment={vertical:'middle',horizontal:'center'};
-    ws.getRow(1).height=40;
-    ws.mergeCells('A2:M2');
-    var st=ws.getCell('A2'); st.value=baseStr;
-    st.font={size:11,color:{argb:'FF5F5E5A'},name:FNT};
-    st.alignment={vertical:'middle',horizontal:'right',indent:1};
-    ws.getRow(2).height=20;
-
-    var HR1=4, HR2=5;
-    var headers=['\uC9C0\uC810','FP','\uC0AC\uBC88','\uAD6C\uBD84','\uBAA9\uD45C(\uB9CC)','\uD604\uC7AC\uC5C5\uC801(\uC6D0)','\uAC74\uC218','\uC0DD\uBCF4(\uC6D0)','\uC190\uBCF4(\uC6D0)'];
-    var stdHeaders=['\uD83C\uDF96 \uC2A4\uD0E0\uB2E4\uB4DC\n50\uB9CC','\u2708 \uC6CC\uD640\n70\uB9CC','\uD83E\uDD84 \uC720\uB2C8\uCF58\uC988\n100\uB9CC'];
-    for(var hi2=0;hi2<headers.length;hi2++){
-      ws.mergeCells(HR1,hi2+1,HR2,hi2+1);
-      var hc=ws.getCell(HR1,hi2+1); hc.value=headers[hi2];
-      hc.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
-      hc.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR}};
-      hc.alignment={vertical:'middle',horizontal:'center'};
-      hc.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
     }
     ws.mergeCells(HR1,10,HR1,12);
     var sh=ws.getCell(HR1,10); sh.value='\uD83C\uDFC5 \uC2DC\uC0C1 \uB2EC\uC131 \uD604\uD669 (\uBBF8\uB2EC \uC2DC \uC794\uC5EC)';
@@ -13365,15 +13289,130 @@ function _buildFpExcel(){
     th5.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
     ws.getRow(HR1).height=24; ws.getRow(HR2).height=30;
 
+    var rn=8;
+    rows.forEach(function(f){
+      var bk=_pvBranchKey(f.branch);
+      var bLabel=bk==='al'?'\uC54C\uD30C':bk==='br'?'\uBE0C\uB77C\uBCF4':'';
+      var vals=[bLabel,f.name,f.id||'-',f.goal||'-',f.total,f.cnt,f.life,f.non,(f.lump||0)];
+      for(var i=0;i<vals.length;i++){
+        var c=ws.getCell(rn,i+1); c.value=vals[i];
+        c.font={size:11,name:FNT,bold:(i===4)};
+        if(i===8){ c.font={size:10,name:FNT,color:{argb:(f.lump>0?'FF854F0B':'FFC8C5BC')}}; if(!(f.lump>0)) c.value='-'; }
+        c.alignment={vertical:'middle',horizontal:'center'};
+        c.border=bd();
+        if(i===0 && bk==='al'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ALBG}}; c.font={size:11,name:FNT,bold:true,color:{argb:ALTX}}; }
+        else if(i===0 && bk==='br'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:BRBG}}; c.font={size:11,name:FNT,bold:true,color:{argb:BRTX}}; }
+        if(i===2){ c.font={size:10,name:FNT,color:{argb:'FF888780'}}; }
+        if(i===4){
+          var tier=null, tcol=null;
+          if(f.total>=1000000){ tier=AMT100; tcol='FF0C447C'; }
+          else if(f.total>=700000){ tier=AMT70; tcol='FF3B6D11'; }
+          else if(f.total>=500000){ tier=AMT50; tcol='FF9A4F0F'; }
+          if(tier){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:tier}}; c.font={size:11,name:FNT,bold:true,color:{argb:tcol}}; }
+        }
+        if(i===3||i===4||i===6||i===7||i===8) c.numFmt='#,##0';
+      }
+      var _lv=_tierOf(f.total);
+      _tierCell(ws, rn, 10, 1, bd, _lv, f.total);
+      _tierCell(ws, rn, 11, 2, bd, _lv, f.total);
+      _tierCell(ws, rn, 12, 3, bd, _lv, f.total);
+      _rankCell(ws, rn, 13, _perfRank[f.id]||0, bd);
+      ws.getRow(rn).height=24;
+      rn++;
+    });
+
+    var svals=['\uD569\uACC4','','',sumGoal||'-',sumTot,sumCnt,sumLife,sumNon,sumLump];
+    for(var i=0;i<svals.length;i++){
+      var c=ws.getCell(rn,i+1); c.value=svals[i];
+      c.font={bold:true,size:(i===6||i===7||i===8?11:12),name:FNT,color:{argb:(i===8?'FF854F0B':'FF1A2744')}};
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
+      c.alignment={vertical:'middle',horizontal:'center'};
+      c.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
+      if(i===3||i===4||i===6||i===7||i===8) c.numFmt='#,##0';
+    }
+    var _tcb=_tierCnt(rows);
+    var _tvv=[_tcb.std,_tcb.hol,_tcb.uni];
+    var _tcc=['FF9A4F0F','FF3B6D11','FF0C447C'];
+    for(var ti=0;ti<3;ti++){
+      var sc2=ws.getCell(rn,10+ti); sc2.value=_tvv[ti]+'\uBA85';
+      sc2.font={bold:true,size:11,name:FNT,color:{argb:_tcc[ti]}};
+      sc2.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
+      sc2.alignment={vertical:'middle',horizontal:'center'};
+      sc2.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
+    }
+    var sc3=ws.getCell(rn,13); sc3.value='';
+    sc3.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
+    sc3.border={top:{style:'medium',color:{argb:GOLD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}};
+    ws.getRow(rn).height=26;
+  }
+
+  buildSheet('\uc804\uccb4','all','\uc804\uccb4');
+  buildSheet('\uc54c\ud30c\uc9c0\uc810','al','\uc54c\ud30c\uc9c0\uc810');
+  buildSheet('\ube0c\ub77c\ubcf4\uc9c0\uc810','br','\ube0c\ub77c\ubcf4\uc9c0\uc810');
+  buildMgrSheet();
+
+  function buildMgrSheet(){
+    var teamsDB=getTeamsDB();
+    if(!teamsDB || !teamsDB.length) return;
+    var byId={};
+    allRows.forEach(function(f){ byId[f.id]=f; });
+    var ws=wb.addWorksheet('\uB9E4\uB2C8\uC800');
+    ws.columns=[{width:7},{width:11},{width:10},{width:10},{width:8},{width:13},{width:6},{width:12},{width:12},{width:12},{width:13},{width:11},{width:13},{width:11}];
+    ws.pageSetup={ orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:1, paperSize:9, horizontalCentered:true, margins:{ left:0.25, right:0.25, top:0.35, bottom:0.35, header:0.2, footer:0.2 } };
+    function bd(){ return {top:{style:'thin',color:{argb:BD}},bottom:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}}}; }
+    ws.mergeCells('A1:N1');
+    var t=ws.getCell('A1'); t.value='Unice \uB9E4\uB2C8\uC800\u00B7\uD300\uBCC4 \uC2E4\uC2DC\uAC04 \uC5C5\uC801 \uC77C\uBCF4';
+    t.font={bold:true,size:20,color:{argb:'FF111111'},name:FNT};
+    t.alignment={vertical:'middle',horizontal:'center'};
+    ws.getRow(1).height=40;
+    ws.mergeCells('A2:N2');
+    var st=ws.getCell('A2'); st.value=baseStr;
+    st.font={size:11,color:{argb:'FF5F5E5A'},name:FNT};
+    st.alignment={vertical:'middle',horizontal:'right',indent:1};
+    ws.getRow(2).height=20;
+
+    var HR1=4, HR2=5;
+    var headers=['\uC9C0\uC810','FP','\uC0AC\uBC88','\uAD6C\uBD84','\uBAA9\uD45C(\uB9CC)','\uD604\uC7AC\uC5C5\uC801(\uC6D0)','\uAC74\uC218','\uC0DD\uBCF4(\uC6D0)','\uC190\uBCF4(\uC6D0)','\uC77C\uC2DC\uB0A9(\uC6D0)'];
+    var stdHeaders=['\uD83C\uDF96 \uC2A4\uD0E0\uB2E4\uB4DC\n50\uB9CC','\u2708 \uC6CC\uD640\n70\uB9CC','\uD83E\uDD84 \uC720\uB2C8\uCF58\uC988\n100\uB9CC'];
+    for(var hi2=0;hi2<headers.length;hi2++){
+      ws.mergeCells(HR1,hi2+1,HR2,hi2+1);
+      var hc=ws.getCell(HR1,hi2+1); hc.value=headers[hi2];
+      hc.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
+      hc.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR}};
+      hc.alignment={vertical:'middle',horizontal:'center'};
+      hc.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
+    }
+    ws.mergeCells(HR1,11,HR1,13);
+    var sh=ws.getCell(HR1,11); sh.value='\uD83C\uDFC5 \uC2DC\uC0C1 \uB2EC\uC131 \uD604\uD669 (\uBBF8\uB2EC \uC2DC \uC794\uC5EC)';
+    sh.font={bold:true,size:12,name:FNT,color:{argb:'FFFFFFFF'}};
+    sh.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
+    sh.alignment={vertical:'middle',horizontal:'center'};
+    sh.border=bd();
+    for(var s2=0;s2<stdHeaders.length;s2++){
+      var sc=ws.getCell(HR2,11+s2); sc.value=stdHeaders[s2];
+      sc.font={bold:true,size:10,name:FNT,color:{argb:'FFFFFFFF'}};
+      sc.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR2}};
+      sc.alignment={vertical:'middle',horizontal:'center',wrapText:true};
+      sc.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
+    }
+    ws.mergeCells(HR1,14,HR2,14);
+    var th5=ws.getCell(HR1,14); th5.value='\uC5C5\uC801TOP5';
+    th5.font={bold:true,size:11,name:FNT,color:{argb:'FFFFFFFF'}};
+    th5.fill={type:'pattern',pattern:'solid',fgColor:{argb:HDR}};
+    th5.alignment={vertical:'middle',horizontal:'center'};
+    th5.border={top:{style:'thin',color:{argb:BD}},left:{style:'thin',color:{argb:BD}},right:{style:'thin',color:{argb:BD}},bottom:{style:'medium',color:{argb:GOLD}}};
+    ws.getRow(HR1).height=24; ws.getRow(HR2).height=30;
+
     var rn=6;
     function putRow(f, kind){
       var bk=_pvBranchKey(f.branch);
       var bLabel=bk==='al'?'\uC54C\uD30C':bk==='br'?'\uBE0C\uB77C\uBCF4':'';
       var isMgr=(kind==='\u2605\uB9E4\uCE6D\uB9E4\uB2C8\uC800');
-      var vals=[bLabel,f.name,f.id||'-',kind,f.goal||'-',f.total,f.cnt,f.life,f.non];
+      var vals=[bLabel,f.name,f.id||'-',kind,f.goal||'-',f.total,f.cnt,f.life,f.non,(f.lump||0)];
       for(var i=0;i<vals.length;i++){
         var c=ws.getCell(rn,i+1); c.value=vals[i];
         c.font={size:11,name:FNT,bold:(i===5||isMgr)};
+        if(i===9){ c.font={size:10,name:FNT,color:{argb:(f.lump>0?'FF854F0B':'FFC8C5BC')}}; if(!(f.lump>0)) c.value='-'; }
         c.alignment={vertical:'middle',horizontal:'center'};
         c.border=bd();
         if(i===0 && bk==='al'){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ALBG}}; c.font={size:11,name:FNT,bold:true,color:{argb:ALTX}}; }
@@ -13387,20 +13426,20 @@ function _buildFpExcel(){
           else if(f.total>=500000){ tier=AMT50; tcol='FF9A4F0F'; }
           if(tier){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:tier}}; c.font={size:11,name:FNT,bold:true,color:{argb:tcol}}; }
         }
-        if(i===4||i===5||i===7||i===8) c.numFmt='#,##0';
+        if(i===4||i===5||i===7||i===8||i===9) c.numFmt='#,##0';
       }
       var _lv=_tierOf(f.total);
-      _tierCell(ws, rn, 10, 1, bd, _lv, f.total);
-      _tierCell(ws, rn, 11, 2, bd, _lv, f.total);
-      _tierCell(ws, rn, 12, 3, bd, _lv, f.total);
-      _rankCell(ws, rn, 13, _perfRank[f.id]||0, bd);
+      _tierCell(ws, rn, 11, 1, bd, _lv, f.total);
+      _tierCell(ws, rn, 12, 2, bd, _lv, f.total);
+      _tierCell(ws, rn, 13, 3, bd, _lv, f.total);
+      _rankCell(ws, rn, 14, _perfRank[f.id]||0, bd);
       ws.getRow(rn).height=24;
       rn++;
     }
     teamsDB.forEach(function(tm){
       var mgrIds=(tm.managers||[]);
       var memIds=(tm.members||[]);
-      ws.mergeCells('A'+rn+':M'+rn);
+      ws.mergeCells('A'+rn+':N'+rn);
       var th=ws.getCell('A'+rn);
       var mgrNames=mgrIds.map(function(id){ return byId[id]?byId[id].name:''; }).filter(Boolean).join('\u00B7');
       th.value='\uD83C\uDFC5 '+(mgrNames||'\uD300')+' \uD300';
@@ -13408,20 +13447,20 @@ function _buildFpExcel(){
       th.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF6ECD9'}};
       th.alignment={vertical:'middle',horizontal:'left',indent:1};
       ws.getRow(rn).height=24; rn++;
-      var tG=0,tT=0,tL=0,tN=0,tC=0;
-      mgrIds.forEach(function(id){ var f=byId[id]; if(f){ putRow(f,'\u2605\uB9E4\uCE6D\uB9E4\uB2C8\uC800'); tG+=f.goal;tT+=f.total;tL+=f.life;tN+=f.non;tC+=f.cnt; } });
-      memIds.forEach(function(id){ if(mgrIds.indexOf(id)>=0) return; var f=byId[id]; if(f){ putRow(f,'\uB9E4\uCE6D\uD300\uC6D0'); tG+=f.goal;tT+=f.total;tL+=f.life;tN+=f.non;tC+=f.cnt; } });
-      var sub=['','\uD300 \uC18C\uACC4','','',tG||'-',tT,tC,tL,tN];
+      var tG=0,tT=0,tL=0,tN=0,tC=0,tLp=0;
+      mgrIds.forEach(function(id){ var f=byId[id]; if(f){ putRow(f,'\u2605\uB9E4\uCE6D\uB9E4\uB2C8\uC800'); tG+=f.goal;tT+=f.total;tL+=f.life;tN+=f.non;tC+=f.cnt;tLp+=(f.lump||0); } });
+      memIds.forEach(function(id){ if(mgrIds.indexOf(id)>=0) return; var f=byId[id]; if(f){ putRow(f,'\uB9E4\uCE6D\uD300\uC6D0'); tG+=f.goal;tT+=f.total;tL+=f.life;tN+=f.non;tC+=f.cnt;tLp+=(f.lump||0); } });
+      var sub=['','\uD300 \uC18C\uACC4','','',tG||'-',tT,tC,tL,tN,tLp];
       for(var si=0;si<sub.length;si++){
         var sc=ws.getCell(rn,si+1); sc.value=sub[si];
         sc.font={bold:true,size:11,name:FNT,color:{argb:'FF1A2744'}};
         sc.alignment={vertical:'middle',horizontal:'center'};
         sc.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
         sc.border=bd();
-        if(si===4||si===5||si===7||si===8) sc.numFmt='#,##0';
+        if(si===4||si===5||si===7||si===8||si===9) sc.numFmt='#,##0';
       }
-      ws.mergeCells(rn,10,rn,13);
-      var se=ws.getCell(rn,10); se.value='';
+      ws.mergeCells(rn,11,rn,14);
+      var se=ws.getCell(rn,11); se.value='';
       se.fill={type:'pattern',pattern:'solid',fgColor:{argb:SUMBG2}};
       se.border=bd();
       ws.getRow(rn).height=26; rn++;
@@ -13476,7 +13515,7 @@ function _buildPerfShareText(){
     var key=r.fpId||r.fpName;
     if(!byFp[key]){ byFp[key]={name:r.fpName, branch:r.branch, items:[]}; order.push(key); }
     (r.products||[]).forEach(function(p){
-      byFp[key].items.push({co:p.co||'', amount:parseInt(p.amount)||0});
+      byFp[key].items.push({co:p.co||'', amount:parseInt(p.amount)||0, lump:_perfIsLump(p)});
     });
   });
 
@@ -13489,7 +13528,7 @@ function _buildPerfShareText(){
     n++;
     lines.push(n+'.'+fp.name);
     fp.items.forEach(function(it){
-      lines.push((it.co?it.co+' ':'')+it.amount.toLocaleString()+'원');
+      lines.push((it.co?it.co+' ':'')+it.amount.toLocaleString()+'원'+(it.lump?' (일시납)':''));
     });
     lines.push('');
   });
@@ -24135,7 +24174,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 93;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 94;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
