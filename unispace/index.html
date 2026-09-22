@@ -5959,6 +5959,7 @@ function _openFromPush(op){
     if(op === 'today'){ window.location.href = 'today_alarm.html'; return; }
     if(op === 'perf'){ setTimeout(function(){ if(typeof openPerfView==='function') openPerfView(); }, 400); return; }
     if(op === 'bojtop' || op === 'stdfp'){
+      if(typeof _dashForegroundRefresh==='function') _dashForegroundRefresh(true); // 푸시로 들어오면 무조건 최신화
       setTimeout(function(){
         try {
           var body = document.getElementById('acc1');
@@ -7297,7 +7298,7 @@ function _dashForegroundRefresh(force){
   if (!currentUser || !currentUser.id) return;
   if (typeof UNISPACE_GAS_URL === 'undefined') return;
   var now = Date.now();
-  if (!force && now - _dashFgLast < 45000) return;
+  if (!force && now - _dashFgLast < 15000) return;
   _dashFgLast = now;
   if (typeof _perfIsPast === 'function' && _perfIsPast()) return; // past month view: leave as is
   if (typeof loadPerfFromGas === 'function') loadPerfFromGas(function(){
@@ -8677,14 +8678,38 @@ function _stdTogglePop(barEl, key, initBranch){
 }
 
 // GAS에서 업적 로드 -> localStorage 반영 -> 집계 갱신
+// 2026-09-22: 모바일 반영 지연 대책
+//  - 최근 3개월만 증분 요청(from=) : 전체 이력을 매번 받던 대용량 응답이 모바일에서 늦거나 끊기던 문제
+//  - 20초 타임아웃 + 1회 재시도 + cache:'no-store' : 실패를 조용히 삼키지 않고 토스트로 알림
+var _perfSyncAt = 0, _perfSyncFailAt = 0, _perfFullSyncAt = 0;
+function _perfSyncFrom(){
+  // 이번 달 포함 최근 3개월의 1일 (예: 9월이면 7/1) — 스탠다드 2개월 합산·전월 조회를 덮고도 남는다
+  var d = new Date(); d = new Date(d.getFullYear(), d.getMonth() - 2, 1);
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-01';
+}
+function _perfFetchJson(url, ms){
+  return new Promise(function(resolve, reject){
+    var done = false;
+    var t = setTimeout(function(){ if(!done){ done = true; reject(new Error('timeout')); } }, ms);
+    fetch(url, { cache:'no-store' }).then(function(r){ return r.json(); })
+      .then(function(d){ if(done) return; done = true; clearTimeout(t); resolve(d); })
+      .catch(function(e){ if(done) return; done = true; clearTimeout(t); reject(e); });
+  });
+}
 function loadPerfFromGas(cb, force){
   if(!currentUser || !currentUser.id){ if(cb) cb(); return; }
-  var url = UNISPACE_GAS_URL + '?action=getPerf&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now();
-  fetch(url).then(function(r){return r.json();}).then(function(res){
+  // 로컬 로그가 비었거나 마지막 전체 동기화가 6시간 넘었으면 전체, 아니면 최근 3개월 증분
+  var existing0 = getPerfLog();
+  var incremental = existing0.length > 0 && (Date.now() - _perfFullSyncAt) < 21600000;
+  var from = incremental ? _perfSyncFrom() : '';
+  var url = UNISPACE_GAS_URL + '?action=getPerf&fp=' + encodeURIComponent(currentUser.id) + (from ? '&from=' + from : '') + '&_=' + Date.now();
+  _perfFetchJson(url, 20000).catch(function(){ return _perfFetchJson(url + '&retry=1', 20000); }).then(function(res){
     if(res && res.ok && res.perf){
+      _perfSyncAt = Date.now();
+      if(!from) _perfFullSyncAt = _perfSyncAt;
       // guard: a transient empty response must not erase data already on screen.
       // skipped when force=true (full reload, e.g. opening the 일보 view).
-      if(!force){
+      if(!force && !from){
         var existing = getPerfLog();
         if((!res.perf.length) && existing && existing.length){
           if(cb) cb();
@@ -8695,6 +8720,11 @@ function loadPerfFromGas(cb, force){
         return { id:p.id, date:p.date, fpId:p.fpCode, fpName:p.fpName, branch:p.branch,
                  products:p.products, total:p.total, note:p.note||'', createdAt:p.createdAt||'' };
       });
+      // 증분 응답: from 이전 기록은 로컬에 있던 것을 그대로 유지하고, from 이후만 서버 값으로 교체
+      if(from){
+        var keepOld = existing0.filter(function(r){ return String(r.date || '') < from; });
+        arr = keepOld.concat(arr);
+      }
       // 방금 삭제한 항목이 서버 지연으로 다시 실려오면 제외 (부활 방지)
       if(_recentDeletedPerf && Object.keys(_recentDeletedPerf).length){
         arr = arr.filter(function(r){ return !_recentDeletedPerf[r.id]; });
@@ -8716,7 +8746,14 @@ function loadPerfFromGas(cb, force){
       rebuildPerfData();
     }
     if(cb) cb();
-  }).catch(function(){ if(cb) cb(); });
+  }).catch(function(){
+    // 실패를 조용히 넘기지 않는다 — 화면 값이 마지막 동기화 기준임을 알려 준다 (1분에 1번)
+    if(Date.now() - _perfSyncFailAt > 60000){
+      _perfSyncFailAt = Date.now();
+      try { showToast('⚠️ 업적 최신화 실패 (네트워크) · 화면은 마지막 동기화 기준입니다'); } catch(e) {}
+    }
+    if(cb) cb();
+  });
 }
 // 최근 삭제한 업적 id (서버 반영 지연 동안 재로드 시 부활 방지)
 var _recentDeletedPerf = {};
@@ -16352,9 +16389,16 @@ function refreshPerf() {
   // reload performance from GAS, then re-render
   if(typeof loadPerfFromGas==='function'){
     var _called=false;
-    try{ loadPerfFromGas(function(){ if(_called) return; _called=true; done(); }); }
+    try{ loadPerfFromGas(function(){
+      if(_called){ // 스피너는 이미 끝났어도 늦게 도착한 데이터는 반드시 화면에 반영
+        if(typeof renderTop10==='function') renderTop10();
+        if(typeof renderBojangCard==='function') renderBojangCard();
+        return;
+      }
+      _called=true; done();
+    }); }
     catch(e){ done(); }
-    setTimeout(function(){ if(!_called){ _called=true; done(); } }, 2500);
+    setTimeout(function(){ if(!_called){ _called=true; done(); } }, 12000);
   } else {
     setTimeout(done, 600);
   }
@@ -24174,7 +24218,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 94;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 95;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
