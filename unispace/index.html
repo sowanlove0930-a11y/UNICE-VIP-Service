@@ -16598,8 +16598,12 @@ function renderAttToday(force) {
   var _nowMs = (new Date()).getTime();
   if (!force && window._attDashLastFetch && (_nowMs - window._attDashLastFetch) < 60000) { return; } // 수동 새로고침(force) 외에는 1분에 1번
   window._attDashLastFetch = _nowMs;
-  var dashUrl = UNISPACE_GAS_URL + '?action=getDashboardStats&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym) + '&_=' + _nowMs;
-  (typeof _perfFetchJson === 'function' ? _perfFetchJson(dashUrl, 45000) : fetch(dashUrl, { cache:'no-store' }).then(function(r){return r.json();})).then(function(attRes){
+  // lite=1: 출결 카드에는 고객 목록이 필요 없다 — 응답 크기를 1/10로 줄여 404/타임아웃을 피한다
+  var dashUrl = UNISPACE_GAS_URL + '?action=getDashboardStats&lite=1&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym) + '&_=' + _nowMs;
+  var _dashReq = (typeof _perfFetchJson === 'function')
+    ? _perfFetchJson(dashUrl, 45000).catch(function(){ return _perfFetchJson(dashUrl + '&retry=1', 45000); }) // 404/지연 시 1회 재시도
+    : fetch(dashUrl, { cache:'no-store' }).then(function(r){return r.json();});
+  _dashReq.then(function(attRes){
     var todayDb = (attRes && attRes.ok && attRes.attendance && attRes.attendance[today]) || {};
     var todayPr = (attRes && attRes.ok && attRes.prereport && attRes.prereport[today]) || {};
     if(attRes && attRes.ok){
@@ -24287,7 +24291,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 101;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 102;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -24616,7 +24620,7 @@ function _gasDiagRun(){
   var base = UNISPACE_GAS_URL + '?fp=' + encodeURIComponent(fp);
   one('가벼운 호출 1 (getFpInfo)', base + '&action=getFpInfo&_=' + Date.now())
     .then(function(){ return one('가벼운 호출 2 (getFpInfo)', base + '&action=getFpInfo&_=' + Date.now()); })
-    .then(function(){ return one('출결 (getDashboardStats)', base + '&action=getDashboardStats&ym=' + (new Date()).toISOString().slice(0,7) + '&_=' + Date.now()); })
+    .then(function(){ return one('출결 (getDashboardStats)', base + '&action=getDashboardStats&lite=1&ym=' + (new Date()).toISOString().slice(0,7) + '&_=' + Date.now()); })
     .then(function(){ return one('업적 최근 3개월 (getPerf)', base + '&action=getPerf&from=' + (typeof _perfSyncFrom==='function'?_perfSyncFrom():'') + '&_=' + Date.now()); })
     .then(function(){
       var extra = '<div style="margin-top:6px;color:var(--text3)">브라우저 ' + (navigator.userAgent.match(/(Chrome|Safari|Firefox|Edg)\/[\d.]+/)||[''])[0] + (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches ? ' (앱)' : ' (브라우저)') + '</div>';
