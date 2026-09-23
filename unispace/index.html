@@ -6128,11 +6128,13 @@ function showDashboard() {
     if (document.visibilityState === 'visible') { renderAttToday(); _dashForegroundRefresh(); }
   });
 
-  // 2분마다 출결현황 자동 갱신 (throttle 90초와 함께 GAS 부하 완화)
+  // 5분마다 출결현황 자동 갱신 — 화면이 보일 때만 (숨겨진 탭/주머니 속 폰은 호출 안 함)
+  // 2026-09-23: 2분 → 5분. 사용자 50명 × 2분 = 시간당 1,500건이 GAS 대기열의 큰 몫이었다
   setInterval(function() {
+    if (document.visibilityState !== 'visible') return;
     renderAttToday();
     renderSmartCheckinBtn();
-  }, 120000);
+  }, 300000);
 
   // 권한별 stat 2, 3번 표시 전환 (관리자 4명: 대표+지점장들+교육지점장)
   var isAdmin = _isManagerUser(currentUser);
@@ -7340,7 +7342,7 @@ function _dashForegroundRefresh(force){
   if (force && typeof window._gasShareClear === 'function') window._gasShareClear();
   if (typeof UNISPACE_GAS_URL === 'undefined') return;
   var now = Date.now();
-  if (!force && now - _dashFgLast < 15000) return;
+  if (!force && now - _dashFgLast < 60000) return; // 앱 복귀 재조회는 1분에 1번
   _dashFgLast = now;
   if (typeof _perfIsPast === 'function' && _perfIsPast()) return; // past month view: leave as is
   if (typeof loadPerfFromGas === 'function') loadPerfFromGas(function(){
@@ -16594,7 +16596,7 @@ function renderAttToday(force) {
 
   // 2) GAS로 최신 갱신 — 무거운 호출이라 8초 내 중복 호출은 건너뜀(첫 로드 3중 호출 방지)
   var _nowMs = (new Date()).getTime();
-  if (window._attDashLastFetch && (_nowMs - window._attDashLastFetch) < 8000) { return; }
+  if (!force && window._attDashLastFetch && (_nowMs - window._attDashLastFetch) < 60000) { return; } // 수동 새로고침(force) 외에는 1분에 1번
   window._attDashLastFetch = _nowMs;
   var dashUrl = UNISPACE_GAS_URL + '?action=getDashboardStats&fp=' + encodeURIComponent(currentUser.id) + '&ym=' + encodeURIComponent(ym) + '&_=' + _nowMs;
   (typeof _perfFetchJson === 'function' ? _perfFetchJson(dashUrl, 45000) : fetch(dashUrl, { cache:'no-store' }).then(function(r){return r.json();})).then(function(attRes){
@@ -24285,7 +24287,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 100;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 101;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
