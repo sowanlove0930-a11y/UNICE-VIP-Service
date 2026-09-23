@@ -251,7 +251,7 @@ var TK_URL = 'https://unice-vip.co.kr/event/';
 var TK_IMG = 'https://unice-vip.co.kr/event/tk-share.png';
 var KAKAO_JS_KEY = 'cbfa60013e8c77c5a8c168d4d5862d51';
 var EVENT_END = '2026-09-30';
-var POLL_MS = 90000; // 2026-09-23: 35s -> 90s (GAS load relief)
+var POLL_MS = 180000; // 2026-09-23: 35s -> 180s, and only while the page is actually visible (GAS load relief)
 var ME = null, STATE = null, pollTimer = null;
 var TIER_META = { p:{ name:'\ud50c\ub798\ud2f0\ub118', icon:'\ud83c\udfc6', cls:'t-p' }, g:{ name:'\uace8\ub4dc', icon:'\ud83e\udd47', cls:'t-g' }, s:{ name:'\uc2e4\ubc84', icon:'\ud83e\udd48', cls:'t-s' } };
 
@@ -339,13 +339,19 @@ function savedFp(){
 })();
 
 /* ---------- app ---------- */
+var _lastLoadAt = 0;
 function startApp(){
   loadState();
   if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(loadState, POLL_MS);
+  // background tabs / pockets do not poll: a hidden page wakes up on return instead
+  pollTimer = setInterval(function(){ if (document.visibilityState === 'visible') loadState(); }, POLL_MS);
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible' && Date.now() - _lastLoadAt > 60000) loadState();
+  });
   tickDday();
 }
 function loadState(){
+  _lastLoadAt = Date.now();
   gasGet(GAS_URL + '?action=tkState&fp=' + encodeURIComponent(ME ? ME.id : ''))
     .then(function(d){ if (!d || !d.ok) return; STATE = d; renderAll(d); })
     .catch(function(){});
@@ -357,7 +363,7 @@ function renderAll(d){
   renderPrizes(d);
   renderRoster(d);
   renderFeed(d);
-  qs('asof').textContent = (d.asOf || '') + ' \uae30\uc900 \u00b7 35\ucd08\ub9c8\ub2e4 \uac31\uc2e0';
+  qs('asof').textContent = (d.asOf || '') + ' \uae30\uc900 \u00b7 3\ubd84\ub9c8\ub2e4 \uac31\uc2e0';
   if (qs('ov').style.display === 'flex') renderOverlay(d);
 }
 
