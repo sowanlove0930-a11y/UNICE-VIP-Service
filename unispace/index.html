@@ -4755,6 +4755,44 @@ var currentUser = null;
 
 // UNISPACE GAS endpoint (auth / roster / password)
 var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
+// ── GAS 호출 합치기 (2026-09-23) ─────────────────────────────
+// 대시보드가 한 번 뜰 때 같은 GAS GET 이 여러 번 나갔다 (getAwardStatus 5회, getPlans 5회 …
+// → 한 사람이 열 때마다 약 30건). 구글은 같은 스크립트로 몰리는 요청을 줄 세우므로
+// 이 중복이 곧 "서버 응답 없음/404" 의 원인이었다.
+// 같은 액션·같은 파라미터의 GET 은 (캐시버스터 _ / _t 제외) 진행 중이면 그 결과를 같이 쓰고,
+// 끝난 지 4초 이내면 그 결과를 그대로 준다. POST 와 저장성 액션은 건드리지 않는다.
+(function(){
+  if (typeof window.fetch !== 'function') return;
+  var _rawFetch = window.fetch.bind(window);
+  var inflight = {}, recent = {};
+  var SHARE_MS = 4000;
+  var NEVER = /action=(save|set|add|delete|del|checkin|upload|change|admin|login|mark|toggle|send|push|register|reset|dedupe|update|ack|notify)/i;
+  function keyOf(url){
+    return String(url).replace(/[?&](_|_t|ts|nocache)=\d+/g, '').replace(/&+$/, '');
+  }
+  window.fetch = function(input, init){
+    try {
+      var url = (typeof input === 'string') ? input : (input && input.url) || '';
+      var method = (init && init.method) ? String(init.method).toUpperCase() : 'GET';
+      if (method === 'GET' && url.indexOf(UNISPACE_GAS_URL) === 0 && !NEVER.test(url)) {
+        var k = keyOf(url), now = Date.now();
+        var rc = recent[k];
+        if (rc && (now - rc.at) < SHARE_MS) return Promise.resolve(rc.res.clone());
+        if (inflight[k]) return inflight[k].then(function(r){ return r.clone(); });
+        var p = _rawFetch(input, init).then(function(r){
+          if (r && r.ok) recent[k] = { at: Date.now(), res: r.clone() };
+          delete inflight[k];
+          return r;
+        }, function(e){ delete inflight[k]; throw e; });
+        inflight[k] = p;
+        return p.then(function(r){ return r.clone(); });
+      }
+    } catch(e) {}
+    return _rawFetch(input, init);
+  };
+  // 오래된 항목 정리
+  setInterval(function(){ var t = Date.now(); for (var k in recent) if (t - recent[k].at > 30000) delete recent[k]; }, 30000);
+})();
 
 // GAS fetch throttle: limit concurrent GAS requests and auto-retry once on failure.
 // Cold FP login fires many GAS calls at once; GAS serializes them and some fail,
@@ -24241,7 +24279,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 98;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 99;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
