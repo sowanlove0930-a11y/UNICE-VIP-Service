@@ -4765,7 +4765,7 @@ var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjskl
   if (typeof window.fetch !== 'function') return;
   var _rawFetch = window.fetch.bind(window);
   var inflight = {}, recent = {};
-  var SHARE_MS = 4000;
+  var SHARE_MS = 15000;   // 같은 조회는 15초 동안 공유. 저장/수동 새로고침 때는 즉시 비운다
   var NEVER = /action=(save|set|add|delete|del|checkin|upload|change|admin|login|mark|toggle|send|push|register|reset|dedupe|update|ack|notify)/i;
   function keyOf(url){
     return String(url).replace(/[?&](_|_t|ts|nocache)=\d+/g, '').replace(/&+$/, '');
@@ -4774,6 +4774,7 @@ var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjskl
     try {
       var url = (typeof input === 'string') ? input : (input && input.url) || '';
       var method = (init && init.method) ? String(init.method).toUpperCase() : 'GET';
+      if (url.indexOf(UNISPACE_GAS_URL) === 0 && (method !== 'GET' || NEVER.test(url))) { recent = {}; } // 쓰기 뒤에는 최신값을 다시 받는다
       if (method === 'GET' && url.indexOf(UNISPACE_GAS_URL) === 0 && !NEVER.test(url)) {
         var k = keyOf(url), now = Date.now();
         var rc = recent[k];
@@ -4790,6 +4791,7 @@ var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjskl
     } catch(e) {}
     return _rawFetch(input, init);
   };
+  window._gasShareClear = function(){ recent = {}; };
   // 오래된 항목 정리
   setInterval(function(){ var t = Date.now(); for (var k in recent) if (t - recent[k].at > 30000) delete recent[k]; }, 30000);
 })();
@@ -5240,6 +5242,7 @@ function loadActivitiesFromGas(cb){
 
 // 활동현황 새로고침: GAS에서 활동기록·계획 다시 불러와 재렌더
 function refreshActivity(){
+  if (typeof window._gasShareClear === 'function') window._gasShareClear();
   var btn=document.getElementById('actRefreshBtn');
   var icon=document.getElementById('actRefreshIcon');
   var txt=document.getElementById('actRefreshTxt');
@@ -7334,6 +7337,7 @@ function _awlMon(ym) { return parseInt(String(ym).slice(5, 7), 10); }
 var _dashFgLast = 0;
 function _dashForegroundRefresh(force){
   if (!currentUser || !currentUser.id) return;
+  if (force && typeof window._gasShareClear === 'function') window._gasShareClear();
   if (typeof UNISPACE_GAS_URL === 'undefined') return;
   var now = Date.now();
   if (!force && now - _dashFgLast < 15000) return;
@@ -16422,6 +16426,7 @@ function doTransfer() {
 // ── 오늘 출결 현황 렌더 ─────────────────────────────
 // TODO_GAS_ATT_2: GAS GET으로 전체 FP 실데이터 교체
 function refreshPerf() {
+  if (typeof window._gasShareClear === 'function') window._gasShareClear();
   var btn=document.getElementById('perfRefreshBtn');
   var icon=document.getElementById('perfRefreshIcon');
   var txt=document.getElementById('perfRefreshTxt');
@@ -16457,6 +16462,7 @@ function refreshPerf() {
   }
 }
 function refreshAttendance() {
+  if (typeof window._gasShareClear === 'function') window._gasShareClear();
   var btn=document.getElementById('attRefreshBtn');
   var icon=document.getElementById('attRefreshIcon');
   var txt=document.getElementById('attRefreshTxt');
@@ -24279,7 +24285,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 99;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 100;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
