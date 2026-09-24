@@ -7339,6 +7339,7 @@ function _awlMon(ym) { return parseInt(String(ym).slice(5, 7), 10); }
 var _dashFgLast = 0;
 function _dashForegroundRefresh(force){
   if (!currentUser || !currentUser.id) return;
+  try { if (_perfPendingList().length && !_perfFlushing) { _perfFlushing = true; _perfPendingList().forEach(function(r,i){ setTimeout(function(){ _perfSubmitToGas(r, 1, null); }, i*700); }); setTimeout(function(){ _perfFlushing = false; }, 8000); } } catch(e) {}
   if (force && typeof window._gasShareClear === 'function') window._gasShareClear();
   if (typeof UNISPACE_GAS_URL === 'undefined') return;
   var now = Date.now();
@@ -9459,6 +9460,49 @@ function confirmPerfInput() {
   renderTop10();
 }
 
+// ── 동기화 상태 표시 (업적 조회 상단) ─────────────────────────────
+// "내 폰에는 보이는데 남한테는 안 보인다" = 저장이 서버에 못 닿고 대기열에 남은 상태.
+// 그 상태를 숨기지 않고 여기서 보여 주고, 손으로 바로 보낼 수 있게 한다.
+function _perfPendingList(){
+  var o = _perfPendingGet(), list = [];
+  for(var k in o){ if(o.hasOwnProperty(k) && o[k] && o[k].rec) list.push(o[k].rec); }
+  return list;
+}
+function _perfRenderSyncStatus(){
+  var el = document.getElementById('pvSyncStatus'); if(!el) return;
+  var pend = _perfPendingList();
+  var t = (typeof _perfSyncAt !== 'undefined' && _perfSyncAt) ? new Date(_perfSyncAt) : null;
+  var tTxt = t ? (('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)) : '아직 없음';
+  var lf = window._lastGasFail;
+  var failTxt = (lf && lf.what === 'getPerf' && (!t || lf.at > _perfSyncAt)) ? ' · <span style="color:#B45309">⚠️ 마지막 조회 실패('+lf.why+')</span>' : '';
+  if(pend.length){
+    el.innerHTML = '<span style="color:#B45309;font-weight:700">⚠️ 서버 미전송 '+pend.length+'건</span> — '
+      + pend.map(function(r){ return (r.fpName||'')+' '+(parseInt(r.total)||0).toLocaleString()+'원'; }).join(', ')
+      + ' <button type="button" onclick="_perfFlushPendingNow()" style="margin-left:6px;padding:3px 9px;border-radius:7px;border:1px solid #F59E0B;background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;cursor:pointer">지금 전송</button>'
+      + '<div style="color:var(--text3);margin-top:2px">미전송 건은 이 폰에서만 보이고 다른 사람에게는 아직 안 보입니다</div>';
+  } else {
+    el.innerHTML = '서버 동기화 '+tTxt+failTxt;
+  }
+}
+function _perfFlushPendingNow(){
+  var pend = _perfPendingList();
+  if(!pend.length){ showToast('미전송 건이 없습니다'); return; }
+  showToast('📤 '+pend.length+'건 전송 중…');
+  var left = pend.length, okN = 0;
+  pend.forEach(function(r, i){
+    setTimeout(function(){
+      _perfSubmitToGas(r, 1, function(ok){
+        if(ok) okN++;
+        left--;
+        if(left === 0){
+          showToast(okN === pend.length ? '✅ '+okN+'건 서버 전송 완료' : '⚠️ '+okN+'/'+pend.length+'건 전송 · 나머지는 잠시 후 자동 재시도');
+          _perfRenderSyncStatus();
+          if(typeof loadPerfFromGas === 'function') loadPerfFromGas(function(){ if(typeof renderPerfView==='function') renderPerfView(); }, true);
+        }
+      });
+    }, i*600);
+  });
+}
 // ── 업적 저장 대기열 (서버 확인 전까지 보관 · 자동 재전송) ──────────
 var PERF_PENDING_KEY = 'unispace_perf_pending';
 var _perfFlushing = false;
@@ -9491,11 +9535,14 @@ function _perfSubmitToGas(rec, attempt, onDone){
     partnerId: rec.partnerId || '', partnerLeadId: rec.partnerLeadId || '', partnerName: rec.partnerName || '',
     partnerPayout: parseInt(rec.partnerPayout)||0
   }});
+  var _ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var _tmr = _ctrl ? setTimeout(function(){ try{ _ctrl.abort(); }catch(e){} }, 45000) : null;
   fetch(UNISPACE_GAS_URL, {
     method:'POST',
     headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-    body: payload
-  }).then(function(r){ return r.json(); }).then(function(res){
+    body: payload,
+    signal: _ctrl ? _ctrl.signal : undefined
+  }).then(function(r){ if(_tmr) clearTimeout(_tmr); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }).then(function(res){
     if(res && res.ok){
       _perfPendingDel(rec.id);
       if(res.mode === 'deleted-skip'){
@@ -9512,13 +9559,14 @@ function _perfSubmitToGas(rec, attempt, onDone){
         } catch(eDS) {}
         if(onDone) onDone(true, res); return;
       }
-      _perfRecentSavedAdd(rec); if(onDone) onDone(true, res); return;
+      _perfRecentSavedAdd(rec); if(onDone) onDone(true, res); _perfRenderSyncStatus(); return;
     }
-    if(attempt < 2){ setTimeout(function(){ _perfSubmitToGas(rec, attempt+1, onDone); }, 1200); return; }
-    if(onDone) onDone(false, res);
+    if(attempt < 3){ setTimeout(function(){ _perfSubmitToGas(rec, attempt+1, onDone); }, attempt*2500); return; }
+    if(onDone) onDone(false, res); _perfRenderSyncStatus();
   }).catch(function(){
-    if(attempt < 2){ setTimeout(function(){ _perfSubmitToGas(rec, attempt+1, onDone); }, 1200); return; }
-    if(onDone) onDone(false, null);
+    if(_tmr) clearTimeout(_tmr);
+    if(attempt < 3){ setTimeout(function(){ _perfSubmitToGas(rec, attempt+1, onDone); }, attempt*2500); return; }
+    if(onDone) onDone(false, null); _perfRenderSyncStatus();
   });
 }
 // reconcile the pending queue against the list the server just returned.
@@ -9851,6 +9899,7 @@ function clearPvCo(){
 
 
 function renderPerfView(){
+  try { _perfRenderSyncStatus(); } catch(e) {}
   if(_pvMode==='co'){ _renderPvCompanyView(); return; }
   // FP별 모드: 회사뷰에서 숨겼던 KPI 카드 복구
   var _kpiW=document.getElementById('pvKpiTot');
@@ -22956,6 +23005,7 @@ function doCheckin() { doSmartCheckin(); }
       <div>
         <div class="mgmt-title">PERFORMANCE</div>
         <div class="mgmt-sub" style="margin-bottom:0">📊 업적 조회 · 일자별 · 누계</div>
+        <div id="pvSyncStatus" style="font-size:11px;margin-top:4px;color:var(--text3)"></div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <button type="button" id="pvShareBtn" onclick="openPerfShare()" style="font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;background:rgba(254,229,0,.18);border:1px solid rgba(201,168,76,.35);color:#854F0B;cursor:pointer;font-family:'Noto Sans KR',sans-serif">📋 카톡 공유</button>
@@ -24291,7 +24341,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 102;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 103;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
