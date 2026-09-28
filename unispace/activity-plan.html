@@ -2089,7 +2089,7 @@ document.addEventListener('visibilitychange', function(){
   try{ loadExisting(); }catch(e){}
 });
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 78; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 79; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2601,6 +2601,16 @@ function renderStatus(){
       if(st==='fix_fp' && lg.fixPush){ metaBits.push(lg.fixPush.sent>0 ? '푸시 전송됨' : '<span style="color:#C0392B;font-weight:700">푸시 미전송'+(lg.fixPush.noToken?' · 앱 재로그인 필요':'')+'</span>'); }
       if(st==='fix_mgr' && lg.repReason){ metaBits.push('대표: "'+String(lg.repReason).slice(0,18)+(String(lg.repReason).length>18?'…':'')+'"'); }
       if(st==='approved1' && lg.by1Name){ metaBits.push(lg.by1Name+' 승인'); }
+      // 최종 승인 뒤 FP가 다시 제출하면 검토가 1단계부터 다시 시작된다 — 그 사실을 줄에 보여 준다
+      if((st==='wait' || st==='approved1') && lg.finalAt){
+        var _fa=new Date(lg.finalAt), _sa=lg.submitAt?new Date(lg.submitAt):null;
+        if(_sa && _sa>_fa){ metaBits.push('<span style="color:#B4560B;font-weight:700">↺ 최종승인('+_pad2(_fa.getMonth()+1)+'/'+_pad2(_fa.getDate())+') 후 재제출'+(lg.resubmit?' '+lg.resubmit+'회':'')+'</span>'); }
+      }
+      // 최종 승인 뒤 수정본: 승인은 유지, 수정 사실만 표시 (2026-09-28 정책)
+      if(st==='final' && lg.editAfterFinal){
+        var _ea=lg.editAfterFinalAt?new Date(lg.editAfterFinalAt):null;
+        metaBits.push('<span style="color:#6B7280">✎ 승인 후 수정 '+lg.editAfterFinal+'회'+(_ea?' ('+_pad2(_ea.getMonth()+1)+'/'+_pad2(_ea.getDate())+')':'')+'</span>');
+      }
       var _nm=fp.name.replace(/'/g,'');
       var btns='<button type="button" class="st-view" data-stview="'+fp.id+'">보기</button>';
       if(_role==='mgr'){
