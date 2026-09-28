@@ -2413,6 +2413,17 @@ var FP_ROSTER_BUILTIN=[
   {id:'H2605017',name:'한송이',role:'FP',branch:'브라보지점',active:true},
   {id:'H2502953',name:'허영민',role:'FP',branch:'알파지점',active:true}
 ];
+// 계획 제출 의무가 없는 직책: 대표, 지점장(전소영·이수아), 교육지점장(최성경) — 2026-09-28 결정
+// 제출 현황 목록·제출률·엑셀·미제출 집계 어디에도 넣지 않는다 (검토·승인 권한은 그대로)
+function _planExempt(fp){
+  if(!fp) return false;
+  var r=String(fp.role||''), t=String(fp.title||''), id=String(fp.id||''), b=String(fp.branch||'');
+  if(id==='ktk01' || r==='대표') return true;
+  if(r==='지점장' || t==='지점장' || t==='교육지점장') return true;
+  if(id==='H2502969' || id==='H2502965' || id==='H2503162') return true;
+  if(b.indexOf('교육')>=0) return true;
+  return false;
+}
 function _getRoster(){
   var r=[]; try{ r=JSON.parse(localStorage.getItem('unispace_fp_roster')||'[]'); }catch(e){}
   if(!r || !r.length) r=FP_ROSTER_BUILTIN; // 대시보드 명단 없으면 내장 명단 사용
@@ -2501,13 +2512,34 @@ function apprApprove1(fpId, fpName, btn){
   _apprBtnBusy(btn, '승인 중…');
   _apprDo('approve1', fpId, '', function(res){ showToast(res.already?('ℹ️ '+fpName+' 이미 승인된 건입니다'):('✅ '+fpName+' 1차 승인')); }, btn);
 }
+// 서버가 ok 를 주면 서버 재조회를 기다리지 않고 화면의 로컬 기록을 먼저 'final' 로 바꾼다 (체감 로딩 단축)
+function _apprMarkFinalLocal(fpIds){
+  try{
+    var wi=_statusWi||getStatusWeekInfo(statusWeekOffset);
+    var db=getPlanDB(); var wk=db[wi.key]||{}; var now=new Date().toISOString();
+    (fpIds||[]).forEach(function(id){
+      var r=wk[id]; if(!r) return;
+      r.approval='final'; r.apprLog=r.apprLog||{}; r.apprLog.finalAt=now;
+    });
+    db[wi.key]=wk; savePlanDB(db);
+  }catch(e){}
+}
 function apprFinal(fpId, fpName, btn){
   _apprBtnBusy(btn, '승인 중…');
-  _apprDo('final', fpId, '', function(res){ showToast(res.already?('ℹ️ '+fpName+' 이미 최종 승인된 건입니다'):('✅ '+fpName+' 최종 승인')); }, btn);
+  _apprDo('final', fpId, '', function(res){
+    _apprMarkFinalLocal([fpId]);
+    showToast(res.already?('ℹ️ '+fpName+' 이미 최종 승인된 건입니다'):('✅ '+fpName+' 최종 승인'));
+  }, btn);
 }
 function apprFinalAll(btn){
   _apprBtnBusy(btn, '일괄 승인 중…');
-  _apprDo('finalAll', '', '', function(res){ showToast('✅ '+(res.count||0)+'건 최종 승인 완료'); }, btn);
+  _apprDo('finalAll', '', '', function(res){
+    // 1차 승인 상태인 모든 행이 대상
+    var wi=_statusWi||getStatusWeekInfo(statusWeekOffset); var wk=(getPlanDB()[wi.key])||{};
+    var ids=Object.keys(wk).filter(function(id){ return _apprStatus(wk[id])==='approved1'; });
+    _apprMarkFinalLocal(ids);
+    showToast('✅ '+(res.count||0)+'건 최종 승인 완료');
+  }, btn);
 }
 var _fixTargetFp='', _fixOp='';
 function openFixModal(op, fpId, fpName, preset){
@@ -2542,7 +2574,7 @@ function renderStatus(){
   var wi=_statusWi||getStatusWeekInfo(statusWeekOffset);
   var db=getPlanDB();
   var weekRec=db[wi.key]||{};
-  var roster=_getRoster().filter(function(fp){ return fp.active && fp.role!=='대표'; });
+  var roster=_getRoster().filter(function(fp){ return fp.active && !_planExempt(fp); });
   // 지점장은 자기 지점만
   if(currentUser.role==='지점장'){
     var myb=_pBranchKey(currentUser.branch);
@@ -2908,7 +2940,7 @@ function exportStatusExcel(){
   if(!window.ExcelJS){ showToast('엑셀 모듈 로딩중...'); return; }
   var wi=_statusWi||getWeekInfo();
   var weekRec=getPlanDB()[wi.key]||{};
-  var roster=_getRoster().filter(function(fp){ return fp.active && fp.role!=='대표'; });
+  var roster=_getRoster().filter(function(fp){ return fp.active && !_planExempt(fp); });
   if(currentUser.role==='지점장'){ var myb=_pBranchKey(currentUser.branch); roster=roster.filter(function(fp){ return _pBranchKey(fp.branch)===myb; }); }
   var scoped=roster.filter(function(fp){ if(_stBranch==='all') return true; return _pBranchKey(fp.branch)===_stBranch; });
   var wb=new ExcelJS.Workbook();
@@ -3075,7 +3107,7 @@ function _buildPastFpOptions(){
   var sel=document.getElementById('pastFpSel');
   if(!_isAdmin()){ if(wrap) wrap.style.display='none'; return; }
   if(wrap) wrap.style.display='flex';
-  var roster=_getRoster().filter(function(fp){ return fp.role!=='대표'; });
+  var roster=_getRoster().filter(function(fp){ return !_planExempt(fp); });
   if(currentUser.role==='지점장'){
     var myb=_pBranchKey(currentUser.branch);
     roster=roster.filter(function(fp){ return _pBranchKey(fp.branch)===myb; });
