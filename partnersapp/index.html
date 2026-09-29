@@ -487,9 +487,13 @@ input,select,textarea,button{font-family:inherit;color:inherit}
     <div style="margin-top:12px" id="admNtcList"></div>
   </div>
   <div class="sec">
-    <div class="secT"><h3>이번 달 수익 현황 공유</h3><div class="rt" id="admShareYm"></div></div>
+    <div class="secT"><h3>수익 현황 공유</h3><div class="rt" id="admShareYm"></div></div>
     <div class="card" style="margin-bottom:18px">
-      <div class="hintline" style="margin:0 0 10px">이번 달 귀속(청약 확정) 지원금 기준 · 이름은 가운데 글자를 가려서 나갑니다.</div>
+      <div style="display:flex;gap:8px;margin:0 0 10px">
+        <button class="btn sm" type="button" id="admShareModeM" style="flex:1;padding:9px 0" onclick="admShareMode('month')">이번 달</button>
+        <button class="btn sm ghost" type="button" id="admShareModeT" style="flex:1;padding:9px 0" onclick="admShareMode('total')">누계</button>
+      </div>
+      <div class="hintline" style="margin:0 0 10px" id="admShareHint">이번 달 귀속(청약 확정) 지원금 기준 · 이름은 가운데 글자를 가려서 나갑니다.</div>
       <pre id="admShareTxt" style="white-space:pre-wrap;font-family:inherit;font-size:13.5px;line-height:1.65;background:#f7f5f2;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 10px;max-height:260px;overflow:auto"></pre>
       <div style="display:flex;gap:9px">
         <button class="btn" type="button" style="flex:1" onclick="admShareIncome('kakao')">💬 카톡 공유</button>
@@ -1061,7 +1065,19 @@ function renderAdmin(){
   $("admSettleDay").value = (ADMST.settings && ADMST.settings.settleDay) || 25;
   renderAdmNotices();
   $("admPtnList").innerHTML = ptnCards(d.partners, "adc");
-  try { $("admShareYm").textContent = d.ym + " 귀속"; $("admShareTxt").textContent = admIncomeText(); } catch(e){}
+  try { admShareMode(ADM_SHARE_MODE); } catch(e){}
+}
+var ADM_SHARE_MODE = "month";
+function admShareMode(mode){
+  ADM_SHARE_MODE = (mode === "total") ? "total" : "month";
+  var d = ADMST.data;
+  $("admShareModeM").className = "btn sm" + (ADM_SHARE_MODE === "month" ? "" : " ghost");
+  $("admShareModeT").className = "btn sm" + (ADM_SHARE_MODE === "total" ? "" : " ghost");
+  $("admShareYm").textContent = (ADM_SHARE_MODE === "month") ? (d.ym + " 귀속") : "전체 누계";
+  $("admShareHint").textContent = (ADM_SHARE_MODE === "month")
+    ? "이번 달 귀속(청약 확정) 지원금 기준 · 이름은 가운데 글자를 가려서 나갑니다."
+    : "지급 예정 + 지급 완료 누계 기준 · 이름은 가운데 글자를 가려서 나갑니다.";
+  $("admShareTxt").textContent = admIncomeText(ADM_SHARE_MODE);
 }
 
 /* ---------- 관리자: 이번 달 수익 현황 공유 ---------- */
@@ -1078,30 +1094,53 @@ function manWon(v){ /* 640,000 -> 64만 / 1,250,000 -> 125만 / 8,000 -> 0.8만 
   var m = v / 10000;
   return (m >= 10 ? Math.round(m) : Math.round(m * 10) / 10) + "만";
 }
-function admIncomeText(){
+/* 표시 폭: 한글·전각 2, 그 외 1 — "/" 위치를 맞추기 위한 패딩 계산 */
+function dispW(str){
+  var w = 0;
+  for (var i = 0; i < str.length; i++){ var c = str.charCodeAt(i); w += (c > 0x2E7F) ? 2 : 1; }
+  return w;
+}
+function padW(str, width){
+  var w = dispW(str);
+  while (w < width){ str += " "; w++; }
+  return str;
+}
+/* mode: "month" = 이번 달 귀속 확정액 / "total" = 지급 예정+완료 누계 */
+function admIncomeText(mode){
   var d = ADMST.data;
+  var isTotal = (mode === "total");
   var ym = d.ym || "";
   var mon = parseInt(ym.slice(5, 7), 10) || "";
   var rows = [];
   for (var i = 0; i < d.partners.length; i++){
     var p = d.partners[i];
-    var pay = (p.stat && p.stat.monthPay) || 0;
+    var st = p.stat || {};
+    var pay = isTotal ? ((st.wait || 0) + (st.paid || 0)) : (st.monthPay || 0);
     if (pay > 0) rows.push({ name: p.name, fp: p.fpName, pay: pay });
   }
   rows.sort(function(a, b){ return b.pay - a.pay; });
-  var out = "*파트너스 수익 현황(" + mon + "월)\n\n";
+  var out = "*파트너스 수익 현황(" + (isTotal ? "누계" : mon + "월") + ")\n\n";
   out += "                 파트너스 / 담당FP\n";
-  if (!rows.length) { out += "이번 달 확정된 지원금이 아직 없습니다."; return out; }
-  var total = 0;
+  if (!rows.length) { out += (isTotal ? "확정된 지원금이 아직 없습니다." : "이번 달 확정된 지원금이 아직 없습니다."); return out; }
+  /* 좌측 열(이름+금액)의 폭을 가장 긴 항목에 맞춰 "/" 를 한 줄로 정렬 */
+  var lefts = [], maxW = 0, total = 0;
   for (var r = 0; r < rows.length; r++){
     total += rows[r].pay;
-    out += (r + 1) + "위  " + maskName(rows[r].name) + "(" + manWon(rows[r].pay) + ") / " + maskName(rows[r].fp) + "\n";
+    var left = maskName(rows[r].name) + "(" + manWon(rows[r].pay) + ")";
+    lefts.push(left);
+    if (dispW(left) > maxW) maxW = dispW(left);
   }
-  out += "\n총 " + rows.length + "명 · " + manWon(total) + (kdateFull(d.settleAt) ? " · 정산 " + kdateFull(d.settleAt) : "");
-  return out;
+  for (var k = 0; k < rows.length; k++){
+    var rank = (k + 1) + "위";
+    out += rank + (k + 1 < 10 ? "  " : " ") + padW(lefts[k], maxW) + " / " + maskName(rows[k].fp) + "\n";
+  }
+  out += "\n";
+  if (isTotal) out += "총 " + rows.length + "명 · 누계 " + manWon(total) + "\n";
+  if (kdateFull(d.settleAt)) out += "정산일 " + kdateFull(d.settleAt);
+  return out.replace(/\n+$/, "");
 }
 function admShareIncome(mode){
-  var txt = admIncomeText();
+  var txt = admIncomeText(ADM_SHARE_MODE);
   if (mode === "copy" || !isMobile()) { copyText(txt, "수익 현황을 복사했습니다"); return; }
   try {
     window.Kakao.Share.sendDefault({ objectType: "text", text: txt, link: { mobileWebUrl: BASE + "index.html", webUrl: BASE + "index.html" } });
