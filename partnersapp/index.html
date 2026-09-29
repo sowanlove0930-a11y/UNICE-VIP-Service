@@ -487,6 +487,15 @@ input,select,textarea,button{font-family:inherit;color:inherit}
     <div style="margin-top:12px" id="admNtcList"></div>
   </div>
   <div class="sec">
+    <div class="secT"><h3>이번 달 수익 현황 공유</h3><div class="rt" id="admShareYm"></div></div>
+    <div class="card" style="margin-bottom:18px">
+      <div class="hintline" style="margin:0 0 10px">이번 달 귀속(청약 확정) 지원금 기준 · 이름은 가운데 글자를 가려서 나갑니다.</div>
+      <pre id="admShareTxt" style="white-space:pre-wrap;font-family:inherit;font-size:13.5px;line-height:1.65;background:#f7f5f2;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 10px;max-height:260px;overflow:auto"></pre>
+      <div style="display:flex;gap:9px">
+        <button class="btn" type="button" style="flex:1" onclick="admShareIncome('kakao')">💬 카톡 공유</button>
+        <button class="btn ghost" type="button" style="flex:1" onclick="admShareIncome('copy')">📋 복사</button>
+      </div>
+    </div>
     <div class="secT"><h3>파트너별 현황</h3><div class="rt">지원금 많은 순</div></div>
     <button class="btn ghost" type="button" style="margin-bottom:12px" onclick="admSyncApplicants()">🔄 신청자 → 명단 동기화</button>
     <div class="hintline" style="margin:-4px 0 12px">파트너스 신청접수에 새로 들어온 분들을 명단에 등록합니다. 파트너가 U아이디로 처음 로그인하면 자동으로도 등록됩니다.</div>
@@ -1005,10 +1014,17 @@ function ptnCards(list, prefix){
     if (s.active) h += ' <span class="bn">★ 액티브</span>';
     h += '</div><div class="sb">' + esc(u.phone || "");
     if (prefix === "adc" && u.fpName) h += ' · 담당 ' + esc(u.fpName);
-    h += ' · 이번 달 소개 ' + (s.month || 0) + '건</div></div>';
+    h += ' · 이번 달 소개 ' + (s.month || 0) + '건';
+    if (prefix === "adc" && u.loginId) h += ' · 아이디 ' + esc(u.loginId);
+    h += '</div></div>';
     h += '<div class="amt"><div class="v">' + won((s.wait || 0) + (s.paid || 0)) + '</div><div class="l">예정 ' + won(s.wait || 0) + '</div></div>';
     h += '</div>';
     h += '<div class="pbody">';
+    if (prefix === "adc") {
+      h += '<div style="display:flex;justify-content:flex-end;padding:6px 0 10px">'
+         + '<button class="btn sm ghost" type="button" style="width:auto;padding:8px 14px;font-size:12.5px" onclick="event.stopPropagation();admResetPw(\'' + esc(u.id) + '\',\'' + esc(u.name) + '\',\'' + esc(u.loginId || '') + '\')">🔑 비밀번호 초기화</button>'
+         + '</div>';
+    }
     var leads = u.leads || [];
     if (!leads.length) h += '<div class="empty" style="padding:16px 0">아직 소개 건이 없습니다.</div>';
     else h += leadRows(leads, false);
@@ -1045,6 +1061,59 @@ function renderAdmin(){
   $("admSettleDay").value = (ADMST.settings && ADMST.settings.settleDay) || 25;
   renderAdmNotices();
   $("admPtnList").innerHTML = ptnCards(d.partners, "adc");
+  try { $("admShareYm").textContent = d.ym + " 귀속"; $("admShareTxt").textContent = admIncomeText(); } catch(e){}
+}
+
+/* ---------- 관리자: 이번 달 수익 현황 공유 ---------- */
+/* 이름 가리기: 가운데 글자를 O로 (홍길동 -> 홍O동, 김철 -> 김O, 남궁민수 -> 남OO수) */
+function maskName(n){
+  n = String(n || "").replace(/\s+/g, "");
+  if (n.length <= 1) return n;
+  if (n.length === 2) return n.charAt(0) + "O";
+  var mid = ""; for (var i = 1; i < n.length - 1; i++) mid += "O";
+  return n.charAt(0) + mid + n.charAt(n.length - 1);
+}
+function manWon(v){ /* 640,000 -> 64만 / 1,250,000 -> 125만 / 8,000 -> 0.8만 */
+  v = Number(v) || 0;
+  var m = v / 10000;
+  return (m >= 10 ? Math.round(m) : Math.round(m * 10) / 10) + "만";
+}
+function admIncomeText(){
+  var d = ADMST.data;
+  var ym = d.ym || "";
+  var mon = parseInt(ym.slice(5, 7), 10) || "";
+  var rows = [];
+  for (var i = 0; i < d.partners.length; i++){
+    var p = d.partners[i];
+    var pay = (p.stat && p.stat.monthPay) || 0;
+    if (pay > 0) rows.push({ name: p.name, fp: p.fpName, pay: pay });
+  }
+  rows.sort(function(a, b){ return b.pay - a.pay; });
+  var out = "*파트너스 수익 현황(" + mon + "월)\n\n";
+  out += "                 파트너스 / 담당FP\n";
+  if (!rows.length) { out += "이번 달 확정된 지원금이 아직 없습니다."; return out; }
+  var total = 0;
+  for (var r = 0; r < rows.length; r++){
+    total += rows[r].pay;
+    out += (r + 1) + "위  " + maskName(rows[r].name) + "(" + manWon(rows[r].pay) + ") / " + maskName(rows[r].fp) + "\n";
+  }
+  out += "\n총 " + rows.length + "명 · " + manWon(total) + (kdateFull(d.settleAt) ? " · 정산 " + kdateFull(d.settleAt) : "");
+  return out;
+}
+function admShareIncome(mode){
+  var txt = admIncomeText();
+  if (mode === "copy" || !isMobile()) { copyText(txt, "수익 현황을 복사했습니다"); return; }
+  try {
+    window.Kakao.Share.sendDefault({ objectType: "text", text: txt, link: { mobileWebUrl: BASE + "index.html", webUrl: BASE + "index.html" } });
+  } catch(e){ copyText(txt, "수익 현황을 복사했습니다 — 카톡에 붙여넣어 주세요"); }
+}
+function admResetPw(pid, name, loginId){
+  uiConfirm(name + "님의 비밀번호를 초기화할까요?\n초기화 후 비밀번호는 아이디(" + (loginId || "U+뒷4자리") + ")와 같습니다.", function(){
+    api({ action:"resetPartnerPw", authId:SESS.id, authPw:SESS.pw, pid:pid }, function(j){
+      if (!j.ok){ uiAlert(j.msg || "초기화하지 못했습니다."); return; }
+      uiAlert(name + "님 비밀번호를 초기화했습니다.\n\n아이디: " + j.loginId + "\n초기 비밀번호: " + j.initPw + "\n\n로그인 후 비밀번호 변경을 안내해 주세요.", "초기화 완료", "🔑");
+    }, "초기화 중...");
+  }, { icon:"🔑", title:"비밀번호 초기화", ok:"초기화" });
 }
 function renderAdmNotices(){
   var n = ADMST.notices || [];
