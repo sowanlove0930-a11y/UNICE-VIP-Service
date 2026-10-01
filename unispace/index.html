@@ -1900,6 +1900,10 @@ body.theme-light .awl-wrap { background:#fff; }
 .awm-trkh .k.g { background:#B5820B; }
 .awm-trkh .k.n { background:#8B8574; }
 .awm-trkbox.n { border-color:#D8D0BC; background:#FBF9F3; }
+.awm-trkbox.h { border-color:#C9B16A; background:#FFF9E6; }
+.awm-hold { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.awm-hold span { background:#fff; border:1px solid #E6D9A8; color:#5A4A12; border-radius:100px; padding:5px 11px; font-size:12.5px; font-weight:700; }
+.awm-hold span.b { border-color:#D8CDEF; color:#4B3A8A; }
 .awm-arow { flex-wrap:nowrap; gap:9px; }
 .awm-arow.done { border-color:#BFE3D2; }
 .awm-amain { flex:1; min-width:0; }
@@ -7459,6 +7463,8 @@ function _awlTier(cls, key, amtTxt, sub, icon, name, extra, cond, cnt) {
     '</div></div>';
 }
 
+// 스탠다드FP 자격월 표기: 고정 2개월 주기 (10~11월 실적 -> "12·1월"). 서버가 qualLabel 을 주면 그걸 쓴다
+function _awlQual(d){ return (d && d.qualLabel) ? d.qualLabel : (_awlMon(d && d.qualYm) + '월'); }
 function _renderAwardLadder(d) {
   var host = document.getElementById('awardLadder');
   if (!host) return;
@@ -7466,7 +7472,7 @@ function _renderAwardLadder(d) {
   var qn = _awlMon(d.qualYm);
   var pn = _awlMon(d.prevYm);
 
-  var stdBadge = '<span class="awl-next">' + qn + '월 자격</span>';
+  var stdBadge = '<span class="awl-next">' + _awlQual(d) + ' 자격</span>';
   var stdCond, stdSub;
   if (d.bOpen) {
     stdSub = 'or 100';
@@ -7482,10 +7488,11 @@ function _renderAwardLadder(d) {
   h += '<div class="awl-axis">';
   h += _awlTier('awl-t3', 'uni', '100', '', '🦄', '유니콘즈클럽', '', '보장월초 100만 이상', d.unicorns.count);
   h += _awlTier('awl-t2', 'holi', '70', '', '✈️', '워킹홀리데이', '', '보장월초 70만 이상', d.holiday.count);
-  var stdExtra = stdBadge + '<span class="awl-plus">출결 ' + d.attFloorA + '%</span>';
+  var stdExtra = stdBadge + '<span class="awl-plus">출결 ' + d.attFloorA + '%</span>'
+    + ((d.holders && d.holders.list) ? '<span class="awl-plus" style="background:#FFF3C4;color:#6B5200">현재 ' + d.holders.label + ' 자격 ' + d.holders.count + '명</span>' : '');
   h += _awlTier('awl-t1', 'std', '50', stdSub, '🎖️', '스탠다드FP', stdExtra, stdCond, d.standard.count);
   h += '</div>';
-  h += '<div class="awl-hint">' + mn + '월 실적 기준 · 스탠다드FP만 <b>' + qn + '월 자격</b></div>';
+  h += '<div class="awl-hint">' + (d.bOpen ? pn + '~' : '') + mn + '월 실적 기준 · 스탠다드FP만 <b>' + _awlQual(d) + ' 자격</b></div>';
   h += '</div>';
   host.innerHTML = h;
 }
@@ -7527,7 +7534,7 @@ function _awmPaint() {
   if (key === 'uni') { ic = '🦄'; title = '유니콘즈클럽'; sub = mn + '월 · 보장월초 100만 이상'; }
   else if (key === 'holi') { ic = '✈️'; title = '워킹홀리데이'; sub = mn + '월 · 보장월초 70만 이상'; }
   else {
-    ic = '🎖️'; title = '스탠다드FP · ' + qn + '월 자격';
+    ic = '🎖️'; title = '스탠다드FP · ' + _awlQual(d) + ' 자격';
     sub = d.bOpen
       ? (mn + '월 50만↑ 출결 ' + d.attFloorA + '%↑  또는  ' + _awlMon(d.prevYm) + '~' + mn + '월 합산 100만↑ 출결 ' + d.attFloorB + '%↑')
       : (mn + '월 50만↑ · 출결 ' + d.attFloorA + '%↑');
@@ -7638,7 +7645,7 @@ function _awmList(key) {
   if (!d.bOpen) {
     // first program month: the grace list IS next month's track-B cohort,
     // so show them inside one blue B card instead of two separate blocks.
-    var _nx = _awlMon(d.qualYm);
+    var _nx = _awlMon((d.cycle && d.cycle.m2) ? d.cycle.m2 : d.qualYm);
     var _nfB = (d.nextFloorB !== undefined && d.nextFloorB !== null) ? d.nextFloorB : 75;
     var _bJoin = {
       count: s.grace.alpha.length + s.grace.bravo.length,
@@ -7728,6 +7735,22 @@ function _awmAllHtml(d) {
     + '<button type="button" class="awm-brtab b' + (_awlBr === 'bravo' ? ' on' : '') + '" onclick="_awmSetBr(\'bravo\')">브라보</button>'
     + '<button type="button" class="awm-share" onclick="_awmShareStd()">💬 카톡 공유</button>'
     + '</div>';
+  // 현재 자격자: 직전 주기 달성자 = 이번 두 달 동안의 스탠다드FP (서버 holders)
+  if (d.holders && d.holders.list) {
+    var hl = d.holders.list.filter(function(x){ var isA = String(x.branch).indexOf('알파') >= 0; return _awlBr === 'all' || (_awlBr === 'alpha' ? isA : !isA); });
+    var hb = _awlMon(d.holders.basis && d.holders.basis.m1) + '~' + _awlMon(d.holders.basis && d.holders.basis.m2);
+    h += '<div class="awm-trkbox h">'
+      + '<div class="awm-trkh"><span class="k a" style="background:#C9A227">🎖️</span><span class="t">현재 스탠다드FP · ' + d.holders.label + '</span>'
+      + '<span class="sub">' + hb + '월 실적으로 확정</span>'
+      + '<span class="cnt">' + hl.length + '명</span></div>';
+    if (!hl.length) h += '<div class="awm-empty">해당자가 없습니다</div>';
+    else {
+      h += '<div class="awm-hold">';
+      for (var hi = 0; hi < hl.length; hi++) h += '<span class="' + (String(hl[hi].branch).indexOf('알파') >= 0 ? 'a' : 'b') + '">' + hl[hi].name + '</span>';
+      h += '</div>';
+    }
+    h += '</div>';
+  }
   h += '<div class="awm-trkbox a">'
     + '<div class="awm-trkh"><span class="k a">✓</span><span class="t">달성</span>'
     + '<span class="sub">' + (showA ? '알파 ' + okA.length : '') + (showA && showB ? ' · ' : '') + (showB ? '브라보 ' + okB.length : '') + '</span>'
@@ -7754,7 +7777,13 @@ function _awmStdShareText(d) {
   ok.sort(_byName); no.sort(_byName);
   var brTxt = _awlBr === 'alpha' ? ' (알파지점)' : (_awlBr === 'bravo' ? ' (브라보지점)' : '');
   var out = '*스탠다드FP 달성현황' + brTxt + '\n';
-  out += qn + '월 자격 · ' + (d.bOpen ? pn + '~' : '') + mn + '월 실적 기준\n\n';
+  out += _awlQual(d) + ' 자격 · ' + (d.bOpen ? pn + '~' : '') + mn + '월 실적 기준\n\n';
+  if (d.holders && d.holders.list) {
+    var hs = d.holders.list.filter(function(x){ var isA = String(x.branch).indexOf('알파') >= 0; return _awlBr === 'all' || (_awlBr === 'alpha' ? isA : !isA); }).slice().sort(_byName);
+    out += '[현재 스탠다드FP · ' + d.holders.label + '] ' + hs.length + '명\n';
+    out += hs.length ? (hs.map(function(x){ return x.name + '(' + _perfBrAbbr(x.branch) + ')'; }).join(', ') + '\n') : '- 없음\n';
+    out += '\n';
+  }
   out += '[달성] ' + ok.length + '명\n';
   if (!ok.length) out += '- 없음\n';
   for (var i = 0; i < ok.length; i++) {
@@ -7825,7 +7854,7 @@ function _awmProgPaint(p) {
   }
 
   h += '<div class="awm-who">' + _awlEsc(p.name) + (p.branch ? ' · ' + _awlEsc(p.branch) : '')
-     + '<span class="q">' + qn + '월 자격 판정</span></div>';
+     + '<span class="q">' + _awlQual(p) + ' 자격 판정</span></div>';
 
   var A = p.A;
   h += '<div class="awm-trk a"><div class="awm-trk-h"><span class="k a">A</span>'
@@ -7835,7 +7864,7 @@ function _awmProgPaint(p) {
     + '<div class="awm-trk-b">';
   if (A.blocked) {
     h += '<div class="awm-block">' + pn + '월 유예 대상자는 <b>2개월 합산(B)으로만</b> 판정합니다. '
-      + pn + '~' + mn + '월 합계 100만 원을 채워야 ' + qn + '월 자격이 인정됩니다.</div>';
+      + pn + '~' + mn + '월 합계 100만 원을 채워야 ' + _awlQual(p) + ' 자격이 인정됩니다.</div>';
   } else {
     h += _awmGauge(mn + '월 보장월초', _manTxt(A.amount), '50', '만',
           Math.min(100, Math.round(A.amount / 500000 * 100)),
@@ -7881,8 +7910,9 @@ function _awmProgPaint(p) {
       }
     }
     h += '</div></div>';
-  } else if (d.graceOn) {
-    h += '<div class="awm-ex" style="margin-top:10px">' + mn + '~' + qn + '월 진행현황은 ' + qn + '월 오픈 예정입니다.</div>';
+  } else if (!d.bOpen) {
+    var _m2 = _awlMon((d.cycle && d.cycle.m2) ? d.cycle.m2 : d.qualYm);
+    h += '<div class="awm-ex" style="margin-top:10px">' + mn + '~' + _m2 + '월 합산 진행현황은 ' + _m2 + '월에 열립니다. 이번 달은 ' + mn + '월 50만↑ 단독 달성만 집계합니다.</div>';
   }
 
   document.getElementById('awmBody').innerHTML = h;
@@ -24329,7 +24359,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 105;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 107;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
