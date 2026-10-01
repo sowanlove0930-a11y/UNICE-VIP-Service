@@ -4759,6 +4759,59 @@ var currentUser = null;
 
 // UNISPACE GAS endpoint (auth / roster / password)
 var UNISPACE_GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
+// ── 저장공간 보호 (2026-10-01) ─────────────────────────────
+// 아이폰 사파리는 localStorage 가 약 5MB 뿐이다. 활동기록·업적·고객이 쌓이면 setItem 이
+// QuotaExceededError 를 던지고, 그걸 조용히 삼키던 코드 때문에 "남의 활동이 안 보임 /
+// 계획 입력 안 됨" 처럼 보였다. 큰 키는 이 헬퍼로만 저장: 실패하면 오래된 것부터 비우고 재시도.
+function _lsSize(){
+  var tot = 0, by = [];
+  try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); var v = localStorage.getItem(k) || ''; var b = (k.length + v.length) * 2; tot += b; by.push({ k:k, b:b }); } } catch(e) {}
+  by.sort(function(a, b){ return b.b - a.b; });
+  return { total: tot, top: by.slice(0, 6) };
+}
+function _lsTrim(level){
+  // level 1: 캐시성 키 제거 / level 2: 활동기록 8주·업적 4개월만 남김
+  var removed = 0;
+  try {
+    var keys = []; for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+    keys.forEach(function(k){
+      if (/^(unispace_award_|unispace_dashbundle_|unispace_st2cache|unispace_pta_last|unispace_ptl_last)/.test(k)) { localStorage.removeItem(k); removed++; }
+    });
+    if (level >= 2) {
+      var cut = new Date(); cut.setDate(cut.getDate() - 56);
+      var cutS = cut.getFullYear() + '-' + ('0' + (cut.getMonth() + 1)).slice(-2) + '-' + ('0' + cut.getDate()).slice(-2);
+      var acts = JSON.parse(localStorage.getItem('unispace_activities') || '{}'), kept = {};
+      for (var id in acts) { if (!acts.hasOwnProperty(id)) continue; var a = acts[id]; if (!a || !a.date || String(a.date) >= cutS) kept[id] = a; else removed++; }
+      localStorage.setItem('unispace_activities', JSON.stringify(kept));
+      var pc = new Date(); pc = new Date(pc.getFullYear(), pc.getMonth() - 3, 1);
+      var pcS = pc.getFullYear() + '-' + ('0' + (pc.getMonth() + 1)).slice(-2) + '-01';
+      var log = JSON.parse(localStorage.getItem('unispace_perf_log') || '[]');
+      var log2 = log.filter(function(r){ return !r || String(r.date || '') >= pcS; });
+      removed += (log.length - log2.length);
+      localStorage.setItem('unispace_perf_log', JSON.stringify(log2));
+    }
+  } catch(e) {}
+  return removed;
+}
+function _lsSet(key, str){
+  try { localStorage.setItem(key, str); return true; }
+  catch(e1) {
+    _lsTrim(1);
+    try { localStorage.setItem(key, str); return true; }
+    catch(e2) {
+      _lsTrim(2);
+      try { localStorage.setItem(key, str); return true; }
+      catch(e3) {
+        try { console.warn('[UNISPACE] 저장공간 부족:', key, e3); } catch(ce) {}
+        if (!window._lsFullToastAt || Date.now() - window._lsFullToastAt > 60000) {
+          window._lsFullToastAt = Date.now();
+          try { showToast('⚠️ 폰 저장공간 부족 — 설정 메뉴 → 알림 진단에서 "저장공간 정리"를 눌러 주세요'); } catch(te) {}
+        }
+        return false;
+      }
+    }
+  }
+}
 // ── GAS 호출 합치기 (2026-09-23) ─────────────────────────────
 // 대시보드가 한 번 뜰 때 같은 GAS GET 이 여러 번 나갔다 (getAwardStatus 5회, getPlans 5회 …
 // → 한 사람이 열 때마다 약 30건). 구글은 같은 스크립트로 몰리는 요청을 줄 세우므로
@@ -5166,7 +5219,7 @@ function _mergePlansToActivities(plans, planKeyFilter){
       db[act.id]=act;
     });
   });
-  localStorage.setItem('unispace_activities', JSON.stringify(db));
+  _lsSet('unispace_activities', JSON.stringify(db));
 }
 // load plans from GAS -> merge to activities -> callback. null weekKey = all
 var _loadedPlanKeys = {};
@@ -5237,7 +5290,7 @@ function loadActivitiesFromGas(cb){
       res.activities.forEach(function(a){
         if(a && a.id) db[a.id]=a;
       });
-      localStorage.setItem('unispace_activities', JSON.stringify(db));
+      _lsSet('unispace_activities', JSON.stringify(db));
       _actLoadedFromGas = true;
     }
     if(cb) cb();
@@ -6265,7 +6318,7 @@ function showDashboard() {
       var _admCustUrl = UNISPACE_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(currentUser.id);
       fetch(_admCustUrl).then(function(r){return r.json();}).then(function(res){
         if(res && res.ok && res.customers){
-          try { localStorage.setItem('unispace_customers', JSON.stringify(_mergeCustContactLog(res.customers))); } catch(e) {}
+          _lsSet('unispace_customers', JSON.stringify(_mergeCustContactLog(res.customers)));
           var _a3 = document.getElementById('st3-alarm');
           if(_a3 && typeof calcTodayCount==='function') _a3.textContent = calcTodayCount();
         }
@@ -6334,7 +6387,7 @@ function showDashboard() {
       var custUrl = UNISPACE_GAS_URL + '?action=getCustomers&fp=' + encodeURIComponent(currentUser.id);
       fetch(custUrl).then(function(r){return r.json();}).then(function(res){
         if(res && res.ok && res.customers){
-          try { localStorage.setItem('unispace_customers', JSON.stringify(_mergeCustContactLog(res.customers))); } catch(e) {}
+          _lsSet('unispace_customers', JSON.stringify(_mergeCustContactLog(res.customers)));
           if(st2) st2.textContent = _countMyCust(res.customers);
           var st4ref = document.getElementById('st4');
           if(st4ref && typeof calcTodayCount==='function') st4ref.textContent = calcTodayCount();
@@ -8853,7 +8906,7 @@ function _perfRecentSavedGet(){ try{ return JSON.parse(localStorage.getItem(PERF
 function _perfRecentSavedSet(o){ try{ localStorage.setItem(PERF_RECENT_SAVED_KEY, JSON.stringify(o)); }catch(e){} }
 function _perfRecentSavedAdd(rec){ if(!rec || !rec.id) return; var o=_perfRecentSavedGet(); o[rec.id]={rec:rec, at:Date.now()}; _perfRecentSavedSet(o); }
 function _perfRecentSavedDel(id){ var o=_perfRecentSavedGet(); if(o[id]){ delete o[id]; _perfRecentSavedSet(o); } }
-function savePerfLog(arr){ localStorage.setItem(PERF_LOG_KEY, JSON.stringify(arr)); }
+function savePerfLog(arr){ _lsSet(PERF_LOG_KEY, JSON.stringify(arr)); }
 // 로그에서 FP별 누계 재계산 → 기존 perfData 형식으로 동기화 (TOP10 등 호환)
 function rebuildPerfData(){
   var log=getPerfLog();
@@ -16467,7 +16520,7 @@ function doTransfer() {
     DB.forEach(function(c) {
       if (selected.indexOf(c.id) >= 0) c.fp = toFp.name;
     });
-    localStorage.setItem('unispace_customers', JSON.stringify(DB));
+    _lsSet('unispace_customers', JSON.stringify(DB));
 
     // 성공 모달 — 이관 모달은 그대로 유지
     var successDesc = document.getElementById('transferSuccessDesc');
@@ -21076,7 +21129,7 @@ function saveActEdit(){
         db[me.parentId]=par;
       }
     }
-    localStorage.setItem('unispace_activities', JSON.stringify(db));
+    _lsSet('unispace_activities', JSON.stringify(db));
     syncActivityToGas(db[_currentActId]);
     if(db[_currentActId] && db[_currentActId].parentId && db[db[_currentActId].parentId]) syncActivityToGas(db[db[_currentActId].parentId]);
     closeActPopup(); renderActView(); if(actViewMode=="month"&&selectedDayStr) renderDayPanel(selectedDayStr);
@@ -21117,7 +21170,7 @@ function _deleteRecruitActChoice(actId, act){
   function _removeActLocal(){
     var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
     delete db[actId];
-    localStorage.setItem('unispace_activities',JSON.stringify(db));
+    _lsSet('unispace_activities', JSON.stringify(db));
     deleteActFromGas(actId);
   }
   document.getElementById('_rcDelEvtOnly').addEventListener('click', function(){
@@ -21167,7 +21220,7 @@ function deleteActFromPopup(){
     if(!ok) return;
     var db2={};try{db2=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
     delete db2[_delId];
-    localStorage.setItem('unispace_activities',JSON.stringify(db2));
+    _lsSet('unispace_activities', JSON.stringify(db2));
     deleteActFromGas(_delId);   // GAS 활동기록에서도 삭제
     // also delete from GAS plan so it does not come back on refresh
     if(_delAct.planKey && _delAct.fpId){
@@ -21697,7 +21750,7 @@ function saveActResult(){
   _finishSaveResult(db, '');
 }
 function _finishSaveResult(db, createdMsg){
-  localStorage.setItem('unispace_activities',JSON.stringify(db));
+  _lsSet('unispace_activities', JSON.stringify(db));
   // GAS 동기화: 현재 활동 + 부모 + 다음차수(자식)
   try{
     if(db[_currentActId]){
@@ -22321,7 +22374,7 @@ function saveQuickAdd() {
       parentId:'',
       createdAt: new Date().toISOString()
     };
-    localStorage.setItem('unispace_activities', JSON.stringify(db));
+    _lsSet('unispace_activities', JSON.stringify(db));
     syncActivityToGas(db[id]);
     closeQuickAdd();
     if(_qaMode==='visited'){
@@ -22390,7 +22443,7 @@ function openNearbyFromPopup() {
       if(gla && gln){
         la=gla; ln=gln;
         if(db[_currentActId]){ db[_currentActId].lat=gla; db[_currentActId].lng=gln;
-          try{ localStorage.setItem('unispace_activities', JSON.stringify(db)); }catch(e){} }
+          try{ _lsSet('unispace_activities', JSON.stringify(db)); }catch(e){} }
       } else {
         showToast('⚠️ 주소를 좌표로 변환하지 못했습니다');
       }
@@ -22559,7 +22612,7 @@ function openDayRoute(fpId, fpName, dateStr) {
       }
       done++;
       if(done===needGeo.length){
-        try{ localStorage.setItem('unispace_activities', JSON.stringify(db)); }catch(e){}
+        try{ _lsSet('unispace_activities', JSON.stringify(db)); }catch(e){}
         buildAndGo();
       }
     });
@@ -24359,7 +24412,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 107;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 108;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -24696,6 +24749,25 @@ function _gasDiagRun(){
       out.innerHTML += extra;
     });
 }
+// 저장공간 진단: 아이폰(약 5MB 한도)에서 "활동이 안 보임" 의 흔한 원인
+function _lsDiagRender(){
+  var el = document.getElementById('lsDiagOut'); if(!el) return;
+  var sz = _lsSize();
+  var mb = (sz.total / 1048576).toFixed(2);
+  var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  var warn = (isIOS && sz.total > 3.5 * 1048576) || sz.total > 8 * 1048576;
+  var h = '<b>💾 폰 저장공간(앱 데이터)</b> ' + mb + 'MB' + (isIOS ? ' / 아이폰 한도 약 5MB' : '') + (warn ? ' <span style="color:#B45309;font-weight:700">⚠️ 한도 근접 — 정리 권장</span>' : ' 🟢');
+  h += '<div style="margin-top:4px;color:var(--text3)">' + sz.top.map(function(t){ return t.k.replace('unispace_','') + ' ' + (t.b/1024).toFixed(0) + 'KB'; }).join(' · ') + '</div>';
+  el.innerHTML = h;
+}
+function _lsDiagClean(){
+  var before = _lsSize().total;
+  var n = _lsTrim(2);
+  var after = _lsSize().total;
+  showToast('🧹 정리 완료 · ' + ((before - after) / 1024).toFixed(0) + 'KB 확보 (' + n + '건) — 서버에서 다시 받아옵니다');
+  _lsDiagRender();
+  setTimeout(function(){ if (typeof _dashForegroundRefresh === 'function') _dashForegroundRefresh(true); }, 500);
+}
 // ── 알림 진단 (대표 전용) ──
 function openPushDiag(){
   try { var um = document.getElementById('userMenu'); if(um) um.style.display = 'none'; } catch(e){}
@@ -24708,13 +24780,16 @@ function openPushDiag(){
     + '<div><b>내 기기</b> · 권한 <b>' + perm + '</b> · 앱 설정 <b>' + pref + '</b> · 토큰 ' + (myTok ? '…' + myTok.slice(-8) : '없음') + '</div>'
     + '<div id="pushDiagOut" style="margin-top:8px;color:var(--text3)">서버 확인 중…</div>'
     + '<div id="gasDiagOut" style="margin-top:8px;padding:8px 10px;border-radius:9px;background:var(--bg2);border:1px solid var(--border2);font-size:12px"><b>🌐 GAS 연결 진단</b> · 측정 중…</div>'
+    + '<div id="lsDiagOut" style="margin-top:8px;padding:8px 10px;border-radius:9px;background:var(--bg2);border:1px solid var(--border2);font-size:12px"></div>'
     + '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'
     + '<button type="button" onclick="_gasDiagRun()" style="padding:8px 12px;border-radius:9px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer">🌐 GAS 다시 측정</button>'
+    + '<button type="button" onclick="_lsDiagClean()" style="padding:8px 12px;border-radius:9px;border:1px solid #F59E0B;background:#FEF3C7;color:#92400E;font-size:12px;font-weight:700;cursor:pointer">🧹 저장공간 정리</button>'
     + '<button type="button" onclick="_pushDiagTest()" style="padding:8px 12px;border-radius:9px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer">🔔 내게 테스트 발송</button>'
     + '<button type="button" onclick="_syncPushToken();showToast(\'토큰 재동기화 요청\')" style="padding:8px 12px;border-radius:9px;border:1px solid var(--border2);background:var(--bg2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer">🔄 내 토큰 재저장</button>'
     + '</div></div>';
   showAppAlert(html, {icon:'🩺', title:'알림 진단'});
   setTimeout(_gasDiagRun, 50);
+  setTimeout(_lsDiagRender, 60);
   try {
     fetch(UNISPACE_GAS_URL + '?action=pushStatus&fp=' + encodeURIComponent(currentUser.id) + '&_t=' + Date.now())
       .then(function(r){ return r.json(); })
