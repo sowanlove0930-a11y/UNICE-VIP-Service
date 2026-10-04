@@ -69,7 +69,8 @@ canvas{display:block; width:100%; touch-action:none; user-select:none; -webkit-u
 .ctl.prac{background:#EAF5EC; border-radius:12px; margin:8px 12px 0}
 .ctl.real{background:#FDECE6; border-radius:12px; margin:8px 12px 0}
 .bigmode{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; pointer-events:none; z-index:25; opacity:0; transition:opacity .25s}
-.bigmode.on{opacity:1}
+.bigmode.on{opacity:1; pointer-events:auto}
+.bigmode .gb{margin-top:22px; border:0; background:#fff; color:var(--ink); font:inherit; font-weight:900; font-size:16px; padding:14px 26px; border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,.35); cursor:pointer; pointer-events:auto}
 .bigmode .t{font-family:'Black Han Sans',sans-serif; font-size:56px; color:#fff; text-shadow:0 8px 0 rgba(0,0,0,.35), 0 0 40px rgba(255,255,255,.6); animation:cpop 1.6s cubic-bezier(.2,1.4,.3,1) forwards}
 .bigmode .s{color:#fff; font-weight:800; font-size:15px; margin-top:8px; text-shadow:0 2px 6px rgba(0,0,0,.6)}
 .bigmode:before{content:''; position:absolute; inset:0; background:radial-gradient(circle, rgba(214,69,69,.7), rgba(20,27,51,.75))}
@@ -339,7 +340,7 @@ canvas{display:block; width:100%; touch-action:none; user-select:none; -webkit-u
   <div class="sub">연습 3발로 바람과 손맛을 확인한 뒤, 4발째부터 실전 세트가 시작됩니다.<br>10만 업적 = 활 5발 · 세트 40점↑ 캠핑의자 1개 · 48점↑ 2개</div>
   <div class="btns"><button class="go" id="introGo">연습 3발 쏘기 🏹</button></div>
 </div></div>
-<div class="bigmode" id="bigmode"><div class="t">실전 시작!</div><div class="s">지금부터 점수가 경품에 반영돼요</div></div>
+<div class="bigmode" id="bigmode"><div class="t">실전 시작!</div><div class="s">지금부터 점수가 경품에 반영돼요<br>바람을 확인하고 준비되면 시작하세요</div><button class="gb" id="gateBtn">🏹 준비됐어요 · 실전 시작</button></div>
 <audio id="bgm" loop preload="auto"><source src="bgm.mp3" type="audio/mpeg"></audio>
 
 <script>
@@ -465,6 +466,8 @@ function resetAim(){ aim.x=TC.x; aim.y=TC.y-TC.R*0.6; }
 
 /* ---------- drawing ---------- */
 function drawScene(now){
+  if(cv.clientWidth && cv.clientWidth!==W) resize();
+  ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.save();
   if(shake>0){ ctx.translate(rnd(-shake,shake), rnd(-shake,shake)); shake*=0.82; if(shake<.3) shake=0; }
   var g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#141B33'); g.addColorStop(.45,'#4A3562'); g.addColorStop(.72,'#C4553D'); g.addColorStop(1,'#F2A048');
@@ -581,11 +584,11 @@ function ptOf(e){ var t=(e.touches&&e.touches[0])||(e.changedTouches&&e.changedT
 function move(e){ if(!hold) return; e.preventDefault(); var q=ptOf(e); cur=q; if(aiming){ var sens=hot()?0.7:1; aim.x=ax0+(q.x-fx0)*sens; aim.y=ay0+(q.y-fy0)*sens; } else { pull=Math.max(0,q.y-fy0); } }
 function down(e){
   e.preventDefault();
-  if(busy||fly) return;
-  if(!S.practice && S.sending){ toast('이전 화살을 기록하는 중이에요 · 잠깐만요'); return; }
+  if(busy||fly||S.gate) return;
+  if(false){ toast('이전 화살을 기록하는 중이에요 · 잠깐만요'); return; }
   if(S.open){ if(!S.practice){ S.practice=true; } }
   else if(S.practice && S.pracLeft<=0){ endPractice(); if(S.arrows<=0){ toast('남은 활이 없어요 · 업적 10만 = 활 5발'); return; } }
-  if(!S.practice && S.arrows<=0){ toast('남은 활이 없어요 · 업적 10만 = 활 5발'); return; }
+  if(!S.practice && S.arrows<=0){ toast(S.perf>0?'남은 활이 없어요 · 업적 10만 = 활 5발':'10월 조기 업적이 아직 0원이에요 · 업적 입력 후 상단 이름을 눌러 새로고침'); return; }
   var q=ptOf(e); fx0=q.x; fy0=q.y; cur=q; ax0=aim.x; ay0=aim.y; pull=0; aiming=false;
   hold=true; holdT=Date.now(); $('hint').className='hint hide'; creakStart(); bgmStart();
 }
@@ -633,6 +636,7 @@ function finish(ring,score){
   busy=false; newWind();
   S.cur.push({ring:ring, score:score});
   var tot=0; for(var i=0;i<S.cur.length;i++) tot+=S.cur[i].score;
+  if(S.practice && !S.open && S.pracLeft<=0){ toast(score+'점 · 연습 끝! 실전 준비'); updateRes(); setTimeout(endPractice, 700); return; }
   if(S.cur.length<5){
     var need40=40-tot, left=5-S.cur.length;
     var t = need40<=0 ? '40점 확보! 🔥 돌풍 · 48점 도전' : (tot>=38 ? ('🔥 38점 · 돌풍 시작 · 40점까지 '+need40+'점') : ('남은 '+left+'발 · 40점까지 '+need40+'점'));
@@ -646,20 +650,20 @@ function finish(ring,score){
   var setRec={n:rn+1, shots:S.cur.slice(), tot:tot, kim:kim, prac:S.practice};
   S.sets.push(setRec); S.cur=[];
   var capped=false;
-  if(!S.practice){ var np=Math.min(10,S.points+kim); if(np<S.points+kim) capped=true; S.points=np; S.stuck=[]; setTimeout(loadState, 2500); }
+  if(!S.practice){ var np=Math.min(10,S.points+kim); if(np<S.points+kim) capped=true; S.points=np; S.stuck=[]; }
   var msg = kim===2?'세트 48점 돌파! 캠핑의자 2개':(kim===1?'세트 40점 달성 · 캠핑의자 1개':(tot>=35?'아깝다! 40점까지 '+(40-tot)+'점':'다음 세트는 바람을 먼저 읽어요'));
   var sub = S.open?'연습 기간 · 10/1(목) 18:00부터 실전 · 계속 연습해 보세요':(S.practice?'연습 세트라 경품은 반영되지 않아요 · 다음부터 실전':(capped?'인당 최대 10개 도달 · 이제부턴 명예 점수':(kim?('🪑 누적 캠핑의자 '+S.points+'개 · 남은 활 '+S.arrows+'발'):'남은 활 '+S.arrows+'발')));
   if(kim===2){ tone(880,'sine',.3,.25); setTimeout(function(){ tone(1175,'sine',.3,.25); },120); setTimeout(function(){ tone(1568,'sine',.5,.25); },240); }
   openSheet(tot, msg, sub, kim===2?10:(kim===1?8:(tot>=25?5:2)));
   if(tot>=48 && !S.practice) fireBigConfetti();
   updateRes(); renderLog();
-  if(S.practice && !S.open && S.pracLeft<=0){ setTimeout(endPractice, 400); }
 }
 function applyMode(){ var m=S.open?'open':(S.practice?'prac':'real'); $('gwrap').className='gwrap '+m; $('modebar').className='modebar '+m; $('ctl').className='ctl '+m;
   $('pracBtn').style.display=S.open?'none':'';
   if(S.open){ $('mbL').textContent='🎯 연습 기간 · 무제한'; $('mbR').textContent='10/1(목) 18:00 실전 시작 · '+fmtLeft()+' 남음'; }
   else if(S.practice){ $('mbL').textContent='🎯 연습 사격'; $('mbR').textContent='경품 반영 안 됨 · 연습 '+S.pracLeft+'발 남음'; } else { $('mbL').textContent='🔥 실전 사격'; $('mbR').textContent='경품 반영 · 남은 활 '+S.arrows+'발'; } }
-function showReal(){ var b=$('bigmode'); b.className='bigmode on'; tone(392,'triangle',.2,.25); setTimeout(function(){ tone(523,'triangle',.2,.25); },120); setTimeout(function(){ tone(784,'triangle',.5,.3); },240); if(navigator.vibrate) navigator.vibrate([60,40,60]); setTimeout(function(){ b.className='bigmode'; },1700); }
+function showReal(){ S.gate=true; var b=$('bigmode'); b.className='bigmode on'; tone(392,'triangle',.2,.25); setTimeout(function(){ tone(523,'triangle',.2,.25); },120); setTimeout(function(){ tone(784,'triangle',.5,.3); },240); if(navigator.vibrate) navigator.vibrate([60,40,60]); }
+$('gateBtn').addEventListener('click',function(){ S.gate=false; $('bigmode').className='bigmode'; $('hint').className='hint'; newWind(); });
 function endPractice(){ if(!S.practice) return; S.practice=false; showReal(); if(STATE) applyState(STATE); else loadState(); S.cur=[]; S.stuck=[]; $('pracBtn').className='tg'; $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; updateRes(); }
 
 /* ---------- ui ---------- */
@@ -718,10 +722,11 @@ if(IS_KAKAO_INAPP) $('extBtn').style.display='block';
 $('extBtn').addEventListener('click',function(){ location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(ARCH_URL+'?go=archery'); });
 function startApp(){ loadState(); if(pollTimer) clearInterval(pollTimer); pollTimer=setInterval(function(){ if(document.visibilityState==='visible') loadState(); }, POLL_MS); document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible' && Date.now()-_lastLoadAt>60000) loadState(); }); }
 function loadState(){ _lastLoadAt=Date.now(); if(!ME) return;
-  gasGet(GAS_URL+'?action=archState&fp='+encodeURIComponent(ME.id)).then(function(d){ if(!d||!d.ok) return; STATE=d; applyState(d); }).catch(function(){}); }
+  gasGet(GAS_URL+'?action=archState&fp='+encodeURIComponent(ME.id)).then(function(d){ if(!d||!d.ok){ toast('업적 불러오기 실패: '+((d&&d.msg)||'응답 없음')+' · 잠시 후 재시도'); setTimeout(loadState, 15000); return; } STATE=d; S.loadErr=0; applyState(d); }).catch(function(){ toast('서버 연결이 느려요 · 잠시 후 다시 불러옵니다'); setTimeout(loadState, 15000); }); }
 function applyState(d){ var m=d.me||{};
-  if(!S.open && !S.practice && !busy && !fly){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; S.perf=m.perf||0; S.bonus=m.bonus||0; S.sets=m.sets||[]; S.cur=m.cur||[]; }
-  else { S.perf=m.perf||0; S.bonus=m.bonus||0; if(!S.practice){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; } }
+  var pending = Q.length>0 || qBusy;
+  if(!S.open && !S.practice && !busy && !fly && !pending){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; S.perf=m.perf||0; S.bonus=m.bonus||0; S.sets=m.sets||[]; S.cur=m.cur||[]; }
+  else { S.perf=m.perf||0; S.bonus=m.bonus||0; if(!S.practice && !pending){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; } }
   $('whoPerf').textContent=Math.round((m.perf||0)/10000)+'만'; $('whoArrows').textContent=m.arrowsTotal||0; $('whoBonus').textContent= m.bonus?('(지점 보너스 +'+m.bonus+'발 포함)'):'';
   renderGoals(d.branches||[]); $('asof').textContent=(d.asOf||'')+' 기준 · 3분마다 갱신';
   var wasOpen=S.open; var nowOpen=openPeriod(); if(S.open!==nowOpen){ if(nowOpen){ S.open=true; S.practice=true; } else { startRealPhase(); if(wasOpen) showReal(); } }
@@ -729,16 +734,21 @@ function applyState(d){ var m=d.me||{};
 function renderGoals(brs){ var h=''; for(var i=0;i<brs.length;i++){ var b=brs[i]; var pct=b.goal?Math.min(100,Math.round(b.total/b.goal*100)):0; var left=Math.max(0,(b.goal||0)-(b.total||0)); var cls=b.name==='알파'?'a':'b'; var em=b.name==='알파'?'🟢':'🟣';
   h+='<div class="goal '+cls+(b.done?' done':'')+'"><div class="row"><b>'+em+' '+b.name+'지점</b><span class="pct">'+(b.done?'달성!':pct+'%')+'</span></div><div class="bar"><i style="width:'+pct+'%"></i></div><div class="row sm"><span>'+Math.round(b.total/10000)+'만 달성</span><span>'+(b.done?'🎉 목표 달성 · 기여 FP 전원 활 +5':'목표 '+Math.round(b.goal/10000)+'만 · <b>'+Math.round(left/10000)+'만</b> 남음')+'</span></div></div>'; }
   $('goalList').innerHTML=h||'<div class="note">지점 현황을 불러오는 중…</div>'; }
-function sendShot(dx,dy,ring,score){ if(!ME||DEMO) return; S.sending=true;
-  gasGet(GAS_URL+'?action=archShoot&fp='+encodeURIComponent(ME.id)+'&dx='+dx.toFixed(3)+'&dy='+dy.toFixed(3)+'&cs='+(ring===15?15:ring), 25000).then(function(d){ S.sending=false;
-    if(!d||!d.ok){ toast((d&&d.msg)||'서버 저장 실패 · 이 발은 무효예요'); loadState(); return; }
-    if(d.me){ STATE.me=d.me; if(!busy && !fly) applyState(STATE); } if(d.branches){ STATE.branches=d.branches; renderGoals(d.branches); }
-  }).catch(function(){ S.sending=false; toast('통신이 느려요 · 잠시 후 자동으로 맞춰집니다'); setTimeout(loadState, 4000); }); }
+var Q=[], qBusy=false, qSeq=0;
+function sendShot(dx,dy,ring,score){ if(!ME||DEMO) return; Q.push({dx:dx,dy:dy,sid:Date.now()+'_'+(++qSeq),tries:0}); pumpQ(); }
+function pumpQ(){ if(qBusy||!Q.length) return; qBusy=true; S.sending=true; var it=Q[0];
+  gasGet(GAS_URL+'?action=archShoot&fp='+encodeURIComponent(ME.id)+'&dx='+it.dx.toFixed(3)+'&dy='+it.dy.toFixed(3)+'&sid='+it.sid, 25000).then(function(d){
+    if(d && d.ok){ Q.shift(); if(d.me) STATE.me=d.me; if(d.branches){ STATE.branches=d.branches; renderGoals(d.branches); } }
+    else if(d && d.msg && /너무 빨라/.test(d.msg)){ /* retry same shot after gap */ }
+    else { Q.shift(); toast((d&&d.msg)||'서버 저장 실패 · 이 발은 무효예요'); }
+    qBusy=false; S.sending=Q.length>0; if(Q.length) setTimeout(pumpQ, 1250); else { setTimeout(function(){ if(!busy&&!fly) loadState(); }, 800); }
+  }).catch(function(){ it.tries++; if(it.tries>=4){ Q.shift(); toast('통신 실패 · 한 발이 기록되지 않았어요'); } qBusy=false; S.sending=Q.length>0; if(Q.length) setTimeout(pumpQ, 2500); else setTimeout(loadState, 1500); }); }
 function startRealPhase(){ S.open=false; var pl=3; try{ if(ME){ var v=localStorage.getItem('arch_prac_'+ME.id); if(v!==null) pl=parseInt(v,10)||0; } }catch(e){} S.pracLeft=pl; S.practice= pl>0; if(pl<=0){ $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; $('pracBtn').className='tg'; } S.cur=[]; S.stuck=[]; if(pl>0){ $('pracBtn').disabled=false; $('pracBtn').className='tg on'; } updateRes(); if(pl>0 && !S.introShown){ S.introShown=true; $('introSheet').className='sheet on'; } }
 function initPhase(){ if(openPeriod()){ S.open=true; S.practice=true; updateRes(); } else { startRealPhase(); }
   if(DEMO){ $('demoWrap').style.display=''; }
   var fp=savedFp(); if(fp) login(fp); else if(!openPeriod()) $('login').style.display='flex'; else $('login').style.display='none'; }
 setInterval(function(){ if(S.open && !openPeriod()){ startRealPhase(); showReal(); } else if(S.open) applyMode(); }, 30000);
+$('whoLine').addEventListener('click',function(){ toast('업적 다시 불러오는 중…'); loadState(); });
 $('introGo').addEventListener('click',function(){ $('introSheet').className='sheet'; $('hint').className='hint'; });
 
 /* ---------- chooser ---------- */
