@@ -1302,7 +1302,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 14; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 15; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2937,6 +2937,12 @@ function loadFpListFromGas(cb){
 }
 function getFpList(){
   if(_fpListCache && _fpListCache.length) return _fpListCache;
+  // 2026-10-05: 서버 명단이 아직 안 왔을 때는 유니스페이스가 저장해 둔 최신 명단(계정관리 반영본)을 쓴다.
+  // 파일에 박힌 내장 명단은 퇴사자가 섞여 있어 "삭제한 인원이 순간 보이는" 원인이었다 — 최후 수단으로만.
+  try {
+    var ls = JSON.parse(localStorage.getItem('unispace_fp_roster') || '[]');
+    if(ls && ls.length) return ls.filter(function(f){ return f && f.id && f.active !== false; });
+  } catch(e){}
   return _getFpListFallback();
 }
 // active roster id set: hide records of deleted/deactivated FPs everywhere.
