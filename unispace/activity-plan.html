@@ -660,7 +660,10 @@ function effectiveWeekInfo(){
       weekNo:parseInt(_periodSetting.week)||Math.ceil(mon.getDate()/7),
       deadline:deadline,
       deadlineTime:_periodSetting.deadlineTime||'12:00',
-      key:mon.getFullYear()+'-'+_pad2(parseInt(_periodSetting.month)||(mon.getMonth()+1))+'-W'+(parseInt(_periodSetting.week)||Math.ceil(mon.getDate()/7)),
+      // 2026-10-05: 키는 입력한 "월/주차" 라벨이 아니라 시작일로 만든다.
+      // 라벨로 만들면 지난주(9/28~)와 이번주(10/6~)를 둘 다 "10월 1주차"라 부르는 순간 같은 키가 되어
+      // 지난주 제출이 이번주 현황에 올라온다. 시작일 기준 키는 주마다 반드시 다르다.
+      key:mon.getFullYear()+'-'+_pad2(mon.getMonth()+1)+'-W'+Math.ceil(mon.getDate()/7),
       custom:true
     };
   }
@@ -2096,7 +2099,7 @@ document.addEventListener('visibilitychange', function(){
   try{ loadExisting(); }catch(e){}
 });
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 79; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 80; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -3049,7 +3052,8 @@ function _renderStatusWeek(){
   _statusWi = wi;
   document.getElementById('stTitle').textContent='유니스지사 '+wi.month+'월 '+wi.weekNo+'주차 제출 현황';
   var dl=wi.deadline;
-  var warn='제출마감 '+_pad2(dl.getMonth()+1)+'/'+_pad2(dl.getDate())+'(월) 12:00';
+  var _dows=['일','월','화','수','목','금','토'];
+  var warn='제출마감 '+_pad2(dl.getMonth()+1)+'/'+_pad2(dl.getDate())+'('+_dows[dl.getDay()]+') '+(wi.deadlineTime||'12:00');
   if(statusWeekOffset < 0) warn += '  ·  지난 주차 (조회)';
   document.getElementById('stWarn').textContent=warn;
   _stSyncNote('');
