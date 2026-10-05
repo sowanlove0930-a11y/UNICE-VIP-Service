@@ -350,13 +350,28 @@ textarea.prm-input{resize:vertical;}
 .ov-wait { font-size:11px; font-weight:700; color:#B45309; background:#FEF3C7; border:1px solid #F6D58A; border-radius:8px; padding:4px 8px; display:inline-block; white-space:nowrap; }
 .ov-rej { font-size:11px; font-weight:700; color:#C0392B; display:inline-block; white-space:nowrap; }
 .ov-panel { margin:0 0 14px; border:1.5px solid #F6D58A; background:#FFFBEB; border-radius:14px; padding:12px 14px; }
-.ov-panel h4 { margin:0 0 8px; font-size:13px; color:#92400E; display:flex; align-items:center; gap:8px; }
+.ov-panel h4 { margin:0 0 8px; font-size:13px; color:#92400E; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .ov-panel h4 .n { background:#B45309; color:#fff; border-radius:100px; padding:1px 8px; font-size:11px; }
-.ov-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px dashed #F1DFA8; font-size:12.5px; flex-wrap:wrap; }
+.ov-panel h4 .d { flex-basis:100%; font-weight:600; font-size:11px; color:#B45309; margin-top:-2px; }
+.ov-row { display:flex; align-items:center; gap:8px; padding:9px 0; border-top:1px dashed #F1DFA8; font-size:12.5px; flex-wrap:wrap; }
 .ov-row:first-of-type { border-top:none; }
-.ov-row .who { font-weight:800; }
+.ov-row .who { font-weight:800; font-size:13.5px; }
 .ov-row .meta { color:var(--text3); font-size:11.5px; }
 .ov-row .acts { margin-left:auto; display:flex; gap:6px; }
+.ov-row .facts { flex-basis:100%; display:flex; gap:6px; flex-wrap:wrap; font-size:11.5px; }
+.ov-row .facts span { background:#fff; border:1px solid #F1DFA8; border-radius:8px; padding:3px 8px; }
+.ov-row .reason { flex-basis:100%; font-size:12px; color:#5A4A12; background:#fff; border:1px solid #F1DFA8; border-radius:8px; padding:6px 9px; line-height:1.45; }
+@media (max-width:480px){
+  .ov-panel { padding:11px 12px; border-radius:12px; }
+  .ov-panel h4 { font-size:12.5px; gap:6px; }
+  .ov-row { gap:6px; padding:10px 0; }
+  .ov-row .who { flex-basis:100%; font-size:13.5px; }
+  .ov-row .meta { flex-basis:100%; font-size:11px; margin-top:-3px; }
+  .ov-row .facts span { font-size:11px; padding:3px 7px; }
+  .ov-row .reason { font-size:11.5px; }
+  .ov-row .acts { margin-left:0; flex-basis:100%; justify-content:flex-end; margin-top:2px; }
+  .ov-row .acts .ov-btn { padding:7px 12px; font-size:12px; }
+}
 .ov-sel { font-size:11px; font-weight:700; border:1px solid rgba(46,158,107,.4); background:rgba(46,158,107,.1); color:#1E7A50; border-radius:8px; padding:5px 6px; max-width:120px; font-family:inherit; }
 /* 커스텀 확인 모달 (직권 출결 등) */
 .att-cf-ov { position:fixed; inset:0; z-index:100050; background:rgba(43,38,28,.5);
@@ -1302,7 +1317,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 16; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 17; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2455,7 +2470,7 @@ function _ovRenderPanel(){
   if(!pend.length && !mine.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
   var h = '';
   if(pend.length){
-    h += '<h4>🕐 직권 출결 승인 대기 <span class="n">' + pend.length + '</span>' + (rep ? '<span style="font-weight:600;color:#B45309;font-size:11px">지점장 1차 승인 → 대표 승인 시 출결에 반영</span>' : '<span style="font-weight:600;color:#B45309;font-size:11px">대표 승인 대기 중</span>') + '</h4>';
+    h += '<h4><span>🕐 직권 출결 승인 대기</span><span class="n">' + pend.length + '</span><span class="d">' + (rep ? '지점장 1차 승인 → 대표 승인 시 출결에 반영' : '대표 승인 대기 중') + '</span></h4>';
     var attDb = getAttDB(), prDb = getPrDB();
     pend.forEach(function(r){
       var own = String(r.reqBy) === String(currentUser.id);
@@ -2465,11 +2480,8 @@ function _ovRenderPanel(){
       var stTxt = a ? ((a.status === '지각' ? '⚠️ 지각 ' : '✅ 정상 ') + (a.time ? String(a.time).slice(0,5) : '')) : '❌ 미출결';
       var prTxt = pr ? ('📋 사전보고 ' + _escHtml(pr.type || '') + (pr.note ? ' · ' + _escHtml(pr.note) : '') + (pr.proof ? ' · 증빙 완료' : ' · 미증빙')) : '사전보고 없음';
       h += '<div class="ov-row"><span class="who">' + r.fpName + '</span><span class="meta">' + (r.branch||'').replace('지점','') + ' · ' + r.date + ' · 1차 ' + r.reqByName + ' ' + _ovFmtAt(r.reqAt) + '</span>'
-         + '<span style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;margin-top:2px">'
-         + '<span style="background:#fff;border:1px solid #F1DFA8;border-radius:8px;padding:3px 8px">' + stTxt + '</span>'
-         + '<span style="background:#fff;border:1px solid #F1DFA8;border-radius:8px;padding:3px 8px">' + prTxt + '</span>'
-         + '</span>'
-         + '<span style="flex-basis:100%;font-size:12px;color:#5A4A12;background:#fff;border:1px solid #F1DFA8;border-radius:8px;padding:6px 9px">1차 사유: ' + (r.reason ? _escHtml(r.reason) : '<span style="color:#B45309">(미입력 — 구버전에서 올린 요청)</span>') + '</span>';
+         + '<span class="facts"><span>' + stTxt + '</span><span>' + prTxt + '</span></span>'
+         + '<span class="reason">1차 사유: ' + (r.reason ? _escHtml(r.reason) : '<span style="color:#B45309">(미입력 — 구버전에서 올린 요청)</span>') + '</span>';
       if(rep){
         h += '<span class="acts"><button type="button" class="ov-btn" onclick="attOvDecide(\'' + r.id + '\',\'approve\',\'' + r.fpName + '\')">✅ 승인</button>'
            + '<button type="button" class="ov-btn rej" onclick="attOvDecide(\'' + r.id + '\',\'reject\',\'' + r.fpName + '\')">✖ 반려</button></span>';
@@ -2480,10 +2492,10 @@ function _ovRenderPanel(){
     });
   }
   if(mine.length){
-    h += '<h4 style="margin-top:' + (pend.length ? '12px' : '0') + ';color:#C0392B">✖ 대표 반려 <span class="n" style="background:#C0392B">' + mine.length + '</span><span style="font-weight:600;color:#C0392B;font-size:11px">사유 확인 후 필요하면 다시 1차 승인</span></h4>';
+    h += '<h4 style="margin-top:' + (pend.length ? '12px' : '0') + ';color:#C0392B"><span>✖ 대표 반려</span><span class="n" style="background:#C0392B">' + mine.length + '</span><span class="d" style="color:#C0392B">사유 확인 후 필요하면 다시 1차 승인</span></h4>';
     mine.forEach(function(r){
       h += '<div class="ov-row"><span class="who">' + r.fpName + '</span><span class="meta">' + r.date + ' · ' + (r.decByName||'대표') + ' ' + _ovFmtAt(r.decAt) + '</span>'
-         + '<span style="flex-basis:100%;font-size:12px;color:#7F1D1D;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:6px 9px">사유: ' + (r.note || '(미입력)') + '</span></div>';
+         + '<span class="reason" style="color:#7F1D1D;background:#FEF2F2;border-color:#FECACA">사유: ' + _escHtml(r.note || '(미입력)') + '</span></div>';
     });
   }
   el.innerHTML = h; el.style.display = '';
