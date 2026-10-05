@@ -346,6 +346,17 @@ textarea.prm-input{resize:vertical;}
 .ov-btn { font-size:11px; font-weight:700; border:1px solid rgba(46,158,107,.4); background:rgba(46,158,107,.1);
   color:#1E7A50; border-radius:7px; padding:5px 9px; cursor:pointer; font-family:inherit; white-space:nowrap; }
 .ov-btn:active { opacity:.7; }
+.ov-btn.rej { border-color:rgba(192,57,43,.4); background:rgba(192,57,43,.08); color:#C0392B; }
+.ov-wait { font-size:11px; font-weight:700; color:#B45309; background:#FEF3C7; border:1px solid #F6D58A; border-radius:8px; padding:4px 8px; display:inline-block; white-space:nowrap; }
+.ov-rej { font-size:11px; font-weight:700; color:#C0392B; display:inline-block; white-space:nowrap; }
+.ov-panel { margin:0 0 14px; border:1.5px solid #F6D58A; background:#FFFBEB; border-radius:14px; padding:12px 14px; }
+.ov-panel h4 { margin:0 0 8px; font-size:13px; color:#92400E; display:flex; align-items:center; gap:8px; }
+.ov-panel h4 .n { background:#B45309; color:#fff; border-radius:100px; padding:1px 8px; font-size:11px; }
+.ov-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px dashed #F1DFA8; font-size:12.5px; flex-wrap:wrap; }
+.ov-row:first-of-type { border-top:none; }
+.ov-row .who { font-weight:800; }
+.ov-row .meta { color:var(--text3); font-size:11.5px; }
+.ov-row .acts { margin-left:auto; display:flex; gap:6px; }
 .ov-sel { font-size:11px; font-weight:700; border:1px solid rgba(46,158,107,.4); background:rgba(46,158,107,.1); color:#1E7A50; border-radius:8px; padding:5px 6px; max-width:120px; font-family:inherit; }
 /* 커스텀 확인 모달 (직권 출결 등) */
 .att-cf-ov { position:fixed; inset:0; z-index:100050; background:rgba(43,38,28,.5);
@@ -502,6 +513,7 @@ textarea.prm-input{resize:vertical;}
         <button type="button" class="branch-chip br" data-br="브라보지점" onclick="setStatusBranch('브라보지점',this)">브라보</button>
       </div>
     </div>
+    <div id="ovPanel" class="ov-panel" style="display:none"></div>
     <div class="att-summary">
       <div class="att-sum-card"><div class="att-sum-val" style="color:#0E6B45" id="sumAttRate">—</div><div class="att-sum-label">이번달 출근율<span id="sumWorkDays" style="display:block;font-size:10px;color:var(--text3);margin-top:2px"></span></div></div>
       <div class="att-sum-card"><div class="att-sum-val" style="color:#C0392B" id="sumLateFp">—</div><div class="att-sum-label" id="sumNormalLabel">지각 FP</div></div>
@@ -834,6 +846,7 @@ function loadAttFromGas(ymArg){
         });
       });
       saveAttDB(localDb);
+      try { _ovLoadReqs(ym); } catch(e){}
       if(res.prereport){
         var localPr = getPrDB();
         var srcPr = res.prereport;
@@ -1289,7 +1302,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 9; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 12; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2378,28 +2391,105 @@ function attConfirm(opts){
     document.body.appendChild(ov);
   });
 }
-// admin/manager: force one FP's day to normal (server validates permission again)
+// ── 직권 출결 2단계 승인 (2026-10-05) ──────────────────────────
+//   지점장 → 1차 승인(요청)  /  대표 → 2차 승인(반영). 대표가 직접 누르면 즉시 반영.
 var _ovPending = {};
+var _ovReqs = {};      // 'date|fp' -> request (pending/approved/rejected)
+var _ovList = [];
+function _isRepUser(){ return currentUser && (currentUser.role==='대표' || String(currentUser.id||'').toLowerCase()==='ktk01'); }
+function _ovKey(ds, fpId){ return ds + '|' + fpId; }
+function _ovLoadReqs(ym){
+  if(!_isAdminUser()) return;
+  attGasGetTimeout({ action:'getAttOverrideReqs', fp: currentUser.id, ym: ym || '' }, 15000, 1).then(function(res){
+    if(!res || !res.ok) return;
+    _ovList = res.list || [];
+    var map = {};
+    _ovList.forEach(function(r){ var k = _ovKey(r.date, r.fpCode); if(!map[k] || r.status === 'pending') map[k] = r; });
+    _ovReqs = map;
+    _ovRenderPanel();
+    try { renderStatus(); } catch(e){}
+  }).catch(function(){});
+}
+function _ovRenderPanel(){
+  var el = document.getElementById('ovPanel'); if(!el) return;
+  var pend = _ovList.filter(function(r){ return r.status === 'pending'; });
+  if(!pend.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  var rep = _isRepUser();
+  var h = '<h4>🕐 직권 출결 승인 대기 <span class="n">' + pend.length + '</span>' + (rep ? '<span style="font-weight:600;color:#B45309;font-size:11px">지점장 1차 승인 → 대표 승인 시 출결에 반영</span>' : '<span style="font-weight:600;color:#B45309;font-size:11px">대표 승인 대기 중</span>') + '</h4>';
+  pend.forEach(function(r){
+    var t = r.reqAt ? new Date(r.reqAt) : null;
+    var tTxt = t ? (t.getMonth()+1) + '/' + t.getDate() + ' ' + ('0'+t.getHours()).slice(-2) + ':' + ('0'+t.getMinutes()).slice(-2) : '';
+    h += '<div class="ov-row"><span class="who">' + r.fpName + '</span><span class="meta">' + (r.branch||'').replace('지점','') + ' · ' + r.date + ' · 1차 ' + r.reqByName + ' ' + tTxt + '</span>';
+    if(rep){
+      h += '<span class="acts"><button type="button" class="ov-btn" onclick="attOvDecide(\'' + r.id + '\',\'approve\',\'' + r.fpName + '\')">✅ 승인</button>'
+         + '<button type="button" class="ov-btn rej" onclick="attOvDecide(\'' + r.id + '\',\'reject\',\'' + r.fpName + '\')">✖ 반려</button></span>';
+    }
+    h += '</div>';
+  });
+  el.innerHTML = h; el.style.display = '';
+}
+function attOvDecide(reqId, decision, fpName){
+  if(_ovPending[reqId]) return;
+  var approve = (decision === 'approve');
+  attConfirm({
+    icon: approve ? '✅' : '✖',
+    title: approve ? '직권 출결 승인' : '직권 출결 반려',
+    msg: '<b>' + fpName + '</b>님 직권 출결 요청을 ' + (approve ? '<b>승인</b>할까요?<br>승인 즉시 출결이 <b>정상</b>으로 반영됩니다.' : '<b>반려</b>할까요?'),
+    okLabel: approve ? '승인' : '반려'
+  }).then(function(ok){
+    if(!ok) return;
+    _ovPending[reqId] = true;
+    showToast((approve ? '✅ 승인' : '✖ 반려') + ' 처리 중...');
+    attGasGetTimeout({ action:'attOverrideDecide', by: currentUser.id, reqId: reqId, decision: decision }, 15000, 2).then(function(res){
+      delete _ovPending[reqId];
+      if(!res || !res.ok){ showToast('⚠️ 처리 실패: ' + ((res && res.msg) || '서버 오류')); return; }
+      if(approve && res.date && res.fpCode){
+        var db = getAttDB(); if(!db[res.date]) db[res.date] = {};
+        var prev = db[res.date][res.fpCode] || {};
+        db[res.date][res.fpCode] = { name: fpName, branch: prev.branch || '', time: res.time || prev.time || '직권', status: '정상' };
+        saveAttDB(db);
+      }
+      _ovList.forEach(function(r){ if(r.id === reqId) r.status = res.status || (approve ? 'approved' : 'rejected'); });
+      _ovReqs = {}; _ovList.forEach(function(r){ var k = _ovKey(r.date, r.fpCode); if(!_ovReqs[k] || r.status === 'pending') _ovReqs[k] = r; });
+      _ovRenderPanel();
+      renderStatus();
+      showToast((approve ? '✅ ' : '✖ ') + fpName + '님 직권 출결 ' + (approve ? '승인 완료 (출결 반영)' : '반려'));
+    });
+  });
+}
+// admin/manager: 직권 출결 버튼 (server validates permission again)
 function adminOverrideAtt(fpId, fpName, ds){
   var pk = fpId + '|' + ds;
   if(_ovPending[pk]) return;
+  var rep = _isRepUser();
   attConfirm({
-    icon: '✔️',
-    title: '직권 출결 처리',
-    msg: '<b>' + fpName + '</b>님의 <b>' + ds + '</b> 출결을<br>직권으로 <b>정상</b> 처리할까요?',
-    okLabel: '직권 출결'
+    icon: rep ? '✔️' : '🕐',
+    title: rep ? '직권 출결 처리' : '직권 출결 1차 승인',
+    msg: rep
+      ? '<b>' + fpName + '</b>님의 <b>' + ds + '</b> 출결을<br>직권으로 <b>정상</b> 처리할까요?'
+      : '<b>' + fpName + '</b>님의 <b>' + ds + '</b> 직권 출결을<br><b>1차 승인</b>하여 대표님께 올릴까요?<br><span style="font-size:11px;color:var(--text3)">대표 승인 후 출결에 반영됩니다</span>',
+    okLabel: rep ? '직권 출결' : '1차 승인'
   }).then(function(ok){
     if(!ok) return;
     _ovPending[pk] = true;
-    showToast('✔️ 직권 출결 처리 중...');
+    showToast(rep ? '✔️ 직권 출결 처리 중...' : '🕐 1차 승인 요청 중...');
     attGasGetTimeout({ action:'adminSetAttendance', by: currentUser.id, target: fpId, date: ds }, 15000, 2).then(function(res){
       delete _ovPending[pk];
       if(!res || !res.ok){ showToast('⚠️ 처리 실패: ' + ((res && res.msg) || '서버 오류')); return; }
+      if(res.mode === 'requested'){
+        _ovReqs[_ovKey(ds, fpId)] = { id: res.reqId, date: ds, fpCode: fpId, fpName: fpName, status: 'pending', reqByName: currentUser.name, reqAt: new Date().toISOString(), branch: '' };
+        _ovList.unshift(_ovReqs[_ovKey(ds, fpId)]);
+        _ovRenderPanel();
+        renderStatus();
+        showToast(res.already ? 'ℹ️ 이미 대표 승인 대기 중입니다' : ('🕐 ' + fpName + '님 ' + ds + ' 1차 승인 완료 — 대표 승인을 기다립니다'));
+        return;
+      }
       var db = getAttDB();
       if(!db[ds]) db[ds] = {};
       var prev = db[ds][fpId] || {};
       db[ds][fpId] = { name: fpName, branch: prev.branch || '', time: res.time || prev.time || '직권', status: '정상' };
       saveAttDB(db);
+      var k2 = _ovKey(ds, fpId); if(_ovReqs[k2] && _ovReqs[k2].status === 'pending'){ _ovReqs[k2].status = 'approved'; _ovRenderPanel(); }
       renderStatus();
       showToast('✅ ' + fpName + '님 ' + ds + ' 직권 출결 완료');
     });
@@ -2577,8 +2667,18 @@ function renderStatus(){
         var dsOv = year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0');
         // manager can only override own-branch FPs (server enforces this too)
         var brOk = (currentUser.role!=='지점장') || (String(r.fp.branch||'').indexOf(String(currentUser.branch||'').replace('지점',''))>=0);
-        if(needOv && brOk){
-          ovTd = '<td><button type="button" class="ov-btn" onclick="adminOverrideAtt(\''+r.fp.id+'\',\''+r.fp.name+'\',\''+dsOv+'\')">✔ 직권 출결</button></td>';
+        var ovReq = _ovReqs[_ovKey(dsOv, r.fp.id)];
+        if(needOv && ovReq && ovReq.status === 'pending'){
+          if(_isRepUser()){
+            ovTd = '<td><span class="ov-wait">🕐 1차 ' + (ovReq.reqByName||'지점장') + '</span> '
+                 + '<button type="button" class="ov-btn" onclick="attOvDecide(\''+ovReq.id+'\',\'approve\',\''+r.fp.name+'\')">✅ 승인</button> '
+                 + '<button type="button" class="ov-btn rej" onclick="attOvDecide(\''+ovReq.id+'\',\'reject\',\''+r.fp.name+'\')">✖ 반려</button></td>';
+          } else {
+            ovTd = '<td><span class="ov-wait">🕐 대표 승인 대기</span></td>';
+          }
+        } else if(needOv && brOk){
+          var _rejTag = (ovReq && ovReq.status === 'rejected') ? '<span class="ov-rej">✖ 반려됨</span> ' : '';
+          ovTd = '<td>' + _rejTag + '<button type="button" class="ov-btn" onclick="adminOverrideAtt(\''+r.fp.id+'\',\''+r.fp.name+'\',\''+dsOv+'\')">' + (_isRepUser() ? '✔ 직권 출결' : '✔ 1차 승인') + '</button></td>';
         } else {
           ovTd = '<td><span style="color:var(--text3)">—</span></td>';
         }
