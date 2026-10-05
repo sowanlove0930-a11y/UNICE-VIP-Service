@@ -1302,7 +1302,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 15; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 16; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2456,9 +2456,20 @@ function _ovRenderPanel(){
   var h = '';
   if(pend.length){
     h += '<h4>🕐 직권 출결 승인 대기 <span class="n">' + pend.length + '</span>' + (rep ? '<span style="font-weight:600;color:#B45309;font-size:11px">지점장 1차 승인 → 대표 승인 시 출결에 반영</span>' : '<span style="font-weight:600;color:#B45309;font-size:11px">대표 승인 대기 중</span>') + '</h4>';
+    var attDb = getAttDB(), prDb = getPrDB();
     pend.forEach(function(r){
       var own = String(r.reqBy) === String(currentUser.id);
-      h += '<div class="ov-row"><span class="who">' + r.fpName + '</span><span class="meta">' + (r.branch||'').replace('지점','') + ' · ' + r.date + ' · 1차 ' + r.reqByName + ' ' + _ovFmtAt(r.reqAt) + '</span>';
+      // 그 날 실제 상태: 체크인 기록 / 사전보고
+      var a = (attDb[r.date] || {})[r.fpCode];
+      var pr = (prDb[r.date] || {})[r.fpCode];
+      var stTxt = a ? ((a.status === '지각' ? '⚠️ 지각 ' : '✅ 정상 ') + (a.time ? String(a.time).slice(0,5) : '')) : '❌ 미출결';
+      var prTxt = pr ? ('📋 사전보고 ' + _escHtml(pr.type || '') + (pr.note ? ' · ' + _escHtml(pr.note) : '') + (pr.proof ? ' · 증빙 완료' : ' · 미증빙')) : '사전보고 없음';
+      h += '<div class="ov-row"><span class="who">' + r.fpName + '</span><span class="meta">' + (r.branch||'').replace('지점','') + ' · ' + r.date + ' · 1차 ' + r.reqByName + ' ' + _ovFmtAt(r.reqAt) + '</span>'
+         + '<span style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;margin-top:2px">'
+         + '<span style="background:#fff;border:1px solid #F1DFA8;border-radius:8px;padding:3px 8px">' + stTxt + '</span>'
+         + '<span style="background:#fff;border:1px solid #F1DFA8;border-radius:8px;padding:3px 8px">' + prTxt + '</span>'
+         + '</span>'
+         + '<span style="flex-basis:100%;font-size:12px;color:#5A4A12;background:#fff;border:1px solid #F1DFA8;border-radius:8px;padding:6px 9px">1차 사유: ' + (r.reason ? _escHtml(r.reason) : '<span style="color:#B45309">(미입력 — 구버전에서 올린 요청)</span>') + '</span>';
       if(rep){
         h += '<span class="acts"><button type="button" class="ov-btn" onclick="attOvDecide(\'' + r.id + '\',\'approve\',\'' + r.fpName + '\')">✅ 승인</button>'
            + '<button type="button" class="ov-btn rej" onclick="attOvDecide(\'' + r.id + '\',\'reject\',\'' + r.fpName + '\')">✖ 반려</button></span>';
@@ -2516,22 +2527,20 @@ function adminOverrideAtt(fpId, fpName, ds){
   var pk = fpId + '|' + ds;
   if(_ovPending[pk]) return;
   var rep = _isRepUser();
-  attConfirm({
-    icon: rep ? '✔️' : '🕐',
-    title: rep ? '직권 출결 처리' : '직권 출결 1차 승인',
-    msg: rep
-      ? '<b>' + fpName + '</b>님의 <b>' + ds + '</b> 출결을<br>직권으로 <b>정상</b> 처리할까요?'
-      : '<b>' + fpName + '</b>님의 <b>' + ds + '</b> 직권 출결을<br><b>1차 승인</b>하여 대표님께 올릴까요?<br><span style="font-size:11px;color:var(--text3)">대표 승인 후 출결에 반영됩니다</span>',
-    okLabel: rep ? '직권 출결' : '1차 승인'
-  }).then(function(ok){
-    if(!ok) return;
+  var p = rep
+    ? attConfirm({ icon:'✔️', title:'직권 출결 처리', msg:'<b>' + fpName + '</b>님의 <b>' + ds + '</b> 출결을<br>직권으로 <b>정상</b> 처리할까요?', okLabel:'직권 출결' }).then(function(ok){ return ok ? '' : null; })
+    : attPrompt({ icon:'🕐', title:'직권 출결 1차 승인', okLabel:'1차 승인', required:true,
+        msg:'<b>' + fpName + '</b>님의 <b>' + ds + '</b> 직권 출결을 <b>1차 승인</b>합니다.<br><span style="font-size:11px;color:var(--text3)">사유는 대표님 승인 화면에 그대로 보입니다</span>',
+        placeholder:'예: 고객 동행 외근 (10:30 복귀) / 병원 진료 후 11시 출근' });
+  p.then(function(reason){
+    if(reason === null || reason === undefined) return;
     _ovPending[pk] = true;
     showToast(rep ? '✔️ 직권 출결 처리 중...' : '🕐 1차 승인 요청 중...');
-    attGasGetTimeout({ action:'adminSetAttendance', by: currentUser.id, target: fpId, date: ds }, 15000, 2).then(function(res){
+    attGasGetTimeout({ action:'adminSetAttendance', by: currentUser.id, target: fpId, date: ds, reason: reason || '' }, 15000, 2).then(function(res){
       delete _ovPending[pk];
       if(!res || !res.ok){ showToast('⚠️ 처리 실패: ' + ((res && res.msg) || '서버 오류')); return; }
       if(res.mode === 'requested'){
-        _ovReqs[_ovKey(ds, fpId)] = { id: res.reqId, date: ds, fpCode: fpId, fpName: fpName, status: 'pending', reqByName: currentUser.name, reqAt: new Date().toISOString(), branch: '' };
+        _ovReqs[_ovKey(ds, fpId)] = { id: res.reqId, date: ds, fpCode: fpId, fpName: fpName, status: 'pending', reqByName: currentUser.name, reqAt: new Date().toISOString(), branch: '', reason: reason || '', reqBy: currentUser.id };
         _ovList.unshift(_ovReqs[_ovKey(ds, fpId)]);
         _ovRenderPanel();
         renderStatus();
