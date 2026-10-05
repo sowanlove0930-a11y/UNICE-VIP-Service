@@ -202,7 +202,7 @@ table.mt td:first-child{font-weight:400}
 .ctl label{font-size:14px;color:var(--muted);display:block;margin-bottom:8px}
 .ctl input[type=range]{width:100%;accent-color:var(--blue);height:30px}
 .seg{display:flex;flex-wrap:wrap;gap:8px}
-.seg button{border:1px solid var(--hair);border-radius:999px;padding:9px 15px;font-size:14px;background:var(--white);min-height:40px}
+.seg button{border:1px solid var(--hair);border-radius:999px;padding:9px 15px;font-size:14px;background:var(--white);min-height:40px;text-align:left;line-height:1.35}
 .seg button.on{border:2px solid var(--blue-focus);padding:8px 14px;font-weight:700}
 .facts{margin-top:28px;display:flex;flex-direction:column;gap:0}
 .fact{padding:14px 0;border-top:1px solid var(--soft);font-size:15px;line-height:1.55}
@@ -413,6 +413,28 @@ body.fpon .fp{display:block}
   .mine{display:table;margin:4px 0 0}
   .card .thumb{height:170px}
 }
+.oxwrap{margin-top:64px;padding-top:44px;border-top:1px solid var(--hair)}
+.oxhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.oxh{font-size:34px;font-weight:700;letter-spacing:-1px;line-height:1.15}
+.oxscore{font-size:14px;color:var(--blue);font-weight:700;white-space:nowrap}
+.oxg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:24px}
+.oxc{background:var(--white);border:1px solid transparent;border-radius:18px;padding:20px 20px 18px;text-align:left;display:flex;flex-direction:column;gap:10px;min-height:150px;transition:transform .2s ease,box-shadow .2s ease}
+.oxc:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.07)}
+.oxq{font-size:16.5px;font-weight:700;line-height:1.45;letter-spacing:-0.3px;color:var(--ink)}
+.oxhint{margin-top:auto;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.oxo,.oxx{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:1.5px solid var(--hair);color:var(--ink80)}
+.oxx{margin-right:4px}
+.oxa{display:flex;align-items:center;gap:10px}
+.oxm{width:40px;height:40px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff}
+.oxl{font-size:18px;font-weight:700}
+.oxt{align-self:flex-start;font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px}
+.oxr{font-size:14px;line-height:1.55;color:var(--ink80)}
+.oxc.is-o{border-color:#bfe5cc}
+.oxc.is-o .oxm{background:#1f8a4c}.oxc.is-o .oxl{color:#1f8a4c}.oxc.is-o .oxt{background:#e8f6ee;color:#1f8a4c}
+.oxc.is-x{border-color:#ffd1d6}
+.oxc.is-x .oxm{background:var(--own)}.oxc.is-x .oxl{color:var(--own)}
+@media (max-width:1023px){.oxg{grid-template-columns:1fr 1fr}}
+@media (max-width:734px){.oxg{grid-template-columns:1fr}.oxh{font-size:26px}.oxc{min-height:0}}
 @media (max-width:1023px){
   h1.hero{font-size:46px}
   .grad{white-space:normal}
@@ -517,6 +539,13 @@ body.fpon .fp{display:block}
     <p class="sub">하나를 골라 주세요. 최근 실제로 일어난 상황과, 우리 가족에게 생길 수 있는 상황이에요.</p>
     <div id="cards"></div>
     <p class="note" style="margin-top:18px">최근 실제 사례는 최근 3년 안에 실제로 보험금이 지급된 사례예요(손해보험사 지급 사례 교육자료, 2026년 9월).</p>
+    <div class="oxwrap">
+      <p class="eyebrow">OX QUIZ</p>
+      <div class="oxhead"><h3 class="oxh">이것도 보상될까요?</h3><span class="oxscore" id="oxscore"></span></div>
+      <p class="sub">생활 속에서 흔히 생기는 일이에요. 눌러서 정답을 확인해 보세요.</p>
+      <div class="oxg" id="oxg"></div>
+      <p class="note" style="margin-top:14px">일상생활배상책임의 일반적인 약관 기준이에요. 회사, 상품, 가입 시기에 따라 다를 수 있어요.</p>
+    </div>
     <div class="btns">
       <button class="pill ghost" type="button" data-go="4">홈케어핏 체크 바로가기</button>
       <button class="textlink" type="button" data-go="1">이전</button>
@@ -668,6 +697,7 @@ var S = {
   step:0,
   p:{home:'',floor:'',fee:'',age:'',own:'',fam:[],extra:[]},
   rev:{},
+  ox:{},
   seen:{},
   cur:'',
   six:{im:'',ga:'',bok:'',gb:'',down:'',hb:'',il:''},
@@ -695,7 +725,7 @@ var ROOMS = [
   {k:'gb',g:'물',nm:'우리 집에 물이 샜을 때 수리비',short:'우리 집 누수',cov:'급배수시설누출손해',say:'배관이 새서 젖은 바닥, 벽, 가전·가구',col:1,row:0,pic:'img/room-gb.webp'},
   {k:'down',g:'물',nm:'우리 집 물이 아랫집을 적셨을 때',short:'아랫집 누수',cov:'일상생활배상책임',say:'아랫집 천장, 벽지 수리비를 대신 물어줘요',col:1,row:1,link:1,pic:'img/room-down.webp'},
   {k:'hb',g:'배상',nm:'우리 집 불이 이웃에 번졌을 때',short:'이웃 화재',cov:'화재배상책임',say:'이웃집 피해와 다친 이웃을 대신 물어줘요',col:2,row:0,pic:'img/room-hb.webp'},
-  {k:'il',g:'배상',nm:'가족 실수로 남에게 피해를 줬을 때',short:'일상생활',short2:'배상',cov:'가족일상생활배상책임',say:'아이 킥보드 사고, 남의 물건 파손까지',col:2,row:1,link:1,pic:'img/room-il.webp'}
+  {k:'il',g:'배상',nm:'가족 실수로 남에게 피해를 줬을 때',short:'일상생활',short2:'배상',cov:'가족일상생활배상책임',say:'아이 자전거 사고, 남의 물건 파손까지',col:2,row:1,link:1,pic:'img/room-il.webp'}
 ];
 var IMG = {A:'img/case-a.webp',B:'img/case-b.webp',C:'img/case-c.webp',D:'img/case-d.webp',E:'img/case-e.webp',F:'img/case-f.webp',stay:'img/stay.webp'};
 
@@ -733,7 +763,7 @@ var CASES = {
   F:{g:'배상',title:'아이가 친구 집 TV를, 강아지가 이웃을',teaser:'우리 가족 실수로 남에게 물어줘야 할 때, 직접 계산해 봐요.',
      sum:'아이가 친구 집 TV를 깨뜨렸어요. 산책하던 반려견이 지나가던 사람을 물었어요.',
      ask:'물건이 망가졌을 때와 사람이 다쳤을 때, 보상이 다를까요?',type:'calc',calcKind:'life',
-     fp:'"사람이 다친 사고는 자기부담금이 없어요." 반려견, 킥보드 이야기로 아이 엄마 고객의 공감을 끌어내세요.'}
+     fp:'"사람이 다친 사고는 자기부담금이 없어요." 반려견, 자전거 이야기로 아이 엄마 고객의 공감을 끌어내세요.'}
 };
 var ORDER = ['A','B','C','D','E','F'];
 var LIT = {
@@ -923,6 +953,40 @@ function renderInsight(){
 }
 
 /* cards */
+var OX = [
+  ['자전거를 타다 지나가던 사람과 부딪혀 다치게 했어요','O','일상생활 배상','일상생활 중 실수로 남을 다치게 하면 보상돼요. 사람이 다친 사고는 자기부담금도 없어요.'],
+  ['베란다 화분이 떨어져 주차된 차가 찌그러졌어요','O','일상생활 배상','우리 집을 쓰고 관리하다 생긴 남의 물건 피해라 보상돼요.'],
+  ['세탁기 호스가 빠져 아랫집 천장이 젖었어요','O','아랫집 누수','아랫집 수리비가 보상돼요. 최근 가입은 누수 자기부담금 50만 원을 빼고 받아요.'],
+  ['마트에서 아이가 진열 상품을 깨뜨렸어요','O','일상생활 배상','남의 물건을 망가뜨린 배상이라 보상돼요.'],
+  ['산책하던 반려견이 다른 집 강아지를 물었어요','O','일상생활 배상','다른 집 반려동물은 남의 재산으로 봐서, 치료비 배상이 보상돼요.'],
+  ['아이가 찬 축구공에 이웃집 유리창이 깨졌어요','O','일상생활 배상','아이 실수로 생긴 이웃집 피해라 보상돼요.'],
+  ['빌려 쓰던 친구 휴대폰을 떨어뜨려 깨뜨렸어요','X','보상 안 돼요','빌리거나 맡아 둔 남의 물건은 보상에서 빠져요.'],
+  ['아이가 놀다가 우리 집 TV를 깨뜨렸어요','X','보상 안 돼요','우리 가족 물건은 남에게 물어주는 돈이 아니라서 빠져요.'],
+  ['형제끼리 다투다 동생 휴대폰을 깨뜨렸어요','X','보상 안 돼요','함께 사는 가족에게 준 피해는 보상에서 빠져요.'],
+  ['차에서 내리다 문을 열어 옆 차를 찍었어요(문콕)','X','보상 안 돼요','차를 쓰다 생긴 사고라 일상생활 배상에서는 빠지고, 자동차보험 대물로 처리해요. 걸어가다 가방으로 남의 차를 긁은 건 일상생활 배상이 돼요.'],
+  ['전동킥보드를 타다 지나가던 사람과 부딪혔어요','X','대부분 안 돼요','모터가 달린 이동장치 사고는 대부분 빠져요. 전용 보험이 있는지 확인해 보세요.'],
+  ['에어컨 실외기가 떨어져 지나가던 사람이 다쳤어요','O','일상생활 배상','우리 집 설비를 관리하다 생긴 사고라 보상돼요.']
+];
+function renderOX(){
+  var g=$('oxg');if(!g)return;
+  var h='',n=0;
+  for(var i=0;i<OX.length;i++){
+    var q=OX[i];var on=!!S.ox[i];var ok=q[1]==='O';if(on)n++;
+    h+='<button type="button" class="oxc'+(on?' on '+(ok?'is-o':'is-x'):'')+'" data-ox="'+i+'" aria-expanded="'+(on?'true':'false')+'">';
+    h+='<span class="oxq">'+q[0]+'</span>';
+    if(on){
+      h+='<span class="oxa"><span class="oxm">'+(ok?'O':'X')+'</span><span class="oxl">'+(ok?'보상돼요':q[2])+'</span></span>';
+      if(ok)h+='<span class="oxt">'+q[2]+'</span>';
+      h+='<span class="oxr">'+q[3]+'</span>';
+    }else{
+      h+='<span class="oxhint"><span class="oxo">O</span><span class="oxx">X</span>눌러서 정답 보기</span>';
+    }
+    h+='</button>';
+  }
+  g.innerHTML=h;
+  $('oxscore').textContent=n?('정답 확인 '+n+' / '+OX.length):'';
+}
+
 function relevant(k){
   var p=S.p;
   if(k==='A'&&has(p.fam,'elder'))return '어르신과 함께 사는 집';
@@ -958,6 +1022,7 @@ function renderCards(){
     h+='<div class="cards">';for(var c2=0;c2<oth.length;c2++)h+=cardHTML(oth[c2]);h+='</div>';
   }
   $('cards').innerHTML=h;
+  renderOX();
 }
 
 /* receipt */
@@ -973,11 +1038,11 @@ function calcResult(){
 function calcPanel(){
   var c=S.calc;var kind=CASES[S.cur].calcKind;var res=calcResult();
   var max=kind==='leak'?2000:1000;
-  var lossLabel=kind==='leak'?'아랫집 피해액 (가정)':((c.kind==='obj')?'망가진 물건 수리비 (가정)':'다친 분 치료비, 배상액 (가정)');
+  var lossLabel=kind==='leak'?'아랫집 피해액 (가정)':((c.kind==='obj')?'친구 집 TV 수리·교체비 (가정)':'물린 분 치료비, 배상액 (가정)');
   var h='<div class="receipt" id="calcBox">';
   h+='<div class="rc-h"><span>'+(kind==='leak'?'아랫집 누수 보상 계산':'일상생활 배상 보상 계산')+'</span><span>막대를 움직여 보세요</span></div>';
   if(kind==='life'){
-    h+='<div class="ctl"><label>어떤 사고예요?</label><div class="seg" data-ctl="kind"><button type="button" data-v="obj"'+(c.kind==='obj'?' class="on"':'')+'>물건이 망가졌어요</button><button type="button" data-v="body"'+(c.kind==='body'?' class="on"':'')+'>사람이 다쳤어요</button></div></div>';
+    h+='<div class="ctl"><label>어떤 상황인가요?</label><div class="seg" data-ctl="kind"><button type="button" data-v="obj"'+(c.kind==='obj'?' class="on"':'')+'>아이가 놀다가 친구 집 TV를 깨뜨렸어요</button><button type="button" data-v="body"'+(c.kind==='body'?' class="on"':'')+'>반려견이 지나가던 사람을 물었어요</button></div></div>';
   }
   h+='<div class="ctl"><label>'+lossLabel+': <b style="color:#1d1d1f" id="lossV">'+man(c.loss)+'</b></label><input type="range" id="lossR" min="30" max="'+max+'" step="10" value="'+Math.min(c.loss,max)+'" aria-label="'+lossLabel+'"></div>';
   if(kind==='leak'){
@@ -985,14 +1050,14 @@ function calcPanel(){
   }else if(c.kind==='obj'){
     h+='<div class="ctl"><label>일상생활 배상은 언제 가입하셨어요?</label><div class="seg" data-ctl="period"><button type="button" data-v="a"'+(c.period==='a'?' class="on"':'')+'>2009.7 이전</button><button type="button" data-v="c"'+(c.period!=='a'?' class="on"':'')+'>2009.8 이후, 신규</button></div><div class="cnote">물건 피해 자기부담금은 2009년 8월부터 지금까지 20만 원으로 같아요.</div></div>';
   }else{
-    h+='<div class="ctl"><div class="cnote">사람이 다친 사고는 가입 시기와 관계없이 자기부담금이 없어요.</div></div>';
+    h+='<div class="ctl"><div class="cnote">사람이 다친 사고는 가입 시기와 관계없이 자기부담금이 없어요. 그래서 1개만 있어도 한도(1억 원) 안에서 전액 보상돼요.</div></div>';
   }
-  h+='<div class="ctl"><label>우리 가족이 이 보장을 몇 개 갖고 있나요?</label><div class="seg" data-ctl="n"><button type="button" data-v="1"'+(c.n===1?' class="on"':'')+'>1개</button><button type="button" data-v="2"'+(c.n===2?' class="on"':'')+'>2개 (예: 부부 각자)</button></div></div>';
+  if(!(kind==='life'&&c.kind==='body'))h+='<div class="ctl"><label>우리 가족이 이 보장을 몇 개 갖고 있나요?</label><div class="seg" data-ctl="n"><button type="button" data-v="1"'+(c.n===1?' class="on"':'')+'>1개</button><button type="button" data-v="2"'+(c.n===2?' class="on"':'')+'>2개 (예: 부부 각자)</button></div></div>';
   var pi=c.loss>0?Math.round(res.pay/c.loss*100):0;
   h+='<div class="bar" aria-hidden="true"><i class="ins-p" id="barP" style="width:'+pi+'%"></i><i class="own-p" id="barO" style="width:'+(100-pi)+'%"></i></div>';
   h+='<div class="legend"><span class="a">보상받는 돈</span><span class="b">보상 못 받는 돈</span></div>';
   h+='<div class="sum2" aria-live="polite"><div><div class="k">보상받는 돈</div><div class="v" id="sumP">'+man(res.pay)+'</div></div><div><div class="k">보상 못 받는 돈</div><div class="v own" id="sumO">'+(res.own>0?man(res.own):'0원')+'</div></div></div>';
-  h+='<p class="note" style="margin-top:12px">'+(res.d>0?'자기부담금 '+comma(res.d)+'만 원 적용.':'자기부담금 없음.')+' 2개 가입이면 두 보험사가 손해를 나눠 내며, 합쳐도 실제 손해액까지만 받아요.</p>';
+  h+='<p class="note" style="margin-top:12px">'+(res.d>0?'자기부담금 '+comma(res.d)+'만 원 적용.':'자기부담금 없음.')+((kind==='life'&&c.kind==='body')?'':' 2개 가입이면 두 보험사가 손해를 나눠 내며, 합쳐도 실제 손해액까지만 받아요.')+'</p>';
   h+='</div>';
   return h;
 }
@@ -1414,7 +1479,7 @@ function fallbackCopy(t,done){
   document.body.removeChild(ta);done(ok);
 }
 function resetAll(){
-  S.p={home:'',floor:'',fee:'',age:'',own:'',fam:[],extra:[]};S.seen={};S.cur='';S.rev={};
+  S.p={home:'',floor:'',fee:'',age:'',own:'',fam:[],extra:[]};S.seen={};S.cur='';S.rev={};S.ox={};
   S.six={im:'',ga:'',bok:'',gb:'',down:'',hb:'',il:''};S.linkNote=false;S.calc={loss:300,period:'c',n:1,kind:'obj'};
   var c=document.querySelectorAll('#nextChk input');for(var i=0;i<c.length;i++)c[i].checked=false;
   $('cname').value='';$('cphone').value='';$('amemo').value='';$('aconsent').checked=false;$('aerr').textContent='';
@@ -1433,6 +1498,7 @@ document.addEventListener('click',function(e){
       if(el.getAttribute('data-q')){pick(el.getAttribute('data-q'),el.getAttribute('data-v'));return;}
       if(el.getAttribute('data-slot')!==null){aSlot=parseInt(el.getAttribute('data-slot'),10);fillTimes();refreshApt();return;}
       if(el.getAttribute('data-x')){var xv=el.getAttribute('data-x');var na=[];for(var xi=0;xi<S.p.extra.length;xi++){if(S.p.extra[xi]!==xv)na.push(S.p.extra[xi]);}if(!has(S.p.extra,xv))na.push(xv);S.p.extra=na;renderPlan();return;}
+      if(el.getAttribute('data-ox')!==null){var oi=el.getAttribute('data-ox');S.ox[oi]=!S.ox[oi];renderOX();return;}
       if(el.getAttribute('data-reveal')){S.rev[S.cur]=true;S.justRev=true;renderReceipt();return;}
       if(el.getAttribute('data-case')){S.cur=el.getAttribute('data-case');S.calc.loss=300;go(3);return;}
       if(el.getAttribute('data-six')){setSix(el.getAttribute('data-six'),el.getAttribute('data-v'));return;}
