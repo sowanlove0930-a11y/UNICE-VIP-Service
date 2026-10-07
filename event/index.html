@@ -354,6 +354,7 @@ canvas{display:block; width:100%; touch-action:none; user-select:none; -webkit-u
   <div class="btns"><button class="mk" id="shMk">🏆 전체 현황</button><button class="go" id="shGo">계속 쏘기 🏹</button></div>
 </div></div>
 <div class="toast" id="toast"></div>
+<pre id="dbgBox" style="display:none;position:fixed;left:6px;right:6px;bottom:70px;max-height:45vh;overflow:auto;background:rgba(0,0,0,.85);color:#9f9;font-size:10px;padding:8px;border-radius:8px;z-index:60;white-space:pre-wrap;word-break:break-all"></pre>
 <div class="sheet" id="introSheet"><div class="in">
   <div class="sc" style="font-size:44px">🔥 실전 시작</div>
   <div class="msg">처음 3발은 연습이에요</div>
@@ -381,6 +382,7 @@ var POLL_MS = 180000;
 var DEMO = /[?&]demo=1/.test(location.search);
 var FORCE_REAL = /[?&]mode=real/.test(location.search) || DEMO;
 var ME = null, STATE = null, pollTimer = null, _lastLoadAt = 0;
+var DBG=[]; function dbg(tag,obj){ try{ DBG.unshift(new Date().toTimeString().slice(0,8)+' '+tag+' '+JSON.stringify(obj).slice(0,300)); if(DBG.length>12) DBG.pop(); if($('dbgBox').style.display!=='none') $('dbgBox').textContent=DBG.join('\n'); }catch(e){} }
 var IS_KAKAO_INAPP = (navigator.userAgent || '').indexOf('KAKAOTALK') >= 0;
 var JSONP_SEQ = 0;
 function fetchTimeout(url, ms){ return new Promise(function(resolve, reject){ var done=false; var t=setTimeout(function(){ if(!done){ done=true; reject(new Error('timeout')); } }, ms); fetch(url).then(function(r){ return r.json(); }).then(function(d){ if(done) return; done=true; clearTimeout(t); resolve(d); }).catch(function(e){ if(done) return; done=true; clearTimeout(t); reject(e); }); }); }
@@ -605,6 +607,7 @@ function move(e){ if(!hold) return; e.preventDefault(); var q=ptOf(e); cur=q; if
 function down(e){
   e.preventDefault();
   if(busy||fly||S.gate) return;
+  if(!S.open && !DEMO && (!ME || !STATE)){ toast(ME?'업적을 불러오는 중이에요 · 잠시만요':'사번 확인 중이에요 · 잠시만요'); if(!ME && !S.loginBusy) login(savedFp()); return; }
   if(false){ toast('이전 화살을 기록하는 중이에요 · 잠깐만요'); return; }
   if(S.open){ if(!S.practice){ S.practice=true; } }
   else if(S.practice && S.pracLeft<=0){ endPractice(); if(S.arrows<=0){ toast('남은 활이 없어요 · 업적 10만 = 활 5발'); return; } }
@@ -682,7 +685,7 @@ function finish(ring,score){
 function applyMode(){ var m=S.open?'open':(S.practice?'prac':'real'); $('gwrap').className='gwrap '+m; $('modebar').className='modebar '+m; $('ctl').className='ctl '+m;
   $('pracBtn').style.display=S.open?'none':'';
   if(S.open){ $('mbL').textContent='🎯 연습 기간 · 무제한'; $('mbR').textContent='10/1(목) 18:00 실전 시작 · '+fmtLeft()+' 남음'; }
-  else if(S.practice){ $('mbL').textContent='🎯 연습 사격'; $('mbR').textContent='경품 반영 안 됨 · 연습 '+S.pracLeft+'발 남음'; } else { $('mbL').textContent='🔥 실전 사격'; $('mbR').textContent='경품 반영 · 남은 활 '+S.arrows+'발'; } }
+  else if(S.practice){ $('mbL').textContent='🎯 연습 사격'; $('mbR').textContent='경품 반영 안 됨 · 연습 '+S.pracLeft+'발 남음'; } else { $('mbL').textContent='🔥 실전 사격'; $('mbR').textContent= (!ME||!STATE)?'내 정보 확인 중…':('경품 반영 · 남은 활 '+S.arrows+'발'); } }
 function showReal(){ S.gate=true; var b=$('bigmode'); b.className='bigmode on'; tone(392,'triangle',.2,.25); setTimeout(function(){ tone(523,'triangle',.2,.25); },120); setTimeout(function(){ tone(784,'triangle',.5,.3); },240); if(navigator.vibrate) navigator.vibrate([60,40,60]); }
 $('gateBtn').addEventListener('click',function(){ S.gate=false; $('bigmode').className='bigmode'; $('hint').className='hint'; newWind(); });
 function endPractice(){ if(!S.practice) return; S.practice=false; showReal(); if(STATE) applyState(STATE); else loadState(); S.cur=[]; S.stuck=[]; $('pracBtn').className='tg'; $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; updateRes(); }
@@ -729,14 +732,16 @@ var _ev=['touchstart','touchend','pointerup','mousedown','click','keydown'];
 for(var ei=0;ei<_ev.length;ei++){ document.addEventListener(_ev[ei],function(){ bgmStart(); ac(); },{passive:true}); }
 function fireBigConfetti(){ shake=6; for(var i=0;i<60;i++) particles.push({x:rnd(0,W),y:-10,vx:rnd(-1.5,1.5),vy:rnd(1,4),s:rnd(3,7),a:1.4,c:['#F2C14E','#D64545','#7C5CBF','#7CC48B','#fff'][i%5]}); }
 function login(code){ code=String(code||'').replace(/\s/g,''); if(!code){ $('login').style.display='flex'; return; }
-  $('lerr').textContent='확인 중…';
+  S.loginBusy=true; $('lerr').textContent='확인 중…'; $('whoName').textContent='확인 중…';
+  var guard=setTimeout(function(){ if(!ME){ $('login').style.display='flex'; $('lerr').textContent='확인이 늦어요 · 사번을 입력해 주세요'; } }, 8000);
   gasGet(GAS_URL+'?action=getFpInfo&fp='+encodeURIComponent(code), 15000).then(function(d){
-    if(!d||!d.ok){ $('login').style.display='flex'; $('lerr').textContent=(d&&d.msg)||'등록되지 않은 사번입니다'; return; }
+    clearTimeout(guard); S.loginBusy=false;
+    if(!d||!d.ok){ $('login').style.display='flex'; $('lerr').textContent=(d&&d.msg)||'등록되지 않은 사번입니다'; $('whoName').textContent='-'; return; }
     ME=d; try{ localStorage.setItem('arch_fp', d.id); }catch(e){}
     qLoad(); qStatus(); if(Q.length) setTimeout(pumpQ, 500);
     $('login').style.display='none'; $('whoName').textContent=d.name+' '+(d.title||'');
     startApp();
-  }).catch(function(){ $('login').style.display='flex'; $('lerr').textContent= IS_KAKAO_INAPP?'연결이 느려요 ㅠㅠ 아래 버튼으로 크롬·사파리에서 열어주세요!':'연결이 느려요. 잠시 후 한 번 더 눌러주세요'; $('extBtn').style.display='block'; });
+  }).catch(function(){ clearTimeout(guard); S.loginBusy=false; $('whoName').textContent='-'; $('login').style.display='flex'; $('lerr').textContent= IS_KAKAO_INAPP?'연결이 느려요 ㅠㅠ 아래 버튼으로 크롬·사파리에서 열어주세요!':'연결이 느려요. 잠시 후 한 번 더 눌러주세요'; $('extBtn').style.display='block'; });
 }
 $('loginBtn').addEventListener('click',function(){ login($('fpInput').value); });
 $('fpInput').addEventListener('keydown',function(e){ if(e.key==='Enter') login($('fpInput').value); });
@@ -744,13 +749,13 @@ if(IS_KAKAO_INAPP) $('extBtn').style.display='block';
 $('extBtn').addEventListener('click',function(){ location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(ARCH_URL+'?go=archery'); });
 function startApp(){ loadState(); if(pollTimer) clearInterval(pollTimer); pollTimer=setInterval(function(){ if(document.visibilityState==='visible') loadState(); }, POLL_MS); document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible' && Date.now()-_lastLoadAt>60000) loadState(); }); }
 function loadState(){ _lastLoadAt=Date.now(); if(!ME) return;
-  gasGet(GAS_URL+'?action=archState&fp='+encodeURIComponent(ME.id)).then(function(d){ if(!d||!d.ok){ toast('업적 불러오기 실패: '+((d&&d.msg)||'응답 없음')+' · 잠시 후 재시도'); setTimeout(loadState, 15000); return; } STATE=d; S.loadErr=0; applyState(d); }).catch(function(){ toast('서버 연결이 느려요 · 잠시 후 다시 불러옵니다'); setTimeout(loadState, 15000); }); }
+  gasGet(GAS_URL+'?action=archState&fp='+encodeURIComponent(ME.id)).then(function(d){ dbg('state',{ok:d&&d.ok,msg:d&&d.msg,me:d&&d.me&&{perf:d.me.perf,used:d.me.arrowsUsed,left:d.me.arrowsLeft,prizes:d.me.prizes},period:d&&d.period}); if(!d||!d.ok){ toast('업적 불러오기 실패: '+((d&&d.msg)||'응답 없음')+' · 잠시 후 재시도'); setTimeout(loadState, 15000); return; } STATE=d; S.loadErr=0; applyState(d); }).catch(function(){ toast('서버 연결이 느려요 · 잠시 후 다시 불러옵니다'); setTimeout(loadState, 15000); }); }
 function applyState(d){ var m=d.me||{};
   var pending = Q.length>0 || qBusy;
   if(!S.open && !S.practice && !busy && !fly && !pending){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; S.perf=m.perf||0; S.bonus=m.bonus||0; S.sets=m.sets||[]; S.cur=m.cur||[]; }
   else { S.perf=m.perf||0; S.bonus=m.bonus||0; if(!S.practice && !pending){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; } }
   $('whoPerf').textContent=Math.round((m.perf||0)/10000)+'만'; $('whoArrows').textContent=m.arrowsTotal||0; $('whoBonus').textContent= m.bonus?('(지점 보너스 +'+m.bonus+'발 포함)'):'';
-  renderGoals(d.branches||[]); $('asof').textContent=(d.asOf||'')+' 기준 · 3분마다 갱신';
+  renderGoals(d.branches||[]); $('asof').textContent=(d.asOf||'')+' 기준 · 3분마다 갱신'; applyMode();
   renderBoard(d.board||[], d.feed||[], d.asOf||'');
   if(S.awaitSet && !(Q.length||qBusy)){ var setsLeft=Math.floor((m.arrowsLeft||0)/5); $('shSub').textContent='✅ 기록 확인 · 🪑 누적 캠핑의자 '+(m.prizes||0)+'개 · 남은 활 '+(m.arrowsLeft||0)+'발 ('+setsLeft+'세트)'; }
   var wasOpen=S.open; var nowOpen=openPeriod(); if(S.open!==nowOpen){ if(nowOpen){ S.open=true; S.practice=true; } else { startRealPhase(); if(wasOpen) showReal(); } }
@@ -776,18 +781,19 @@ function sendShot(dx,dy,ring,score){ if(!ME||DEMO) return; Q.push({dx:dx,dy:dy,s
 function pumpQ(){ if(qBusy||!Q.length||!ME) return; qBusy=true; S.sending=true; var it=Q[0];
   gasGet(GAS_URL+'?action=archShoot&fp='+encodeURIComponent(ME.id)+'&dx='+it.dx.toFixed(3)+'&dy='+it.dy.toFixed(3)+'&sid='+it.sid, 25000).then(function(d){
     var delay=1250;
+    dbg('shoot',d);
     if(d && d.ok){ Q.shift(); qFail=0; if(d.me && STATE) STATE.me=d.me; if(d.branches && STATE){ STATE.branches=d.branches; renderGoals(d.branches); } }
     else if(d && d.fatal){ Q.shift(); toast((d.msg||'기록 불가')+' · 이 발은 무효예요'); }
     else { qFail++; delay= /너무 빨라/.test((d&&d.msg)||'') ? 1500 : Math.min(8000, 2000*qFail); if(qFail===3) toast('서버가 바빠요 · 기록은 계속 재시도합니다'); }
     qSave(); qStatus(); qBusy=false; S.sending=Q.length>0;
     if(Q.length) setTimeout(pumpQ, delay); else setTimeout(function(){ if(!busy&&!fly) loadState(); }, 600);
-  }).catch(function(){ qFail++; qSave(); qStatus(); qBusy=false; S.sending=Q.length>0; if(qFail===3) toast('통신이 느려요 · 기록은 계속 재시도합니다'); setTimeout(pumpQ, Math.min(10000, 2500*qFail)); }); }
+  }).catch(function(err){ dbg('shoot-fail',String(err)); qFail++; qSave(); qStatus(); qBusy=false; S.sending=Q.length>0; if(qFail===3) toast('통신이 느려요 · 기록은 계속 재시도합니다'); setTimeout(pumpQ, Math.min(10000, 2500*qFail)); }); }
 function startRealPhase(){ S.open=false; var pl=3; try{ if(ME){ var v=localStorage.getItem('arch_prac_'+ME.id); if(v!==null) pl=parseInt(v,10)||0; } }catch(e){} S.pracLeft=pl; S.practice= pl>0; if(pl<=0){ $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; $('pracBtn').className='tg'; } S.cur=[]; S.stuck=[]; if(pl>0){ $('pracBtn').disabled=false; $('pracBtn').className='tg on'; } updateRes(); if(pl>0 && !S.introShown){ S.introShown=true; $('introSheet').className='sheet on'; } }
 function initPhase(){ if(openPeriod()){ S.open=true; S.practice=true; updateRes(); } else { startRealPhase(); }
   if(DEMO){ $('demoWrap').style.display=''; }
   var fp=savedFp(); if(fp) login(fp); else if(!openPeriod()) $('login').style.display='flex'; else $('login').style.display='none'; }
 setInterval(function(){ if(S.open && !openPeriod()){ startRealPhase(); showReal(); } else if(S.open) applyMode(); }, 30000);
-$('whoLine').addEventListener('click',function(){ toast('업적 다시 불러오는 중…'); loadState(); });
+$('whoLine').addEventListener('click',function(){ if(!ME){ $('login').style.display='flex'; var f=savedFp(); if(f){ $('fpInput').value=f; login(f); } return; } toast('업적 다시 불러오는 중…'); loadState(); });
 $('introGo').addEventListener('click',function(){ $('introSheet').className='sheet'; $('hint').className='hint'; });
 
 /* ---------- chooser ---------- */
@@ -800,6 +806,8 @@ var tabs=document.querySelectorAll('.tabs button');
 function go(p){ for(var i=0;i<tabs.length;i++){ tabs[i].className= tabs[i].getAttribute('data-p')===p?'on':''; } var pages=document.querySelectorAll('.page'); for(var j=0;j<pages.length;j++) pages[j].className='page'+(pages[j].id===p?' on':''); window.scrollTo(0,0); }
 for(var ti=0;ti<tabs.length;ti++){ tabs[ti].addEventListener('click',function(){ go(this.getAttribute('data-p')); }); }
 
+var _dc=0; $('dday').addEventListener('click',function(){ _dc++; if(_dc>=5){ _dc=0; var b=$('dbgBox'); b.style.display= b.style.display==='none'?'':'none'; b.textContent=DBG.join('\n')||'(기록 없음)'; } });
+if(/[?&]debug=1/.test(location.search)) $('dbgBox').style.display='';
 (function(){ var end=new Date(2026,9,12); var d=Math.ceil((end.getTime()-Date.now())/86400000)-1; $('dday').textContent= d>0?'D-'+d:(d===0?'D-DAY':'종료'); })();
 initPhase(); renderLog();
 })();
