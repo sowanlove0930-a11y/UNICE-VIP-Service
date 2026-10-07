@@ -6633,6 +6633,7 @@ function resolveConfirm(result) {
 })();
 function _doLogoutNow() {
   try { localStorage.removeItem('unispace_user'); } catch(e) {}
+  try { localStorage.removeItem('unispace_att_roster'); localStorage.removeItem('unispace_fp_roster'); localStorage.removeItem('unispace_activities'); } catch(e) {}
   try { localStorage.removeItem('unispace_customers'); } catch(e) {}
   try { localStorage.removeItem('unispace_attendance'); } catch(e) {}
   try { localStorage.removeItem('unispace_prereport'); } catch(e) {}
@@ -12410,18 +12411,21 @@ function saveSchedule(){
   if((_schedType==='life'||_schedType==='non') && !company && !title){ showToast('⚠️ 교육 회사나 내용을 입력해 주세요'); return; }
   if(_schedType==='imp' && !title){ showToast('⚠️ 일정 내용을 입력해 주세요'); return; }
   var db=getSchedDB();
+  var item=null;
   if(_schedEditId){
     for(var i=0;i<db.length;i++){
       if(db[i].id===_schedEditId){
         db[i].type=_schedType; db[i].date=date; db[i].title=title; db[i].company=company; db[i].time=time;
+        item=db[i];
         break;
       }
     }
   } else {
-    db.push({ id:'sch_'+Date.now()+'_'+Math.random().toString(36).substr(2,5), type:_schedType, date:date, title:title, company:company, time:time, by:(currentUser?currentUser.name:'') });
+    item={ id:'sch_'+Date.now()+'_'+Math.random().toString(36).substr(2,5), type:_schedType, date:date, title:title, company:company, time:time, by:(currentUser?currentUser.name:'') };
+    db.push(item);
   }
   saveSchedDB(db);
-  if(typeof gasSaveSched==='function') gasSaveSched(db);
+  if(item && typeof gasSaveSchedOne==='function') gasSaveSchedOne(item); // 2026-10-07: 건별 저장 (전체 덮어쓰기 금지)
   closeSchedForm();
   renderSchedCal();
   schedDayClick(date);
@@ -12436,16 +12440,31 @@ function deleteSchedule(){
     if(!ok) return;
     var db=getSchedDB().filter(function(s){ return s.id!==_id; });
     saveSchedDB(db);
-    if(typeof gasSaveSched==='function') gasSaveSched(db);
+    if(typeof gasDeleteSched==='function') gasDeleteSched(_id);
     renderSchedCal();
     showToast('삭제되었습니다');
   });
 }
-function gasSaveSched(arr){
-  try{ fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'saveSchedules', data:arr||[] }) }).catch(function(){}); }catch(e){}
+// 2026-10-07: 일정은 건별로 서버에 저장한다. 전체 목록 덮어쓰기(saveSchedules)는
+// 9KB 한도에서 조용히 실패하고 다른 사람이 넣은 일정을 지우던 원인이라 더 이상 쓰지 않는다.
+function _gasSchedPost(body, onFail){
+  var tryOnce=function(n){
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){ if(!res || !res.ok){ if(n<2) setTimeout(function(){ tryOnce(n+1); }, 2500); else if(onFail) onFail(res && res.msg); } })
+      .catch(function(){ if(n<2) setTimeout(function(){ tryOnce(n+1); }, 2500); else if(onFail) onFail('네트워크'); });
+  };
+  tryOnce(0);
 }
+function gasSaveSchedOne(item){
+  _gasSchedPost({ action:'saveSchedule', data:item }, function(why){ showToast('⚠️ 일정이 서버에 저장되지 않았습니다 (' + (why||'오류') + ') — 다시 저장해 주세요'); });
+}
+function gasDeleteSched(id){
+  _gasSchedPost({ action:'deleteSchedule', id:id }, function(why){ showToast('⚠️ 일정 삭제가 서버에 반영되지 않았습니다 (' + (why||'오류') + ')'); });
+}
+function gasSaveSched(arr){ /* 구버전 호출 호환용 - 더 이상 전체 목록을 보내지 않는다 */ }
 function loadSchedFromGas(cb){
-  fetch(UNISPACE_GAS_URL+'?action=getSchedules').then(function(r){ return r.json(); }).then(function(res){
+  fetch(UNISPACE_GAS_URL+'?action=getSchedules&_='+Date.now(), { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(res){
     if(res && res.ok && Array.isArray(res.data)){
       var arr=res.data;
       for(var i=0;i<arr.length;i++){ if(!arr[i].id) arr[i].id='sch_'+Date.now()+'_'+i+'_'+Math.random().toString(36).substr(2,4); }
@@ -16736,7 +16755,9 @@ function renderAttToday(force) {
   try {
     var _cAtt = JSON.parse(localStorage.getItem('unispace_attendance')||'{}');
     var _cPr = JSON.parse(localStorage.getItem('unispace_prereport')||'{}');
-    var _cRoster = JSON.parse(localStorage.getItem('unispace_att_roster')||'[]');
+    // 2026-10-07: 명단 캐시는 계정별로. 같은 PC에서 다른 계정으로 쓰다 돌아오면
+    // 이전 계정(지점장·FP) 범위의 명단이 남아 "브라보 0명"처럼 보이던 문제
+    var _cRoster = JSON.parse(localStorage.getItem('unispace_att_roster_' + currentUser.id)||'[]');
     if(_cRoster && _cRoster.length){
       _renderAttTodayCards(_cRoster, _cAtt[today]||{}, _cPr[today]||{});
     }
@@ -16776,7 +16797,7 @@ function renderAttToday(force) {
       if(!_attSeeAll && _attMyBr && _attNb(f.branch) !== _attMyBr) return;
       FPS.push({ id:f.id, name:f.name, branch:(f.branch||'').replace('지점','') });
     });
-    try { localStorage.setItem('unispace_att_roster', JSON.stringify(FPS)); } catch(e) {}
+    try { localStorage.setItem('unispace_att_roster_' + currentUser.id, JSON.stringify(FPS)); localStorage.removeItem('unispace_att_roster'); } catch(e) {}
     _renderAttTodayCards(FPS, todayDb, todayPr);
   }).catch(function(e){
     var why = (typeof _gasFailReason === 'function') ? _gasFailReason(e) : String(e && e.message || e);
@@ -24446,7 +24467,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 111;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 113;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
