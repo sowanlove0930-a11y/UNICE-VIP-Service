@@ -4785,12 +4785,12 @@ function _lsTrim(level){
       if (/^(unispace_award_|unispace_dashbundle_|unispace_st2cache|unispace_pta_last|unispace_ptl_last)/.test(k)) { localStorage.removeItem(k); removed++; }
     });
     if (level >= 2) {
-      var cut = new Date(); cut.setDate(cut.getDate() - 56);
+      var cut = new Date(); cut.setDate(cut.getDate() - (level >= 3 ? 28 : 56)); // 3단계: 활동 4주·업적 2개월만
       var cutS = cut.getFullYear() + '-' + ('0' + (cut.getMonth() + 1)).slice(-2) + '-' + ('0' + cut.getDate()).slice(-2);
       var acts = JSON.parse(localStorage.getItem('unispace_activities') || '{}'), kept = {};
       for (var id in acts) { if (!acts.hasOwnProperty(id)) continue; var a = acts[id]; if (!a || !a.date || String(a.date) >= cutS) kept[id] = a; else removed++; }
       localStorage.setItem('unispace_activities', JSON.stringify(kept));
-      var pc = new Date(); pc = new Date(pc.getFullYear(), pc.getMonth() - 3, 1);
+      var pc = new Date(); pc = new Date(pc.getFullYear(), pc.getMonth() - (level >= 3 ? 1 : 3), 1);
       var pcS = pc.getFullYear() + '-' + ('0' + (pc.getMonth() + 1)).slice(-2) + '-01';
       var log = JSON.parse(localStorage.getItem('unispace_perf_log') || '[]');
       var log2 = log.filter(function(r){ return !r || String(r.date || '') >= pcS; });
@@ -4809,12 +4809,17 @@ function _lsSet(key, str){
       _lsTrim(2);
       try { localStorage.setItem(key, str); return true; }
       catch(e3) {
-        try { console.warn('[UNISPACE] 저장공간 부족:', key, e3); } catch(ce) {}
-        if (!window._lsFullToastAt || Date.now() - window._lsFullToastAt > 60000) {
-          window._lsFullToastAt = Date.now();
-          try { showToast('⚠️ 폰 저장공간 부족 — 설정 메뉴 → 알림 진단에서 "저장공간 정리"를 눌러 주세요'); } catch(te) {}
+        _lsTrim(3);
+        try { localStorage.setItem(key, str); return true; }
+        catch(e4) {
+          try { console.warn('[UNISPACE] 저장공간 부족:', key, e4); } catch(ce) {}
+          window._lsFullKey = key;
+          if (!window._lsFullToastAt || Date.now() - window._lsFullToastAt > 60000) {
+            window._lsFullToastAt = Date.now();
+            try { showToast('⚠️ 저장공간 부족 (' + String(key).replace('unispace_','') + ') · 알림 진단에서 확인'); } catch(te) {}
+          }
+          return false;
         }
-        return false;
       }
     }
   }
@@ -24467,7 +24472,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 113;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 114;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -24810,8 +24815,9 @@ function _lsDiagRender(){
   var sz = _lsSize();
   var mb = (sz.total / 1048576).toFixed(2);
   var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  var warn = (isIOS && sz.total > 3.5 * 1048576) || sz.total > 8 * 1048576;
-  var h = '<b>💾 폰 저장공간(앱 데이터)</b> ' + mb + 'MB' + (isIOS ? ' / 아이폰 한도 약 5MB' : '') + (warn ? ' <span style="color:#B45309;font-weight:700">⚠️ 한도 근접 — 정리 권장</span>' : ' 🟢');
+  var warn = sz.total > 3.5 * 1048576;
+  var h = '<b>💾 폰 저장공간(앱 데이터)</b> ' + mb + 'MB / 한도 약 5MB' + (warn ? ' <span style="color:#B45309;font-weight:700">⚠️ 한도 근접 — 정리 권장</span>' : ' 🟢');
+  if (window._lsFullKey) h += '<div style="color:#B45309;font-weight:700;margin-top:3px">⚠️ 마지막 저장 실패: ' + String(window._lsFullKey).replace('unispace_','') + '</div>';
   h += '<div style="margin-top:4px;color:var(--text3)">' + sz.top.map(function(t){ return t.k.replace('unispace_','') + ' ' + (t.b/1024).toFixed(0) + 'KB'; }).join(' · ') + '</div>';
   el.innerHTML = h;
 }
