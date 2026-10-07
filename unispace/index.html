@@ -4787,20 +4787,29 @@ function _lsTrim(level){
     if (level >= 2) {
       var cut = new Date(); cut.setDate(cut.getDate() - (level >= 3 ? 28 : 56)); // 3단계: 활동 4주·업적 2개월만
       var cutS = cut.getFullYear() + '-' + ('0' + (cut.getMonth() + 1)).slice(-2) + '-' + ('0' + cut.getDate()).slice(-2);
-      var acts = JSON.parse(localStorage.getItem('unispace_activities') || '{}'), kept = {};
+      var acts = JSON.parse(_bigGet('unispace_activities') || '{}'), kept = {};
       for (var id in acts) { if (!acts.hasOwnProperty(id)) continue; var a = acts[id]; if (!a || !a.date || String(a.date) >= cutS) kept[id] = a; else removed++; }
-      localStorage.setItem('unispace_activities', JSON.stringify(kept));
+      var _ks = JSON.stringify(kept); _BIG['unispace_activities'] = _ks; localStorage.setItem('unispace_activities', _ks);
       var pc = new Date(); pc = new Date(pc.getFullYear(), pc.getMonth() - (level >= 3 ? 1 : 3), 1);
       var pcS = pc.getFullYear() + '-' + ('0' + (pc.getMonth() + 1)).slice(-2) + '-01';
-      var log = JSON.parse(localStorage.getItem('unispace_perf_log') || '[]');
+      var log = JSON.parse(_bigGet('unispace_perf_log') || '[]');
       var log2 = log.filter(function(r){ return !r || String(r.date || '') >= pcS; });
       removed += (log.length - log2.length);
-      localStorage.setItem('unispace_perf_log', JSON.stringify(log2));
+      var _ls2 = JSON.stringify(log2); _BIG['unispace_perf_log'] = _ls2; localStorage.setItem('unispace_perf_log', _ls2);
     }
   } catch(e) {}
   return removed;
 }
+// 2026-10-07: 큰 데이터는 메모리에 먼저 둔다. 폰 저장공간(5MB)에 못 들어가도 이번 세션 화면은 항상 최신이다.
+//   읽기: _bigGet(key)  — 메모리 → localStorage 순서
+//   쓰기: _lsSet(key, str) — 메모리 저장 후 localStorage 시도(실패해도 ok)
+var _BIG = {};
+function _bigGet(key){
+  if (Object.prototype.hasOwnProperty.call(_BIG, key)) return _BIG[key];
+  try { return localStorage.getItem(key); } catch(e) { return null; }
+}
 function _lsSet(key, str){
+  _BIG[key] = str;
   try { localStorage.setItem(key, str); return true; }
   catch(e1) {
     _lsTrim(1);
@@ -4914,7 +4923,7 @@ function _mergeCustContactLog(gasCustomers){
   // GAS customers have no contactLog; preserve local call history by id
   var prevById = {};
   try {
-    var _prev = JSON.parse(localStorage.getItem('unispace_customers') || '[]');
+    var _prev = JSON.parse(_bigGet('unispace_customers') || '[]');
     if (Array.isArray(_prev)) _prev.forEach(function(pc){ if(pc && pc.id) prevById[pc.id] = pc; });
   } catch(e) {}
   return (gasCustomers||[]).map(function(c){
@@ -5190,7 +5199,7 @@ function _mergePlansToActivities(plans, planKeyFilter){
   }catch(e){}
 
   var db={};
-  try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  try{ db=JSON.parse(_bigGet('unispace_activities')||'{}'); }catch(e){}
   var incoming={};
   (plans||[]).forEach(function(pl){
     if(!pl || !pl.fpId) return;
@@ -5274,7 +5283,7 @@ function syncActivityToGas(act){
 // id로 localStorage에서 활동 찾아 GAS 저장
 function syncActIdToGas(actId){
   try{
-    var db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');
+    var db=JSON.parse(_bigGet('unispace_activities')||'{}');
     if(db[actId]) syncActivityToGas(db[actId]);
   }catch(e){}
 }
@@ -5287,19 +5296,30 @@ function deleteActFromGas(actId){
 }
 // GAS에서 활동 불러와 localStorage 병합 (plan 기반 활동은 보존)
 var _actLoadedFromGas = false;
+// 2026-10-07: 활동기록은 최근 8주만 기본 동기화한다 (전체 이력은 대표 기준 5MB에 가까워 폰 저장 한도를 넘겼다).
+// 더 과거 주차는 화면에서 그 주로 이동할 때 그 범위만 서버에서 받아 메모리에 얹는다 (_actEnsureRange).
+var ACT_SYNC_WEEKS = 8;
+function _actSyncFrom(){
+  var d = new Date(); d.setDate(d.getDate() - ACT_SYNC_WEEKS * 7);
+  var dow = d.getDay(); d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1)); // 그 주 월요일
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+}
+var _actRangeLoaded = {};
 function loadActivitiesFromGas(cb){
   if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ if(cb) cb(); return; }
-  var url = UNISPACE_GAS_URL + '?action=getActivities&fp=' + encodeURIComponent(currentUser.id);
+  var from = _actSyncFrom();
+  var url = UNISPACE_GAS_URL + '?action=getActivities&fp=' + encodeURIComponent(currentUser.id) + '&from=' + from;
   fetch(url).then(function(r){return r.json();}).then(function(res){
     if(res && res.ok && res.activities){
       var old={};
-      try{ old=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
-      // 계획(plan) 출신 활동만 보존 — 서버 활동은 GAS 응답으로 완전 교체(삭제 반영)
+      try{ old=JSON.parse(_bigGet('unispace_activities')||'{}'); }catch(e){}
+      // 계획(plan) 출신 활동과, 이번 동기화 범위(from 이전)의 과거 활동은 보존 — 범위 안은 서버 응답으로 완전 교체(삭제 반영)
       var db={};
       for(var k in old){
-        if(old.hasOwnProperty(k) && typeof _isPlanOriginAct==='function' && _isPlanOriginAct(old[k], k)){
-          db[k]=old[k];
-        }
+        if(!old.hasOwnProperty(k)) continue;
+        var o=old[k];
+        if(typeof _isPlanOriginAct==='function' && _isPlanOriginAct(o, k)){ db[k]=o; continue; }
+        if(o && o.date && String(o.date) < from) db[k]=o;
       }
       res.activities.forEach(function(a){
         if(a && a.id) db[a.id]=a;
@@ -5309,6 +5329,25 @@ function loadActivitiesFromGas(cb){
     }
     if(cb) cb();
   }).catch(function(){ if(cb) cb(); });
+}
+// 과거 범위 on-demand: [from, to] 구간이 기본 동기화 범위 밖이면 서버에서 받아 메모리 DB에 병합
+function _actEnsureRange(from, to, cb){
+  var base = _actSyncFrom();
+  if(!from || String(from) >= base){ if(cb) cb(false); return; }
+  var key = from + '~' + (to || '');
+  if(_actRangeLoaded[key]){ if(cb) cb(false); return; }
+  if(typeof UNISPACE_GAS_URL==='undefined' || !currentUser || !currentUser.id){ if(cb) cb(false); return; }
+  var url = UNISPACE_GAS_URL + '?action=getActivities&fp=' + encodeURIComponent(currentUser.id) + '&from=' + from + (to ? '&to=' + to : '');
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if(res && res.ok && res.activities){
+      var db={}; try{ db=JSON.parse(_bigGet('unispace_activities')||'{}'); }catch(e){}
+      res.activities.forEach(function(a){ if(a && a.id) db[a.id]=a; });
+      _BIG['unispace_activities'] = JSON.stringify(db); // 과거분은 메모리에만 (폰 저장 안 함)
+      _actRangeLoaded[key] = true;
+      if(cb) cb(true); return;
+    }
+    if(cb) cb(false);
+  }).catch(function(){ if(cb) cb(false); });
 }
 
 // 활동현황 새로고침: GAS에서 활동기록·계획 다시 불러와 재렌더
@@ -6375,7 +6414,7 @@ function showDashboard() {
       // FP customer count (by fp code)
       // show cached count first, then refresh from GAS so it works without visiting customer tab
       var DB2 = [];
-      try { DB2 = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e) {}
+      try { DB2 = JSON.parse(_bigGet('unispace_customers') || '[]'); } catch(e) {}
       function _countMyCust(arr){
         return arr.filter(function(c){
           return c.fpCode === currentUser.id || c.fp === currentUser.name;
@@ -6420,24 +6459,24 @@ function showDashboard() {
         // merge self records into existing store without replacing other people's data
         if(res && res.ok && res.attendance){
           try {
-            var _exist = JSON.parse(localStorage.getItem('unispace_attendance')||'{}');
+            var _exist = JSON.parse(_bigGet('unispace_attendance')||'{}');
             Object.keys(res.attendance).forEach(function(d){
               if(!_exist[d]) _exist[d] = {};
               var rec = res.attendance[d][currentUser.id];
               if(rec) _exist[d][currentUser.id] = rec;
             });
-            localStorage.setItem('unispace_attendance', JSON.stringify(_exist));
+            _lsSet('unispace_attendance', JSON.stringify(_exist));
           } catch(e) {}
         }
         if(res && res.ok && res.prereport){
           try {
-            var _existP = JSON.parse(localStorage.getItem('unispace_prereport')||'{}');
+            var _existP = JSON.parse(_bigGet('unispace_prereport')||'{}');
             Object.keys(res.prereport).forEach(function(d){
               if(!_existP[d]) _existP[d] = {};
               var prr = res.prereport[d][currentUser.id];
               if(prr) _existP[d][currentUser.id] = prr;
             });
-            localStorage.setItem('unispace_prereport', JSON.stringify(_existP));
+            _lsSet('unispace_prereport', JSON.stringify(_existP));
           } catch(e) {}
         }
         var _myAtt = _calcMyAtt(currentUser.id);
@@ -6466,8 +6505,8 @@ function _calcMyAtt(fpId) {
   var res = { normal: 0, late: 0, absent: 0 };
   if (!fpId) return res;
   var attDb = {}, prDb = {};
-  try { attDb = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
-  try { prDb  = JSON.parse(localStorage.getItem('unispace_prereport')  || '{}'); } catch(e) {}
+  try { attDb = JSON.parse(_bigGet('unispace_attendance') || '{}'); } catch(e) {}
+  try { prDb  = JSON.parse(_bigGet('unispace_prereport')  || '{}'); } catch(e) {}
   var now = new Date();
   var ym = now.getFullYear() + '-' + (now.getMonth()+1 < 10 ? '0' : '') + (now.getMonth()+1);
   Object.keys(attDb).forEach(function(date){
@@ -6505,7 +6544,7 @@ function renderAdminAttStat() {
 
 // ── 오늘 챙길 고객 수 계산 (today_alarm.html 동일 로직) ──
 function calcTodayCount() {
-  var raw = localStorage.getItem('unispace_customers');
+  var raw = _bigGet('unispace_customers');
   if (!raw) return 0;
   var DB;
   try { DB = JSON.parse(raw); } catch(e) { return 0; }
@@ -8249,7 +8288,7 @@ function renderActTop4() {
   }
   // 1) local first (avoid blank) — may be branch-only for FP/manager
   var db = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
+  try { db = JSON.parse(_bigGet('unispace_activities')||'{}'); } catch(e) {}
   var scoreMap = {};
   // 이번 달 활동만 합산 — 로컬 저장소엔 전 기간이 있어 필터 없이는 지난달과 합산돼 보임
   var _actYm=(new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2);
@@ -8360,7 +8399,7 @@ function _legacyRenderPanelTop4_unused() {
   var el = document.getElementById('_unusedPanelTop');
   if(!el) return;
   var db = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
+  try { db = JSON.parse(_bigGet('unispace_activities')||'{}'); } catch(e) {}
 
   // 이번 달(현재 월) 범위
   var now = new Date();
@@ -8421,7 +8460,7 @@ function _legacyRenderPanelTop4_unused() {
 var PERF_LOG_KEY = 'unispace_perf_log';
 var PERF_CATS = ['건강상해','종신','저축','기타'];
 var PERF_COMPANIES = ['한화생명','라이나','미래에셋','신한라이프','흥국생명','메트라이프','한화손보','현대해상','DB손보','KB손보','메리츠','삼성화재'];
-function getPerfLog(){ try{ return JSON.parse(localStorage.getItem(PERF_LOG_KEY)||'[]'); }catch(e){ return []; } }
+function getPerfLog(){ try{ return JSON.parse(_bigGet(PERF_LOG_KEY)||'[]'); }catch(e){ return []; } }
 
 // 스탠다드FP: FP별 4개 조건 판정
 // (1)10일까지 가동: 6월은 전원 인정, 이후 월은 1~10일 perf 존재
@@ -10795,7 +10834,7 @@ function _supportSchedItems(){
   var myBr='';
   if(isMgr){ var b=currentUser.branch||''; myBr=b.indexOf('알파')>=0?'알파':(b.indexOf('브라보')>=0?'브라보':''); }
   var nb=function(x){ var s=String(x||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return ''; };
-  var db={}; try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){ return []; }
+  var db={}; try{ db=JSON.parse(_bigGet('unispace_activities')||'{}'); }catch(e){ return []; }
   var out=[];
   Object.values(db).forEach(function(a){
     if(!a.fpId || a.support!=='지점장' || !a.date) return;
@@ -14278,7 +14317,7 @@ function openCheckupPicker(ev) {
   if (_ckpCustomers) { _ckpRender(); return false; }
   // reuse dashboard-loaded customer cache first (instant open)
   try {
-    var _lsRaw = localStorage.getItem('unispace_customers');
+    var _lsRaw = _bigGet('unispace_customers');
     if (_lsRaw) {
       var _lsArr = JSON.parse(_lsRaw);
       if (_lsArr && _lsArr.length) {
@@ -16483,7 +16522,7 @@ function loadTransferList() {
 
   var fp     = getMergedFpList().find(function(f){ return f.id === fromId; });
   var DB     = [];
-  try { DB = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e) {}
+  try { DB = JSON.parse(_bigGet('unispace_customers') || '[]'); } catch(e) {}
 
   var customers = DB.filter(function(c) { return c.fp === (fp ? fp.name : ''); });
 
@@ -16568,7 +16607,7 @@ function doTransfer() {
     if (!ok) { execBtn.disabled = false; return; }
 
     var DB = [];
-    try { DB = JSON.parse(localStorage.getItem('unispace_customers') || '[]'); } catch(e) {}
+    try { DB = JSON.parse(_bigGet('unispace_customers') || '[]'); } catch(e) {}
     DB.forEach(function(c) {
       if (selected.indexOf(c.id) >= 0) c.fp = toFp.name;
     });
@@ -16662,8 +16701,8 @@ function _attMonthStats() {
   var today = getTodayStr();
   var ym = today.slice(0, 7);
   var db = {}, pr = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch (e) {}
-  try { pr = JSON.parse(localStorage.getItem('unispace_prereport') || '{}'); } catch (e) {}
+  try { db = JSON.parse(_bigGet('unispace_attendance') || '{}'); } catch (e) {}
+  try { pr = JSON.parse(_bigGet('unispace_prereport') || '{}'); } catch (e) {}
   var late = {}, abs = {}, unpv = {};
   var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10);
   var dEnd = parseInt(today.slice(8, 10), 10);
@@ -16758,8 +16797,8 @@ function renderAttToday(force) {
 
   // 1) 캐시(localStorage)로 즉시 렌더 — GAS 응답 전 0으로 보이는 것 방지
   try {
-    var _cAtt = JSON.parse(localStorage.getItem('unispace_attendance')||'{}');
-    var _cPr = JSON.parse(localStorage.getItem('unispace_prereport')||'{}');
+    var _cAtt = JSON.parse(_bigGet('unispace_attendance')||'{}');
+    var _cPr = JSON.parse(_bigGet('unispace_prereport')||'{}');
     // 2026-10-07: 명단 캐시는 계정별로. 같은 PC에서 다른 계정으로 쓰다 돌아오면
     // 이전 계정(지점장·FP) 범위의 명단이 남아 "브라보 0명"처럼 보이던 문제
     var _cRoster = JSON.parse(localStorage.getItem('unispace_att_roster_' + currentUser.id)||'[]');
@@ -16782,8 +16821,8 @@ function renderAttToday(force) {
     var todayPr = (attRes && attRes.ok && attRes.prereport && attRes.prereport[today]) || {};
     if(attRes && attRes.ok){
       try {
-        if(attRes.attendance) localStorage.setItem('unispace_attendance', JSON.stringify(attRes.attendance));
-        if(attRes.prereport) localStorage.setItem('unispace_prereport', JSON.stringify(attRes.prereport));
+        if(attRes.attendance) _lsSet('unispace_attendance', JSON.stringify(attRes.attendance));
+        if(attRes.prereport) _lsSet('unispace_prereport', JSON.stringify(attRes.prereport));
       } catch(e) {}
     }
     var roster = (attRes && attRes.ok && attRes.roster) ? attRes.roster : [];
@@ -19971,7 +20010,7 @@ var monthOffset = 0;
 var selectedDayStr = '';
 
 function initBranchCal() { if(typeof setupBranchTabsByRole==='function') setupBranchTabsByRole(); renderActView(); }
-function moveWeek(dir) { weekOffset += dir; renderActView(); }
+function moveWeek(dir) { moveActPeriod(dir); }
 function setWeekBranch(val, el) {
   weekBranchFilter = val;
   document.querySelectorAll('.week-branch-chip').forEach(function(c){ c.classList.remove('active','active-al','active-br'); });
@@ -20061,9 +20100,24 @@ function setActViewMode(mode) {
 }
 
 function moveActPeriod(dir) {
-  if (actViewMode == 'month') { monthOffset += dir; renderActView(); }
-  else { weekOffset += dir; renderActView(); }
+  if (actViewMode == 'month') { monthOffset += dir; }
+  else { weekOffset += dir; }
+  renderActView();
+  // 과거 구간이면 그 범위를 서버에서 받아 다시 그린다
+  try {
+    var now = new Date(), from, to;
+    if (actViewMode == 'month') {
+      var m0 = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1), m1 = new Date(m0.getFullYear(), m0.getMonth() + 1, 0);
+      from = _ymdOf(m0); to = _ymdOf(m1);
+    } else {
+      var dow = now.getDay(); var mon = new Date(now); mon.setDate(now.getDate() - (dow===0?6:dow-1) + weekOffset*7);
+      var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      from = _ymdOf(mon); to = _ymdOf(sun);
+    }
+    _actEnsureRange(from, to, function(changed){ if (changed) renderActView(); });
+  } catch(e) {}
 }
+function _ymdOf(d){ return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
 
 function _doRenderActView() {
   if (actViewMode == 'month') renderMonthCal();
@@ -20101,7 +20155,7 @@ function renderMonthCal() {
   if (rngEl) rngEl.textContent = y + '년 ' + (m+1) + '월';
 
   var db = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
+  try { db = JSON.parse(_bigGet('unispace_activities')||'{}'); } catch(e) {}
   var cntByDate = {}, ptByDate = {}, ckByDate = {}, perfByDate = {};
   var monPrefix = y+'-'+('0'+(m+1)).slice(-2);
   var monPt = 0, monCk = 0, monProg = 0, monDone = 0;
@@ -20243,7 +20297,7 @@ function renderDayPanel(ds) {
   var panel = document.getElementById('mcalDayPanel');
   if (!panel) return;
   var db = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
+  try { db = JSON.parse(_bigGet('unispace_activities')||'{}'); } catch(e) {}
   var dayActs = Object.values(db).filter(function(a){ return a.date===ds && actFilterMatch(a); });
   dayActs.sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
 
@@ -20529,7 +20583,7 @@ function renderWeekActTable() {
   if(rngEl) rngEl.textContent = (first.getMonth()+1)+'월 '+first.getDate()+'일 - '+(last.getMonth()+1)+'월 '+last.getDate()+'일';
 
   var db = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
+  try { db = JSON.parse(_bigGet('unispace_activities')||'{}'); } catch(e) {}
 
   var datestrs = dates.map(function(d){
     return d.getFullYear()+'-'+_padTwo(d.getMonth()+1)+'-'+_padTwo(d.getDate());
@@ -20869,7 +20923,7 @@ function renderWeekActTable() {
 var _currentActId = null;
 
 function showActPopup(e, actId) {
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(err){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(err){}
   var act=db[actId];if(!act)return;
   e.stopPropagation();
   _currentActId = actId;
@@ -21073,7 +21127,7 @@ function toggleEditTag(el){
   _repositionActPopup();
 }
 function switchActEdit(){
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId];if(!act)return;
   var enEl=document.getElementById('editActName'); if(enEl) enEl.value = act.customerName||'';
   var edEl=document.getElementById('editActDate'); if(edEl) edEl.value = act.date||'';
@@ -21132,7 +21186,7 @@ function setEditStatus(status) {
   co.dataset.selected = (status==='완료')   ? '1' : '';
 }
 function saveActEdit(){
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   if(!db[_currentActId]) return;
   var status = document.getElementById('editStatusComplete').dataset.selected ? '완료' : '진행중';
   var supportVal = _pSupport;
@@ -21222,7 +21276,7 @@ function _deleteRecruitActChoice(actId, act){
   document.body.appendChild(ov);
   function _close(){ if(ov && ov.parentNode) ov.parentNode.removeChild(ov); }
   function _removeActLocal(){
-    var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+    var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
     delete db[actId];
     _lsSet('unispace_activities', JSON.stringify(db));
     deleteActFromGas(actId);
@@ -21243,7 +21297,7 @@ function _deleteRecruitActChoice(actId, act){
 }
 function deleteActFromPopup(){
   if(!_currentActId) return;
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
   // permission: own activity, or admin (rep / branch head)
   var _isAdmin = currentUser && (currentUser.role==='대표'||currentUser.role==='지점장'||(currentUser.title||'')==='교육지점장');
@@ -21272,7 +21326,7 @@ function deleteActFromPopup(){
     okLabel:'삭제',okCls:'red'
   }).then(function(ok){
     if(!ok) return;
-    var db2={};try{db2=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+    var db2={};try{db2=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
     delete db2[_delId];
     _lsSet('unispace_activities', JSON.stringify(db2));
     deleteActFromGas(_delId);   // GAS 활동기록에서도 삭제
@@ -21292,7 +21346,7 @@ function deleteActFromPopup(){
 }
 function openResultFromPopup(){
   if(!_currentActId) return;
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
   _resType=''; _resTags=[]; _resNext=''; _resNextTags=[]; _resNextSup=''; _resProducts=[{company:'',amount:''}]; _resNextProducts=[{company:'',amount:''}];
   var supNone=document.getElementById('resNextSupNone');
@@ -21538,7 +21592,7 @@ function _typeLabel(t){
 }
 function resLoadCustAddrTo(placeId, latId, lngId){
   if(!_currentActId) return;
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
   var name=act.customerName;
   var cdb=qaGetCustomerDB(), hit=null;
@@ -21551,7 +21605,7 @@ function resLoadCustAddrTo(placeId, latId, lngId){
 }
 function resLoadCustAddr(){
   if(!_currentActId) return;
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
   var name=act.customerName;
   var cdb=qaGetCustomerDB(), hit=null;
@@ -21662,7 +21716,7 @@ function toggleResNextTag(el){
 function saveActResult(){
   if(!_currentActId) return;
   if(!_resType){ showToast('상담 결과를 선택해 주세요'); return; }
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
   var curChasu = _chasuFromType(act.type);
   act.resultType = _resType;
@@ -22150,13 +22204,13 @@ function qaResetGeo(){
 }
 function qaGetCustomerDB(){
   var arr=[];
-  try { arr=JSON.parse(localStorage.getItem('unispace_customers')||'[]'); } catch(e){ arr=[]; }
+  try { arr=JSON.parse(_bigGet('unispace_customers')||'[]'); } catch(e){ arr=[]; }
   if(!Array.isArray(arr)) arr=[];
   return arr;
 }
 // 수정 모달: 활동의 고객명으로 등록주소/좌표 불러오기
 function editLoadCustomerAddr(){
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=_currentActId?db[_currentActId]:null;
   var name=act?(act.customerName||''):'';
   var st=document.getElementById('editGeoStatus');
@@ -22390,7 +22444,7 @@ function saveQuickAdd() {
   }
 
   var db = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_activities')||'{}'); } catch(e) {}
+  try { db = JSON.parse(_bigGet('unispace_activities')||'{}'); } catch(e) {}
   var id = 'act_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
   var placeStr = document.getElementById('qaPlace').value.trim();
   var nEl=document.getElementById('qaChasuN');
@@ -22469,9 +22523,9 @@ function onWeekCellClick(e, dateStr, fpId) {
 
 function openNearbyFromPopup() {
   if(!_currentActId) return;
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
-  var customers=[]; try{customers=JSON.parse(localStorage.getItem('unispace_customers')||'[]');}catch(e){}
+  var customers=[]; try{customers=JSON.parse(_bigGet('unispace_customers')||'[]');}catch(e){}
   var matched=customers.filter(function(c){ return c.name==act.customerName; })[0];
 
   var addr = (matched && matched.address) ? matched.address : (act.place || act.placeAddr || '');
@@ -22548,7 +22602,7 @@ function _initActPopupDrag(){
 
 var _dayListCtx = null;
 function openDayListPopup(fpId, dateStr){
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var acts = Object.values(db).filter(function(a){ return a.fpId===fpId && a.date===dateStr; });
   acts.sort(function(a,b){ return (a.time||'99:99').localeCompare(b.time||'99:99'); });
   if(!acts.length) return;
@@ -22596,15 +22650,15 @@ function showActPopupById(actId){
 
 function openRouteFromPopup() {
   if(!_currentActId) return;
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
   var act=db[_currentActId]; if(!act) return;
   openDayRoute(act.fpId, act.fpName, act.date);
 }
 
 // FP의 특정 날짜 활동을 동선으로 모아 nearby로 전달
 function openDayRoute(fpId, fpName, dateStr) {
-  var db={};try{db=JSON.parse(localStorage.getItem('unispace_activities')||'{}');}catch(e){}
-  var customers=[]; try{customers=JSON.parse(localStorage.getItem('unispace_customers')||'[]');}catch(e){}
+  var db={};try{db=JSON.parse(_bigGet('unispace_activities')||'{}');}catch(e){}
+  var customers=[]; try{customers=JSON.parse(_bigGet('unispace_customers')||'[]');}catch(e){}
   function findCust(nm){ for(var i=0;i<customers.length;i++){ if(customers[i] && customers[i].name==nm) return customers[i]; } return null; }
 
   var acts = Object.values(db).filter(function(a){ return a.fpId===fpId && a.date===dateStr; });
@@ -22770,7 +22824,7 @@ function renderSmartCheckinBtn() {
 
   var today  = getTodayStr();
   var db     = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
+  try { db = JSON.parse(_bigGet('unispace_attendance') || '{}'); } catch(e) {}
   var rec    = db[today] && db[today][currentUser.id];
 
   var pend = (typeof _checkinPendingGet === 'function') ? _checkinPendingGet() : null;
@@ -22811,13 +22865,13 @@ function _checkinPendingSet(o) {
 }
 function _checkinComplete(pend, srvTime, srvStatus, toastMsg) {
   var db = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch (e) {}
+  try { db = JSON.parse(_bigGet('unispace_attendance') || '{}'); } catch (e) {}
   if (!db[pend.date]) db[pend.date] = {};
   db[pend.date][currentUser.id] = {
     name: currentUser.name, branch: currentUser.branch, role: currentUser.role,
     time: srvTime || pend.time, status: srvStatus || pend.status
   };
-  localStorage.setItem('unispace_attendance', JSON.stringify(db));
+  _lsSet('unispace_attendance', JSON.stringify(db));
   _checkinPendingSet(null);
   renderSmartCheckinBtn();
   if (typeof renderAttToday === 'function') renderAttToday(true);
@@ -22883,7 +22937,7 @@ function doSmartCheckin() {
   }
   var today = getTodayStr();
   var db    = {};
-  try { db = JSON.parse(localStorage.getItem('unispace_attendance') || '{}'); } catch(e) {}
+  try { db = JSON.parse(_bigGet('unispace_attendance') || '{}'); } catch(e) {}
   var rec   = db[today] && db[today][currentUser.id];
   if (rec) {
     showToast('⏰ ' + rec.time.slice(0,5) + '에 이미 체크인했습니다');
@@ -24472,7 +24526,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 114;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 115;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
