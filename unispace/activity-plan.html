@@ -629,20 +629,53 @@ function _planConfirmSaved(payload){
 // ===== submission period custom setting =====
 var PERIOD_KEY='unispace_plan_period';
 var _periodSetting=null; // {month, week, start, end, deadlineDate, deadlineTime}
+// 2026-10-07: 기기마다 다른 달(8월·9월·10월)이 보이던 문제
+//   - 폰에 남은 옛 기간 설정을 서버 확인 없이 그대로 쓰고, 서버 조회가 실패하면 조용히 넘어갔다
+//   - 이제: 끝난 기간(종료일이 어제 이전)은 폰에서도 서버에서도 쓰지 않고, 서버 조회는 3회 재시도하며,
+//           실패하면 제목 아래에 "서버 확인 실패" 를 표시한다
+function _periodExpired(p){
+  if(!p || !p.end) return true;
+  var t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()-1); // 종료일 다음날까지는 유효(지난 계획 열람용)
+  var e=p.end.split('-'); var ed=new Date(parseInt(e[0]),parseInt(e[1])-1,parseInt(e[2]));
+  return ed < t;
+}
 function _loadPeriodLocal(){
-  try{ var s=localStorage.getItem(PERIOD_KEY); if(s) _periodSetting=JSON.parse(s); }catch(e){}
+  try{
+    var s=localStorage.getItem(PERIOD_KEY); if(!s) return;
+    var p=JSON.parse(s);
+    if(_periodExpired(p)){ localStorage.removeItem(PERIOD_KEY); _periodSetting=null; return; }
+    _periodSetting=p;
+  }catch(e){}
+}
+var _periodSyncState='';
+function _periodNote(msg){
+  var el=document.getElementById('periodSyncNote');
+  if(!el){ var hw=document.getElementById('heroWarn'); if(!hw||!hw.parentNode) return; el=document.createElement('div'); el.id='periodSyncNote'; el.style.cssText='font-size:11px;margin-top:4px;opacity:.85'; hw.parentNode.insertBefore(el, hw.nextSibling); }
+  el.textContent=msg||''; el.style.color = /실패/.test(msg||'') ? '#ffb4a2' : '#c8d0dc';
 }
 function loadPeriodFromGas(cb){
-  planGasGet({ action:'getPlanPeriod' }).then(function(res){
-    if(res && res.ok && res.period && res.period.start){
-      _periodSetting=res.period;
-      try{ localStorage.setItem(PERIOD_KEY, JSON.stringify(res.period)); }catch(e){}
-    } else if (res && res.ok && res.cleared){
-      _periodSetting=null;
-      try{ localStorage.removeItem(PERIOD_KEY); }catch(e){}
-    }
-    if(cb) cb();
-  }).catch(function(){ if(cb) cb(); });
+  var tries=0;
+  function once(){
+    tries++;
+    planGasGet({ action:'getPlanPeriod' }).then(function(res){
+      if(res && res.ok && res.period && res.period.start){
+        if(_periodExpired(res.period)){ _periodSetting=null; try{ localStorage.removeItem(PERIOD_KEY); }catch(e){} }
+        else { _periodSetting=res.period; try{ localStorage.setItem(PERIOD_KEY, JSON.stringify(res.period)); }catch(e){} }
+      } else if (res && res.ok && res.cleared){
+        _periodSetting=null;
+        try{ localStorage.removeItem(PERIOD_KEY); }catch(e){}
+      } else { throw new Error('bad'); }
+      _periodSyncState='ok'; _periodNote('');
+      if(cb) cb();
+    }).catch(function(){
+      if(tries<3){ setTimeout(once, 2000*tries); return; }
+      _periodSyncState='fail';
+      _periodNote('⚠️ 제출 기간 서버 확인 실패 — 표시된 주차가 다를 수 있습니다. 새로고침해 주세요');
+      if(cb) cb();
+    });
+  }
+  _periodNote('제출 기간 확인 중…');
+  once();
 }
 // effective week info: custom setting wins, else auto getWeekInfo
 function effectiveWeekInfo(){
@@ -2099,7 +2132,7 @@ document.addEventListener('visibilitychange', function(){
   try{ loadExisting(); }catch(e){}
 });
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 80; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 81; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -3282,6 +3315,24 @@ function init(){
   _renderPlanHeader();
   // refresh from GAS then re-render
   loadPeriodFromGas(function(){ _renderPlanHeader(); if(typeof renderWeekActCal==='function') renderWeekActCal(); });
+  // 2026-10-07: 뒤로가기(bfcache)로 돌아오거나 다른 앱에서 복귀했을 때도 서버 기준으로 다시 맞춘다
+  //   — 메인에서 새로고침해도 이 페이지는 따로 돌기 때문에, 여기 들어올 때마다 스스로 최신화해야 한다
+  var _planLastSync = Date.now();
+  function _planResync(reason){
+    _planLastSync = Date.now();
+    loadPeriodFromGas(function(){
+      _renderPlanHeader();
+      var sv = document.getElementById('statusView');
+      if(sv && sv.style.display !== 'none' && typeof _renderStatusWeek === 'function'){ _renderStatusWeek(); return; }
+      var pv = document.getElementById('pastView');
+      if(pv && pv.style.display !== 'none' && typeof _buildPastWeekOptions === 'function'){ _buildPastWeekOptions(); return; }
+      if(typeof renderWeekActCal === 'function') renderWeekActCal();
+    });
+  }
+  window.addEventListener('pageshow', function(e){ if(e && e.persisted) _planResync('bfcache'); });
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible' && Date.now() - _planLastSync > 60000) _planResync('visible');
+  });
 
   var _bk = _pBranchKey(currentUser.branch);
   var _bn = (_bk==='al') ? '알파지점' : (_bk==='br') ? '브라보지점' : '유니스지사';
