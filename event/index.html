@@ -356,6 +356,12 @@ canvas{display:block; width:100%; touch-action:none; user-select:none; -webkit-u
 </div></div>
 <div class="toast" id="toast"></div>
 <pre id="dbgBox" style="display:none;position:fixed;left:6px;right:6px;bottom:70px;max-height:45vh;overflow:auto;background:rgba(0,0,0,.85);color:#9f9;font-size:10px;padding:8px;border-radius:8px;z-index:60;white-space:pre-wrap;word-break:break-all"></pre>
+<div class="sheet" id="realSheet"><div class="in">
+  <div class="sc" style="font-size:40px">🔥 실전 모드</div>
+  <div class="msg">연습 3발은 이미 사용했어요</div>
+  <div class="sub" id="realSheetSub">지금부터 쏘는 발은 전부 기록되고 경품에 반영돼요.<br>활 개수를 확인하고 신중하게 쏘세요.</div>
+  <div class="btns"><button class="go" id="realGo">알겠어요 · 실전 쏘기 🏹</button></div>
+</div></div>
 <div class="sheet" id="introSheet"><div class="in">
   <div class="sc" style="font-size:44px">🔥 실전 시작</div>
   <div class="msg">처음 3발은 연습이에요</div>
@@ -373,7 +379,7 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 function rnd(a,b){ return a + Math.random()*(b-a); }
 
 /* ---------- config ---------- */
-var ARCH_BUILD = 13;
+var ARCH_BUILD = 15;
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 var ARCH_URL = 'https://unice-vip.co.kr/event/';
 var LOTTERY_URL = 'tk.html';
@@ -734,17 +740,22 @@ var _ev=['touchstart','touchend','pointerup','mousedown','click','keydown'];
 for(var ei=0;ei<_ev.length;ei++){ document.addEventListener(_ev[ei],function(){ bgmStart(); ac(); },{passive:true}); }
 function fireBigConfetti(){ shake=6; for(var i=0;i<60;i++) particles.push({x:rnd(0,W),y:-10,vx:rnd(-1.5,1.5),vy:rnd(1,4),s:rnd(3,7),a:1.4,c:['#F2C14E','#D64545','#7C5CBF','#7CC48B','#fff'][i%5]}); }
 function login(code){ code=String(code||'').replace(/\s/g,''); if(!code){ $('login').style.display='flex'; return; }
-  S.loginBusy=true; $('lerr').textContent='확인 중…'; $('whoName').textContent='확인 중…';
-  var guard=setTimeout(function(){ if(!ME){ $('login').style.display='flex'; $('lerr').textContent='확인이 늦어요 · 사번을 입력해 주세요'; } }, 8000);
-  gasGet(GAS_URL+'?action=getFpInfo&fp='+encodeURIComponent(code), 15000).then(function(d){
-    clearTimeout(guard); S.loginBusy=false;
-    if(!d||!d.ok){ $('login').style.display='flex'; $('lerr').textContent=(d&&d.msg)||'등록되지 않은 사번입니다'; $('whoName').textContent='-'; return; }
-    ME=d; try{ localStorage.setItem('arch_fp', d.id); }catch(e){}
+  S.loginBusy=true; $('lerr').textContent='확인 중…';
+  try{ var cached=JSON.parse(localStorage.getItem('arch_me_'+code.toUpperCase())||'null'); if(cached&&cached.name){ $('whoName').textContent=cached.name+' '+(cached.title||''); } else $('whoName').textContent='확인 중…'; }catch(e){ $('whoName').textContent='확인 중…'; }
+  var guard=setTimeout(function(){ if(!ME){ $('login').style.display='flex'; $('lerr').textContent='확인이 늦어요 · 서버가 바쁩니다. 잠시 후 다시 눌러주세요'; } }, 20000);
+  _lastLoadAt=Date.now();
+  gasGet(GAS_URL+'?action=archState&fp='+encodeURIComponent(code), 25000).then(function(d){
+    clearTimeout(guard); S.loginBusy=false; dbg('login',{ok:d&&d.ok,msg:d&&d.msg,name:d&&d.me&&d.me.name});
+    if(!d||!d.ok||!d.me||!d.me.name){ $('login').style.display='flex'; $('lerr').textContent=(d&&d.msg)||'등록되지 않은 사번입니다'; $('whoName').textContent='-'; return; }
+    ME={id:code.toUpperCase(), name:d.me.name, title:d.me.title||'', branch:d.me.branch||''};
+    try{ localStorage.setItem('arch_fp', ME.id); localStorage.setItem('arch_me_'+ME.id, JSON.stringify({name:ME.name,title:ME.title})); }catch(e){}
     qLoad(); qStatus(); if(Q.length) setTimeout(pumpQ, 500);
     if(!S.open && S.cur.length===0 && S.shot===0){ S.introShown=false; $('introSheet').className='sheet'; startRealPhase(); }
-    $('login').style.display='none'; $('whoName').textContent=d.name+' '+(d.title||'');
-    startApp();
-  }).catch(function(){ clearTimeout(guard); S.loginBusy=false; $('whoName').textContent='-'; $('login').style.display='flex'; $('lerr').textContent= IS_KAKAO_INAPP?'연결이 느려요 ㅠㅠ 아래 버튼으로 크롬·사파리에서 열어주세요!':'연결이 느려요. 잠시 후 한 번 더 눌러주세요'; $('extBtn').style.display='block'; });
+    $('login').style.display='none'; $('whoName').textContent=ME.name+' '+ME.title;
+    STATE=d; applyState(d);
+    if(pollTimer) clearInterval(pollTimer); pollTimer=setInterval(function(){ if(document.visibilityState==='visible') loadState(); }, POLL_MS);
+    document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible' && Date.now()-_lastLoadAt>60000) loadState(); });
+  }).catch(function(err){ clearTimeout(guard); S.loginBusy=false; dbg('login-fail',String(err)); $('whoName').textContent='-'; $('login').style.display='flex'; $('lerr').textContent= IS_KAKAO_INAPP?'연결이 느려요 ㅠㅠ 아래 버튼으로 크롬·사파리에서 열어주세요!':'연결이 느려요. 잠시 후 한 번 더 눌러주세요'; $('extBtn').style.display='block'; });
 }
 $('loginBtn').addEventListener('click',function(){ login($('fpInput').value); });
 $('fpInput').addEventListener('keydown',function(e){ if(e.key==='Enter') login($('fpInput').value); });
@@ -758,6 +769,7 @@ function applyState(d){ var m=d.me||{};
   var pending = Q.length>0 || qBusy;
   if(!S.open && !S.practice && !busy && !fly && !pending){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; S.perf=m.perf||0; S.bonus=m.bonus||0; S.sets=m.sets||[]; S.cur=m.cur||[]; }
   else { S.perf=m.perf||0; S.bonus=m.bonus||0; if(!pending){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; } }
+  try{ $('realSheetSub').innerHTML='지금부터 쏘는 발은 전부 기록되고 경품에 반영돼요.<br>남은 활 <b>'+(m.arrowsLeft||0)+'발</b> · 신중하게 쏘세요.'; }catch(e){}
   $('whoPerf').textContent=Math.round((m.perf||0)/10000)+'만'; $('whoArrows').textContent=m.arrowsTotal||0; $('whoBonus').textContent= m.bonus?('(지점 보너스 +'+m.bonus+'발 포함)'):'';
   renderGoals(d.branches||[]); $('asof').textContent=(d.asOf||'')+' 기준 · 3분마다 갱신'; applyMode();
   renderBoard(d.board||[], d.feed||[], d.asOf||'');
@@ -800,13 +812,14 @@ function pumpQ(){ if(qBusy||!Q.length||!ME) return; qBusy=true; S.sending=true; 
     setTimeout(function(){ loadState(); }, 2500);
     setTimeout(pumpQ, Math.min(10000, 2500*qFail)); });
 }
-function startRealPhase(){ S.open=false; var pl=3; try{ if(ME){ var v=localStorage.getItem('arch_prac_'+ME.id); if(v!==null) pl=parseInt(v,10)||0; } }catch(e){} S.pracLeft=pl; S.practice= pl>0; if(pl<=0){ $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; $('pracBtn').className='tg'; } S.cur=[]; S.stuck=[]; if(pl>0){ $('pracBtn').disabled=false; $('pracBtn').className='tg on'; } updateRes(); if(pl>0 && !S.introShown){ S.introShown=true; $('introSheet').className='sheet on'; } }
+function startRealPhase(){ S.open=false; var pl=3; try{ if(ME){ var v=localStorage.getItem('arch_prac_'+ME.id); if(v!==null) pl=parseInt(v,10)||0; } }catch(e){} S.pracLeft=pl; S.practice= pl>0; if(pl<=0){ $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; $('pracBtn').className='tg'; } S.cur=[]; S.stuck=[]; if(pl>0){ $('pracBtn').disabled=false; $('pracBtn').className='tg on'; } updateRes(); if(!S.introShown){ S.introShown=true; if(pl>0) $('introSheet').className='sheet on'; else { S.gate=true; $('realSheet').className='sheet on'; } } }
 function initPhase(){ if(openPeriod()){ S.open=true; S.practice=true; updateRes(); } else { startRealPhase(); }
   if(DEMO){ $('demoWrap').style.display=''; }
   var fp=savedFp(); if(fp) login(fp); else if(!openPeriod()) $('login').style.display='flex'; else $('login').style.display='none'; }
 setInterval(function(){ if(S.open && !openPeriod()){ startRealPhase(); showReal(); } else if(S.open) applyMode(); }, 30000);
 $('whoLine').addEventListener('click',function(){ if(!ME){ $('login').style.display='flex'; var f=savedFp(); if(f){ $('fpInput').value=f; login(f); } return; } toast('업적 다시 불러오는 중…'); loadState(); });
 $('introGo').addEventListener('click',function(){ $('introSheet').className='sheet'; $('hint').className='hint'; });
+$('realGo').addEventListener('click',function(){ $('realSheet').className='sheet'; S.gate=false; $('hint').className='hint'; });
 
 /* ---------- chooser ---------- */
 (function(){ var q=location.search||''; var a=$('goLottery'); a.href=LOTTERY_URL+q; var lotOn= Date.now()<LOTTERY_UNTIL.getTime(); a.style.display=lotOn?'':'none'; if(!lotOn) $('chooser').className='chooser hide';
