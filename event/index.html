@@ -373,7 +373,7 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 function rnd(a,b){ return a + Math.random()*(b-a); }
 
 /* ---------- config ---------- */
-var ARCH_BUILD = 11;
+var ARCH_BUILD = 13;
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 var ARCH_URL = 'https://unice-vip.co.kr/event/';
 var LOTTERY_URL = 'tk.html';
@@ -754,6 +754,7 @@ function startApp(){ loadState(); if(pollTimer) clearInterval(pollTimer); pollTi
 function loadState(){ _lastLoadAt=Date.now(); if(!ME) return;
   gasGet(GAS_URL+'?action=archState&fp='+encodeURIComponent(ME.id)).then(function(d){ dbg('state',{ok:d&&d.ok,msg:d&&d.msg,me:d&&d.me&&{perf:d.me.perf,used:d.me.arrowsUsed,left:d.me.arrowsLeft,prizes:d.me.prizes},period:d&&d.period}); if(!d||!d.ok){ toast('업적 불러오기 실패: '+((d&&d.msg)||'응답 없음')+' · 잠시 후 재시도'); setTimeout(loadState, 15000); return; } STATE=d; S.loadErr=0; applyState(d); }).catch(function(){ toast('서버 연결이 느려요 · 잠시 후 다시 불러옵니다'); setTimeout(loadState, 15000); }); }
 function applyState(d){ var m=d.me||{};
+  if(m.sids && Q.length){ var keep=[]; for(var qi=0;qi<Q.length;qi++){ if(m.sids.indexOf(Q[qi].sid)>=0){ dbg('confirmed',Q[qi].sid); } else keep.push(Q[qi]); } if(keep.length!==Q.length){ Q=keep; qFail=0; qSave(); qStatus(); if(!Q.length){ S.sending=false; $('dbgBox').style.display='none'; toast('✅ 기록 확인됨'); } } }
   var pending = Q.length>0 || qBusy;
   if(!S.open && !S.practice && !busy && !fly && !pending){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; S.perf=m.perf||0; S.bonus=m.bonus||0; S.sets=m.sets||[]; S.cur=m.cur||[]; }
   else { S.perf=m.perf||0; S.bonus=m.bonus||0; if(!pending){ S.arrows=m.arrowsLeft||0; S.points=m.prizes||0; } }
@@ -779,19 +780,26 @@ var Q=[], qBusy=false, qSeq=0, qFail=0;
 function qKey(){ return 'arch_q_'+(ME?ME.id:'x'); }
 function qSave(){ try{ localStorage.setItem(qKey(), JSON.stringify(Q)); }catch(e){} }
 function qLoad(){ try{ var v=JSON.parse(localStorage.getItem(qKey())||'[]'); if(v && v.length){ Q=v; } }catch(e){} }
-function showFail(reason){ var b=$('dbgBox'); b.style.display=''; b.textContent='⚠️ 기록 전송이 계속 실패하고 있어요. 이 화면을 캡처해서 대표님께 보내주세요.\n'+reason+'\n브라우저: '+navigator.userAgent.slice(0,80)+'\n온라인: '+navigator.onLine+'\n---\n'+DBG.join('\n'); }
+function showFail(reason){ var b=$('dbgBox'); b.style.display=''; b.textContent='⚠️ 기록 전송이 계속 실패하고 있어요. 이 화면을 캡처해서 대표님께 보내주세요.\n'+reason+'\n브라우저: '+navigator.userAgent.slice(0,200)+'\n온라인: '+navigator.onLine+'\n---\n'+DBG.join('\n'); }
 function qStatus(){ var el=$('qstat'); if(!el) return; el.textContent= Q.length? ('📡 기록 전송 중 '+Q.length+'발'+(qFail>2?' · 통신 재시도 중':'')) : ''; }
 function sendShot(dx,dy,ring,score){ if(!ME||DEMO) return; Q.push({dx:dx,dy:dy,sid:Date.now()+'_'+(++qSeq),tries:0}); qSave(); qStatus(); pumpQ(); }
-function pumpQ(){ if(qBusy||!Q.length||!ME) return; qBusy=true; S.sending=true; var it=Q[0];
-  gasGet(GAS_URL+'?action=archShoot&fp='+encodeURIComponent(ME.id)+'&dx='+it.dx.toFixed(3)+'&dy='+it.dy.toFixed(3)+'&sid='+it.sid, 25000).then(function(d){
-    var delay=1250;
-    dbg('shoot',d);
+function shotUrl(it){ var enc=encodeURIComponent([it.dx.toFixed(3), it.dy.toFixed(3), it.sid].join('|')); return GAS_URL+'?action=archState&fp='+encodeURIComponent(ME.id)+'&r='+enc; }
+function pumpQ(){ if(qBusy||!Q.length||!ME) return; qBusy=true; S.sending=true; var it=Q[0]; var url=shotUrl(it);
+  gasGet(url, 25000).then(function(d){
+    var delay=1250; dbg('shoot',d);
     if(d && d.ok){ Q.shift(); qFail=0; if(d.me && STATE) STATE.me=d.me; if(d.branches && STATE){ STATE.branches=d.branches; renderGoals(d.branches); } }
     else if(d && d.fatal){ Q.shift(); toast((d.msg||'기록 불가')+' · 이 발은 무효예요'); }
-    else { qFail++; delay= /너무 빨라/.test((d&&d.msg)||'') ? 1500 : Math.min(8000, 2000*qFail); if(qFail===3) showFail('서버 응답: '+((d&&d.msg)||'알 수 없음')); }
+    else { qFail++; delay=Math.min(8000, 2000*qFail); if(qFail===3) showFail('서버 응답: '+((d&&d.msg)||'알 수 없음')); }
     qSave(); qStatus(); qBusy=false; S.sending=Q.length>0;
     if(Q.length) setTimeout(pumpQ, delay); else setTimeout(function(){ if(!busy&&!fly) loadState(); }, 600);
-  }).catch(function(err){ dbg('shoot-fail',String(err)); qFail++; qSave(); qStatus(); qBusy=false; S.sending=Q.length>0; if(qFail===3) showFail('통신 실패: '+String(err)); setTimeout(pumpQ, Math.min(10000, 2500*qFail)); }); }
+  }).catch(function(err){ dbg('shoot-fail',String(err)); qFail++;
+    /* blind resend: the server dedupes by sid, and the next state poll confirms it via me.sids */
+    try{ if(window.fetch) fetch(url+'&blind=1', {mode:'no-cors', cache:'no-store'}).catch(function(){}); }catch(e){}
+    try{ var im=new Image(); im.src=url+'&blind=2&_='+Date.now(); }catch(e2){}
+    qSave(); qStatus(); qBusy=false; S.sending=Q.length>0; if(qFail===3) showFail('통신 실패: '+String(err));
+    setTimeout(function(){ loadState(); }, 2500);
+    setTimeout(pumpQ, Math.min(10000, 2500*qFail)); });
+}
 function startRealPhase(){ S.open=false; var pl=3; try{ if(ME){ var v=localStorage.getItem('arch_prac_'+ME.id); if(v!==null) pl=parseInt(v,10)||0; } }catch(e){} S.pracLeft=pl; S.practice= pl>0; if(pl<=0){ $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; $('pracBtn').className='tg'; } S.cur=[]; S.stuck=[]; if(pl>0){ $('pracBtn').disabled=false; $('pracBtn').className='tg on'; } updateRes(); if(pl>0 && !S.introShown){ S.introShown=true; $('introSheet').className='sheet on'; } }
 function initPhase(){ if(openPeriod()){ S.open=true; S.practice=true; updateRes(); } else { startRealPhase(); }
   if(DEMO){ $('demoWrap').style.display=''; }
