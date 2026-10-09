@@ -379,7 +379,7 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 function rnd(a,b){ return a + Math.random()*(b-a); }
 
 /* ---------- config ---------- */
-var ARCH_BUILD = 15;
+var ARCH_BUILD = 16;
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 var ARCH_URL = 'https://unice-vip.co.kr/event/';
 var LOTTERY_URL = 'tk.html';
@@ -750,9 +750,10 @@ function login(code){ code=String(code||'').replace(/\s/g,''); if(!code){ $('log
     ME={id:code.toUpperCase(), name:d.me.name, title:d.me.title||'', branch:d.me.branch||''};
     try{ localStorage.setItem('arch_fp', ME.id); localStorage.setItem('arch_me_'+ME.id, JSON.stringify({name:ME.name,title:ME.title})); }catch(e){}
     qLoad(); qStatus(); if(Q.length) setTimeout(pumpQ, 500);
-    if(!S.open && S.cur.length===0 && S.shot===0){ S.introShown=false; $('introSheet').className='sheet'; startRealPhase(); }
+    STATE=d;
+    if(!S.open && S.cur.length===0 && S.shot===0){ S.introShown=false; $('introSheet').className='sheet'; $('realSheet').className='sheet'; startRealPhase(); }
     $('login').style.display='none'; $('whoName').textContent=ME.name+' '+ME.title;
-    STATE=d; applyState(d);
+    applyState(d);
     if(pollTimer) clearInterval(pollTimer); pollTimer=setInterval(function(){ if(document.visibilityState==='visible') loadState(); }, POLL_MS);
     document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible' && Date.now()-_lastLoadAt>60000) loadState(); });
   }).catch(function(err){ clearTimeout(guard); S.loginBusy=false; dbg('login-fail',String(err)); $('whoName').textContent='-'; $('login').style.display='flex'; $('lerr').textContent= IS_KAKAO_INAPP?'연결이 느려요 ㅠㅠ 아래 버튼으로 크롬·사파리에서 열어주세요!':'연결이 느려요. 잠시 후 한 번 더 눌러주세요'; $('extBtn').style.display='block'; });
@@ -812,7 +813,8 @@ function pumpQ(){ if(qBusy||!Q.length||!ME) return; qBusy=true; S.sending=true; 
     setTimeout(function(){ loadState(); }, 2500);
     setTimeout(pumpQ, Math.min(10000, 2500*qFail)); });
 }
-function startRealPhase(){ S.open=false; var pl=3; try{ if(ME){ var v=localStorage.getItem('arch_prac_'+ME.id); if(v!==null) pl=parseInt(v,10)||0; } }catch(e){} S.pracLeft=pl; S.practice= pl>0; if(pl<=0){ $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; $('pracBtn').className='tg'; } S.cur=[]; S.stuck=[]; if(pl>0){ $('pracBtn').disabled=false; $('pracBtn').className='tg on'; } updateRes(); if(!S.introShown){ S.introShown=true; if(pl>0) $('introSheet').className='sheet on'; else { S.gate=true; $('realSheet').className='sheet on'; } } }
+function startRealPhase(){ S.open=false; var pl=3; try{ if(ME){ var v=localStorage.getItem('arch_prac_'+ME.id); if(v!==null) pl=parseInt(v,10)||0; } }catch(e){}
+  if(STATE && STATE.me && ((STATE.me.arrowsUsed||0)>0 || (STATE.me.sets||[]).length>0 || (STATE.me.cur||[]).length>0)){ pl=0; try{ if(ME) localStorage.setItem('arch_prac_'+ME.id,'0'); }catch(e2){} } S.pracLeft=pl; S.practice= pl>0; if(pl<=0){ $('pracBtn').textContent='연습 완료'; $('pracBtn').disabled=true; $('pracBtn').className='tg'; } S.cur=[]; S.stuck=[]; if(pl>0){ $('pracBtn').disabled=false; $('pracBtn').className='tg on'; } updateRes(); if(!S.introShown){ S.introShown=true; if(pl>0) $('introSheet').className='sheet on'; else { S.gate=true; $('realSheet').className='sheet on'; } } }
 function initPhase(){ if(openPeriod()){ S.open=true; S.practice=true; updateRes(); } else { startRealPhase(); }
   if(DEMO){ $('demoWrap').style.display=''; }
   var fp=savedFp(); if(fp) login(fp); else if(!openPeriod()) $('login').style.display='flex'; else $('login').style.display='none'; }
