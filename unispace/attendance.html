@@ -373,6 +373,16 @@ textarea.prm-input{resize:vertical;}
   .ov-row .acts .ov-btn { padding:7px 12px; font-size:12px; }
 }
 .ov-sel { font-size:11px; font-weight:700; border:1px solid rgba(46,158,107,.4); background:rgba(46,158,107,.1); color:#1E7A50; border-radius:8px; padding:5px 6px; max-width:120px; font-family:inherit; }
+/* ATT18: roster notes under the status table (hidden FPs / stale roster / refresh) */
+.st-note { margin:10px 2px 0; font-size:12px; line-height:1.6; color:var(--text2); }
+.st-note-warn { background:rgba(192,57,43,.07); border:1px solid rgba(192,57,43,.28); border-radius:10px; padding:8px 12px; color:#C0392B; margin-bottom:6px; font-weight:600; }
+.st-note-dim { background:var(--sur2); border:1px solid var(--bdr2); border-radius:10px; padding:8px 12px; color:var(--text2); margin-bottom:6px; }
+.st-note-dim b { color:var(--text1); }
+.st-note-sub { display:block; color:var(--text3); font-size:11px; margin-top:2px; }
+.st-note-time { color:var(--text3); font-size:11px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.st-note-btn { font-size:11px; font-weight:700; border:1px solid var(--bdr2); background:var(--sur); color:var(--text1); border-radius:8px; padding:4px 9px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.st-note-btn:active { opacity:.7; }
+@media (max-width:480px){ .st-note { font-size:11.5px; } .st-note-dim, .st-note-warn { padding:8px 10px; } }
 /* 커스텀 확인 모달 (직권 출결 등) */
 .att-cf-ov { position:fixed; inset:0; z-index:100050; background:rgba(43,38,28,.5);
   backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:20px; }
@@ -543,6 +553,7 @@ textarea.prm-input{resize:vertical;}
         <tbody id="statusTableBody"></tbody>
       </table>
     </div>
+    <div id="stHiddenNote" class="st-note" style="display:none"></div>
   </div>
 
   <!-- ══ 사전근태보고 탭 ══ -->
@@ -1317,7 +1328,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 17; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 18; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2550,7 +2561,13 @@ function adminOverrideAtt(fpId, fpName, ds){
     showToast(rep ? '✔️ 직권 출결 처리 중...' : '🕐 1차 승인 요청 중...');
     attGasGetTimeout({ action:'adminSetAttendance', by: currentUser.id, target: fpId, date: ds, reason: reason || '' }, 15000, 2).then(function(res){
       delete _ovPending[pk];
-      if(!res || !res.ok){ showToast('⚠️ 처리 실패: ' + ((res && res.msg) || '서버 오류')); return; }
+      if(!res || !res.ok){
+        var _m = (res && res.msg) || '서버 오류';
+        showToast('⚠️ 처리 실패: ' + _m);
+        // roster changed on the server (deactivated / excluded since this page loaded) -> pull it again
+        if(_m.indexOf('비활성')>=0 || _m.indexOf('제외')>=0 || _m.indexOf('찾을 수')>=0) setTimeout(function(){ _attResync(false); }, 1500);
+        return;
+      }
       if(res.mode === 'requested'){
         _ovReqs[_ovKey(ds, fpId)] = { id: res.reqId, date: ds, fpCode: fpId, fpName: fpName, status: 'pending', reqByName: currentUser.name, reqAt: new Date().toISOString(), branch: '', reason: reason || '', reqBy: currentUser.id };
         _ovList.unshift(_ovReqs[_ovKey(ds, fpId)]);
@@ -2797,6 +2814,7 @@ function renderStatus(){
       '</tr>';
     }
   }).join('');
+  try { _stRenderHiddenNote(branch); } catch(eN) {}
 }
 
 // summary card popup: who is behind the number
@@ -2936,25 +2954,56 @@ function absentTotal(rows){
 }
 // FP 목록 — GAS(getAllFps)에서 로드한 실제 명단 우선, 없으면 하드코딩 fallback
 var _fpListCache = null;
+var _fpListAll = null;   // ATT18: every roster row incl. inactive / attendance-excluded (for the hidden-FP note)
+var _fpListAt = 0;       // ATT18: when the roster last arrived from GAS (ms)
+var _fpListFail = false; // ATT18: last roster request failed -> the table may be stale
+function _fpNormRow(fp){
+  var t=String(fp.title||''), lv=String(fp.level||'');
+  var role='FP';
+  if(t==='대표'||lv==='admin') role='대표';
+  else if(t==='지점장'||t==='교육지점장'||lv==='manager') role='지점장';
+  else if(fp.id==='ktk01') role='대표';
+  var br = String(fp.branch||'').trim();
+  if (br === '알파') br = '알파지점';
+  else if (br === '브라보') br = '브라보지점';
+  var act = (String(fp.active)==='true' || fp.active===true);
+  var att = !(fp.attend===false || String(fp.attend)==='false');
+  return { id:String(fp.id), active:act, name:fp.name, role:role, branch:br, title:t, level:lv, attend:att };
+}
+var _fpListInflight = null; // callbacks waiting on the request in flight (page load fires this twice)
+function _fpListDone(){
+  var cbs = _fpListInflight || [];
+  _fpListInflight = null;
+  for(var i=0;i<cbs.length;i++){ try { cbs[i](); } catch(e){} }
+}
 function loadFpListFromGas(cb){
-  attGasGet({ action:'getAllFps' }).then(function(res){
+  if(_fpListInflight){ if(cb) _fpListInflight.push(cb); return; }
+  _fpListInflight = cb ? [cb] : [];
+  // ATT18: 20s timeout + 1 retry + cache-buster. a failed load keeps the previous list and flags it stale.
+  attGasGetTimeout({ action:'getAllFps', _t: Date.now() }, 20000, 2).then(function(res){
     if(res && res.ok && res.list && res.list.length){
-      _fpListCache = res.list.filter(function(fp){
-        return String(fp.active)==='true' || fp.active===true; // 활성만
-      }).map(function(fp){
-        var t=String(fp.title||''), lv=String(fp.level||'');
-        var role='FP';
-        if(t==='대표'||lv==='admin') role='대표';
-        else if(t==='지점장'||t==='교육지점장'||lv==='manager') role='지점장';
-        else if(fp.id==='ktk01') role='대표';
-        var br = String(fp.branch||'');
-        if (br === '알파') br = '알파지점';
-        else if (br === '브라보') br = '브라보지점';
-        return { id:String(fp.id), active:true, name:fp.name, role:role, branch:br, title:t, level:lv, attend:fp.attend };
-      });
+      _fpListAll = res.list.map(_fpNormRow);
+      _fpListCache = _fpListAll.filter(function(fp){ return fp.active; }); // active accounts only
+      _fpListAt = Date.now();
+      _fpListFail = false;
+    } else {
+      _fpListFail = true; _fpListRetry();
     }
-    if(cb) cb();
-  }).catch(function(){ if(cb) cb(); });
+    _fpListDone();
+  }).catch(function(){ _fpListFail = true; _fpListRetry(); _fpListDone(); });
+}
+// no roster yet (GAS busy): keep trying quietly in the background, up to 3 times (6s / 12s / 18s)
+var _fpListRetryN = 0;
+function _fpListRetry(){
+  if(_fpListAll || _fpListRetryN >= 3) return;
+  _fpListRetryN++;
+  setTimeout(function(){
+    if(_fpListAll) return;
+    loadFpListFromGas(function(){
+      if(_fpListFail) return;
+      try { var sp=document.getElementById('pageStatus'); if(sp && sp.classList.contains('active')) renderStatus(); } catch(e){}
+    });
+  }, 6000 * _fpListRetryN);
 }
 function getFpList(){
   if(_fpListCache && _fpListCache.length) return _fpListCache;
@@ -3032,6 +3081,77 @@ function _getFpListFallback(){
     {id:'H2502953',active:true,name:'허영민',role:'FP',branch:'알파지점'},
   ];
 }
+
+// ===== ATT18: why an FP is missing from the table + roster/attendance resync =====
+function _hhmmOf(ms){
+  var d=new Date(ms); var h=d.getHours(), m=d.getMinutes();
+  return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+}
+// list FPs in the current scope that are hidden on purpose (계정관리): attendance-excluded / inactive account
+function _stRenderHiddenNote(branch){
+  var el=document.getElementById('stHiddenNote');
+  if(!el) return;
+  var h='';
+  if(_fpListFail){
+    h+='<div class="st-note-warn">⚠️ FP 명단을 서버에서 받지 못해 <b>이전 명단</b>으로 표시 중입니다. 최근 계정관리 변경(출결 대상·활성 등)이 아직 반영되지 않았을 수 있어요. '
+      +'<button type="button" class="st-note-btn" onclick="_attResync(true)">🔄 다시 불러오기</button></div>';
+  }
+  if(_fpListAll && _fpListAll.length){
+    var offAtt=[], offAcc=[];
+    var _myKey = (currentUser && currentUser.role==='지점장') ? String(currentUser.branch||'').replace('지점','') : '';
+    var _bKey = (branch && branch!=='all') ? String(branch).replace('지점','') : '';
+    for(var i=0;i<_fpListAll.length;i++){
+      var f=_fpListAll[i];
+      if(f.role==='대표'||f.role==='지점장') continue;
+      if(String(f.title||'').indexOf('지점장')>=0) continue;
+      var fb=String(f.branch||'');
+      if(_myKey && fb.indexOf(_myKey)<0) continue;
+      if(_bKey && fb.indexOf(_bKey)<0) continue;
+      if(!f.active) offAcc.push(f.name);
+      else if(f.attend===false) offAtt.push(f.name);
+    }
+    var parts=[];
+    if(offAtt.length) parts.push('<b>출결 제외</b> '+offAtt.length+'명: '+_escHtml(offAtt.join(', ')));
+    if(offAcc.length) parts.push('<b>계정 비활성</b> '+offAcc.length+'명: '+_escHtml(offAcc.join(', ')));
+    if(parts.length){
+      h+='<div class="st-note-dim">표에 없는 FP — '+parts.join(' · ')
+        +'<span class="st-note-sub">계정관리에서 바꾼 설정 그대로입니다. 출결 제외·계정 비활성 FP는 출결현황·직권 출결 대상이 아니에요 (대상으로 바꾸면 🔄 새로고침 후 바로 표시).</span></div>';
+    }
+  }
+  if(_fpListAt){
+    h+='<div class="st-note-time">명단·출결 기준 '+_hhmmOf(_fpListAt)+' <button type="button" class="st-note-btn" onclick="_attResync(true)">🔄 새로고침</button></div>';
+  }
+  el.innerHTML=h;
+  el.style.display = h ? '' : 'none';
+}
+// reload roster + the month on screen (attendance, prereport, override requests), then re-render whatever tab is open
+var _attResyncBusy=false, _attHiddenAt=0;
+function _attResync(force){
+  if(_attResyncBusy) return;
+  _attResyncBusy=true;
+  if(force) showToast('🔄 명단·출결 새로고침 중...');
+  var ym=getYMStr(new Date());
+  try {
+    var y=parseInt(document.getElementById('statusYear').value), m=parseInt(document.getElementById('statusMonth').value);
+    if(y && m) ym = y+'-'+(m<10?'0':'')+m;
+  } catch(e){}
+  loadFpListFromGas(function(){
+    loadAttFromGas(ym).then(function(){ _attResyncDone(force); }).catch(function(){ _attResyncDone(force); });
+  });
+}
+function _attResyncDone(force){
+  _attResyncBusy=false;
+  try { renderCheckinTab(); } catch(e1){}
+  try { var sp=document.getElementById('pageStatus'); if(sp && sp.classList.contains('active')) renderStatus(); } catch(e2){}
+  try { var pp=document.getElementById('pagePrereport'); if(pp && pp.classList.contains('active')) renderPrereportTab(); } catch(e3){}
+  if(force) showToast(_fpListFail ? '⚠️ 명단 최신화 실패 — 이전 명단 유지' : '✅ 최신 명단·출결로 갱신했습니다');
+}
+// phones keep this page alive for days: refresh when it comes back after 2+ minutes, or from the back-forward cache
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState==='hidden'){ _attHiddenAt=Date.now(); return; }
+  if(document.visibilityState==='visible' && _attHiddenAt && (Date.now()-_attHiddenAt) > 120000){ _attHiddenAt=0; _attResync(false); }
+});
+window.addEventListener('pageshow', function(ev){ if(ev && ev.persisted) _attResync(false); });
 
 // ===== ESC 키로 열린 모달 닫기 =====
 (function(){

@@ -6777,8 +6777,8 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.active?'on':'off') + '" onclick="toggleFpActive(\'' + fp.id + '\')">' +
         (fp.active ? '✅ 활성' : '🚫 비활성') +
       '</button></td>' +
-      '<td><button class="fp-active-toggle ' + (fp.attend!==false?'on':'off') + '" onclick="toggleFpAttend(\'' + fp.id + '\')">' +
-        (fp.attend!==false ? '📋 대상' : '🚫 제외') +
+      '<td><button class="fp-active-toggle ' + (fp.attend!==false?'on':'off') + '" onclick="toggleFpAttend(\'' + fp.id + '\')"' + ((fp.attend!==false && !fp.active) ? ' style="opacity:.55" title="계정이 비활성이라 출결현황에는 나오지 않습니다"' : '') + '>' +
+        (fp.attend!==false ? (fp.active ? '📋 대상' : '📋 대상<span style="display:block;font-size:9px;font-weight:700;color:#C0392B;margin-top:1px">계정 비활성</span>') : '🚫 제외') +
       '</button></td>' +
       '<td><button class="fp-active-toggle ' + (fp.perfKeep===true?'on':'off') + '" onclick="toggleFpPerfKeep(\'' + fp.id + '\')">' +
         (fp.perfKeep===true ? '📊 집계' : (fp.active ? '—' : '⛔ 제외')) +
@@ -6914,6 +6914,9 @@ function _fpDoToggle(id, key) {
       if (key === 'std' && typeof loadAwardStatus === 'function') { try { _awlData = null; loadAwardStatus(); } catch (e) {} } // re-filter the standard fp ladder/share list
       if (key === 'active') {
         showToast((v ? '\u2705 ' : '\uD83D\uDEAB ') + fp.name + ' ' + (v ? cfg.onMsg : cfg.offMsg));
+      } else if (key === 'attend' && v && fp.active === false) {
+        // v116: the flag is saved, but attendance screens only list active accounts
+        showToast('\u26A0\uFE0F ' + fp.name + ' \uCD9C\uACB0 \uB300\uC0C1\uC73C\uB85C \uC800\uC7A5\uB428 \u2014 \uACC4\uC815\uC774 \uBE44\uD65C\uC131\uC774\uB77C \uCD9C\uACB0\uD604\uD669\u00B7\uC9C1\uAD8C \uCD9C\uACB0\uC5D0\uB294 \uC544\uC9C1 \uC548 \uB098\uC635\uB2C8\uB2E4. \uACC4\uC815\uB3C4 \uD65C\uC131\uD654\uD574 \uC8FC\uC138\uC694');
       } else if (cfg.defFalse) {
         showToast(cfg.icon + ' ' + fp.name + ' ' + cfg.label + ' ' + (v ? 'ON' : 'OFF'));
       } else {
@@ -16826,6 +16829,19 @@ function renderAttToday(force) {
       } catch(e) {}
     }
     var roster = (attRes && attRes.ok && attRes.roster) ? attRes.roster : [];
+    // v116: my own row carries the current attend flag -> refresh the cached user so the check-in button follows 계정관리 without re-login
+    try {
+      for (var _ri = 0; _ri < roster.length; _ri++) {
+        if (String(roster[_ri].id) !== String(currentUser.id)) continue;
+        var _newAtt = (roster[_ri].attend !== false);
+        if ((currentUser.attend !== false) !== _newAtt) {
+          currentUser.attend = _newAtt;
+          try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch(eU) {}
+          if (typeof renderSmartCheckinBtn === 'function') { try { renderSmartCheckinBtn(); } catch(eB) {} }
+        }
+        break;
+      }
+    } catch(eA) {}
     // admin/branch-head = all branches, others = own branch only
     var _attSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
     var _attNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
@@ -24526,7 +24542,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 115;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 116;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
