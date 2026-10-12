@@ -1431,7 +1431,7 @@ function _prDayMarker(db,ds,isAdmin){
     var a=0,b=0,etc=0,allDone=true;
     for(var k=0;k<ids.length;k++){
       var r=recs[ids[k]];
-      if(branchFilter && (r.branch||'')!==branchFilter) continue;
+      if(branchFilter && _brKeyOf(r.branch)!==_brKeyOf(branchFilter)) continue;
       if(!r.proof) allDone=false;
       var br=(r.branch||'');
       if(br.indexOf('알파')>=0) a++;
@@ -1636,7 +1636,7 @@ function _renderPrAdminList(){
   if(bf) branchFilter=bf.value||'';
   var ids=Object.keys(recs).filter(function(id){
     if(!branchFilter) return true;
-    return (recs[id].branch||'')===branchFilter;
+    return _brKeyOf(recs[id].branch)===_brKeyOf(branchFilter);
   });
   // 알파 먼저, 브라보 나중, 그 외 마지막 + 같은 지점 내 이름순
   ids.sort(function(a,b){
@@ -1809,13 +1809,41 @@ function _prmDeleteDo(date, fpCode, name){
 
 // ── 관리자: FP 근태 직접 추가 ──────────────────────
 var _prRoster = null; // [{id,name,branch,...}]
+var _prRosterAt = 0;  // ATT18: when the list last came from GAS (ms)
+// ATT18: the picker lists attendance-target FPs of my scope only (same rule as the status table):
+//   active account, not attendance-excluded, not 대표/지점장, and my branch when I am a 지점장.
+//   branch is matched loosely ('알파' vs '알파지점') — exact matching hid FPs added via 계정관리.
+function _prRosterFilter(list){
+  var myKey = (currentUser && currentUser.role==='지점장') ? String(currentUser.branch||'').replace('지점','') : '';
+  var out = [];
+  for(var i=0;i<(list||[]).length;i++){
+    var f = list[i];
+    if(!f || !f.id) continue;
+    if(f.active===false) continue;
+    if(f.attend===false) continue;
+    var lv=String(f.level||''), t=String(f.title||'');
+    if(lv==='admin'||lv==='manager'||t.indexOf('지점장')>=0||t==='대표'||f.role==='대표'||f.role==='지점장') continue;
+    if(myKey && String(f.branch||'').indexOf(myKey)<0) continue;
+    out.push({ id:String(f.id), name:f.name||'', branch:String(f.branch||'') });
+  }
+  out.sort(function(a,b){
+    var oa=_brKeyOf(a.branch)==='알파'?0:_brKeyOf(a.branch)==='브라보'?1:2;
+    var ob=_brKeyOf(b.branch)==='알파'?0:_brKeyOf(b.branch)==='브라보'?1:2;
+    if(oa!==ob) return oa-ob;
+    return String(a.name).localeCompare(String(b.name),'ko');
+  });
+  return out;
+}
 function _loadRoster(cb){
-  if(_prRoster){ if(cb) cb(); return; }
-  attGasGet({ action:'getRoster', fp:currentUser.id }).then(function(res){
-    if(res && res.ok && res.list){ _prRoster = res.list; }
-    else { _prRoster = []; }
+  // one roster for the whole page: the same getAllFps list the status table uses (shared, de-duplicated request)
+  if(_prRoster && _prRoster.length && (Date.now()-_prRosterAt) < 120000){ if(cb) cb(); return; }
+  var fin = function(){
+    _prRoster = _prRosterFilter(_fpListAll || []);
+    if(_fpListAll && _fpListAll.length) _prRosterAt = Date.now();
     if(cb) cb();
-  }).catch(function(){ _prRoster=[]; if(cb) cb(); });
+  };
+  var stale = !_fpListAll || !_fpListAll.length || (Date.now()-_fpListAt) > 120000;
+  if(stale) loadFpListFromGas(fin); else fin();
 }
 var _prAddDate = null;
 var _prAddActs = [];
@@ -1907,9 +1935,13 @@ function openPrAdd(date){
   document.getElementById('prAddOverlay').classList.add('show');
   _loadRoster(function(){
     var opts='<option value="">FP를 선택하세요</option>';
+    if(!_prRoster || !_prRoster.length){
+      sel.innerHTML='<option value="">명단을 불러오지 못했습니다 — 닫았다가 다시 열어 주세요</option>';
+      return;
+    }
     for(var i=0;i<_prRoster.length;i++){
       var f=_prRoster[i];
-      opts+='<option value="'+f.id+'" data-name="'+(f.name||'')+'" data-branch="'+(f.branch||'')+'">'+(f.name||'')+' · '+(f.branch||'')+'</option>';
+      opts+='<option value="'+f.id+'" data-name="'+(f.name||'')+'" data-branch="'+(f.branch||'')+'">'+(f.name||'')+' · '+String(f.branch||'').replace('지점','')+'</option>';
     }
     sel.innerHTML=opts;
   });
@@ -3083,6 +3115,12 @@ function _getFpListFallback(){
 }
 
 // ===== ATT18: why an FP is missing from the table + roster/attendance resync =====
+function _brKeyOf(b){
+  var x=String(b||'');
+  if(x.indexOf('알파')>=0) return '알파';
+  if(x.indexOf('브라보')>=0) return '브라보';
+  return x;
+}
 function _hhmmOf(ms){
   var d=new Date(ms); var h=d.getHours(), m=d.getMinutes();
   return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
@@ -3130,6 +3168,7 @@ function _attResync(force){
   if(_attResyncBusy) return;
   _attResyncBusy=true;
   if(force) showToast('🔄 명단·출결 새로고침 중...');
+  _prRosterAt = 0;
   var ym=getYMStr(new Date());
   try {
     var y=parseInt(document.getElementById('statusYear').value), m=parseInt(document.getElementById('statusMonth').value);
