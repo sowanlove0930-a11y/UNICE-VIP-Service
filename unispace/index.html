@@ -3538,7 +3538,7 @@ window.UNISPACE_FCM = {
       </div>
       <div class="rc2-sum3">
         <div class="rc2-bl rc2-bl-cand"><div class="rc2-bl-lbl">추진 후보자</div><div class="rc2-bl-val" id="rc2SumCand">0<small id="rc2SumGoal"></small></div></div>
-        <div class="rc2-bl rc2-bl-panel"><div class="rc2-bl-lbl">소비자패널</div><div class="rc2-bl-val" id="rc2SumPanel">0<small>명</small></div></div>
+        <div class="rc2-bl rc2-bl-panel"><div class="rc2-bl-lbl">전화인터뷰</div><div class="rc2-bl-val" id="rc2SumPanel">0<small>명</small></div></div>
         <div class="rc2-bl rc2-bl-itv"><div class="rc2-bl-lbl">지점장 인터뷰</div><div class="rc2-bl-val" id="rc2SumItv">0<small>명</small></div></div>
       </div>
 
@@ -3671,6 +3671,8 @@ window.UNISPACE_FCM = {
         <span>📞 전화인터뷰 신청</span>
       </label>
       <div id="rc2CallTimeWrap" style="display:none;margin-top:9px;padding:12px;background:rgba(217,131,36,.08);border:1px dashed rgba(217,131,36,.5);border-radius:9px">
+        <label class="rc2-fld-lbl" style="margin-bottom:6px">전화인터뷰 날짜</label>
+        <input type="date" id="rc2fCallDate" class="rc2-text" style="width:100%;padding:9px;margin-bottom:9px;box-sizing:border-box">
         <label class="rc2-fld-lbl" style="margin-bottom:6px">전화인터뷰 가능시간</label>
         <div style="display:flex;align-items:center;gap:7px">
           <select id="rc2fCallFrom" class="rc2-text" style="flex:1;padding:9px"></select>
@@ -17111,11 +17113,20 @@ var RECRUIT_KEY = 'unispace_recruit_v2'; // { ym: { goal:{alpha,bravo}, list:[ {
 // 리크루팅 진행 항목 정의 (복수선택) — 라벨·색상
 var RC2_TYPES = [
   { key:'지점장인터뷰', short:'인터뷰', kakao:'인', icon:'🤝', bg:'#6D3FB0', soft:'#F0EAFA', deep:'#5A2FA0', bd:'#D6C2EF' },
-  { key:'소비자패널',   short:'패널', kakao:'패', icon:'🗂', bg:'#1A6FB5', soft:'#E6F1FB', deep:'#13568F', bd:'#B8D6EF' },
+  { key:'전화인터뷰',   short:'전화', kakao:'전', icon:'☎️', bg:'#1A6FB5', soft:'#E6F1FB', deep:'#13568F', bd:'#B8D6EF' },
   { key:'라이프디자인', short:'라디', kakao:'라', icon:'📋', bg:'#1E7A50', soft:'#E5F5EB', deep:'#15663F', bd:'#AEDFC2' },
   { key:'파트너스',     short:'파트', kakao:'파', icon:'🙌', bg:'#C2691A', soft:'#FCEEDD', deep:'#9A4F0F', bd:'#F0CDA3' },
-  { key:'잡사이트',     short:'콜', kakao:'콜', icon:'📞', bg:'#4A5568', soft:'#EDF0F4', deep:'#2D3748', bd:'#CBD5E0' }
+  { key:'잡사이트',     short:'콜', kakao:'콜', icon:'📞', bg:'#4A5568', soft:'#EDF0F4', deep:'#2D3748', bd:'#CBD5E0' },
+  // hidden: kept only so old records still render (removed from the chips 2026-10-13)
+  { key:'소비자패널',   short:'패널', kakao:'패', icon:'🗂', bg:'#2E6E8E', soft:'#E4EFF4', deep:'#245A75', bd:'#B5D0DD', hidden:true }
 ];
+// phone interview entry (aladdin call lead or an event whose type is phone interview only)
+function _rcPhoneEv(E){
+  if(!E) return false;
+  if(E.evid==='alcall') return true;
+  var t=E.types||[];
+  return t.indexOf('전화인터뷰')>=0 && t.indexOf('지점장인터뷰')<0;
+}
 function rc2TypeMeta(key){ if(key==='서포터즈') key='파트너스'; /* legacy alias */ for(var i=0;i<RC2_TYPES.length;i++){ if(RC2_TYPES[i].key===key) return RC2_TYPES[i]; } return { key:key, icon:'●', bg:'#888', soft:'#EEE', deep:'#555', bd:'#DDD' }; }
 // 후보자 1건의 events 배열 정규화 (구버전 panelState/itvState → events 마이그레이션)
 function rc2NormEvents(it){
@@ -17346,7 +17357,8 @@ function rc2SaveToGas(rec, ym, sendEvents) {
     + '&focus=' + encodeURIComponent(rec.focus===true ? 'Y' : 'N')
     + '&joinConfirmDate=' + encodeURIComponent(rec.joinConfirmDate||'')
     + '&regMonth=' + encodeURIComponent(rec.regMonth||'')
-    + (rec.al ? ('&aladdin=' + encodeURIComponent(rec.al) + '&aladdinType=' + encodeURIComponent(rec.alType||'call') + '&callDate=' + encodeURIComponent(rec.callDate||'')) : '');
+    + '&callDate=' + encodeURIComponent(rec.callDate||'')
+    + (rec.al ? ('&aladdin=' + encodeURIComponent(rec.al) + '&aladdinType=' + encodeURIComponent(rec.alType||'call')) : '');
   return fetch(u).then(function(r){ return r.json(); }).catch(function(){});
 }
 // 후보자 GAS 삭제
@@ -17917,7 +17929,10 @@ function _alCallLeadsOf(br){
   var all=rc2GetAllCandData(); var out=[];
   for(var i=0;i<((all&&all.list)||[]).length;i++){
     var c=all.list[i];
-    if(!c || !c.al || c.alType!=='call') continue;
+    if(!c) continue;
+    var _isAlCall=(c.al && c.alType==='call');
+    if(!_isAlCall && !(c.callItv===true && c.callDate)) continue;
+    if(!_isAlCall){ var _hv=false, _ev2=rc2NormEvents(c); for(var _e2=0;_e2<_ev2.length;_e2++){ if(_ev2[_e2] && _ev2[_e2].dt && !_ev2[_e2].cancelled && (_ev2[_e2].types||[]).indexOf('지점장인터뷰')>=0){ _hv=true; break; } } if(_hv) continue; }
     var cb=(c.branch==='alpha'||String(c.branch||'').indexOf('알파')>=0)?'alpha':'bravo';
     if(br && cb!==br) continue;
     if(c.status==='관리' || c.callRes==='no') continue;
@@ -17950,7 +17965,7 @@ function _alPendCallSection(br){
   var h='<div style="font-size:11.5px;font-weight:800;color:#2D3748;margin:6px 2px 8px;display:flex;align-items:center;gap:7px">📞 전화인터뷰 예정 <span style="flex:1;height:1px;background:var(--border)"></span> '+list.length+'명</div>';
   for(var i=0;i<list.length;i++){
     var c=list[i];
-    var who=c.ref?('🧞 '+rc2Esc(c.ref)):'';
+    var who=c.ref?((c.al?'🧞 ':'추천 ')+rc2Esc(c.ref)):'';
     var tm=(rc2NormCallTime(c.callFrom)||'')+((c.callTo)?(' ~ '+rc2NormCallTime(c.callTo)):'');
     var dl=c.callDate?_alFmtDt(c.callDate):'';
     var friTag=''; if(_alIsFriLead(c.alAt)){ friTag='<span style="font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;background:#F4F1E9;color:#97A0B0;margin-left:5px">금요일 콜 · 점수 제외</span>'; }
@@ -18003,7 +18018,7 @@ function _alDayEvs(dayKey){
       if(!m) continue;
       var dk=m[1]+'-'+_alP2(+m[2])+'-'+_alP2(+m[3]);
       if(dk!==dayKey) continue;
-      out.push({ time:(+m[4])+':'+m[5], branch:((c.branch==='alpha'||String(c.branch||'').indexOf('알파')>=0)?'alpha':'bravo'), cancelled:!!ev.cancelled, name:c.name });
+      out.push({ time:(+m[4])+':'+m[5], branch:((c.branch==='alpha'||String(c.branch||'').indexOf('알파')>=0)?'alpha':'bravo'), cancelled:!!ev.cancelled, name:c.name, types:ev.types||[] });
     }
   }
   return out;
@@ -18014,7 +18029,7 @@ function rcAlOpenCallDone(candId){
   for(var i=0;i<((all&&all.list)||[]).length;i++){ if(all.list[i].id===candId){ c=all.list[i]; break; } }
   if(!c){ showToast('후보자를 찾을 수 없습니다'); return; }
   var br=(c.branch==='alpha'||String(c.branch||'').indexOf('알파')>=0)?'alpha':'bravo';
-  rcAlCD={ id:candId, res:'visit', day:'', time:'', br:br, first:!c.callDoneAt, name:c.name, fri:false };
+  rcAlCD={ id:candId, res:'visit', day:'', time:'', br:br, first:!c.callDoneAt, name:c.name, fri:false, al:!!c.al };
   rcAlCD.fri=_alIsFriLead(c.alAt);
   var old=document.getElementById('ralCdOv'); if(old && old.parentNode) old.parentNode.removeChild(old);
   var ov=document.createElement('div');
@@ -18043,7 +18058,7 @@ function rcAlRenderCallDone(){
   var el=document.getElementById('ralCdBody'); if(!el) return;
   var S=rcAlCD;
   var h='<div style="font-size:15px;font-weight:800;margin-bottom:2px">'+(S.first?'📞 ':'🏠 ')+rc2Esc(S.name)+(S.first?' 통화 완료':' 내방 연결')
-    +(S.first?(' <span style="font-size:12px;color:#9A6A10">· '+(S.fri?'금요일 콜(점수 제외)':(_alBrKo(S.br)+' +2점'))+'</span>'):'')+'</div>';
+    +((S.first && S.al)?(' <span style="font-size:12px;color:#9A6A10">· '+(S.fri?'금요일 콜(점수 제외)':(_alBrKo(S.br)+' +2점'))+'</span>'):'')+'</div>';
   if(S.first){
     h+='<div style="font-size:11.5px;color:var(--text3);margin:8px 0 6px">통화 결과</div><div class="ral-seg3">';
     var opts=[['visit','🏠 내방으로 연결'],['think','⏳ 생각해 본대요'],['no','🙅 관심 없음']];
@@ -18211,6 +18226,7 @@ function rc2RenderSummary(d) {
     // 입과확보 카운트: 주기와 무관하게 전체 인원
     // (아래 '✅ 입과확보' 아코디언 인원수와 항상 일치)
     if(it.status==='입과확보'){ join++; }
+    if(it.callDoneAt){ var _cdk=String(it.callDoneAt).substr(0,10).split('-'); var _cdd=new Date(+_cdk[0],+_cdk[1]-1,+_cdk[2]); if(!cycleStart || _cdd.getTime()>=cycleStart.getTime()) panel++; }
     var evs = rc2NormEvents(it);
     for(var e=0;e<evs.length;e++){
       if(!evs[e].done) continue;
@@ -18221,7 +18237,7 @@ function rc2RenderSummary(d) {
         if(_ed.getTime() < cycleStart.getTime()) continue;
       }
       var ts = evs[e].types||[];
-      if(ts.indexOf('소비자패널')>=0) panel++;
+      if(ts.indexOf('전화인터뷰')>=0) panel++;
       if(ts.indexOf('지점장인터뷰')>=0) itv++;
     }
   }
@@ -18265,6 +18281,7 @@ function rc2CollectPending(includeConfirmed){
       var ev=evs[e];
       if(!ev || !ev.dt || ev.done || ev.cancelled) continue;
       if(ev.hideFromPending===true) continue;
+      if(_rcPhoneEv(ev)) continue;
       // 일정 날짜가 현재 표시월인 것만 (월별 리셋)
       var _evYm=rc2DtKey(ev.dt); if(_evYm) _evYm=_evYm.substr(0,7);
       if(_evYm!==_curYm) continue;
@@ -19028,6 +19045,7 @@ function rc2OpenAdd(id) {
   var _cf=document.getElementById('rc2fCallFrom'); if(_cf) _cf.value = it ? rc2NormCallTime(it.callFrom) : '';
   var _ct=document.getElementById('rc2fCallTo'); if(_ct) _ct.value = it ? rc2NormCallTime(it.callTo) : '';
   var _cn=document.getElementById('rc2fCallNote'); if(_cn) _cn.value = it ? (it.callNote||'') : '';
+  var _cdt=document.getElementById('rc2fCallDate'); if(_cdt) _cdt.value = it ? String(it.callDate||'').substr(0,10) : '';
   rc2ToggleCallTime();
   rc2.status = it ? (it.status||'추진중') : '추진중';
   rc2.editEvents = it ? rc2NormEvents(it).slice() : [];
@@ -19075,6 +19093,8 @@ function rc2CloseAdd() {
 function rc2ToggleCallTime(){
   var ci=document.getElementById('rc2fCallItv'), w=document.getElementById('rc2CallTimeWrap');
   if(w) w.style.display = (ci && ci.checked) ? '' : 'none';
+  var cd=document.getElementById('rc2fCallDate');
+  if(ci && ci.checked && cd && !cd.value){ var n=new Date(); cd.value=n.getFullYear()+'-'+((n.getMonth()+1)<10?'0':'')+(n.getMonth()+1)+'-'+(n.getDate()<10?'0':'')+n.getDate(); }
 }
 function rc2NormCallTime(v){
   if(!v) return '';
@@ -19116,6 +19136,7 @@ function rc2RenderTypeChips() {
   var html = '';
   for(var i=0;i<RC2_TYPES.length;i++){
     var t = RC2_TYPES[i];
+    if(t.hidden) continue;
     var on = rc2.fTypes.indexOf(t.key)>=0;
     var st = on
       ? 'background:'+t.bg+';color:#fff;border:1px solid '+t.bg
@@ -19384,7 +19405,7 @@ function _rc2IvSlotChips(dt){
       if(ev.dt.split(' ')[0]!==dayKey) continue;
       // 편집 중인 본인 이벤트는 점유에서 제외
       var _bn = (it.branch==='alpha' || String(it.branch||'').indexOf('\uC54C\uD30C')>=0) ? 'alpha' : 'bravo';
-      evsAll.push({ time:(ev.dt.split(' ')[1]||''), branch:_bn, cancelled:ev.cancelled });
+      evsAll.push({ time:(ev.dt.split(' ')[1]||''), branch:_bn, cancelled:ev.cancelled, types:ev.types||[] });
     }
   }
   var slots = _ivComputeSlots(evsAll, br);
@@ -19416,6 +19437,8 @@ function _rc2IvSlotChips(dt){
 }
 // 가능시간 칩 선택 -> rc2.fDt 시간 채움
 function rc2PickIvSlot(hhmm){
+  // tap the selected time again -> clear the selection
+  if(rc2.fDt && String(rc2.fDt).split(' ')[1]===hhmm){ rc2.fDt=''; rc2RenderEvtPicker(); return; }
   var datePart = (rc2.fDt && rc2.fDt.split(' ')[0]) ? rc2.fDt.split(' ')[0] : (function(){ var pk=rc2._pk; var mo=(pk.m+1<10?'0':'')+(pk.m+1); return pk.y+'-'+mo+'-01'; })();
   rc2.fDt = datePart+' '+hhmm;
   rc2RenderEvtPicker();
@@ -19428,6 +19451,8 @@ function rc2EvtPickDay(dnum) {
   var pk = rc2._pk;
   var mo=(pk.m+1<10?'0':'')+(pk.m+1); var da=(dnum<10?'0':'')+dnum;
   var datePart = pk.y+'-'+mo+'-'+da;
+  // tap the selected day again -> clear the selection
+  if(rc2.fDt && String(rc2.fDt).split(' ')[0]===datePart){ rc2.fDt=''; rc2RenderEvtPicker(); return; }
   var timePart = (rc2.fDt && rc2.fDt.split(' ')[1]) ? rc2.fDt.split(' ')[1] : '12:00';
   rc2.fDt = datePart+' '+timePart;
   rc2RenderEvtPicker();
@@ -19629,20 +19654,21 @@ function rc2SaveCand() {
     callItv: (function(){ var p=document.getElementById('rc2fCallItv'); return p ? p.checked : false; })(),
     callFrom: (function(){ var p=document.getElementById('rc2fCallFrom'); return p ? p.value : ''; })(),
     callTo: (function(){ var p=document.getElementById('rc2fCallTo'); return p ? p.value : ''; })(),
-    callNote: (function(){ var p=document.getElementById('rc2fCallNote'); return p ? p.value.trim() : ''; })()
+    callNote: (function(){ var p=document.getElementById('rc2fCallNote'); return p ? p.value.trim() : ''; })(),
+    callDate: (function(){ var ci=document.getElementById('rc2fCallItv'), p=document.getElementById('rc2fCallDate'); return (ci && ci.checked && p) ? p.value : ''; })()
   };
   // aladdin lead fields: keep on edit, set on a new lead from the aladdin counter
   (function(){
     var _src=null;
     if(rc2.editId){ var _alD=rc2GetAllCandData(); for(var _ai2=0; _ai2<(_alD.list||[]).length; _ai2++){ if(_alD.list[_ai2].id===rc2.editId){ _src=_alD.list[_ai2]; break; } } }
     if(_src && _src.al){
-      rec.al=_src.al; rec.alType=_src.alType; rec.alAt=_src.alAt; rec.callDate=_src.callDate;
+      rec.al=_src.al; rec.alType=_src.alType; rec.alAt=_src.alAt; if(!rec.callDate) rec.callDate=_src.callDate;
       rec.callDoneAt=_src.callDoneAt; rec.callRes=_src.callRes; rec.callMiss=_src.callMiss;
     } else if(!rc2.editId && rc2.alMode && currentUser){
       var _n=new Date(); var _p=function(n){ return (n<10?'0':'')+n; };
       var _td=_n.getFullYear()+'-'+_p(_n.getMonth()+1)+'-'+_p(_n.getDate());
       rec.al=currentUser.id; rec.alType=rc2.alMode; rec.alAt=_td+' '+_p(_n.getHours())+':'+_p(_n.getMinutes())+':00';
-      rec.callDate=(rc2.alMode==='call') ? _td : '';
+      if(rc2.alMode==='call' && !rec.callDate) rec.callDate=_td;
       rec.callDoneAt=''; rec.callRes=''; rec.callMiss=0;
     }
   })();
@@ -19768,6 +19794,7 @@ function rc2ResRenderTypeChips(){
   var html='';
   for(var i=0;i<RC2_TYPES.length;i++){
     var t=RC2_TYPES[i];
+    if(t.hidden) continue;
     var on=rc2res.nextTypes.indexOf(t.key)>=0;
     var st=on?('background:'+t.bg+';color:#fff;border:1px solid '+t.bg):('background:'+t.soft+';color:'+t.deep+';border:1px solid '+t.bd);
     html+='<span class="rc2-restype" data-tkey="'+t.key+'" style="font-size:11px;font-weight:700;padding:7px 11px;border-radius:8px;cursor:pointer;'+st+'">'+t.icon+' '+t.key+(on?' ✓':'')+'</span>';
@@ -20023,7 +20050,7 @@ function _rc2RenderCalNow() {
       pushEv(_ev.dt, it.name, it.ref, _t0, it.branch, it.id, _ev.types, _ev.done, _ev.id, _ev.cancelled, it.age, it.phoenix===true, _ev.createdAt, it.callItv===true, _ev.visitConfirm);
     }
     // aladdin phone interview: show at the call start time
-    if(it.al && it.alType==='call' && it.callDate && it.callRes!=='no' && it.status!=='관리'){
+    if((it.callItv===true || it.alType==='call') && it.callDate && it.callRes!=='no' && it.status!=='관리'){
       pushEv(it.callDate+' '+(rc2NormCallTime(it.callFrom)||'09:00'), it.name, it.ref, '전화인터뷰', it.branch, it.id, ['전화인터뷰'], !!it.callDoneAt, 'alcall', false, it.age, false, '', true, undefined);
     }
     if(it.status==='입과확보') joinCount++;
@@ -20068,12 +20095,12 @@ function _rc2RenderCalNow() {
         // 내방 미확정(신규 일정 기본값): 주황. 기존 일정(visitConfirm 미설정)은 확정으로 간주
         _brBg='rgba(217,131,36,.16)'; _brTx='#B85C1A'; _brBd='#D98324';
       }
-      if(E.evid==='alcall'){ _brBg=E.done?'#EDF0F4':'#FFFFFF'; _brTx='#2D3748'; _brBd='#4A5568'; _lbTx='\uD83D\uDCDE'; _lbPad='0 2px'; _doneCheck=''; }
+      if(_rcPhoneEv(E) && !E.cancelled){ _brBg=E.done?'#E6F1FB':'#FFFFFF'; _brTx='#13568F'; _brBd='#1A6FB5'; _lbTx='\uD83D\uDCDE'; _lbPad='0 2px'; _doneCheck=''; }
       var _cancelSty = E.cancelled ? 'text-decoration:line-through;opacity:.85;' : '';
       var _refTx = E.ref ? ' <span style="opacity:.6;font-size:9.5px">'+rc2Esc(E.ref)+'</span>' : '';
       var _timeHtml = E.time ? '<span class="rc2-ev-time" style="font-weight:700;flex-shrink:0">'+E.time+'</span> ' : '';
       var _doneCls = E.done ? ' rc2-ev-done' : '';
-      evHtml += '<div class="rc2-cal-ev'+_doneCls+'" style="background:'+_brBg+';color:'+_brTx+';display:flex;align-items:center;gap:3px;'+_cancelSty+(E.evid==='alcall'?('border:1px '+(E.done?'solid':'dashed')+' #8A93A3;'):'')+'">'+
+      evHtml += '<div class="rc2-cal-ev'+_doneCls+'" style="background:'+_brBg+';color:'+_brTx+';display:flex;align-items:center;gap:3px;'+_cancelSty+((_rcPhoneEv(E) && !E.cancelled)?('border:1px '+(E.done?'solid':'dashed')+' #7FB0DA;'):'')+'">'+
         '<span class="rc2-ev-lbl" style="position:relative;background:'+_brBd+';color:#fff;font-size:8px;font-weight:700;padding:'+_lbPad+';border-radius:3px;flex-shrink:0">'+_lbTx+_doneCheck+'</span>'+
         _timeHtml+
         '<span class="rc2-ev-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+rc2Esc(E.name)+_refTx+'</span>'+
@@ -20097,7 +20124,7 @@ function _rc2RenderCalNow() {
     var _NEW_MS = 3*60*60*1000;
     var _nowMs = Date.now();
     for(var ci=0; ci<evs.length; ci++){
-      if(evs[ci].evid==='alcall') continue;
+      if(_rcPhoneEv(evs[ci])) continue;
       var _cb=evs[ci].branch;
       var _cIsAl=(_cb==='alpha' || String(_cb||'').indexOf('\uC54C\uD30C')>=0);
       var _isNew=false;
@@ -20330,7 +20357,7 @@ function _ivComputeSlots(evs, br){
   for(var i=0;i<evs.length;i++){
     var E=evs[i];
     if(!E || E.cancelled || !E.time) continue;
-    if(E.evid==='alcall') continue;
+    if(_rcPhoneEv(E)) continue;
     if(E.branch!==br) continue;
     var s=_ivToMin(E.time);
     busy.push([s, s+DUR]);
@@ -20491,6 +20518,7 @@ function rc2RenderCalDetail(evByDay, dayKey) {
       _btns = _hasResult ? (_btnVisit + _btnResult + _btnDel) : (_btnEdit + _btnVisit + _btnResult + _btnDel);
     }
     if(E.evid==='alcall') _btns = _alCallBtns(E.id);
+    else if(_rcPhoneEv(E)) _btns = _hasResult ? (_btnResult + _btnDel) : (_btnEdit + _btnResult + _btnDel);
     var _isAl = (E.branch==='alpha');
     var _cTime = _isAl ? '#0F6E56' : '#5A2FA0';
     var _cName = _isAl ? '#0A3D30' : '#3A1D6B';
@@ -20501,13 +20529,21 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     if(E.visitConfirm===false && !E.done && !E.cancelled){
       _cTime='#B85C1A'; _cName='#8A4513'; _cRef='#C17A3A'; _miniBg='#FBEEDD'; _nbc='#D98324';
     }
-    if(E.evid==='alcall'){ _cTime='#2D3748'; _cName='#1A2744'; _cRef='#5C6678'; _miniBg='#EDF0F4'; _nbc='#4A5568'; }
+    if(_rcPhoneEv(E) && !E.cancelled){ _cTime='#13568F'; _cName='#0E3A63'; _cRef='#4C7AA6'; _miniBg='#E6F1FB'; _nbc='#1A6FB5'; }
     var _isNew=false;
     if(E.createdAt){ var _ct2=new Date(E.createdAt).getTime(); if(!isNaN(_ct2)){ var _diff=Date.now()-_ct2; if(_diff>=0 && _diff<3*60*60*1000) _isNew=true; } }
     var _key = E.id+'_'+(E.evid||'')+'_'+i;
     var _newDot = _isNew ? ('<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+_nbc+';margin-left:4px;vertical-align:middle"></span>') : '';
     // 미니 카드 (좌/우 컬럼)
-    var _mini = '<div class="rc2-mini" data-rcmini="'+_key+'" style="cursor:pointer;background:'+_miniBg+';border-radius:9px;padding:8px 9px;margin-bottom:6px'+(_isNew?(';border:1.5px solid '+_nbc):'')+'">'+
+    // kind pill: phone interview vs visit (2026-10-13)
+    var _isPh = _rcPhoneEv(E) && !E.cancelled;
+    var _kTy = (E.types && E.types.length) ? E.types : (E.type?[E.type]:[]);
+    var _kind = _isPh ? '📞 전화인터뷰' : ((_kTy.indexOf('지점장인터뷰')>=0 || !_kTy.length) ? '🏠 내방' : (rc2TypeMeta(_kTy[0]).icon+' '+rc2TypeMeta(_kTy[0]).key));
+    if(!_isPh && _kind==='🏠 내방' && E.visitConfirm===false && !E.done && !E.cancelled) _kind='🏠 내방 미확정';
+    var _kindBg = _isPh ? '#1A6FB5' : _nbc;
+    var _kindPill = '<span style="display:inline-block;font-size:10.5px;font-weight:800;color:#fff;background:'+_kindBg+';border-radius:999px;padding:1px 8px;white-space:nowrap">'+_kind+(E.done?' ✓':'')+'</span>';
+    var _mini = '<div class="rc2-mini" data-rcmini="'+_key+'" style="cursor:pointer;background:'+_miniBg+';border-radius:9px;padding:8px 9px;margin-bottom:6px'+(_isNew?(';border:1.5px solid '+_nbc):(_isPh?';border:1.5px dashed #7FB0DA':''))+'">'+
+      '<div style="margin-bottom:4px">'+_kindPill+'</div>'+
       '<div><span style="font-weight:800;font-size:12.5px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:600;font-size:12.5px;margin-left:4px;color:'+_cName+'">'+rc2Esc(E.name)+'</span>'+_newDot+'</div>'+
       (refTxt?('<div style="font-size:10px;margin-top:2px;color:'+_cRef+';opacity:.85">'+refTxt+'</div>'):'')+
     '</div>';
@@ -20544,7 +20580,7 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     }
     // 상세 (탭하면 표시) - 하단 공통 영역
     _details += '<div class="rc2-detail-box" data-rcdetail="'+_key+'" style="display:none;background:'+_miniBg+';border:1.5px solid '+_nbc+';border-radius:11px;padding:12px;margin-bottom:8px">'+
-      '<div style="display:flex;align-items:center;gap:7px;margin-bottom:3px"><span style="font-weight:800;font-size:15px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:700;font-size:15px;color:'+_cName+'">'+rc2Esc(E.name)+'</span></div>'+
+      '<div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;flex-wrap:wrap">'+_kindPill+'<span style="font-weight:800;font-size:15px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:700;font-size:15px;color:'+_cName+'">'+rc2Esc(E.name)+'</span></div>'+
       (refTxt?('<div style="font-size:11px;margin-bottom:8px;color:'+_cRef+'">'+refTxt+'</div>'):'<div style="margin-bottom:8px"></div>')+
       _infoHtml+
       '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">'+typeTag+doneTag+brTag+'</div>'+
@@ -25277,7 +25313,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 119;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 121;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
