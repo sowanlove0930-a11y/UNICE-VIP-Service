@@ -18334,7 +18334,8 @@ function rcAlRenderDB(){
     for(var a=0;a<pool.length;a++){
       var p=pool[a], on=!!rcAlDB.sel[p.id];
       list+='<div class="ral-row'+(on?' sel':'')+'" onclick="rcAlDbToggle(\''+p.id+'\')"><span class="ck">'+(on?'✓':'')+'</span><div class="m"><div class="nm">'+(p.name?rc2Esc(p.name):'(이름 없음)')+' '+cnt(p.miss, p)+'</div><div class="tel">'+rc2Esc(_alPhFmt(p.phone))+'</div><div class="h">'+lastTx(p)+'</div></div>'
-        +(mgr?('<button type="button" class="ral-mini r" onclick="event.stopPropagation();rcAlDbDelete(\''+p.id+'\')">삭제</button>'):'')+'</div>';
+        +'<div class="ral-acts2"><button type="button" class="ral-mini" onclick="event.stopPropagation();rcAlNumEdit(\'db\',\''+p.id+'\')">✏️ 수정</button>'
+        +(mgr?('<button type="button" class="ral-mini r" onclick="event.stopPropagation();rcAlDbDelete(\''+p.id+'\')">삭제</button>'):'')+'</div></div>';
     }
     if(!pool.length) list+='<div class="ral-none2">남은 번호가 없어요</div>';
     list+='<div class="ral-selbar"><span>'+nSel+'개 선택</span><button type="button" onclick="rcAlDbClaim()"'+(nSel?'':' disabled')+'>가져가기</button></div>';
@@ -18350,7 +18351,7 @@ function rcAlRenderDB(){
     for(var c=0;c<mine.length;c++){
       var m2=mine[c];
       list+='<div class="ral-row"><div class="m"><div class="nm">'+(m2.name?rc2Esc(m2.name):'(이름 없음)')+' '+cnt(m2.miss, m2)+'</div><div class="tel">'+rc2Esc(_alPhFmt(m2.phone))+'</div><div class="h">'+lastTx(m2)+'</div></div>'
-        +'<div class="ral-acts2"><button type="button" class="ral-call" onclick="rcAlNumCall(\'db\',\''+m2.id+'\')">📞 걸기</button><button type="button" class="ral-mini" onclick="rcAlDbRelease(\''+m2.id+'\')">돌려놓기</button></div></div>';
+        +'<div class="ral-acts2"><button type="button" class="ral-call" onclick="rcAlNumCall(\'db\',\''+m2.id+'\')">📞 걸기</button><button type="button" class="ral-mini" onclick="rcAlNumEdit(\'db\',\''+m2.id+'\')">✏️ 수정</button><button type="button" class="ral-mini" onclick="rcAlDbRelease(\''+m2.id+'\')">돌려놓기</button></div></div>';
     }
     if(!mine.length) list+='<div class="ral-none2">"남은 것"에서 골라 가져가세요</div>';
     list+='<div class="ral-note2">⏰ 매일 <b>오후 4시 30분</b>에 못 건 번호는 자동으로 공용으로 돌아가요</div>';
@@ -18411,7 +18412,7 @@ function rcAlRenderRecall(){
     var late=(r.status==='open' && r.due && r.due.substr(0,16) < (_alTodayStr()+' '+_alP2(new Date().getHours())+':'+_alP2(new Date().getMinutes())));
     h+='<div class="ral-row'+(late?' late':'')+'"><div class="m"><div class="nm">'+(r.name?rc2Esc(r.name):'(이름 없음)')+' <span class="ral-cnt rc">⏰ '+rc2Esc(dueTx)+'</span>'+(_alFriNum(r)?(' '+AL_FRI_TAG):'')+'</div><div class="tel">'+rc2Esc(_alPhFmt(r.phone))+'</div>'
       +'<div class="h">'+(r.memo?('"'+rc2Esc(r.memo)+'" · '):'')+'재통화 '+hs.filter(function(x){ return x.o==='recall'||x.o==='hold'; }).length+'회'+(r.status!=='open'&&last?(' · 결과 '+(AL_O_KO[last.o]||last.o)):'')+'</div></div>'
-      +(r.status==='open'?('<button type="button" class="ral-call rc" onclick="rcAlNumCall(\'rc\',\''+r.id+'\')">📞 걸기</button>'):'')+'</div>';
+      +(r.status==='open'?('<div class="ral-acts2"><button type="button" class="ral-call rc" onclick="rcAlNumCall(\'rc\',\''+r.id+'\')">📞 걸기</button><button type="button" class="ral-mini" onclick="rcAlNumEdit(\'rc\',\''+r.id+'\')">✏️ 수정</button></div>'):'')+'</div>';
   }
   if(!list.length) h+='<div class="ral-none2">'+(tab==='done'?'오늘 처리한 재통화가 없어요':'없어요')+'</div>';
   h+='</div><div class="ral-btns"><button type="button" class="ral-bt g" onclick="_alSheetClose()">닫기</button></div>';
@@ -18476,6 +18477,32 @@ function rcAlNumLead(type){
   var nm=document.getElementById('rc2fName'); if(nm && o.name) nm.value=o.name;
   var ph=document.getElementById('rc2fPhone'); if(ph){ ph.value=_alPhFmt(o.phone); }
   rcAl.numSrc={ src:rcAlNC.src, id:rcAlNC.id };
+}
+// ---- 5. edit a number (typo fix) ----
+var rcAlED={ src:'', id:'' };
+function rcAlNumEdit(src, id){
+  var o=_alFindNum(src, id); if(!o){ showToast('번호를 찾지 못했어요'); return; }
+  rcAlED={ src:src, id:id };
+  var h='<div class="ral-shh">✏️ '+(src==='db'?'부재 번호 수정':'재통화 번호 수정')+'</div><div class="ral-shs">오타를 고쳐 주세요 · 부재 횟수와 기록은 그대로예요</div>'
+    +'<div class="ral-fl">전화번호 *</div><input type="tel" inputmode="numeric" id="ralEdPh" class="ral-in" value="'+rc2Esc(_alPhFmt(o.phone))+'">'
+    +'<div class="ral-fl">이름</div><input type="text" id="ralEdNm" class="ral-in" value="'+rc2Esc(o.name||'')+'" placeholder="예: 김○○">'
+    +'<div class="ral-fl">메모</div><input type="text" id="ralEdMemo" class="ral-in" value="'+rc2Esc(o.memo||'')+'">'
+    +'<div class="ral-btns"><button type="button" class="ral-bt g" onclick="'+(src==='db'?'rcAlRenderDB()':'rcAlRenderRecall()')+'">취소</button>'
+    +'<button type="button" class="ral-bt" id="ralEdSave" style="background:#1A2744" onclick="rcAlNumEditSave()">저장</button></div>';
+  _alSheetOpen(h);
+}
+function rcAlNumEditSave(){
+  var ph=document.getElementById('ralEdPh'), nm=document.getElementById('ralEdNm'), mm=document.getElementById('ralEdMemo');
+  if(!ph || _alPhKey(ph.value).length<10){ showToast('📞 전화번호를 확인해 주세요'); return; }
+  var btn=document.getElementById('ralEdSave'); if(btn){ btn.disabled=true; btn.textContent='저장 중…'; }
+  var S=rcAlED;
+  _alPost({ action:'aladdinNumEdit', fp:currentUser.id, src:S.src, id:S.id, phone:_alPhFmt(ph.value), name:nm?nm.value.trim():'', memo:mm?mm.value.trim():'' }).then(function(res){
+    if(!res || !res.ok){ if(btn){ btn.disabled=false; btn.textContent='저장'; } showToast('⚠️ '+((res&&res.msg)||'저장 실패')); return; }
+    var o=_alFindNum(S.src, S.id); if(o){ o.phone=res.row.phone; o.name=res.row.name; o.memo=res.row.memo; }
+    showToast('✅ 고쳤어요');
+    if(S.src==='db') rcAlRenderDB(); else rcAlRenderRecall();
+    rcAlLoad();
+  }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='저장'; } showToast('⚠️ 네트워크 오류'); });
 }
 // ===== /ALADDIN numbers =====
 function rc2SwitchView(v, el) {
@@ -25680,7 +25707,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 124;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 125;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
