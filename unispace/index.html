@@ -2968,6 +2968,7 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .ral-bt.g { flex:1; background:var(--bg3); color:var(--text2); }
 .ral-bt[disabled] { opacity:.5; }
 .ral-cnt { font-size:10.5px; font-weight:900; border-radius:999px; padding:1px 8px; background:#EEF0F4; color:#4A5568; white-space:nowrap; }
+.ral-cnt.fri { background:#F4F1E9; color:#97A0B0; }
 .ral-cnt.c2 { background:#FFE9C7; color:#9A6A10; } .ral-cnt.c3 { background:#FBDAD6; color:#B5473D; } .ral-cnt.rc { background:#FFF4DE; color:#9A6A10; }
 .ral-tabs { display:flex; gap:4px; background:var(--bg3); border-radius:999px; padding:3px; margin-bottom:9px; }
 .ral-tabs span { flex:1; text-align:center; font-size:11.5px; font-weight:800; border-radius:999px; padding:6px 2px; color:var(--text3); cursor:pointer; white-space:nowrap; }
@@ -17337,7 +17338,7 @@ function rc2LoadAllFromGas(cb){
           phone:it.phone||'',
           callItv:(it.callItv===true || it.callItv==='true' || it.callItv==='Y' || it.callItv===1 || it.callItv==='1'),
           callFrom:it.callFrom||'', callTo:it.callTo||'', callNote:it.callNote||'',
-          al:it.aladdin||'', alType:it.aladdinType||'', alAt:it.aladdinAt||'', callDate:String(it.callDate||'').substr(0,10), callDoneAt:it.callDoneAt||'', callRes:it.callRes||'', callMiss:(parseInt(it.callMiss,10)||0),
+          al:it.aladdin||'', alType:it.aladdinType||'', alAt:it.aladdinAt||'', callDate:String(it.callDate||'').substr(0,10), callDoneAt:it.callDoneAt||'', callRes:it.callRes||'', callMiss:(parseInt(it.callMiss,10)||0), friSrc:(it.friSrc==='Y'),
           focus:(it.focus===true || it.focus==='true' || it.focus==='Y' || it.focus===1 || it.focus==='1')
         });
       }
@@ -17386,7 +17387,7 @@ function rc2LoadFromGas(ym, cb) {
           phone:it.phone||'',
           callItv:(it.callItv===true || it.callItv==='true' || it.callItv==='Y' || it.callItv===1 || it.callItv==='1'),
           callFrom:it.callFrom||'', callTo:it.callTo||'', callNote:it.callNote||'',
-          al:it.aladdin||'', alType:it.aladdinType||'', alAt:it.aladdinAt||'', callDate:String(it.callDate||'').substr(0,10), callDoneAt:it.callDoneAt||'', callRes:it.callRes||'', callMiss:(parseInt(it.callMiss,10)||0),
+          al:it.aladdin||'', alType:it.aladdinType||'', alAt:it.aladdinAt||'', callDate:String(it.callDate||'').substr(0,10), callDoneAt:it.callDoneAt||'', callRes:it.callRes||'', callMiss:(parseInt(it.callMiss,10)||0), friSrc:(it.friSrc==='Y'),
           focus:(it.focus===true || it.focus==='true' || it.focus==='Y' || it.focus===1 || it.focus==='1')
         });
       }
@@ -17607,7 +17608,10 @@ function _stdSyncModalOpenClass(){
 // ===== ALADDIN tab (recruiting call team) - 2026-10-13 =====
 var rcAl = { data:null, sel:'', seg:'week', wk:'', loading:false, loadedAt:0, myTaps:[] };
 var AL_START = '2026-10-19'; // official start (trial week before: no Friday exclusion, no judging)
-function _alIsFriLead(alAt){ var ds=String(alAt||'').substr(0,10); if(!ds || ds<AL_START) return false; var d=_alDay(ds); return !!(d && d.getDay()===5); }
+function _alIsFriLead(alAt, c){ if(c && c.friSrc) return true; var ds=String(alAt||'').substr(0,10); if(!ds || ds<AL_START) return false; var d=_alDay(ds); return !!(d && d.getDay()===5); }
+// number first logged on a Friday (absent DB / recall row)
+function _alFriNum(r){ return !!(r && r.friSrc==='Y'); }
+var AL_FRI_TAG='<span class="ral-cnt fri">🏆 금 · 점수 제외</span>';
 function _alP2(n){ return (n<10?'0':'')+n; }
 function _alYmd(d){ return d.getFullYear()+'-'+_alP2(d.getMonth()+1)+'-'+_alP2(d.getDate()); }
 function _alDay(s){ var m=String(s||'').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); return m ? new Date(+m[1], +m[2]-1, +m[3], 12, 0, 0) : null; }
@@ -17814,7 +17818,7 @@ function rcAlRender(){
     if((wd===6||wd===0||wd===5) && today<AL_START) notice='';
     else if(wd===6||wd===0) notice='주말 콜 — 잡은 후보는 성사되면 점수 인정';
     else if(wdB && wdB!==myB) notice='오늘은 '+_alBrKo(wdB)+' 콜데이 — 시도 수는 동점 판정에서 빠져요';
-    else if(wd===5) notice='금요일에 잡은 후보는 점수 없이 기록만';
+    else if(wd===5) notice='금요일 콜 — 오늘 잡은 후보·오늘 넣은 부재/재통화 번호는 나중에 성사돼도 점수 제외';
   }
   var pan='<div class="ral-card ral-today">'
     +'<div class="ral-ch"><div class="ral-ttl">📞 오늘 콜 <span class="ral-sub">'+(+today.substr(5,2))+'/'+(+today.substr(8,2))+'('+dows[wd]+')</span></div>'
@@ -18050,7 +18054,7 @@ function _alPendCallSection(br){
     var who=c.ref?((c.al?'🧞 ':'추천 ')+rc2Esc(c.ref)):'';
     var tm=(rc2NormCallTime(c.callFrom)||'')+((c.callTo)?(' ~ '+rc2NormCallTime(c.callTo)):'');
     var dl=c.callDate?_alFmtDt(c.callDate):'';
-    var friTag=''; if(_alIsFriLead(c.alAt)){ friTag='<span style="font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;background:#F4F1E9;color:#97A0B0;margin-left:5px">금요일 콜 · 점수 제외</span>'; }
+    var friTag=''; if(_alIsFriLead(c.alAt, c)){ friTag='<span style="font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;background:#F4F1E9;color:#97A0B0;margin-left:5px">금요일 콜 · 점수 제외</span>'; }
     h+='<div style="background:'+(c.callRes==='think'?'#F7F3FF':'#fff')+';border:1.5px solid #CBD5E0;border-left:4px solid #4A5568;border-radius:12px;padding:12px 13px;margin-bottom:10px">';
     h+='<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:16px;font-weight:800;color:#1A2744">'+rc2Esc(c.name)+'</span>'
       +'<span style="font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;background:#EDF0F4;color:#2D3748">'+(c.callRes==='think'?'📞 통화 완료 · 생각 중':'📞 전화인터뷰 예정')+'</span>'
@@ -18112,7 +18116,7 @@ function rcAlOpenCallDone(candId){
   if(!c){ showToast('후보자를 찾을 수 없습니다'); return; }
   var br=(c.branch==='alpha'||String(c.branch||'').indexOf('알파')>=0)?'alpha':'bravo';
   rcAlCD={ id:candId, res:'visit', day:'', time:'', br:br, first:!c.callDoneAt, name:c.name, fri:false, al:!!c.al };
-  rcAlCD.fri=_alIsFriLead(c.alAt);
+  rcAlCD.fri=_alIsFriLead(c.alAt, c);
   var old=document.getElementById('ralCdOv'); if(old && old.parentNode) old.parentNode.removeChild(old);
   var ov=document.createElement('div');
   ov.id='ralCdOv'; ov.className='confirm-overlay open'; ov.style.zIndex='10001';
@@ -18268,7 +18272,8 @@ function rcAlPhCheck(kind){
       var hs=_alHist(db[i]), last=hs.length?hs[hs.length-1]:null;
       w.innerHTML='<div class="ral-warn">⚠️ 부재 DB에 있는 번호예요 — <b>'+(db[i].name?rc2Esc(db[i].name):'이름 없음')+' · 부재 '+db[i].miss+'회</b>'
         +(last?('<br>마지막 '+rc2Esc(last.at)+' '+rc2Esc(last.by)):'')
-        +(kind==='absent'?('<br>저장하면 <b>부재 '+((parseInt(db[i].miss,10)||0)+1)+'회</b>'):'<br>재통화로 저장하면 부재 DB에서 빠져요')+'</div>';
+        +(kind==='absent'?('<br>저장하면 <b>부재 '+((parseInt(db[i].miss,10)||0)+1)+'회</b>'):'<br>재통화로 저장하면 부재 DB에서 빠져요')
+        +(_alFriNum(db[i])?'<br>🏆 금요일 기록 번호 — 후보로 이어져도 점수 제외':'')+'</div>';
       var nm=document.getElementById('ralNmIn'); if(nm && !nm.value && db[i].name) nm.value=db[i].name;
       return;
     }
@@ -18321,13 +18326,14 @@ function rcAlRenderDB(){
     +'<span class="'+(tab==='mine'?'on':'')+'" onclick="rcAlDB.tab=\'mine\';rcAlRenderDB()">내 담당 '+mine.length+'</span></div>';
   function cnt(m){ m=parseInt(m,10)||0; return '<span class="ral-cnt '+(m>=3?'c3':(m>=2?'c2':''))+'">부재 '+m+'회</span>'; }
   function lastTx(r){ return '마지막 '+rc2Esc(String(r.lastAt||'').substr(5))+' '+rc2Esc(r.lastName||'')+(r.memo?(' · '+rc2Esc(r.memo)):''); }
+  var _cnt0=cnt; cnt=function(m, r){ return _cnt0(m)+(_alFriNum(r)?(' '+AL_FRI_TAG):''); };
   var list='';
   if(tab==='pool'){
     var nSel=0; for(var k in rcAlDB.sel){ if(rcAlDB.sel[k]) nSel++; }
     if(pool.length) list+='<div class="ral-quick"><button type="button" onclick="rcAlDbQuick(5)">＋ 앞에서 5개</button><button type="button" onclick="rcAlDbQuick(10)">＋ 10개</button><button type="button" onclick="rcAlDbQuick(0)">선택 해제</button></div>';
     for(var a=0;a<pool.length;a++){
       var p=pool[a], on=!!rcAlDB.sel[p.id];
-      list+='<div class="ral-row'+(on?' sel':'')+'" onclick="rcAlDbToggle(\''+p.id+'\')"><span class="ck">'+(on?'✓':'')+'</span><div class="m"><div class="nm">'+(p.name?rc2Esc(p.name):'(이름 없음)')+' '+cnt(p.miss)+'</div><div class="tel">'+rc2Esc(_alPhFmt(p.phone))+'</div><div class="h">'+lastTx(p)+'</div></div>'
+      list+='<div class="ral-row'+(on?' sel':'')+'" onclick="rcAlDbToggle(\''+p.id+'\')"><span class="ck">'+(on?'✓':'')+'</span><div class="m"><div class="nm">'+(p.name?rc2Esc(p.name):'(이름 없음)')+' '+cnt(p.miss, p)+'</div><div class="tel">'+rc2Esc(_alPhFmt(p.phone))+'</div><div class="h">'+lastTx(p)+'</div></div>'
         +(mgr?('<button type="button" class="ral-mini r" onclick="event.stopPropagation();rcAlDbDelete(\''+p.id+'\')">삭제</button>'):'')+'</div>';
     }
     if(!pool.length) list+='<div class="ral-none2">남은 번호가 없어요</div>';
@@ -18343,7 +18349,7 @@ function rcAlRenderDB(){
   } else {
     for(var c=0;c<mine.length;c++){
       var m2=mine[c];
-      list+='<div class="ral-row"><div class="m"><div class="nm">'+(m2.name?rc2Esc(m2.name):'(이름 없음)')+' '+cnt(m2.miss)+'</div><div class="tel">'+rc2Esc(_alPhFmt(m2.phone))+'</div><div class="h">'+lastTx(m2)+'</div></div>'
+      list+='<div class="ral-row"><div class="m"><div class="nm">'+(m2.name?rc2Esc(m2.name):'(이름 없음)')+' '+cnt(m2.miss, m2)+'</div><div class="tel">'+rc2Esc(_alPhFmt(m2.phone))+'</div><div class="h">'+lastTx(m2)+'</div></div>'
         +'<div class="ral-acts2"><button type="button" class="ral-call" onclick="rcAlNumCall(\'db\',\''+m2.id+'\')">📞 걸기</button><button type="button" class="ral-mini" onclick="rcAlDbRelease(\''+m2.id+'\')">돌려놓기</button></div></div>';
     }
     if(!mine.length) list+='<div class="ral-none2">"남은 것"에서 골라 가져가세요</div>';
@@ -18403,7 +18409,7 @@ function rcAlRenderRecall(){
     var r=list[i], hs=_alHist(r), last=hs.length?hs[hs.length-1]:null;
     var dueTx=r.due ? ((r.due.substr(0,10)===today?'오늘 ':_alFmtDt(r.due.substr(0,10))+' ')+r.due.substr(11,5)) : '시간 미정';
     var late=(r.status==='open' && r.due && r.due.substr(0,16) < (_alTodayStr()+' '+_alP2(new Date().getHours())+':'+_alP2(new Date().getMinutes())));
-    h+='<div class="ral-row'+(late?' late':'')+'"><div class="m"><div class="nm">'+(r.name?rc2Esc(r.name):'(이름 없음)')+' <span class="ral-cnt rc">⏰ '+rc2Esc(dueTx)+'</span></div><div class="tel">'+rc2Esc(_alPhFmt(r.phone))+'</div>'
+    h+='<div class="ral-row'+(late?' late':'')+'"><div class="m"><div class="nm">'+(r.name?rc2Esc(r.name):'(이름 없음)')+' <span class="ral-cnt rc">⏰ '+rc2Esc(dueTx)+'</span>'+(_alFriNum(r)?(' '+AL_FRI_TAG):'')+'</div><div class="tel">'+rc2Esc(_alPhFmt(r.phone))+'</div>'
       +'<div class="h">'+(r.memo?('"'+rc2Esc(r.memo)+'" · '):'')+'재통화 '+hs.filter(function(x){ return x.o==='recall'||x.o==='hold'; }).length+'회'+(r.status!=='open'&&last?(' · 결과 '+(AL_O_KO[last.o]||last.o)):'')+'</div></div>'
       +(r.status==='open'?('<button type="button" class="ral-call rc" onclick="rcAlNumCall(\'rc\',\''+r.id+'\')">📞 걸기</button>'):'')+'</div>';
   }
@@ -18426,7 +18432,8 @@ function rcAlNumCall(src, id){
   for(var i=0;i<hs.length;i++) tl+='<div style="--d:'+(AL_O_COL[hs[i].o]||'#8A93A3')+'">'+rc2Esc(String(hs[i].at||'').substr(5))+' · '+rc2Esc(hs[i].by||'')+' · '+(AL_O_KO[hs[i].o]||hs[i].o)+'</div>';
   tl+='<div style="--d:#1A6FB5"><b>지금 · '+rc2Esc(currentUser.name||'')+'</b></div>';
   var tel=_alPhKey(o.phone);
-  var h='<div class="ral-shh">'+(o.name?rc2Esc(o.name):'(이름 없음)')+'</div>'
+  var h='<div class="ral-shh">'+(o.name?rc2Esc(o.name):'(이름 없음)')+(_alFriNum(o)?(' '+AL_FRI_TAG):'')+'</div>'
+    +(_alFriNum(o)?'<div class="ral-shs">금요일에 처음 기록된 번호예요 — 전화인터뷰·내방으로 이어져도 쟁탈전 점수에는 들어가지 않아요</div>':'')
     +'<a class="ral-telbtn" href="tel:'+tel+'">📞 '+rc2Esc(_alPhFmt(o.phone))+' 전화 걸기</a>'
     +'<div class="ral-tline">'+tl+'</div>'
     +'<div class="ral-shs" style="margin:2px 0 6px">통화 결과를 골라 주세요</div>'
@@ -20018,7 +20025,7 @@ function rc2SaveCand() {
     if(rc2.editId){ var _alD=rc2GetAllCandData(); for(var _ai2=0; _ai2<(_alD.list||[]).length; _ai2++){ if(_alD.list[_ai2].id===rc2.editId){ _src=_alD.list[_ai2]; break; } } }
     if(_src && _src.al){
       rec.al=_src.al; rec.alType=_src.alType; rec.alAt=_src.alAt; if(!rec.callDate) rec.callDate=_src.callDate;
-      rec.callDoneAt=_src.callDoneAt; rec.callRes=_src.callRes; rec.callMiss=_src.callMiss;
+      rec.callDoneAt=_src.callDoneAt; rec.callRes=_src.callRes; rec.callMiss=_src.callMiss; rec.friSrc=_src.friSrc;
     } else if(!rc2.editId && rc2.alMode && currentUser){
       var _n=new Date(); var _p=function(n){ return (n<10?'0':'')+n; };
       var _td=_n.getFullYear()+'-'+_p(_n.getMonth()+1)+'-'+_p(_n.getDate());
@@ -25673,7 +25680,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 123;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 124;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
