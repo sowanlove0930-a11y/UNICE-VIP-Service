@@ -7685,6 +7685,10 @@ function _ucTier(cls, icon, tname, cond, alList, brList){
 }
 /* ═══ UNICE AWARD LADDER ═══ */
 var _awlData = null;
+// 2026-10-19: '현재 10·11월 자격 N명' (holders) is hidden everywhere - the card badge,
+// the modal box and the kakao text - because counting restarts in November.
+// flip to true to show it again (server still sends d.holders).
+var AWL_SHOW_HOLDERS = false;
 var _awlTab = 'list';
 var _awlFp = '';
 var _awlNear = null;
@@ -7854,7 +7858,7 @@ function _renderAwardLadder(d) {
   h += _awlTier('awl-t3', 'uni', '100', '', '🦄', '유니콘즈클럽', '', '보장월초 100만 이상', d.unicorns.count);
   h += _awlTier('awl-t2', 'holi', '70', '', '✈️', '워킹홀리데이', '', '보장월초 70만 이상', d.holiday.count);
   var stdExtra = stdBadge + '<span class="awl-plus">출결 ' + d.attFloorA + '%</span>'
-    + ((d.holders && d.holders.list) ? '<span class="awl-plus" style="background:#FFF3C4;color:#6B5200">현재 ' + d.holders.label + ' 자격 ' + d.holders.count + '명</span>' : '');
+    + ((AWL_SHOW_HOLDERS && d.holders && d.holders.list) ? '<span class="awl-plus" style="background:#FFF3C4;color:#6B5200">현재 ' + d.holders.label + ' 자격 ' + d.holders.count + '명</span>' : '');
   h += _awlTier('awl-t1', 'std', '50', stdSub, '🎖️', '스탠다드FP', stdExtra, stdCond, d.standard.count);
   h += '</div>';
   h += '<div class="awl-hint">' + (d.bOpen ? pn + '~' : '') + mn + '월 실적 기준 · 스탠다드FP만 <b>' + _awlQual(d) + ' 자격</b></div>';
@@ -8101,7 +8105,7 @@ function _awmAllHtml(d) {
     + '<button type="button" class="awm-share" onclick="_awmShareStd()">💬 카톡 공유</button>'
     + '</div>';
   // 현재 자격자: 직전 주기 달성자 = 이번 두 달 동안의 스탠다드FP (서버 holders)
-  if (d.holders && d.holders.list) {
+  if (AWL_SHOW_HOLDERS && d.holders && d.holders.list) {
     var hl = d.holders.list.filter(function(x){ var isA = String(x.branch).indexOf('알파') >= 0; return _awlBr === 'all' || (_awlBr === 'alpha' ? isA : !isA); });
     var hb = _awlMon(d.holders.basis && d.holders.basis.m1) + '~' + _awlMon(d.holders.basis && d.holders.basis.m2);
     h += '<div class="awm-trkbox h">'
@@ -8143,7 +8147,7 @@ function _awmStdShareText(d) {
   var brTxt = _awlBr === 'alpha' ? ' (알파지점)' : (_awlBr === 'bravo' ? ' (브라보지점)' : '');
   var out = '*스탠다드FP 달성현황' + brTxt + '\n';
   out += _awlQual(d) + ' 자격 · ' + (d.bOpen ? pn + '~' : '') + mn + '월 실적 기준\n\n';
-  if (d.holders && d.holders.list) {
+  if (AWL_SHOW_HOLDERS && d.holders && d.holders.list) {
     var hs = d.holders.list.filter(function(x){ var isA = String(x.branch).indexOf('알파') >= 0; return _awlBr === 'all' || (_awlBr === 'alpha' ? isA : !isA); }).slice().sort(_byName);
     out += '[현재 스탠다드FP · ' + d.holders.label + '] ' + hs.length + '명\n';
     out += hs.length ? (hs.map(function(x){ return x.name + '(' + _perfBrAbbr(x.branch) + ')'; }).join(', ') + '\n') : '- 없음\n';
@@ -19551,6 +19555,7 @@ function rc2ToggleMng() {
 // ===== 후보자 추가/수정 모달 =====
 function rc2OpenAdd(id) {
   rc2.editId = id || null;
+  rc2.alMode = null; // a plain open is never an aladdin lead (rcAlNewLead sets the mode right after)
   rc2._pk = null; // 단일 날짜피커 기준월
   var bn = rc2.branch==='alpha' ? '알파지점' : '브라보지점';
   document.getElementById('rc2AddSub').textContent = bn + (id ? ' · 후보자 수정' : ' · 새 후보자 등록');
@@ -25918,7 +25923,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 131;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 133;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
