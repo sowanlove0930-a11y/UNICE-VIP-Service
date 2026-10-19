@@ -4971,13 +4971,13 @@ function _lsTrim(level){
       var cutS = cut.getFullYear() + '-' + ('0' + (cut.getMonth() + 1)).slice(-2) + '-' + ('0' + cut.getDate()).slice(-2);
       var acts = JSON.parse(_bigGet('unispace_activities') || '{}'), kept = {};
       for (var id in acts) { if (!acts.hasOwnProperty(id)) continue; var a = acts[id]; if (!a || !a.date || String(a.date) >= cutS) kept[id] = a; else removed++; }
-      var _ks = JSON.stringify(kept); _BIG['unispace_activities'] = _ks; localStorage.setItem('unispace_activities', _ks);
+      var _ks = JSON.stringify(kept); _BIG['unispace_activities'] = _ks; if (_IDB_KEYS['unispace_activities'] && _idbOk !== false) { _idbPut('unispace_activities', _ks); try { localStorage.removeItem('unispace_activities'); } catch(eA) {} } else { localStorage.setItem('unispace_activities', _ks); }
       var pc = new Date(); pc = new Date(pc.getFullYear(), pc.getMonth() - (level >= 3 ? 1 : 3), 1);
       var pcS = pc.getFullYear() + '-' + ('0' + (pc.getMonth() + 1)).slice(-2) + '-01';
       var log = JSON.parse(_bigGet('unispace_perf_log') || '[]');
       var log2 = log.filter(function(r){ return !r || String(r.date || '') >= pcS; });
       removed += (log.length - log2.length);
-      var _ls2 = JSON.stringify(log2); _BIG['unispace_perf_log'] = _ls2; localStorage.setItem('unispace_perf_log', _ls2);
+      var _ls2 = JSON.stringify(log2); _BIG['unispace_perf_log'] = _ls2; if (_IDB_KEYS['unispace_perf_log'] && _idbOk !== false) { _idbPut('unispace_perf_log', _ls2); try { localStorage.removeItem('unispace_perf_log'); } catch(eP) {} } else { localStorage.setItem('unispace_perf_log', _ls2); }
     }
   } catch(e) {}
   return removed;
@@ -4990,8 +4990,61 @@ function _bigGet(key){
   if (Object.prototype.hasOwnProperty.call(_BIG, key)) return _BIG[key];
   try { return localStorage.getItem(key); } catch(e) { return null; }
 }
+// 2026-10-18: big keys live in IndexedDB (hundreds of MB) instead of localStorage (~5MB).
+//   _BIG is the in-session copy; IndexedDB is only the cache for the next app start.
+//   Phones that cannot open IndexedDB fall back to localStorage as before.
+var _IDB_KEYS = { 'unispace_activities':1, 'unispace_perf_log':1, 'unispace_customers':1, 'unispace_attendance':1, 'unispace_prereport':1 };
+var _idbOk = null, _idbDb = null;
+function _idbOpen(cb){
+  if (_idbDb) { cb(_idbDb); return; }
+  if (_idbOk === false || typeof indexedDB === 'undefined') { cb(null); return; }
+  try {
+    var req = indexedDB.open('unispace_big', 1);
+    req.onupgradeneeded = function(){ try { req.result.createObjectStore('kv'); } catch(e) {} };
+    req.onsuccess = function(){ _idbDb = req.result; _idbOk = true; try { _idbDb.onversionchange = function(){ try { _idbDb.close(); } catch(e){} _idbDb = null; }; } catch(e2) {} cb(_idbDb); };
+    req.onerror = function(){ _idbOk = false; cb(null); };
+    req.onblocked = function(){ cb(null); };
+  } catch(e) { _idbOk = false; cb(null); }
+}
+function _idbPut(key, str){
+  _idbOpen(function(db){
+    if (!db) return;
+    try { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(str, key); tx.onerror = function(){}; } catch(e) {}
+  });
+}
+function _idbDel(key){
+  _idbOpen(function(db){ if (!db) return; try { db.transaction('kv', 'readwrite').objectStore('kv').delete(key); } catch(e) {} });
+}
+// load every big key into _BIG before the app renders (resolves within ~1.5s either way)
+function _idbPreload(done){
+  var finished = false;
+  function fin(){ if (finished) return; finished = true; done(); }
+  var timer = setTimeout(fin, 1500);
+  _idbOpen(function(db){
+    if (!db) { clearTimeout(timer); fin(); return; }
+    try {
+      var tx = db.transaction('kv', 'readonly'), st = tx.objectStore('kv'), keys = Object.keys(_IDB_KEYS), left = keys.length;
+      keys.forEach(function(k){
+        var r = st.get(k);
+        r.onsuccess = function(){
+          if (typeof r.result === 'string' && !Object.prototype.hasOwnProperty.call(_BIG, k)) _BIG[k] = r.result;
+          if (--left === 0) { clearTimeout(timer); fin(); }
+        };
+        r.onerror = function(){ if (--left === 0) { clearTimeout(timer); fin(); } };
+      });
+      if (!keys.length) { clearTimeout(timer); fin(); }
+    } catch(e) { clearTimeout(timer); fin(); }
+  });
+}
 function _lsSet(key, str){
   _BIG[key] = str;
+  if (_IDB_KEYS[key] && _idbOk !== false) {
+    _idbPut(key, str);
+    // keep a small copy in localStorage (fast offline start); drop it when it does not fit
+    if (str.length < 300000) { try { localStorage.setItem(key, str); } catch(eS) { try { localStorage.removeItem(key); } catch(eR) {} } }
+    else { try { localStorage.removeItem(key); } catch(eR2) {} }
+    return true;
+  }
   try { localStorage.setItem(key, str); return true; }
   catch(e1) {
     _lsTrim(1);
@@ -5655,6 +5708,9 @@ window.addEventListener('DOMContentLoaded', function() {
   var rco=document.getElementById('resNote'); if(rco) rco.addEventListener('input', function(){});
   _initActPopupDrag();
 
+  _idbPreload(_bootAfterStorage);
+});
+function _bootAfterStorage(){
   var saved = localStorage.getItem('unispace_user');
   if (saved) {
     try {
@@ -5670,7 +5726,7 @@ window.addEventListener('DOMContentLoaded', function() {
   var loginOv = document.getElementById('loginOverlay');
   if (loginOv) loginOv.classList.remove('hidden');
   checkBioOnLoginScreen();
-});
+}
 
 // ── 시계 ────────────────────────────────────────────
 function startClock() {
@@ -5737,14 +5793,10 @@ function doLogin(fromBio) {
     try {
       var _prev = JSON.parse(localStorage.getItem('unispace_user') || 'null');
       if (!_prev || _prev.id !== _newUser.id) {
-        localStorage.removeItem('unispace_customers');
-        localStorage.removeItem('unispace_attendance');
-        localStorage.removeItem('unispace_prereport');
+        ['unispace_customers','unispace_attendance','unispace_prereport'].forEach(_bigClear);
       }
     } catch(e) {
-      localStorage.removeItem('unispace_customers');
-      localStorage.removeItem('unispace_attendance');
-      localStorage.removeItem('unispace_prereport');
+      ['unispace_customers','unispace_attendance','unispace_prereport'].forEach(_bigClear);
     }
     currentUser = _newUser;
     // Only persist a complete user. Saving a user without id makes refresh bounce to login.
@@ -6857,8 +6909,10 @@ function resolveConfirm(result) {
     logout();
   });
 })();
+function _bigClear(key){ try { delete _BIG[key]; } catch(e) {} try { _idbDel(key); } catch(e2) {} try { localStorage.removeItem(key); } catch(e3) {} }
 function _doLogoutNow() {
   try { localStorage.removeItem('unispace_user'); } catch(e) {}
+  try { ['unispace_activities','unispace_customers','unispace_attendance','unispace_prereport'].forEach(_bigClear); } catch(e0) {}
   try { localStorage.removeItem('unispace_att_roster'); localStorage.removeItem('unispace_fp_roster'); localStorage.removeItem('unispace_activities'); } catch(e) {}
   try { localStorage.removeItem('unispace_customers'); } catch(e) {}
   try { localStorage.removeItem('unispace_attendance'); } catch(e) {}
@@ -10102,9 +10156,25 @@ function togglePvFpDd(){
   if(open){ body.style.display='none'; if(chev) chev.textContent='▼'; }
   else { body.style.display='block'; if(chev) chev.textContent='▲'; renderPvFpList(); }
 }
+// records inside the selected period (today / week / month / range)
+function _pvLogInPeriod(log){
+  var now=new Date(); now.setHours(0,0,0,0);
+  if(_pvRange==='today'){ var ds=_pvYmd(_pvDay||now); return log.filter(function(r){ return r.date===ds; }); }
+  if(_pvRange==='week'){ var wr=_pvWeekRange(); return log.filter(function(r){ return r.date>=wr.ms && r.date<=wr.ss; }); }
+  if(_pvRange==='range'){ if(!_pvRangeStart||!_pvRangeEnd) return []; return log.filter(function(r){ return (r.date||'')>=_pvRangeStart && (r.date||'')<=_pvRangeEnd; }); }
+  var mref=_pvMonth||now; var mp=mref.getFullYear()+'-'+('0'+(mref.getMonth()+1)).slice(-2);
+  return log.filter(function(r){ return (r.date||'').indexOf(mp)===0; });
+}
+// active roster ids (account mgmt) - FPs with records but no active account are shown as 퇴사
+function _pvActiveIds(){
+  var m={};
+  try{ var r=JSON.parse(localStorage.getItem('unispace_fp_roster_full')||'null'); if(r&&r.length){ r.forEach(function(f){ if(f && f.id && f.active!==false && String(f.active).toUpperCase()!=='N') m[String(f.id).toLowerCase()]=1; }); return m; } }catch(e){}
+  try{ var r2=JSON.parse(localStorage.getItem('unispace_fp_roster')||'null'); if(r2&&r2.length){ r2.forEach(function(f){ if(f && f.id && f.active!==false) m[String(f.id).toLowerCase()]=1; }); return m; } }catch(e2){}
+  return null;
+}
 function _pvFpCandidates(){
-  // 현재 조회 범위(지점 필터 반영) 안에서 업적이 있는 FP 목록
-  var log=getPerfLog();
+  // 2026-10-18: FPs with records inside the SELECTED period only (was: whole local log, so phones differed by cache)
+  var log=_pvLogInPeriod(getPerfLog());
   if(!_canSeeReport(currentUser)){
     var myBk=_pvBranchKey((currentUser&&currentUser.branch)||'');
     log=log.filter(function(r){ return _pvBranchKey(r.branch)===myBk; });
@@ -10117,7 +10187,9 @@ function _pvFpCandidates(){
     seen[r.fpId]=1;
     arr.push({ id:r.fpId, name:r.fpName||'', bk:_pvBranchKey(r.branch) });
   });
-  arr.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var act=_pvActiveIds();
+  if(act){ arr.forEach(function(f){ f.gone = !act[String(f.id).toLowerCase()]; }); }
+  arr.sort(function(a,b){ if(!!a.gone!==!!b.gone) return a.gone?1:-1; return (a.name||'').localeCompare(b.name||''); });
   return arr;
 }
 function renderPvFpList(){
@@ -10130,9 +10202,9 @@ function renderPvFpList(){
   arr.forEach(function(f){
     var on=(_pvFp===f.id);
     var chip = f.bk==='al' ? '<span style="font-size:8px;padding:1px 4px;background:rgba(201,168,76,.18);color:var(--gold2);border-radius:3px;margin-right:5px">알</span>' : (f.bk==='br'?'<span style="font-size:8px;padding:1px 4px;background:rgba(47,125,208,.15);color:#2F7DD0;border-radius:3px;margin-right:5px">브</span>':'');
-    h+='<div onclick="selectPvFp(\''+f.id+'\',\''+(f.name||'').replace(/'/g,"")+'\')" style="font-size:12px;padding:7px 8px;border-radius:6px;cursor:pointer;'+(on?'background:rgba(201,168,76,.15);color:var(--text);font-weight:700':'color:var(--text2)')+'">'+chip+(f.name||'')+(on?'<span style="float:right;color:var(--gold2)">✓</span>':'')+'</div>';
+    h+='<div onclick="selectPvFp(\''+f.id+'\',\''+(f.name||'').replace(/'/g,"")+'\')" style="font-size:12px;padding:7px 8px;border-radius:6px;cursor:pointer;'+(on?'background:rgba(201,168,76,.15);color:var(--text);font-weight:700':'color:var(--text2)')+'">'+chip+(f.name||'')+(f.gone?'<span style="font-size:9px;padding:1px 5px;margin-left:5px;border-radius:3px;background:var(--bg3);color:var(--text3);border:1px solid var(--border)">퇴사</span>':'')+(on?'<span style="float:right;color:var(--gold2)">✓</span>':'')+'</div>';
   });
-  if(!arr.length) h+='<div style="font-size:11px;color:var(--text3);padding:10px;text-align:center">FP가 없습니다</div>';
+  if(!arr.length) h+='<div style="font-size:11px;color:var(--text3);padding:10px;text-align:center">이 기간에 업적이 있는 FP가 없습니다</div>';
   el.innerHTML=h;
 }
 function selectPvFp(id,name){
@@ -10228,6 +10300,12 @@ function clearPvCo(){
 
 function renderPerfView(){
   try { _perfRenderSyncStatus(); } catch(e) {}
+  // keep the FP picker in step with the selected period; drop a selected FP who has no record in it
+  try {
+    var _pvBody=document.getElementById('pvFpDdBody');
+    if(_pvFp){ var _c=_pvFpCandidates(), _ok=false; for(var _ci=0;_ci<_c.length;_ci++){ if(_c[_ci].id===_pvFp){ _ok=true; break; } } if(!_ok){ _pvFp=''; var _lb=document.getElementById('pvFpDdLabel'); if(_lb) _lb.textContent='FP별 보기 — 전체'; } }
+    if(_pvBody && _pvBody.style.display!=='none') renderPvFpList();
+  } catch(ePv) {}
   if(_pvMode==='co'){ _renderPvCompanyView(); return; }
   // FP별 모드: 회사뷰에서 숨겼던 KPI 카드 복구
   var _kpiW=document.getElementById('pvKpiTot');
@@ -25707,7 +25785,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 125;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 127;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -26052,6 +26130,8 @@ function _lsDiagRender(){
   var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   var warn = sz.total > 3.5 * 1048576;
   var h = '<b>💾 폰 저장공간(앱 데이터)</b> ' + mb + 'MB / 한도 약 5MB' + (warn ? ' <span style="color:#B45309;font-weight:700">⚠️ 한도 근접 — 정리 권장</span>' : ' 🟢');
+  var bigKb = 0; try { for (var bk in _IDB_KEYS) { if (_BIG[bk]) bigKb += _BIG[bk].length * 2 / 1024; } } catch(eB) {}
+  h += '<div style="margin-top:3px">' + (_idbOk === false ? '⚠️ 큰 데이터 저장소(IndexedDB)를 열 수 없어 폰 저장공간을 씁니다' : ('🗄 활동·업적·고객 등 큰 데이터 ' + (bigKb/1024).toFixed(2) + 'MB는 별도 저장소(IndexedDB)에 보관 — 5MB 한도와 무관')) + '</div>';
   if (window._lsFullKey) h += '<div style="color:#B45309;font-weight:700;margin-top:3px">⚠️ 마지막 저장 실패: ' + String(window._lsFullKey).replace('unispace_','') + '</div>';
   h += '<div style="margin-top:4px;color:var(--text3)">' + sz.top.map(function(t){ return t.k.replace('unispace_','') + ' ' + (t.b/1024).toFixed(0) + 'KB'; }).join(' · ') + '</div>';
   el.innerHTML = h;
