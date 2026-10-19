@@ -942,10 +942,10 @@ function renderWeekActCal(){
   var datestrs=dates.map(function(d){ return d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-'+_pad2(d.getDate()); });
   var dowNames=['일','월','화','수','목','금','토'];
   var today=new Date(); today.setHours(0,0,0,0);
-  var myId=currentUser?String(currentUser.id):'';
+  var myId=currentUser?String(currentUser.id).toLowerCase():'';
 
-  var db={}; try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
-  var mine=Object.values(db).filter(function(a){ return a.fpId && String(a.fpId)===myId; });
+  var db={}; try{ db=JSON.parse(_actGet()||'{}'); }catch(e){}
+  var mine=Object.values(db).filter(function(a){ return a.fpId && String(a.fpId).toLowerCase()===myId; });
 
   var colMin = dates.length>7 ? 90 : 80;
   var h='<table style="width:100%;border-collapse:separate;border-spacing:4px;table-layout:fixed;min-width:'+(dates.length*colMin)+'px">';
@@ -1152,14 +1152,44 @@ function startNewOnDate(ds){
   openCustModal(ds);
 }
 
+// 2026-10-19: pull my own activities for the plan week straight from the server, so the page
+//   does not depend on what this phone happens to have cached (other device / cleared storage / quota).
+var _actFetchBusy=false, _actFetchedAt=0;
+function _actFetchMine(cb){
+  if(!currentUser || !currentUser.id || typeof UNISPACE_GAS_URL==='undefined'){ if(cb) cb(false); return; }
+  if(_actFetchBusy){ if(cb) cb(false); return; }
+  _actFetchBusy=true;
+  var wi=effectiveWeekInfo();
+  var now=new Date(); now.setHours(0,0,0,0);
+  var tm=new Date(now); tm.setDate(tm.getDate()-((tm.getDay()+6)%7));
+  var a=new Date(Math.min(wi.mon.getTime(), tm.getTime())); a.setDate(a.getDate()-7);
+  var b=new Date(Math.max(wi.sun.getTime(), tm.getTime()+6*86400000)); b.setDate(b.getDate()+7);
+  var myId=String(currentUser.id||'').toLowerCase();
+  planGasGet({ action:'getActivities', fp:currentUser.id, from:_ymd(a), to:_ymd(b) }).then(function(res){
+    _actFetchBusy=false;
+    if(!res || !res.ok || !res.activities){ if(cb) cb(false); return; }
+    var db={}; try{ db=JSON.parse(_actGet()||'{}'); }catch(e){}
+    var changed=0;
+    res.activities.forEach(function(x){
+      if(!x || !x.id) return;
+      if(String(x.fpId||'').toLowerCase()!==myId) return;
+      var old=db[x.id];
+      if(!old || JSON.stringify(old)!==JSON.stringify(x)){ db[x.id]=x; changed++; }
+    });
+    _actFetchedAt=Date.now();
+    if(changed){ _actSet(JSON.stringify(db)); if(typeof renderWeekActCal==='function') renderWeekActCal(); }
+    if(cb) cb(changed>0);
+  }).catch(function(){ _actFetchBusy=false; if(cb) cb(false); });
+}
 // GAS plan을 unispace_activities에 머지 후 달력 갱신
 function loadWeekActCal(){
   renderWeekActCal();
   if(!currentUser || !currentUser.id) return;
+  _actFetchMine();
   var wi=effectiveWeekInfo();
   planGasGet({ action:'getPlans', fp:currentUser.id, weekKey:wi.key }).then(function(res){
     if(res && res.ok && res.plans){
-      var db={}; try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+      var db={}; try{ db=JSON.parse(_actGet()||'{}'); }catch(e){}
       var ms=_ymd(wi.mon), ss=_ymd(wi.sun);
       var myId=String(currentUser.id||'').toLowerCase();
       // 이전 버전이 만든 임시 plan_ 기록은 제거한다.
@@ -1200,7 +1230,7 @@ function loadWeekActCal(){
           existKeys[dupKey]=true;
         });
       });
-      localStorage.setItem('unispace_activities', JSON.stringify(db));
+      _actSet(JSON.stringify(db));
       renderWeekActCal();
     }
   }).catch(function(){});
@@ -1396,7 +1426,7 @@ function startNew(){
 function startEditFromActId(actId){
   if(!actId) return;
   var db={};
-  try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  try{ db=JSON.parse(_actGet()||'{}'); }catch(e){}
   var a=db[actId];
   if(!a){ showToast('\uD65C\uB3D9\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'); return; }
   // already in custs? edit that
@@ -1644,13 +1674,13 @@ function loadCustAddr(){
 function _getImportCandidates(){
   var wi=effectiveWeekInfo();
   var ms=_ymd(wi.mon), ss=_ymd(wi.sun);
-  var db={}; try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  var db={}; try{ db=JSON.parse(_actGet()||'{}'); }catch(e){}
   var out=[];
   var seen={};
   Object.keys(db).forEach(function(k){
     var a=db[k];
     if(!a) return;
-    if(a.fpId!==currentUser.id) return;
+    if(String(a.fpId||'').toLowerCase()!==String(currentUser.id||'').toLowerCase()) return;
     if(a.planKey) return;      // 계획에서 만든 건 제외
     if(a._fromPlan) return;    // GAS 계획 머지분도 제외 (이미 내 계획)
     if(!a.date || a.date<ms || a.date>ss) return;
@@ -1691,10 +1721,20 @@ function _actToCust(a){
 
 var _importSel={};
 function openImport(){
+  _renderImport();
+  document.getElementById('importPk').classList.add('on');
+  // always re-check the server once the list is up (covers "entered on another phone / cache missing")
+  _actFetchMine(function(changed){
+    var pk=document.getElementById('importPk');
+    if(changed && pk && pk.classList.contains('on')){ _renderImport(); showToast('서버에서 활동을 더 불러왔어요'); }
+    else if(pk && pk.classList.contains('on')){ var st=document.getElementById('importSrvNote'); if(st) st.textContent='서버 확인 완료 · '+new Date().toTimeString().slice(0,5); }
+  });
+}
+function _renderImport(){
   var cands=_getImportCandidates();
   _importSel={};
   var wrap=document.getElementById('importList');
-  if(!cands.length){ wrap.innerHTML='<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px">이번 주 불러올 미팅이 없습니다</div>'; }
+  if(!cands.length){ wrap.innerHTML='<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px">이번 주 불러올 미팅이 없습니다<div id="importSrvNote" style="font-size:11px;margin-top:6px">서버에서 확인 중…</div></div>'; }
   else {
     var h='';
     for(var i=0;i<cands.length;i++){
@@ -1725,7 +1765,6 @@ function openImport(){
       })(rows[r]);
     }
   }
-  document.getElementById('importPk').classList.add('on');
 }
 
 function applyImport(){
@@ -1771,7 +1810,7 @@ function openDatePicker(){
 // 특정 날짜(ymd)에 잡힌 일정 모으기: 활동현황 전체 + 작성중 계획 고객
 function _daySchedule(ymd){
   var out=[];
-  var db={}; try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  var db={}; try{ db=JSON.parse(_actGet()||'{}'); }catch(e){}
   Object.keys(db).forEach(function(k){
     var a=db[k];
     if(a && a.fpId===currentUser.id && a.date===ymd){
@@ -2132,7 +2171,7 @@ document.addEventListener('visibilitychange', function(){
   try{ loadExisting(); }catch(e){}
 });
 // ===== version check: GitHub 배포 시 상단 업데이트 배너 =====
-var PLAN_BUILD = 81; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
+var PLAN_BUILD = 84; // 배포 시 version.json 의 plan(없으면 v)과 같은 숫자로
 function _planHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2218,7 +2257,7 @@ function syncAllToActivities(){
   var planKey=wi.key;
   var ms=_ymd(wi.mon), ss=_ymd(wi.sun);
   var db={};
-  try{ db=JSON.parse(localStorage.getItem('unispace_activities')||'{}'); }catch(e){}
+  try{ db=JSON.parse(_actGet()||'{}'); }catch(e){}
   // GAS sync helpers (so deletes/edits here also reach the sheet, not just localStorage)
   var _gasDelIds=[], _gasSaveActs=[];
   function _gasDel(id){ if(id) _gasDelIds.push(id); }
@@ -2260,7 +2299,7 @@ function syncAllToActivities(){
     _gasSaveActs.push(act);
     added++;
   });
-  localStorage.setItem('unispace_activities', JSON.stringify(db));
+  _actSet(JSON.stringify(db));
   // push to GAS: delete removed ones, save current ones (deletes first to avoid id resurrection)
   try{
     var _saveIds={};
@@ -2538,18 +2577,39 @@ function _apprBtnRestore(btn){
   btn.style.opacity='';
   btn.style.pointerEvents='';
 }
+// 2026-10-12: approvals tapped in quick succession were dropped (only the first was sent,
+//   the rest stayed stuck on "승인 중…"). Now every tap is queued and sent one at a time.
+var _apprQ=[], _apprRunning=false, _apprPend={};
 function _apprDo(op, targetFp, reason, cb, btn){
-  if(_apprBusy) return;
-  _apprBusy=true;
+  var key=op+'|'+(targetFp||'*');
+  if(_apprPend[key]) return;
+  _apprPend[key]=true;
   var wi=_statusWi||getStatusWeekInfo(statusWeekOffset);
+  _apprQ.push({ op:op, targetFp:targetFp, reason:reason||'', cb:cb, btn:btn, key:key, wk:wi.key });
+  if(_apprRunning && btn) btn.textContent='대기 중…';
+  _apprNext();
+}
+function _apprAlive(btn){ return !!(btn && document.body && document.body.contains(btn)); }
+function _apprNext(){
+  if(_apprRunning) return;
+  var job=_apprQ.shift();
+  if(!job){ _apprBusy=false; _renderStatusWeek(); return; }
+  _apprRunning=true; _apprBusy=true;
+  if(_apprAlive(job.btn) && job.btn.textContent==='대기 중…') job.btn.textContent='승인 중…';
+  function fin(){ _apprRunning=false; delete _apprPend[job.key]; _apprNext(); }
   planGasPost({ action:'planApprove', data:{
-    fpCode:currentUser.id, weekKey:wi.key, targetFp:targetFp, op:op, reason:reason||''
+    fpCode:currentUser.id, weekKey:job.wk, targetFp:job.targetFp, op:job.op, reason:job.reason
   }}).then(function(res){
-    _apprBusy=false;
-    if(!res || !res.ok){ _apprBtnRestore(btn); showToast('⚠️ '+((res&&res.msg)||'처리 실패')); return; }
-    if(cb) cb(res);
-    _renderStatusWeek();
-  }).catch(function(){ _apprBusy=false; _apprBtnRestore(btn); showToast('⚠️ 네트워크 오류'); });
+    if(!res || !res.ok){ _apprBtnRestore(job.btn); showToast('⚠️ '+((res&&res.msg)||'처리 실패')); fin(); return; }
+    try{ if(job.cb) job.cb(res); }catch(e){}
+    if(_apprAlive(job.btn)) job.btn.textContent='✓ 완료';
+    fin();
+  }).catch(function(){ _apprBtnRestore(job.btn); showToast('⚠️ 네트워크 오류 — 다시 눌러 주세요'); fin(); });
+}
+// buttons of rows still waiting in the queue keep their busy look after a re-render
+function _apprPendBtn(op, fpId, label){
+  if(!_apprPend[op+'|'+fpId]) return '';
+  return '<button type="button" class="st-view" disabled style="background:#8A9BB8;color:#fff;border-color:#8A9BB8;pointer-events:none">'+label+'</button>';
 }
 function apprApprove1(fpId, fpName, btn){
   _apprBtnBusy(btn, '승인 중…');
@@ -2691,7 +2751,7 @@ function renderStatus(){
       if(_role==='mgr'){
         if(st==='wait'){
           btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_fp\',\''+fp.id+'\',\''+_nm+'\')">보완 요청</button>'
-              +'<button type="button" class="st-view" style="background:#177245;color:#fff;border-color:#177245" onclick="apprApprove1(\''+fp.id+'\',\''+_nm+'\',this)">승인</button>';
+              +(_apprPendBtn('approve1',fp.id,'승인 중…')||'<button type="button" class="st-view" style="background:#177245;color:#fff;border-color:#177245" onclick="apprApprove1(\''+fp.id+'\',\''+_nm+'\',this)">승인</button>');
         } else if(st==='fix_mgr'){
           var pre=(lg.repReason||'').replace(/'/g,'').replace(/"/g,'');
           btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_fp\',\''+fp.id+'\',\''+_nm+'\',\''+pre+'\')">FP에게 보완 요청</button>';
@@ -2699,7 +2759,7 @@ function renderStatus(){
       } else if(_role==='rep'){
         if(st==='approved1'){
           btns+='<button type="button" class="st-view" style="color:#B4560B;border-color:#E8B77E" onclick="openFixModal(\'fix_mgr\',\''+fp.id+'\',\''+_nm+'\')">보완 요청</button>'
-              +'<button type="button" class="st-view" style="background:#153E75;color:#fff;border-color:#153E75" onclick="apprFinal(\''+fp.id+'\',\''+_nm+'\',this)">최종 승인</button>';
+              +(_apprPendBtn('final',fp.id,'승인 중…')||'<button type="button" class="st-view" style="background:#153E75;color:#fff;border-color:#153E75" onclick="apprFinal(\''+fp.id+'\',\''+_nm+'\',this)">최종 승인</button>');
         }
       }
       var rowStyle=(st==='fix_mgr' && _role==='mgr')?' style="border-color:#153E75;background:#F4F7FD"':'';
@@ -3282,6 +3342,46 @@ function _on(id, evt, fn){
   if(el) el.addEventListener(evt, fn);
   return el;
 }
+// 2026-10-19: activities live in IndexedDB since UNISPACE v126 (localStorage copy is dropped when big).
+//   _actGet()/_actSet() read and write the same store; localStorage stays as the fallback for old phones.
+var _ACT_MEM = null, _idbDb = null, _idbOk = null;
+function _idbOpen(cb){
+  if (_idbDb) { cb(_idbDb); return; }
+  if (_idbOk === false || typeof indexedDB === 'undefined') { cb(null); return; }
+  try {
+    var req = indexedDB.open('unispace_big', 1);
+    req.onupgradeneeded = function(){ try { req.result.createObjectStore('kv'); } catch(e) {} };
+    req.onsuccess = function(){ _idbDb = req.result; _idbOk = true; cb(_idbDb); };
+    req.onerror = function(){ _idbOk = false; cb(null); };
+    req.onblocked = function(){ cb(null); };
+  } catch(e) { _idbOk = false; cb(null); }
+}
+function _actPreload(done){
+  var fin = false; function f(){ if (fin) return; fin = true; done(); }
+  var t = setTimeout(f, 1500);
+  _idbOpen(function(db){
+    if (!db) { clearTimeout(t); f(); return; }
+    try {
+      var r = db.transaction('kv', 'readonly').objectStore('kv').get('unispace_activities');
+      r.onsuccess = function(){ if (typeof r.result === 'string') _ACT_MEM = r.result; clearTimeout(t); f(); };
+      r.onerror = function(){ clearTimeout(t); f(); };
+    } catch(e) { clearTimeout(t); f(); }
+  });
+}
+function _actGet(){
+  if (_ACT_MEM !== null) return _ACT_MEM;
+  try { return localStorage.getItem('unispace_activities'); } catch(e) { return null; }
+}
+function _actSet(str){
+  _ACT_MEM = str;
+  if (_idbOk !== false) {
+    _idbOpen(function(db){ if (!db) return; try { db.transaction('kv', 'readwrite').objectStore('kv').put(str, 'unispace_activities'); } catch(e) {} });
+    if (str.length < 300000) { try { localStorage.setItem('unispace_activities', str); } catch(e1) { try { localStorage.removeItem('unispace_activities'); } catch(e2) {} } }
+    else { try { localStorage.removeItem('unispace_activities'); } catch(e3) {} }
+    return;
+  }
+  try { localStorage.setItem('unispace_activities', str); } catch(e4) {}
+}
 function init(){
   var saved=localStorage.getItem('unispace_user');
   if(saved){ try{ currentUser=JSON.parse(saved); }catch(e){} }
@@ -3426,7 +3526,7 @@ function init(){
   }
 }
 
-init();
+_actPreload(init);
 </script>
 </body>
 </html>
