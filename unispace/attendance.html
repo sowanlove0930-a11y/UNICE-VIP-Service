@@ -406,6 +406,9 @@ textarea.prm-input{resize:vertical;}
 /* toast */
 .toast{position:fixed;top:24px;left:50%;transform:translateX(-50%) translateY(-20px);background:rgba(13,22,40,.95);border:1px solid var(--bdr2);border-radius:12px;padding:12px 22px;font-size:13px;font-weight:600;color:#F0F4FF;opacity:0;transition:all .3s;z-index:100000;white-space:nowrap;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.4);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.wide{white-space:normal;max-width:calc(100vw - 32px);width:max-content;text-align:center;line-height:1.5;}
+.ci-memo{display:block;font-size:10px;font-weight:600;color:var(--text3,#8A94A6);margin-top:2px;white-space:nowrap}
+.ci-memo.skew{color:var(--orange,#F4A326)}
 
 @media(max-width:600px){
   .att-summary{grid-template-columns:repeat(2,1fr);}
@@ -897,8 +900,30 @@ function gasSetProof(date, fpCode, proof){ attGasGet({ action:'setPrereportProof
 
 function showToast(msg){
   var t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
+  t.textContent=msg; t.classList.remove('wide'); t.classList.add('show');
   clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove('show');},2800);
+}
+// multi-line toast that stays long enough to read an explanation
+function _toastLong(msg, ms){
+  var t=document.getElementById('toast'); if(!t) return;
+  t.textContent=msg; t.classList.add('wide'); t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove('show'); setTimeout(function(){ t.classList.remove('wide'); },350); }, ms||8000);
+}
+// memo column of the 출결 sheet: '서버도착 10:51' (request arrived long after the
+// press — the press time is what was recorded) / '폰시계 09:50' (phone clock or
+// time zone off) / '직권:...'
+function _attMemoInfo(memo){
+  var s=String(memo||''); var o={arrive:'',skew:''};
+  var m1=s.match(/서버도착\s*(\d{1,2}:\d{2})/); if(m1) o.arrive=m1[1];
+  var m2=s.match(/폰시계\s*(\d{1,2}:\d{2})/); if(m2) o.skew=m2[1];
+  return o;
+}
+// small note under the check-in time in the manager table ('' when nothing to note)
+function _attMemoLabel(rec){
+  var mi=_attMemoInfo(rec&&rec.memo);
+  if(mi.arrive) return '서버도착 '+mi.arrive;
+  if(mi.skew)  return '⏰ 폰시계 '+mi.skew;
+  return '';
 }
 // 시각 표시 보정: "1899-12-30T08:34:26.000Z" 같은 깨진 값 -> "HH:MM:SS"
 function _fmtTime(t){
@@ -1223,12 +1248,14 @@ function _ciPendingGet(){
 function _ciPendingSet(v){ try { localStorage.setItem(ATT_PENDING_KEY, JSON.stringify(v)); } catch(e){} }
 function _ciPendingClear(){ try { localStorage.removeItem(ATT_PENDING_KEY); } catch(e){} }
 
-function _ciSaveLocal(today, time, status){
+function _ciSaveLocal(today, time, status, memo){
   var db=getAttDB();
   if(!db[today]) db[today]={};
   db[today][currentUser.id]={name:currentUser.name,branch:currentUser.branch,role:currentUser.role,time:time||'',status:status||'정상'};
+  if(memo) db[today][currentUser.id].memo=String(memo);
   saveAttDB(db);
   _ciPendingClear();
+  _ciSyncClear();
   renderCheckinTab();
 }
 function _ciBtn(txt, disabled){
@@ -1241,6 +1268,31 @@ function _ciHHMM(ms){
   return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
 }
 
+// Android Chrome: hand the request to the service worker's background sync too
+// (sw.js 'unispace-checkin'): sent as soon as the phone is online, app closed or not.
+// the server dedupes by (date, fp), so a double delivery is harmless. iOS: no-op.
+function _ciSyncRegister(pend){
+  try {
+    if(!('serviceWorker' in navigator) || !('SyncManager' in window) || typeof indexedDB === 'undefined') return;
+    var qs = { action:'checkin', date:pend.date, fp:currentUser.id, name:currentUser.name, branch:currentUser.branch, sentAt:pend.sentAt, reqId:pend.reqId };
+    var url = ATT_GAS_URL + '?' + Object.keys(qs).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(qs[k]==null?'':qs[k]); }).join('&');
+    var req = indexedDB.open('unispace_big', 1);
+    req.onupgradeneeded = function(){ try { req.result.createObjectStore('kv'); } catch(e){} };
+    req.onsuccess = function(){
+      var db = req.result;
+      try { db.transaction('kv','readwrite').objectStore('kv').put(JSON.stringify({ url:url, date:pend.date, fp:pend.fp }), 'unispace_checkin_sync'); } catch(e){}
+      setTimeout(function(){ try { db.close(); } catch(e){} navigator.serviceWorker.ready.then(function(reg){ if(reg && reg.sync) return reg.sync.register('unispace-checkin'); }).catch(function(){}); }, 600);
+    };
+  } catch(e){}
+}
+function _ciSyncClear(){
+  try {
+    if(typeof indexedDB === 'undefined') return;
+    var req = indexedDB.open('unispace_big', 1);
+    req.onupgradeneeded = function(){ try { req.result.createObjectStore('kv'); } catch(e){} };
+    req.onsuccess = function(){ var db = req.result; try { db.transaction('kv','readwrite').objectStore('kv').delete('unispace_checkin_sync'); } catch(e){} setTimeout(function(){ try { db.close(); } catch(e){} }, 300); };
+  } catch(e){}
+}
 // single request, single timeout, no retry inside
 function _ciSend(pend, timeoutMs){
   return attGasGetTimeout({ action:'checkin', date:pend.date, fp:currentUser.id, name:currentUser.name,
@@ -1255,23 +1307,25 @@ function _ciResolve(pend, silent){
   var today=pend.date;
   return _ciSend(pend, 40000).then(function(res){
     if(res && res.ok===true){
-      _ciSaveLocal(today, res.time, res.status);
+      _ciSaveLocal(today, res.time, res.status, res.memo);
       if(!silent){
-        if(res.dup) showToast('오늘 이미 체크인되어 있습니다 (' + String(res.time||'').slice(0,5) + ')');
-        else if(res.status==='지각') showToast('⚠️ '+String(res.time||'').slice(0,5)+' 지각 처리되었습니다'+(res.memo?' · '+res.memo:''));
-        else showToast('✅ '+String(res.time||'').slice(0,5)+' 정상 출근 완료!');
+        var _tm=String(res.time||'').slice(0,5), _mi=_attMemoInfo(res.memo);
+        if(res.dup) showToast('오늘 이미 체크인되어 있습니다 (' + _tm + ')');
+        else if(_mi.skew) _toastLong((res.status==='지각'?'⚠️ '+_tm+' 지각 처리':'✅ '+_tm+' 정상 출근 완료')+' — 핸드폰 시계('+_mi.skew+')가 실제 시각과 달라요. 설정 → 날짜·시간 "자동 설정"을 켜주세요.', 9000);
+        else if(res.status==='지각') showToast('⚠️ '+_tm+' 지각 처리되었습니다');
+        else showToast('✅ '+_tm+' 정상 출근 완료!'+(_mi.arrive?' (누른 시각 기준 · 서버 도착 '+_mi.arrive+')':''));
       }
       return true;
     }
     if(res && res.ok===false && res.msg && res.msg.indexOf('이미')>=0){
-      _ciSaveLocal(today, res.time, res.status);
+      _ciSaveLocal(today, res.time, res.status, res.memo);
       if(!silent) showToast('오늘 이미 체크인하셨습니다');
       return true;
     }
     // timeout / network / server busy -> ask before re-sending
     return _ciStatus(pend).then(function(st){
       if(st && st.ok && st.exists){
-        _ciSaveLocal(today, st.time, st.status);
+        _ciSaveLocal(today, st.time, st.status, st.memo);
         if(!silent) showToast('✅ 체크인이 확인되었습니다 ('+String(st.time||'').slice(0,5)+')');
         return true;
       }
@@ -1291,6 +1345,7 @@ function doCheckin(){
   if(!pend){
     pend={ date:today, fp:currentUser.id, sentAt:Date.now(), reqId:currentUser.id+'_'+today+'_'+Date.now() };
     _ciPendingSet(pend);
+    _ciSyncRegister(pend);
   }
   _ciBtn('확인 중... ('+_ciHHMM(pend.sentAt)+' 기준)', true);
 
@@ -1328,7 +1383,7 @@ function _ciResumePending(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _ciResumePending(); });
 
 // ===== version check: version.json 'att' key (same scheme as activity-plan 'plan') =====
-var ATT_BUILD = 18; // deploy: set version.json { "att": N } to the same number
+var ATT_BUILD = 20; // deploy: set version.json { "att": N } to the same number
 function _attHardUpdate(){
   var p = (window.caches && caches.keys)
     ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
@@ -2464,6 +2519,7 @@ function attPrompt(opts){
       + '<button type="button" class="att-cf-ok">' + (opts.okLabel || '확인') + '</button>'
       + '</div></div>';
     var ta = ov.querySelector('.att-cf-in');
+    if(opts.value) ta.value = String(opts.value);
     function done(v){ if(ov.parentNode) ov.parentNode.removeChild(ov); resolve(v); }
     ov.addEventListener('click', function(e){ if(e.target === ov) done(null); });
     ov.querySelector('.att-cf-no').addEventListener('click', function(){ done(null); });
@@ -2689,7 +2745,8 @@ function renderStatus(){
     return {fp,normalCnt,lateCnt,absentCnt,prCnt,demerit,rate:_rate,missDays:missDays,prList:prList,prPend:prPend,absentDays:absentDays,lateNoPrDays:lateNoPrDays,
             timeStr: isDayMode && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')]
                      && attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id]
-                     ? attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id].time : ''};
+                     ? attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')][fp.id].time : '',
+            dayRec: isDayMode ? ((attDb[year+'-'+String(month).padStart(2,'0')+'-'+String(targetDays[0]).padStart(2,'0')]||{})[fp.id]||null) : null};
   });
 
   // 요약 카드
@@ -2812,7 +2869,7 @@ function renderStatus(){
         '<td style="font-weight:700">'+r.fp.name+'</td>'+
         '<td class="att-col-br" style="font-size:12px;color:var(--text2)">'+r.fp.branch+'</td>'+
         '<td>'+statusHtml+'</td>'+
-        '<td style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums">'+(r.timeStr?r.timeStr.slice(0,5):'—')+'</td>'+
+        '<td style="font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums">'+(r.timeStr?r.timeStr.slice(0,5):'—')+((r.dayRec&&_attMemoLabel(r.dayRec))?'<span class="ci-memo'+(_attMemoInfo(r.dayRec.memo).skew?' skew':'')+'">'+_attMemoLabel(r.dayRec)+'</span>':'')+'</td>'+
         '<td class="att-col-opt'+((r.prList&&r.prList.length&&!r.prList[0].proof)?' prc-td-pending':'')+'">'+_prCellDay(r)+'</td>'+
         ovTd+
       '</tr>';

@@ -1,6 +1,7 @@
-// UNISPACE Service Worker (PWA cache + FCM push)
+// UNISPACE Service Worker (PWA cache + FCM push + check-in background sync)
 // PWA: network-first for fresh data, cache fallback.
 // Push: firebase background message handler + notification click.
+// Sync: delivers a pending 출근 체크인 as soon as the phone is online (Android).
 
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
@@ -56,7 +57,7 @@ self.addEventListener('notificationclick', function(event) {
 });
 
 // ===== PWA cache (network-first) =====
-var CACHE_NAME = 'unispace-v80';
+var CACHE_NAME = 'unispace-v81';
 var PRECACHE = [
   './manifest.json',
   './unispace-192.png',
@@ -100,4 +101,52 @@ self.addEventListener('fetch', function(e){
       });
     })
   );
+});
+
+// ===== check-in background sync (Android Chrome; iOS has no 'sync' event) =====
+// the app stores the check-in request URL under 'unispace_checkin_sync' in the
+// shared IndexedDB (db 'unispace_big', store 'kv') and registers the
+// 'unispace-checkin' tag. when the phone is back online the browser wakes this
+// worker - even with the app closed - and the request goes out. the URL carries
+// the press time (sentAt), which the server records as the check-in time, and
+// the server dedupes by (date, fp), so a request the app already delivered is
+// a harmless no-op.
+function _swIdb(mode, fn){
+  return new Promise(function(resolve){
+    try {
+      var req = indexedDB.open('unispace_big', 1);
+      req.onupgradeneeded = function(){ try { req.result.createObjectStore('kv'); } catch(e) {} };
+      req.onsuccess = function(){
+        var db = req.result, r = null;
+        try {
+          var tx = db.transaction('kv', mode);
+          r = fn(tx.objectStore('kv'));
+          tx.oncomplete = function(){ try { db.close(); } catch(e) {} resolve(r && r.result !== undefined ? r.result : null); };
+          tx.onerror = function(){ try { db.close(); } catch(e) {} resolve(null); };
+          tx.onabort = function(){ try { db.close(); } catch(e) {} resolve(null); };
+        } catch(e) { try { db.close(); } catch(e2) {} resolve(null); }
+      };
+      req.onerror = function(){ resolve(null); };
+      req.onblocked = function(){ resolve(null); };
+    } catch(e) { resolve(null); }
+  });
+}
+function _swCheckinFlush(){
+  return _swIdb('readonly', function(st){ return st.get('unispace_checkin_sync'); }).then(function(raw){
+    var pend = null;
+    try { pend = JSON.parse(raw || 'null'); } catch(e) {}
+    if (!pend || !pend.url) return null;
+    return fetch(pend.url + '&sw=1&_=' + Date.now(), { cache: 'no-store' })
+      .then(function(r){ return r.text(); })
+      .then(function(txt){
+        var res = null;
+        try { res = JSON.parse(txt); } catch(e) {}
+        var done = res && (res.ok === true || (res.msg && String(res.msg).indexOf('이미') >= 0));
+        if (!done) throw new Error('checkin not accepted');   // the browser retries the sync later
+        return _swIdb('readwrite', function(st){ return st.delete('unispace_checkin_sync'); });
+      });
+  });
+}
+self.addEventListener('sync', function(e){
+  if (e.tag === 'unispace-checkin') e.waitUntil(_swCheckinFlush());
 });

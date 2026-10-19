@@ -1113,6 +1113,7 @@ body.theme-light .perf-amt-big { color:#854F0B !important; background:#FDF8EF !i
   box-shadow: 0 8px 32px rgba(0,0,0,.5);
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.wide { white-space: normal; max-width: calc(100vw - 32px); width: max-content; text-align: center; line-height: 1.5; }
 body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba(201,168,76,.4); color: #FBF5E6; box-shadow: 0 10px 32px rgba(60,50,20,.3); }
 
 /* ── 출근 체크인 스마트버튼 ── */
@@ -4632,6 +4633,7 @@ function showToast(msg) {
   var t = document.getElementById('toast');
   if (!t) return;
   t.textContent = msg;
+  t.classList.remove('wide');
   t.classList.add('show');
   clearTimeout(t._timer);
   t._timer = setTimeout(function(){ t.classList.remove('show'); }, 2800);
@@ -24181,10 +24183,52 @@ function renderSmartCheckinBtn() {
 }
 
 // ── checkin queue: press once, we keep retrying in the background. ──
-// the very first press pins sentAt, and the server judges lateness by that
-// timestamp (<=2min skew), so retries can never turn an on-time press late.
+// the very first press pins sentAt and the server records THAT moment as the
+// check-in time (2026-10-19: however late the request arrives, same day), so
+// a dead signal or a closed app can never turn an on-time press into 지각.
 var CHECKIN_PENDING_KEY = 'unispace_checkin_pending';
 var _checkinInFlight = false;
+// memo column of the 출결 sheet: '서버도착 10:51' (request arrived long after the
+// press — the press time still counts) / '폰시계 09:50' (phone clock or time zone off)
+function _attMemoInfo(memo) {
+  var s = String(memo || ''); var o = { arrive: '', skew: '' };
+  var m1 = s.match(/서버도착\s*(\d{1,2}:\d{2})/); if (m1) o.arrive = m1[1];
+  var m2 = s.match(/폰시계\s*(\d{1,2}:\d{2})/); if (m2) o.skew = m2[1];
+  return o;
+}
+function _checkinBuildUrl(pend) {
+  return UNISPACE_GAS_URL + '?action=checkin'
+    + '&date=' + encodeURIComponent(pend.date)
+    + '&fp=' + encodeURIComponent(currentUser.id)
+    + '&name=' + encodeURIComponent(currentUser.name)
+    + '&branch=' + encodeURIComponent(currentUser.branch || '')
+    + '&time=' + encodeURIComponent(pend.time)
+    + '&status=' + encodeURIComponent(pend.status)
+    + '&sentAt=' + encodeURIComponent(pend.sentAt);
+}
+// Android Chrome: also hand the request to the service worker's background sync
+// (sw.js 'unispace-checkin'), so it goes out as soon as the phone is online again
+// even if the app is closed. iOS has no background sync -> the resume hooks below.
+// the server dedupes by (date, fp), so a double delivery is a harmless no-op.
+function _checkinSyncRegister(pend) {
+  try {
+    if (!('serviceWorker' in navigator) || !('SyncManager' in window) || typeof _idbPut !== 'function') return;
+    _idbPut('unispace_checkin_sync', JSON.stringify({ url: _checkinBuildUrl(pend), date: pend.date, fp: pend.fp }));
+    setTimeout(function(){
+      navigator.serviceWorker.ready.then(function(reg){ if (reg && reg.sync) return reg.sync.register('unispace-checkin'); }).catch(function(){});
+    }, 600);
+  } catch (e) {}
+}
+function _checkinSyncClear() { try { if (typeof _idbDel === 'function') _idbDel('unispace_checkin_sync'); } catch (e) {} }
+// multi-line toast that stays long enough to read an explanation
+function _toastLong(msg, ms) {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('wide'); t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function(){ t.classList.remove('show'); setTimeout(function(){ t.classList.remove('wide'); }, 350); }, ms || 8000);
+}
 function _checkinPendingGet() {
   try { return JSON.parse(localStorage.getItem(CHECKIN_PENDING_KEY) || 'null'); } catch (e) { return null; }
 }
@@ -24194,7 +24238,7 @@ function _checkinPendingSet(o) {
     else localStorage.removeItem(CHECKIN_PENDING_KEY);
   } catch (e) {}
 }
-function _checkinComplete(pend, srvTime, srvStatus, toastMsg) {
+function _checkinComplete(pend, srvTime, srvStatus, toastMsg, memo) {
   var db = {};
   try { db = JSON.parse(_bigGet('unispace_attendance') || '{}'); } catch (e) {}
   if (!db[pend.date]) db[pend.date] = {};
@@ -24202,11 +24246,13 @@ function _checkinComplete(pend, srvTime, srvStatus, toastMsg) {
     name: currentUser.name, branch: currentUser.branch, role: currentUser.role,
     time: srvTime || pend.time, status: srvStatus || pend.status
   };
+  if (memo) db[pend.date][currentUser.id].memo = String(memo);
   _lsSet('unispace_attendance', JSON.stringify(db));
   _checkinPendingSet(null);
+  _checkinSyncClear();
   renderSmartCheckinBtn();
   if (typeof renderAttToday === 'function') renderAttToday(true);
-  if (toastMsg) showToast(toastMsg);
+  if (toastMsg) { if (toastMsg.length > 40) _toastLong(toastMsg, 9000); else showToast(toastMsg); }
 }
 function _checkinFlush() {
   if (_checkinInFlight) return;
@@ -24214,14 +24260,7 @@ function _checkinFlush() {
   if (!pend || !currentUser || pend.fp !== currentUser.id) return;
   if (pend.date !== getTodayStr()) { _checkinPendingSet(null); renderSmartCheckinBtn(); return; }
   _checkinInFlight = true;
-  var url = UNISPACE_GAS_URL + '?action=checkin'
-    + '&date=' + encodeURIComponent(pend.date)
-    + '&fp=' + encodeURIComponent(currentUser.id)
-    + '&name=' + encodeURIComponent(currentUser.name)
-    + '&branch=' + encodeURIComponent(currentUser.branch || '')
-    + '&time=' + encodeURIComponent(pend.time)
-    + '&status=' + encodeURIComponent(pend.status)
-    + '&sentAt=' + encodeURIComponent(pend.sentAt);
+  var url = _checkinBuildUrl(pend);
   function run(attempt) {
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
@@ -24236,14 +24275,23 @@ function _checkinFlush() {
         if (res && res.ok === true) {
           _checkinInFlight = false;
           var lateNow = (res.status || pend.status) === '지각';
-          _checkinComplete(pend, res.time, res.status,
-            lateNow ? ('⚠️ ' + String(res.time || pend.time).slice(0, 5) + ' 지각 처리되었습니다')
-                    : ('✅ ' + String(res.time || pend.time).slice(0, 5) + ' 정상 출근 완료!'));
+          var _tm = String(res.time || pend.time).slice(0, 5);
+          var _mi = _attMemoInfo(res.memo);
+          var _msg;
+          if (_mi.skew) {
+            // the phone showed a different time than the real one (clock / time zone off)
+            _msg = (lateNow ? '⚠️ ' + _tm + ' 지각 처리' : '✅ ' + _tm + ' 정상 출근 완료') + ' — 핸드폰 시계(' + _mi.skew + ')가 실제 시각과 달라요. 설정 → 날짜·시간 "자동 설정"을 켜주세요.';
+          } else if (lateNow) {
+            _msg = '⚠️ ' + _tm + ' 지각 처리되었습니다';
+          } else {
+            _msg = '✅ ' + _tm + ' 정상 출근 완료!' + (_mi.arrive ? ' (누른 시각 기준 · 서버 도착 ' + _mi.arrive + ')' : '');
+          }
+          _checkinComplete(pend, res.time, res.status, _msg, res.memo || '');
           return;
         }
         if (res && res.ok === false && res.msg && res.msg.indexOf('이미') >= 0) {
           _checkinInFlight = false;
-          _checkinComplete(pend, res.time, res.status, '⏰ 오늘 이미 체크인되어 있습니다 (' + String(res.time || pend.time).slice(0, 5) + ')');
+          _checkinComplete(pend, res.time, res.status, '⏰ 오늘 이미 체크인되어 있습니다 (' + String(res.time || pend.time).slice(0, 5) + ')', res.memo || '');
           return;
         }
         if (attempt < 3) { run(attempt + 1); return; }
@@ -24288,13 +24336,26 @@ function doSmartCheckin() {
   var timeStr = _p2(h) + ':' + _p2(m) + ':' + _p2(s);
   var isLate  = (h > LATE_HOUR) || (h === LATE_HOUR && m >= LATE_MIN);
   var status  = isLate ? '지각' : '정상';
-  _checkinPendingSet({ date: today, fp: currentUser.id, sentAt: sentAt, time: timeStr, status: status });
+  var pendNew = { date: today, fp: currentUser.id, sentAt: sentAt, time: timeStr, status: status };
+  _checkinPendingSet(pendNew);
+  _checkinSyncRegister(pendNew);
   renderSmartCheckinBtn();
   showToast('📍 ' + timeStr.slice(0,5) + ' 출근 접수 완료 — 서버에 저장하고 있습니다');
   _checkinFlush();
 }
 
 function doCheckin() { doSmartCheckin(); }
+
+// 2026-10-19: finish a pending check-in the moment the app comes back
+// (foreground, network restored, page restored from cache) instead of
+// waiting for the 60s refresh loop. the press time is what gets recorded,
+// but the row should reach the sheet (and the managers' 출결현황) quickly.
+(function(){
+  function _ciKick(){ try { if (typeof _checkinFlush === 'function') setTimeout(_checkinFlush, 300); } catch(e) {} }
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') _ciKick(); });
+  window.addEventListener('online', _ciKick);
+  window.addEventListener('pageshow', _ciKick);
+})();
 
 // 핸드폰 뒤로가기: 열린 모달/메뉴가 있으면 그것부터 닫고, 없으면 정상 뒤로가기
 (function(){
@@ -25857,7 +25918,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 129;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 131;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
