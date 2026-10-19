@@ -2913,6 +2913,17 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .ral-tbl tr.grp td.l small { font-weight:700; opacity:.7; }
 .ral-tbl tr.ga td { background:rgba(46,158,107,.1); color:#1F7A4D; }
 .ral-tbl tr.gb td { background:rgba(123,82,208,.1); color:#5A2FA0; }
+.ral-tbl tr.gm td { background:#FFF6E0; color:#9A6A10; }
+.ral-tl .ral-dt { position:absolute; right:8px; bottom:7px; font-size:10px; font-weight:800; color:var(--c); background:var(--bg2); border:1px solid var(--c); border-radius:999px; padding:1px 7px; cursor:pointer; }
+.ral-tl.ed .ral-dt { right:8px; }
+.ral-eq .c { cursor:pointer; }
+.ral-shx { position:absolute; right:12px; top:12px; width:30px; height:30px; border-radius:50%; border:1px solid var(--border); background:var(--bg2); color:var(--text2); font-size:13px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.ral-shbox { position:relative; }
+.ral-log { display:flex; align-items:center; gap:7px; padding:7px 2px; border-bottom:1px solid var(--border); font-size:12.5px; }
+.ral-log .t { font-weight:800; color:var(--text2); width:42px; flex-shrink:0; }
+.ral-log .o { font-size:10.5px; font-weight:800; border-radius:6px; padding:1px 7px; color:#fff; flex-shrink:0; }
+.ral-log .w { color:var(--text3); font-size:11px; margin-left:auto; white-space:nowrap; }
+.ral-log .m { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ral-tbl td.pt { font-size:15px; font-weight:900; color:#9A6A10; }
 .ral-tbl td.pt.top { background:#FFF3D6; }
 .ral-tbl th.pt { color:#9A6A10; }
@@ -2976,7 +2987,7 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .ral-quick { display:flex; gap:6px; margin-bottom:8px; }
 .ral-quick button { flex:1; font-family:inherit; font-size:12px; font-weight:800; border-radius:10px; padding:7px 4px; border:1.5px dashed #2E9E6B; background:#fff; color:#1F7A4D; cursor:pointer; }
 .ral-quick button:last-child { border-color:var(--bdr2); color:var(--text3); }
-.ral-list { max-height:52vh; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.ral-list { }
 .ral-row { display:flex; align-items:center; gap:9px; border:1px solid var(--border); border-radius:12px; padding:9px 10px; margin-bottom:6px; background:#fff; }
 .ral-row .ck { width:22px; height:22px; border-radius:7px; border:2px solid #CFC7B5; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:900; color:#fff; }
 .ral-row.sel { border-color:#2E9E6B; background:#F1F9F4; } .ral-row.sel .ck { background:#2E9E6B; border-color:#2E9E6B; }
@@ -17669,7 +17680,7 @@ function _stdSyncModalOpenClass(){
     var dy = e.touches[0].clientY - startY;
     // 모달 내부 스크롤 컨테이너가 최상단인데 아래로 당기면 새로고침 발생 → 차단
     // 실제 스크롤되는 모달 박스를 찾는다 (.mgmt-box / .rc2-addbox 등). 오버레이가 아니라 박스가 스크롤 컨테이너.
-    var sc = e.target.closest ? e.target.closest('.mgmt-box, .rc2-addbox, .perf-modal, .mgmt-modal, .mgmt-body, .rc2-cal-wrap') : null;
+    var sc = e.target.closest ? e.target.closest('.mgmt-box, .rc2-addbox, .perf-modal, .mgmt-modal, .mgmt-body, .rc2-cal-wrap, .ral-shbox') : null;
     // 스크롤 컨테이너를 찾았고 그 안에서 스크롤 여지가 있으면 차단하지 않음 (내부 스크롤 허용)
     if(sc){
       var canScroll = sc.scrollHeight > sc.clientHeight;
@@ -17799,12 +17810,13 @@ function _alLeadChip(L){
 function _alFilterMembers(ms){
   return (ms||[]).filter(function(M){
     var t=String(M.title||''), id=String(M.id||'').toLowerCase();
-    if(id==='ktk01') return false;
-    if(t==='지점장' || t==='교육지점장' || t==='대표') return false;
-    if(M.level==='admin' || M.level==='manager') return false;
+    if(id==='ktk01' || t==='대표' || M.level==='admin') return false;
     return true;
   });
 }
+function _alGrpOf(M){ return M.mgr ? 'mgr' : M.branch; }
+function _alGrpKo(g){ return g==='mgr' ? '지점장' : _alBrKo(g); }
+function _alGrpIcon(g){ return g==='mgr' ? '👔' : _alBrIcon(g); }
 function _alNum(n, cls){ return '<span class="'+(n?(cls||''):'z')+'">'+n+'</span>'; }
 function rcAlRender(){
   var box=document.getElementById('rc2ViewAl'); if(!box) return;
@@ -17818,7 +17830,7 @@ function rcAlRender(){
   var trial=(mon<AL_START);
   var wd=_alDay(today).getDay();
   var dows=['일','월','화','수','목','금','토'];
-  var ms=_alFilterMembers(d.members).sort(function(a,b){ if(a.branch!==b.branch) return a.branch==='alpha'?-1:1; return String(a.name).localeCompare(String(b.name)); });
+  var ms=_alFilterMembers(d.members).sort(function(a,b){ var ga=_alGrpOf(a), gb=_alGrpOf(b); if(ga!==gb){ var o={alpha:0,bravo:1,mgr:2}; return (o[ga]===undefined?3:o[ga])-(o[gb]===undefined?3:o[gb]); } return String(a.name).localeCompare(String(b.name)); });
   var me=_alMe();
   var h='';
 
@@ -17874,8 +17886,9 @@ function rcAlRender(){
   var grp='';
   for(var m=0;m<ms.length;m++){
     var M=ms[m], mid=String(M.id).toLowerCase();
-    if(M.branch!==grp){ if(grp) opt+='</optgroup>'; grp=M.branch; opt+='<optgroup label="'+_alBrIcon(grp)+' '+_alBrKo(grp)+'">'; }
-    opt+='<option value="'+mid+'"'+(sel===mid?' selected':'')+'>'+rc2Esc(M.name)+(mid===me?' (나)':'')+'</option>';
+    var _g=_alGrpOf(M);
+    if(_g!==grp){ if(grp) opt+='</optgroup>'; grp=_g; opt+='<optgroup label="'+_alGrpIcon(grp)+' '+_alGrpKo(grp)+'">'; }
+    opt+='<option value="'+mid+'"'+(sel===mid?' selected':'')+'>'+rc2Esc(M.name)+(M.mgr?(' · '+(M.branch==='edu'?'교육':_alBrKo(M.branch))):'')+(mid===me?' (나)':'')+'</option>';
   }
   if(grp) opt+='</optgroup>';
   var ts=_alStats(sel==='all'?'all':sel, today, today);
@@ -17886,9 +17899,10 @@ function rcAlRender(){
   }
   var rate=ts.tries?Math.round(ts.con*100/ts.tries):0;
   function tile(key, lbl, sub, col, n, wide){
-    return '<div class="ral-tl'+(wide==='ww'?' ww':(wide?' w':''))+(edit?' ed':'')+'" style="--c:'+col+'"'+(edit?(' onclick="rcAlTap(\''+key+'\')"'):'')+'>'
+    return '<div class="ral-tl'+(wide==='ww'?' ww':(wide?' w':''))+(edit?' ed':'')+'" style="--c:'+col+'"'+(edit?(' onclick="rcAlTap(\''+key+'\')"'):(' onclick="rcAlDetail(\''+key+'\')"'))+'>'
       +'<div class="n">'+n+'</div><div class="k">'+lbl+'</div>'+(sub?('<div class="s">'+sub+'</div>'):'')
-      +(edit?'<span class="pl">＋</span>':'')+'</div>';
+      +(edit?'<span class="pl">＋</span>':'')
+      +'<span class="ral-dt" onclick="event.stopPropagation();rcAlDetail(\''+key+'\')">보기</span></div>';
   }
   var notice='';
   if(edit){
@@ -17901,9 +17915,9 @@ function rcAlRender(){
   var pan='<div class="ral-card ral-today">'
     +'<div class="ral-ch"><div class="ral-ttl">📞 오늘 콜 <span class="ral-sub">'+(+today.substr(5,2))+'/'+(+today.substr(8,2))+'('+dows[wd]+')</span></div>'
     +'<select class="ral-sel" onchange="rcAlPick(this.value)">'+opt+'</select></div>'
-    +'<div class="ral-eq"><div class="c t"><b>'+ts.tries+'</b><span>시도</span></div><i>=</i>'
-    +'<div class="c ok"><b>'+ts.con+'</b><span>연결 '+rate+'%</span></div><i>+</i>'
-    +'<div class="c ab"><b>'+ts.absent+'</b><span>부재</span></div></div>'
+    +'<div class="ral-eq"><div class="c t" onclick="rcAlDetail(\'all\')"><b>'+ts.tries+'</b><span>시도 ›</span></div><i>=</i>'
+    +'<div class="c ok" onclick="rcAlDetail(\'con\')"><b>'+ts.con+'</b><span>연결 '+rate+'% ›</span></div><i>+</i>'
+    +'<div class="c ab" onclick="rcAlDetail(\'absent\')"><b>'+ts.absent+'</b><span>부재 ›</span></div></div>'
     +'<div class="ral-glbl ok">✅ 연결 <small>(받은 통화)</small></div>'
     +'<div class="ral-tls">'+tile('call','전화인터뷰','📞 예정 · 2점','#1A6FB5',ts.call,true)+tile('visit','내방인터뷰','🏠 예정 · 4점','#7B52D0',ts.visit,true)
     +tile('hold','재통화','🔁 번호 입력 · 나만 관리','#E0A93A',ts.hold,true)+tile('reject','거절','받았지만 관심 없음','#D0574B',ts.reject,true)+'</div>'
@@ -17956,14 +17970,14 @@ function rcAlRender(){
     +'<span class="'+(seg==='week'?'on':'')+'" onclick="rcAlSeg(\'week\')">'+(mon===curMon?'이번 주':_alWeekLabel(mon))+'</span>'
     +'<span class="'+(seg==='month'?'on':'')+'" onclick="rcAlSeg(\'month\')">이번 달</span></div></div>';
   tb+='<div class="ral-tblw"><table class="ral-tbl"><thead><tr><th class="l">팀원</th><th class="pt">점수</th><th>시도</th><th>연결률</th><th>📞 예정<small>/완료</small></th><th>🏠 예정<small>/내방</small></th><th class="sm">부재</th><th class="sm">거절</th><th class="sm">재통화</th></tr></thead><tbody>';
-  ['alpha','bravo'].forEach(function(br){
+  ['alpha','bravo','mgr'].forEach(function(br){
     var sub={tries:0,con:0,absent:0,reject:0,hold:0,call:0,visit:0,cd:0,vd:0,pts:0}, n=0, body='';
     for(var i2=0;i2<rows.length;i2++){
-      var R=rows[i2]; if(R.M.branch!==br) continue; n++;
+      var R=rows[i2]; if(_alGrpOf(R.M)!==br) continue; n++;
       var S=R.s, P=R.p, rt=S.tries?Math.round(S.con*100/S.tries):0;
       sub.tries+=S.tries; sub.con+=S.con; sub.absent+=S.absent; sub.reject+=S.reject; sub.hold+=S.hold; sub.call+=S.call; sub.visit+=S.visit; sub.cd+=P.callDone; sub.vd+=P.visitDone; sub.pts+=P.pts;
       body+='<tr class="'+(R.id===me?'me ':'')+(S.tries||P.pts?'':'idle')+'" onclick="rcAlPick(\''+R.id+'\')">'
-        +'<td class="l">'+rc2Esc(R.M.name)+(R.id===me?' <i>나</i>':'')+'</td>'
+        +'<td class="l">'+rc2Esc(R.M.name)+(R.M.mgr?(' <small style="font-weight:700;color:'+(R.M.branch==='alpha'?'#1F7A4D':(R.M.branch==='bravo'?'#5A2FA0':'var(--text3)'))+'">'+(R.M.branch==='edu'?'교육':_alBrKo(R.M.branch))+'</small>'):'')+(R.id===me?' <i>나</i>':'')+'</td>'
         +'<td class="pt'+((P.pts && P.pts===best)?' top':'')+'">'+_alNum(P.pts)+'</td>'
         +'<td>'+_alNum(S.tries,'b')+'</td><td>'+(S.tries?(rt+'%'):'<span class="z">–</span>')+'</td>'
         +'<td>'+_alNum(S.call)+'<span class="sl">/</span>'+_alNum(P.callDone,'ok')+'</td>'
@@ -17972,7 +17986,7 @@ function rcAlRender(){
     }
     if(!n) return;
     var srt=sub.tries?Math.round(sub.con*100/sub.tries):0;
-    tb+='<tr class="grp '+(br==='alpha'?'ga':'gb')+'"><td class="l">'+_alBrIcon(br)+' '+_alBrKo(br)+' <small>'+n+'명</small></td>'
+    tb+='<tr class="grp '+(br==='alpha'?'ga':(br==='bravo'?'gb':'gm'))+'"><td class="l">'+_alGrpIcon(br)+' '+_alGrpKo(br)+' <small>'+n+'명</small></td>'
       +'<td class="pt">'+sub.pts+'</td><td>'+sub.tries+'</td><td>'+(sub.tries?(srt+'%'):'–')+'</td>'
       +'<td>'+sub.call+'<span class="sl">/</span>'+sub.cd+'</td><td>'+sub.visit+'<span class="sl">/</span>'+sub.vd+'</td>'
       +'<td class="sm">'+sub.absent+'</td><td class="sm">'+sub.reject+'</td><td class="sm">'+sub.hold+'</td></tr>'+body;
@@ -17996,7 +18010,7 @@ function rcAlWeek(n){
   rcAl.wk=nx; rcAl.data && (rcAl.data.war=null);
   rcAlRender(); rcAlLoad();
 }
-function _alMyBranch(){ var M=_alMemberOf(_alMe()); return M ? M.branch : ((typeof _recruitMyBranch==='function') ? _recruitMyBranch() : 'alpha'); }
+function _alMyBranch(){ var M=_alMemberOf(_alMe()); var b=M ? M.branch : ''; if(b!=='alpha' && b!=='bravo') b=(typeof _recruitMyBranch==='function') ? _recruitMyBranch() : 'alpha'; return b; }
 function rcAlTap(key){
   if(key==='call' || key==='visit'){ rcAlNewLead(key); return; }
   if(key==='absent' || key==='hold'){ rcAlAskPhone(key); return; }
@@ -18299,7 +18313,7 @@ function _alSheetOpen(html){
     ov.addEventListener('click', function(e){ if(e.target===ov) _alSheetClose(); });
     document.body.appendChild(ov);
   }
-  document.getElementById('ralNumBox').innerHTML='<div class="ral-grab"></div>'+html;
+  document.getElementById('ralNumBox').innerHTML='<div class="ral-grab"></div><span class="ral-shx" onclick="_alSheetClose()">✕</span>'+html;
   ov.classList.add('open');
 }
 function _alSheetClose(){ var ov=document.getElementById('ralNumOv'); if(ov) ov.classList.remove('open'); }
@@ -18555,6 +18569,57 @@ function rcAlNumLead(type){
   var nm=document.getElementById('rc2fName'); if(nm && o.name) nm.value=o.name;
   var ph=document.getElementById('rc2fPhone'); if(ph){ ph.value=_alPhFmt(o.phone); }
   rcAl.numSrc={ src:rcAlNC.src, id:rcAlNC.id };
+}
+// ---- 6. tile detail: what is behind a number ----
+var AL_TAP_KO={ absent:'부재', dead:'결번', reject:'거절', hold:'재통화' };
+function rcAlDetail(key){
+  var d=rcAl.data; if(!d) return;
+  var sel=rcAl.sel||'all', today=_alTodayStr(), me=_alMe(), mgr=_alIsMgrView();
+  var SM=(sel==='all')?null:_alMemberOf(sel);
+  var nmOf={}; (d.members||[]).forEach(function(M){ nmOf[String(M.id).toLowerCase()]=M.name; });
+  var who=SM?rc2Esc(SM.name):'전체 알라딘';
+  var canPh = mgr || (SM && sel===me);
+  var title={ all:'📋 오늘 콜 기록', con:'✅ 오늘 연결', absent:'📵 오늘 부재', reject:'🙅 오늘 거절', hold:'🔁 오늘 재통화', call:'📞 오늘 전화인터뷰 예정', visit:'🏠 오늘 내방인터뷰 예정' }[key]||'기록';
+  var h='<div class="ral-shh">'+title+'</div><div class="ral-shs">'+who+' · '+(+today.substr(5,2))+'/'+(+today.substr(8,2))+'</div>';
+  // leads (call / visit)
+  var leads=(d.leads||[]).filter(function(L){ if(sel!=='all' && String(L.al).toLowerCase()!==sel) return false; return String(L.at||'').substr(0,10)===today; });
+  if(key==='call' || key==='visit'){
+    var ls=leads.filter(function(L){ return L.type===key; }).sort(function(a,b){ return String(b.at).localeCompare(String(a.at)); });
+    if(!ls.length) h+='<div class="ral-none2">오늘 잡은 '+(key==='call'?'전화인터뷰':'내방인터뷰')+'가 없어요</div>';
+    ls.forEach(function(L){
+      h+='<div class="ral-it" style="padding:8px 2px;cursor:pointer" onclick="_alSheetClose();rc2OpenAdd(\''+L.id+'\')"><span class="nm">'+(L.type==='call'?'📞':'🏠')+' '+rc2Esc(L.name)+' <small style="color:var(--text3);font-weight:600">'+rc2Esc(String(L.at).substr(11,5))+(sel==='all'?(' · 🧞 '+rc2Esc(nmOf[String(L.al).toLowerCase()]||L.al)):'')+(L.callFrom?(' · '+rc2NormCallTime(L.callFrom)+(L.callTo?('~'+rc2NormCallTime(L.callTo)):'')):'')+'</small></span>'+_alLeadChip(L)+'</div>';
+    });
+    h+='<div class="ral-note2">누르면 후보자 상세(수정) 창이 열려요</div>';
+  } else {
+    // taps timeline
+    var taps=(d.taps||[]).filter(function(t){ if(t.date!==today) return false; if(sel!=='all' && String(t.fp).toLowerCase()!==sel) return false; return true; });
+    var items=[];
+    taps.forEach(function(t){ items.push({ ts:String(t.ts||'').substr(11,5)||'방금', o:t.o, ph:t.ph||'', fp:t.fp, ref:t.ref||'' }); });
+    leads.forEach(function(L){ items.push({ ts:String(L.at||'').substr(11,5), o:L.type, lead:L, fp:L.al }); });
+    if(key==='con') items=items.filter(function(x){ return x.o!=='absent' && x.o!=='dead'; });
+    else if(key==='absent') items=items.filter(function(x){ return x.o==='absent' || x.o==='dead'; });
+    else if(key!=='all') items=items.filter(function(x){ return x.o===key; });
+    items.sort(function(a,b){ return String(b.ts).localeCompare(String(a.ts)); });
+    var dbByPh={}; (d.db||[]).forEach(function(r){ dbByPh[_alPhKey(r.phone)]=r; });
+    var rcByPh={}; (d.recalls||[]).forEach(function(r){ if(r.status==='open') rcByPh[_alPhKey(r.phone)]=r; });
+    var col={ absent:'#8A93A3', dead:'#5C6678', reject:'#D0574B', hold:'#E0A93A', call:'#1A6FB5', visit:'#7B52D0' };
+    var ko={ absent:'부재', dead:'결번', reject:'거절', hold:'재통화', call:'전화', visit:'내방' };
+    if(!items.length) h+='<div class="ral-none2">기록이 없어요</div>';
+    items.forEach(function(x){
+      var mid='', right='';
+      if(x.lead){ mid=rc2Esc(x.lead.name); right=_alLeadChip(x.lead); }
+      else if(x.ph){
+        var k=_alPhKey(x.ph), nm=(dbByPh[k]&&dbByPh[k].name)||(rcByPh[k]&&rcByPh[k].name)||'';
+        mid=(nm?(rc2Esc(nm)+' · '):'')+rc2Esc(canPh?_alPhFmt(x.ph):_alPhMask(x.ph));
+        if(x.o==='hold' && rcByPh[k]) right='⏰ '+rc2Esc(rcByPh[k].due?rcByPh[k].due.substr(5,11):'시간 미정');
+        else if(x.o==='absent') right=dbByPh[k]?('부재 DB · '+dbByPh[k].miss+'회'):'DB에서 빠짐';
+      } else right=(x.o==='reject'?'번호 없음':'');
+      if(sel==='all') mid=(mid?(mid+' · '):'')+'<b>'+rc2Esc(nmOf[String(x.fp).toLowerCase()]||x.fp)+'</b>';
+      h+='<div class="ral-log"><span class="t">'+rc2Esc(x.ts)+'</span><span class="o" style="background:'+(col[x.o]||'#999')+'">'+(ko[x.o]||x.o)+'</span><span class="m">'+mid+'</span><span class="w">'+right+'</span></div>';
+    });
+  }
+  h+='<div class="ral-btns"><button type="button" class="ral-bt g" onclick="_alSheetClose()">닫기</button></div>';
+  _alSheetOpen(h);
 }
 // ---- 5. edit a number (typo fix) ----
 var rcAlED={ src:'', id:'' };
@@ -25785,7 +25850,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 127;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 128;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
