@@ -2854,10 +2854,14 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .ral-side .sc { font-size:38px; font-weight:900; line-height:1.05; letter-spacing:-1px; margin:2px 0 4px; }
 .ral-side.sa .sc { color:#0F6E56; } .ral-side.sb .sc { color:#4A2690; }
 .ral-side .sc small { font-size:14px; font-weight:800; margin-left:2px; letter-spacing:0; }
-.ral-side .bd { display:flex; gap:5px; flex-wrap:wrap; font-size:11.5px; font-weight:700; color:var(--text2); }
-.ral-side.sb .bd { justify-content:flex-end; }
-.ral-side .bd span { background:rgba(255,255,255,.7); border-radius:6px; padding:1px 6px; }
+.ral-side .bd { display:flex; flex-direction:column; gap:3px; align-items:flex-start; font-size:11px; font-weight:700; color:var(--text2); }
+.ral-side.sb .bd { align-items:flex-end; }
+.ral-side .bd span { background:rgba(255,255,255,.7); border-radius:6px; padding:2px 7px; white-space:nowrap; letter-spacing:-.2px; }
+.ral-side .bd span b { font-weight:900; color:var(--text); }
+.ral-side .bd span b.pp { color:#B8700E; } .ral-side .bd span b.pz { color:var(--text3); font-weight:700; }
+.ral-side .bd span i { font-style:normal; color:var(--text3); margin:0 4px; }
 .ral-side .bd .pd { background:#FFF3D6; color:#9A6A10; }
+@media (max-width:380px){ .ral-side .bd { font-size:10.5px; } .ral-side .bd span { padding:2px 5px; } .ral-side .bd span i { margin:0 3px; } }
 .ral-side .tr { font-size:10.5px; color:var(--text3); margin-top:6px; }
 .ral-mid { align-self:center; text-align:center; font-size:10.5px; color:var(--text3); min-width:50px; }
 .ral-mid b { display:block; font-size:13px; color:var(--text); margin-top:2px; white-space:nowrap; }
@@ -17854,12 +17858,18 @@ function rcAlRender(){
   var lead=war.leader||'tie';
   if(A.pts===B.pts) lead='tie';
   var leadTx = (lead==='tie') ? '동점' : (_alBrKo(lead)+' +'+Math.abs(A.pts-B.pts));
+  // one line per interview kind: done (scored) and, for the current week, still-pending
+  function _alSideRow(icon, done, pend, cur){
+    return '<span>'+icon+' 완료 <b>'+done+'</b>'+((cur && pend!==null)?('<i>·</i>예정 <b class="'+(pend>0?'pp':'pz')+'">'+pend+'</b>'):'')+'</span>';
+  }
   function side(br, X){
     var on=(lead===br && (A.pts!==B.pts));
     return '<div class="ral-side '+(br==='alpha'?'sa':'sb')+(on?' lead':'')+'">'
       +'<div class="nm">'+_alBrIcon(br)+' '+_alBrKo(br)+(on?' <span class="crown">👑</span>':'')+'</div>'
       +'<div class="sc">'+X.pts+'<small>점</small></div>'
-      +'<div class="bd"><span>📞 '+X.callDone+'</span><span>🏠 '+X.visitDone+'</span>'+((mon===curMon && X.pendCnt)?('<span class="pd">대기 '+X.pendCnt+'</span>'):'')+'</div>'
+      +'<div class="bd">'+_alSideRow('📞', X.callDone, (X.pendCall===undefined)?null:X.pendCall, mon===curMon)
+      +_alSideRow('🏠', X.visitDone, (X.pendVisit===undefined)?null:X.pendVisit, mon===curMon)
+      +((mon===curMon && X.pendCall===undefined && X.pendCnt)?('<span class="pd">예정 '+X.pendCnt+'</span>'):'')+'</div>'
       +'<div class="tr">콜 '+X.tries+' · 연결률 '+(X.tries?Math.round(X.con*100/X.tries):0)+'%</div>'
       +'</div>';
   }
@@ -25923,7 +25933,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 133;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 134;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
