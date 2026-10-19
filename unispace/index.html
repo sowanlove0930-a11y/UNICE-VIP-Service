@@ -18570,6 +18570,13 @@ function rcAlNumLead(type){
   var ph=document.getElementById('rc2fPhone'); if(ph){ ph.value=_alPhFmt(o.phone); }
   rcAl.numSrc={ src:rcAlNC.src, id:rcAlNC.id };
 }
+// 'yyyy-MM-dd HH:mm:ss' -> 'HH:mm'; also copes with a Date string the sheet may hand back
+function _alTsHm(ts){
+  var s=String(ts||''); if(!s) return '방금';
+  var m=s.match(/^\d{4}-\d{2}-\d{2}[ T](\d{2}):(\d{2})/); if(m) return m[1]+':'+m[2];
+  var d=new Date(s); if(!isNaN(d.getTime())) return _alP2(d.getHours())+':'+_alP2(d.getMinutes());
+  return '방금';
+}
 // ---- 6. tile detail: what is behind a number ----
 var AL_TAP_KO={ absent:'부재', dead:'결번', reject:'거절', hold:'재통화' };
 function rcAlDetail(key){
@@ -18594,7 +18601,7 @@ function rcAlDetail(key){
     // taps timeline
     var taps=(d.taps||[]).filter(function(t){ if(t.date!==today) return false; if(sel!=='all' && String(t.fp).toLowerCase()!==sel) return false; return true; });
     var items=[];
-    taps.forEach(function(t){ items.push({ ts:String(t.ts||'').substr(11,5)||'방금', o:t.o, ph:t.ph||'', fp:t.fp, ref:t.ref||'' }); });
+    taps.forEach(function(t){ items.push({ ts:_alTsHm(t.ts), o:t.o, ph:t.ph||'', fp:t.fp, ref:t.ref||'' }); });
     leads.forEach(function(L){ items.push({ ts:String(L.at||'').substr(11,5), o:L.type, lead:L, fp:L.al }); });
     if(key==='con') items=items.filter(function(x){ return x.o!=='absent' && x.o!=='dead'; });
     else if(key==='absent') items=items.filter(function(x){ return x.o==='absent' || x.o==='dead'; });
@@ -25850,7 +25857,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 128;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 129;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
