@@ -1253,6 +1253,8 @@ body.theme-light .hl-role.r1 { color:#1E4F8A; } body.theme-light .hl-role.r2 { c
 .hl-row .act { display:flex; gap:6px; flex:none; }
 .hl-row .act a, .hl-row .act span { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; border:1px solid var(--border2); text-decoration:none; cursor:pointer; color:var(--text); }
 .hl-row .act .tel { background:rgba(16,185,129,.14); border-color:rgba(16,185,129,.35); } .hl-row .act .sms { background:rgba(244,163,38,.14); border-color:rgba(244,163,38,.35); }
+.hl-row .act .kko { background:#FEE500; border-color:#F2D600; color:#191919; font-size:10px; font-weight:900; letter-spacing:-.2px; font-family:'Noto Sans KR',sans-serif; } .hl-row .act .kko.nolink { background:rgba(254,229,0,.35); color:#6B6200; }
+.hl-kid { font-size:12px; color:var(--text2); text-align:center; margin:-6px 0 10px; }
 .hl-row .act .off { opacity:.35; cursor:default; } .hl-row .act .mv { width:24px; font-size:11px; color:var(--text2); } .hl-row .act .ed { background:var(--surface2); font-size:14px; } .hl-row .act .del { background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.35); font-size:14px; }
 .hl-none { padding:10px 12px; font-size:12px; color:var(--text3); border-top:1px solid var(--border); }
 .hl-info { display:flex; flex-wrap:wrap; gap:6px; padding:8px 12px 10px; border-top:1px dashed var(--border2); background:var(--surface); }
@@ -11761,6 +11763,31 @@ function _hlIsEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s||'').t
 function _hlIsUrl(s){ return /^(https?:\/\/)?[a-z0-9.-]+\.[a-z]{2,}(\/\S*)?$/i.test(String(s||'').trim()) && !_hlIsEmail(s); }
 function _hlIsPhone(s){ var d=_hlDigits(s); return d.length>=8 && d.length<=12 && /^[0-9+\-\s().]+$/.test(String(s||'').trim()); }
 function _hlKindKo(k){ return k==='non' ? '손보' : '생보'; }
+// kakao field: a link (open chat / 친구추가 QR link) opens straight into KakaoTalk;
+// a plain kakao id can only be copied and searched in the app
+function _hlKakaoHref(p){
+  var v = String((p && p.kakao) || '').trim();
+  if (!v) return '';
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^(open|qr|pf)\.kakao\.com\//i.test(v) || /^talk\.kakao/i.test(v)) return 'https://' + v;
+  return '';
+}
+function _hlKakaoId(p){ var v = String((p && p.kakao) || '').trim(); return (v && !_hlKakaoHref(p)) ? v : ''; }
+function _hlOpenKakaoApp(){
+  var ua = navigator.userAgent || '';
+  try {
+    if (/Android/i.test(ua)) { window.location.href = 'intent://#Intent;package=com.kakao.talk;scheme=kakaotalk;end'; }
+    else if (/iPhone|iPad|iPod/i.test(ua)) { window.location.href = 'kakaotalk://'; }
+  } catch(e) {}
+}
+function _hlKakao(id){
+  var p = _hlById(id); if (!p) return;
+  var href = _hlKakaoHref(p);
+  if (href) { window.open(href, '_blank'); return; }
+  var kid = _hlKakaoId(p);
+  if (kid) { _hlCopy(kid); setTimeout(_hlOpenKakaoApp, 600); return; }
+  _hlTap(id);   // no kakao info yet: the sheet explains the contact-save route
+}
 function openHotline(){
   if (!currentUser) { showToast('로그인이 필요합니다'); return; }
   var ov = document.getElementById('hlOverlay');
@@ -11879,6 +11906,7 @@ function _hlRenderList(){
           var dg = _hlDigits(p.phone);
           h += '<div class="act">'
             + (dg ? '<a class="tel" href="tel:' + dg + '" onclick="event.stopPropagation()">📞</a><a class="sms" href="sms:' + dg + '" onclick="event.stopPropagation()">💬</a>' : '<span class="tel off">📞</span><span class="sms off">💬</span>')
+            + ((dg || p.kakao) ? '<span class="kko' + ((_hlKakaoHref(p) || _hlKakaoId(p)) ? '' : ' nolink') + '" title="카카오톡" onclick="event.stopPropagation();_hlKakao(\'' + p.id + '\')">TALK</span>' : '<span class="kko off">TALK</span>')
             + '</div>';
         }
         h += '</div>';
@@ -11915,7 +11943,9 @@ function _hlTap(id){
     + '<div class="hl-grid">'
     + (dg ? '<a class="hl-b tel" href="tel:' + dg + '">📞 <span>전화 걸기<small>바로 통화</small></span></a>' : '<span class="hl-b off">📞 <span>전화 걸기<small>번호 없음</small></span></span>')
     + (dg ? '<a class="hl-b" href="sms:' + dg + '">💬 <span>문자 보내기<small>문자 앱 열기</small></span></a>' : '<span class="hl-b off">💬 <span>문자 보내기<small>번호 없음</small></span></span>')
-    + (dg ? '<span class="hl-b kakao" onclick="_hlSaveContact(\'' + p.id + '\')">💛 <span>카톡 친구로<small>연락처 저장 → 카톡 친구 자동 등록</small></span></span>' : '')
+    + (_hlKakaoHref(p) ? '<a class="hl-b kakao" href="' + _hlEsc(_hlKakaoHref(p)) + '" target="_blank" rel="noopener">💛 <span>카톡으로 대화<small>오픈채팅 · 친구추가 링크 열기</small></span></a>'
+      : (_hlKakaoId(p) ? '<span class="hl-b kakao" onclick="_hlKakao(\'' + p.id + '\')">💛 <span>카톡 ID 복사<small>' + _hlEsc(_hlKakaoId(p)) + ' → 카톡 친구 검색</small></span></span>'
+      : (dg ? '<span class="hl-b kakao" onclick="_hlSaveContact(\'' + p.id + '\')">💛 <span>카톡 친구로<small>연락처 저장 → 카톡 친구 자동 등록</small></span></span>' : '')))
     + (dg ? '<span class="hl-b" onclick="_hlCopy(\'' + _hlEsc(p.phone) + '\')">📋 <span>번호 복사<small>카톡·메모에 붙여넣기</small></span></span>' : '')
     + '</div>'
     + '<div class="ral-btns"><button type="button" class="ral-bt g" onclick="_alSheetClose()">닫기</button></div>';
@@ -11984,6 +12014,7 @@ function _hlEditPerson(coId, id){
     + '<div class="hl-two"><div><label>이름</label><input type="text" class="ral-in" id="hlfName" value="' + _hlEsc(p ? p.name : '') + '" placeholder="모르면 비워두기"></div>'
     + '<div><label>휴대폰</label><input type="tel" class="ral-in" id="hlfPhone" value="' + _hlEsc(p ? p.phone : '') + '" placeholder="010-0000-0000"></div></div>'
     + '<label>메모 (선택)</label><input type="text" class="ral-in" id="hlfMemo" value="' + _hlEsc(p ? p.memo : '') + '" placeholder="예: 이메일 · 담당 업무 · 통화 가능 시간">'
+    + '<label>카톡 (선택) — 오픈채팅·친구추가 링크 또는 카톡 ID</label><input type="text" class="ral-in" id="hlfKakao" value="' + _hlEsc(p ? p.kakao : '') + '" placeholder="https://open.kakao.com/o/… 또는 카톡 ID">'
     + '</div>'
     + '<div class="ral-btns"><button type="button" class="ral-bt g" onclick="_alSheetClose()">취소</button><button type="button" class="ral-bt" style="background:#1F9268" onclick="_hlSavePerson()">저장</button></div>';
   _alSheetOpen(h);
@@ -11996,8 +12027,9 @@ function _hlSavePerson(){
   var name = String((document.getElementById('hlfName')||{}).value||'').trim();
   var phone = String((document.getElementById('hlfPhone')||{}).value||'').trim();
   var memo = String((document.getElementById('hlfMemo')||{}).value||'').trim();
+  var kakao = String((document.getElementById('hlfKakao')||{}).value||'').trim();
   if (!name && !phone) { showToast('이름이나 번호 중 하나는 입력해 주세요'); return; }
-  _hlSend({ action:'hotlineSave', row:{ id:_hl.ed.id||'', type:'person', coId:_hl.ed.coId, role:role, name:name, phone:phone, memo:memo } }, '✅ 담당자 저장');
+  _hlSend({ action:'hotlineSave', row:{ id:_hl.ed.id||'', type:'person', coId:_hl.ed.coId, role:role, name:name, phone:phone, memo:memo, kakao:kakao } }, '✅ 담당자 저장');
 }
 function _hlEditInfo(coId, id){
   var f = id ? _hlById(id) : null;
@@ -26313,7 +26345,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 138;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 139;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
