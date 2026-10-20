@@ -1271,6 +1271,7 @@ body.theme-light .hl-role.r1 { color:#1E4F8A; } body.theme-light .hl-role.r2 { c
 .hl-b.tel { background:#1F9268; color:#fff; border-color:#1F9268; } .hl-b.tel small { color:#D9F2E6; }
 .hl-b.kakao { background:#FEE500; border-color:#FEE500; color:#191919; } .hl-b.kakao small { color:#5F5500; }
 .hl-b.off { opacity:.4; cursor:default; }
+.hl-b.wide { grid-column:1 / -1; padding:10px 13px; }
 .hl-f { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
 .hl-f label { font-size:11px; font-weight:800; color:var(--text3); }
 .hl-chips { display:flex; flex-wrap:wrap; gap:6px; }
@@ -11776,8 +11777,10 @@ function _hlKakaoId(p){ var v = String((p && p.kakao) || '').trim(); return (v &
 function _hlOpenKakaoApp(){
   var ua = navigator.userAgent || '';
   try {
-    if (/Android/i.test(ua)) { window.location.href = 'intent://#Intent;package=com.kakao.talk;scheme=kakaotalk;end'; }
-    else if (/iPhone|iPad|iPod/i.test(ua)) { window.location.href = 'kakaotalk://'; }
+    // 'kakaotalk://launch' is the app's own launch entry; a bare scheme has no
+    // matching activity on Android, so the browser fell through to Play Store
+    if (/Android/i.test(ua)) { window.location.href = 'intent://launch#Intent;scheme=kakaotalk;package=com.kakao.talk;end'; }
+    else if (/iPhone|iPad|iPod/i.test(ua)) { window.location.href = 'kakaotalk://launch'; }
   } catch(e) {}
 }
 function _hlKakao(id){
@@ -11786,7 +11789,9 @@ function _hlKakao(id){
   if (href) { window.open(href, '_blank'); return; }
   var kid = _hlKakaoId(p);
   if (kid) { _hlCopy(kid); setTimeout(_hlOpenKakaoApp, 600); return; }
-  _hlTap(id);   // no kakao info yet: the sheet explains the contact-save route
+  // nothing registered: open KakaoTalk itself (the friend shows up there once the contact is saved)
+  showToast('💛 카톡 열기 — 연락처 저장을 해두면 친구 목록에 떠요');
+  _hlOpenKakaoApp();
 }
 function openHotline(){
   if (!currentUser) { showToast('로그인이 필요합니다'); return; }
@@ -11943,10 +11948,11 @@ function _hlTap(id){
     + '<div class="hl-grid">'
     + (dg ? '<a class="hl-b tel" href="tel:' + dg + '">📞 <span>전화 걸기<small>바로 통화</small></span></a>' : '<span class="hl-b off">📞 <span>전화 걸기<small>번호 없음</small></span></span>')
     + (dg ? '<a class="hl-b" href="sms:' + dg + '">💬 <span>문자 보내기<small>문자 앱 열기</small></span></a>' : '<span class="hl-b off">💬 <span>문자 보내기<small>번호 없음</small></span></span>')
-    + (_hlKakaoHref(p) ? '<a class="hl-b kakao" href="' + _hlEsc(_hlKakaoHref(p)) + '" target="_blank" rel="noopener">💛 <span>카톡으로 대화<small>오픈채팅 · 친구추가 링크 열기</small></span></a>'
-      : (_hlKakaoId(p) ? '<span class="hl-b kakao" onclick="_hlKakao(\'' + p.id + '\')">💛 <span>카톡 ID 복사<small>' + _hlEsc(_hlKakaoId(p)) + ' → 카톡 친구 검색</small></span></span>'
-      : (dg ? '<span class="hl-b kakao" onclick="_hlSaveContact(\'' + p.id + '\')">💛 <span>카톡 친구로<small>연락처 저장 → 카톡 친구 자동 등록</small></span></span>' : '')))
-    + (dg ? '<span class="hl-b" onclick="_hlCopy(\'' + _hlEsc(p.phone) + '\')">📋 <span>번호 복사<small>카톡·메모에 붙여넣기</small></span></span>' : '')
+    + (_hlKakaoHref(p) ? '<a class="hl-b kakao" href="' + _hlEsc(_hlKakaoHref(p)) + '" target="_blank" rel="noopener">💛 <span>카톡으로 대화<small>등록된 링크로 바로 열기</small></span></a>'
+      : (_hlKakaoId(p) ? '<span class="hl-b kakao" onclick="_hlKakao(\'' + p.id + '\')">💛 <span>카톡 ID 복사<small>' + _hlEsc(_hlKakaoId(p)) + ' → 친구 검색</small></span></span>'
+      : '<span class="hl-b kakao" onclick="_hlKakao(\'' + p.id + '\')">💛 <span>카톡 열기<small>친구 목록에서 찾기</small></span></span>'))
+    + (dg ? '<span class="hl-b" onclick="_hlSaveContact(\'' + p.id + '\')">👤 <span>연락처 저장<small>폰 연락처에 저장 · 카톡 친구에도 뜸</small></span></span>' : '<span class="hl-b off">👤 <span>연락처 저장<small>번호 없음</small></span></span>')
+    + (dg ? '<span class="hl-b wide" onclick="_hlCopy(\'' + _hlEsc(p.phone) + '\')">📋 <span>번호 복사<small>카톡·메모에 붙여넣기</small></span></span>' : '')
     + '</div>'
     + '<div class="ral-btns"><button type="button" class="ral-bt g" onclick="_alSheetClose()">닫기</button></div>';
   _alSheetOpen(h);
@@ -11971,7 +11977,7 @@ function _hlSaveContact(id){
     var a = document.createElement('a'); a.href = url; a.download = fn.trim().replace(/\s+/g,'_') + '.vcf';
     document.body.appendChild(a); a.click();
     setTimeout(function(){ try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch(e) {} }, 3000);
-    showToast('👤 연락처 파일을 열어 저장하면 카톡 친구에 자동으로 떠요');
+    showToast('👤 내려받은 연락처 파일을 열어 저장하세요 (카톡 친구에도 자동으로 떠요)');
   } catch(e) { _hlCopy(p.phone); }
 }
 // ── edit (대표·지점장) ──
@@ -26345,7 +26351,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 139;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 141;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
