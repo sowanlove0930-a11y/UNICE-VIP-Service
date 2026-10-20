@@ -26320,7 +26320,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 136;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 137;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -26522,6 +26522,16 @@ function _getPushPref(){
 }
 
 // GAS에 토큰 저장 (3단계에서 GAS 함수 추가 예정)
+// install id of this browser/app: lets the server keep ONE token row per install
+// (a rotated token used to leave the old row alive -> duplicate pushes on one phone)
+function _pushDid(){
+  var id = '';
+  try {
+    id = localStorage.getItem('unispace_did') || '';
+    if (!id) { id = 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('unispace_did', id); }
+  } catch(e) {}
+  return id;
+}
 function _savePushToken(token){
   if(!currentUser || !currentUser.id) return;
   try { localStorage.setItem('unispace_push_token_' + currentUser.id, token); } catch(e){}
@@ -26530,7 +26540,8 @@ function _savePushToken(token){
       + '&token=' + encodeURIComponent(token)
       + '&name=' + encodeURIComponent(currentUser.name||'')
       + '&branch=' + encodeURIComponent(currentUser.branch||'')
-      + '&dev=' + encodeURIComponent(_pushDeviceLabel()))
+      + '&dev=' + encodeURIComponent(_pushDeviceLabel())
+      + '&did=' + encodeURIComponent(_pushDid()))
       .catch(function(){});
   } catch(e){}
 }
