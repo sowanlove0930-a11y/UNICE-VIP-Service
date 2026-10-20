@@ -2516,7 +2516,10 @@ body.theme-light .cc-partners .cc-name{ color: #9A7418; }
 .fp-table td { padding: 10px 12px; border-bottom: 1px solid var(--border2); font-size: 13px; vertical-align: middle; white-space: nowrap; }
 .fp-table th { white-space: nowrap; }
 /* 권한/상태 토글 컬럼(5~9번)과 비번초기화(10번)는 가운데 정렬 */
-.fp-table th:nth-child(n+5), .fp-table td:nth-child(n+5) { text-align: center; }
+.fp-table th:nth-child(n+6), .fp-table td:nth-child(n+6) { text-align: center; }
+.fp-table td.fp-no { text-align:right; font-size:11.5px; color:var(--text3); font-variant-numeric:tabular-nums; padding-right:6px; }
+.fp-edit-btn { margin-left:6px; padding:2px 7px; border:1px solid var(--border2); border-radius:7px; background:var(--surface); color:var(--text2); font-size:11px; cursor:pointer; font-family:inherit; vertical-align:middle; }
+.fp-edit-btn:hover { color:var(--text); border-color:var(--gold); }
 .fp-table tr:hover td { background: rgba(255,255,255,.02); }
 .fp-active-toggle {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -4272,13 +4275,14 @@ window.UNISPACE_FCM = {
       <span class="fp-filter-chip" onclick="filterFpMgmt('알파지점',this)">알파지점</span>
       <span class="fp-filter-chip" onclick="filterFpMgmt('브라보지점',this)">브라보지점</span>
       <span class="fp-filter-chip" onclick="filterFpMgmt('inactive',this)">비활성</span>
-      <button type="button" onclick="openFpAddForm()" style="margin-left:auto;padding:7px 16px;border:none;border-radius:9px;background:linear-gradient(135deg,#3A2E8C,#7B3FB0);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">＋ FP 추가</button>
+      <button type="button" onclick="exportFpRoster()" style="margin-left:auto;padding:7px 14px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📥 엑셀 저장</button>
+      <button type="button" onclick="openFpAddForm()" style="padding:7px 16px;border:none;border-radius:9px;background:linear-gradient(135deg,#3A2E8C,#7B3FB0);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">＋ FP 추가</button>
     </div>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적유지</th><th>🎖️ 스탠다드</th><th>📝 활동계획</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>홈케어핏</th><th>제니스</th><th>🧞 알라딘</th><th>비번초기화</th><th>삭제</th>
+          <th style="width:34px;text-align:right">No.</th><th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적유지</th><th>🎖️ 스탠다드</th><th>📝 활동계획</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>홈케어핏</th><th>제니스</th><th>🧞 알라딘</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -4291,7 +4295,7 @@ window.UNISPACE_FCM = {
 <div class="mgmt-overlay" id="fpAddOverlay" style="z-index:680">
   <div class="mgmt-box" style="max-width:420px;width:90vw;padding:24px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div class="mgmt-title">＋ 신규 FP 추가</div>
+      <div class="mgmt-title" id="fpAddTitle">＋ 신규 FP 추가</div>
       <button type="button" class="modal-close-x" onclick="closeFpAddForm()" aria-label="닫기">✕</button>
     </div>
     <div style="display:flex;flex-direction:column;gap:11px">
@@ -4316,6 +4320,8 @@ window.UNISPACE_FCM = {
           <select id="fpAddLevel" style="width:100%;padding:10px 12px;border:1px solid var(--bdr2);border-radius:9px;background:var(--bg2);color:var(--text1);font-size:14px;font-family:inherit">
             <option value="fp|FP">FP</option>
             <option value="fp|매니저">매니저</option>
+            <option value="fp|센터장">센터장</option>
+            <option value="fp|교육지점장">교육지점장</option>
             <option value="manager|지점장">지점장</option>
           </select>
         </div>
@@ -5363,7 +5369,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, homefit:f.homefit!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true, attend:f.attend!==false, std:f.std!==false, actplan:f.actplan!==false };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', email:f.email||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, homefit:f.homefit!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true, attend:f.attend!==false, std:f.std!==false, actplan:f.actplan!==false };
     });
   } else {
     baseList = FP_LIST;
@@ -5697,10 +5703,105 @@ function refreshActivity(){
 }
 
 // ── FP 추가/삭제 (GAS 연동) ──
+var _fpFormMode = 'add';
+var _fpMgmtLastList = [];
 function openFpAddForm(){
+  _fpFormMode = 'add';
   ['fpAddId','fpAddName','fpAddPhone','fpAddEmail'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var idEl=document.getElementById('fpAddId'); if(idEl){ idEl.readOnly=false; idEl.style.opacity=''; }
+  var t=document.getElementById('fpAddTitle'); if(t) t.textContent='＋ 신규 FP 추가';
+  var b=document.getElementById('fpAddSubmit'); if(b){ b.textContent='추가하기'; b.onclick=submitFpAdd; }
   var ov=document.getElementById('fpAddOverlay'); if(ov) ov.classList.add('open');
 }
+// ── 2026-10-20: edit an existing account (name / phone / email / branch / role) in the same form ──
+function openFpEditForm(id){
+  var fp=getMergedFpList().find(function(f){ return String(f.id)===String(id); });
+  if(!fp){ showToast('⚠️ 명단에서 찾을 수 없어요'); return; }
+  _fpFormMode = 'edit';
+  var idEl=document.getElementById('fpAddId'); if(idEl){ idEl.value=fp.id; idEl.readOnly=true; idEl.style.opacity='.6'; }
+  document.getElementById('fpAddName').value=fp.name||'';
+  document.getElementById('fpAddPhone').value=fp.phone||'';
+  document.getElementById('fpAddEmail').value=fp.email||'';
+  var brSel=document.getElementById('fpAddBranch');
+  var br=String(fp.branch||''); if(br.indexOf('알파')>=0) br='알파지점'; else if(br.indexOf('브라보')>=0) br='브라보지점';
+  if(brSel){ var hasBr=false; for(var i=0;i<brSel.options.length;i++){ if(brSel.options[i].value===br) hasBr=true; } if(!hasBr && br){ var o=document.createElement('option'); o.value=br; o.textContent=br; brSel.appendChild(o); } brSel.value=br||brSel.options[0].value; }
+  var lvSel=document.getElementById('fpAddLevel');
+  var combo=(fp.level||'fp')+'|'+(fp.title||'FP');
+  if(lvSel){ var hasLv=false; for(var j=0;j<lvSel.options.length;j++){ if(lvSel.options[j].value===combo) hasLv=true; } if(!hasLv){ var o2=document.createElement('option'); o2.value=combo; o2.textContent=(fp.title||'FP'); lvSel.appendChild(o2); } lvSel.value=combo; }
+  var t=document.getElementById('fpAddTitle'); if(t) t.textContent='✏️ FP 정보 수정';
+  var b=document.getElementById('fpAddSubmit'); if(b){ b.textContent='저장하기'; b.onclick=submitFpEdit; }
+  var ov=document.getElementById('fpAddOverlay'); if(ov) ov.classList.add('open');
+}
+function submitFpEdit(){
+  var id=(document.getElementById('fpAddId').value||'').trim();
+  var name=(document.getElementById('fpAddName').value||'').trim();
+  var branch=document.getElementById('fpAddBranch').value;
+  var _lt=(document.getElementById('fpAddLevel').value||'fp|FP').split('|');
+  var level=_lt[0]||'fp', title=_lt[1]||'FP';
+  var phone=(document.getElementById('fpAddPhone').value||'').trim();
+  var email=(document.getElementById('fpAddEmail').value||'').trim();
+  if(!name){ showToast('⚠️ 이름을 입력해 주세요'); return; }
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showToast('⚠️ 이메일 형식을 확인해 주세요'); return; }
+  var btn=document.getElementById('fpAddSubmit');
+  if(btn){ btn.disabled=true; btn.textContent='저장 중...'; }
+  var url=UNISPACE_GAS_URL+'?action=updateFp&by='+encodeURIComponent(currentUser.id)+'&id='+encodeURIComponent(id)
+    +'&name='+encodeURIComponent(name)+'&phone='+encodeURIComponent(phone)+'&email='+encodeURIComponent(email)
+    +'&branch='+encodeURIComponent(branch)+'&level='+encodeURIComponent(level)+'&title='+encodeURIComponent(title)+'&_='+Date.now();
+  fetch(url, { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ok){
+      // local copy first so the table updates right away, then the server list
+      try {
+        var full=JSON.parse(localStorage.getItem('unispace_fp_roster_full')||'[]');
+        for(var i=0;i<full.length;i++){ if(String(full[i].id)===id){ full[i].name=name; full[i].phone=phone; full[i].email=email; full[i].branch=branch; full[i].level=level; full[i].title=title; } }
+        localStorage.setItem('unispace_fp_roster_full', JSON.stringify(full));
+      } catch(e) {}
+      showToast('✅ '+name+' 정보를 저장했습니다');
+      closeFpAddForm();
+      renderFpMgmtTable();
+      loadAllFpsFromGas(function(){ renderFpMgmtTable(); });
+    } else {
+      showToast('⚠️ '+((res&&res.msg)||'저장 실패'));
+    }
+  }).catch(function(){ showToast('⚠️ 서버 연결 실패'); }).then(function(){ if(btn){ btn.disabled=false; btn.textContent=(_fpFormMode==='edit')?'저장하기':'추가하기'; } });
+}
+// ── 2026-10-20: roster -> Excel (the rows currently shown, in the same order) ──
+function exportFpRoster(){
+  var list=_fpMgmtLastList||[];
+  if(!list.length){ showToast('⚠️ 내보낼 명단이 없어요'); return; }
+  showToast('📥 엑셀 만드는 중...');
+  _loadExcelJS(function(){
+    try {
+      var wb=new ExcelJS.Workbook();
+      var ws=wb.addWorksheet('FP명단');
+      var on=function(v){ return v ? 'O' : ''; };
+      var head=['No.','이름','사번','지점','역할','연락처','이메일','계정','출결','업적유지','스탠다드','활동계획','케어핏','케어핏2.0','U고비','노후파이','노후파이2','홈케어핏','제니스','알라딘'];
+      ws.addRow(head);
+      list.forEach(function(fp, i){
+        var _tt=String(fp.title||''); var role;
+        if(fp.role==='대표') role='대표'; else if(_tt==='교육지점장'||fp.id==='H2503162') role='교육지점장'; else if(fp.role==='지점장'||_tt==='지점장') role='지점장'; else if(_tt) role=_tt; else role='FP';
+        ws.addRow([i+1, fp.name||'', fp.id||'', fp.branch||'', role, fp.phone||'', fp.email||'', fp.active?'활성':'비활성',
+          on(fp.attend!==false), on(fp.perfKeep===true), on(fp.std!==false), on(fp.actplan!==false), on(fp.carefit!==false), on(fp.carefit2!==false),
+          on(fp.ugobi!==false), on(fp.nohupai!==false), on(fp.nohupai2!==false), on(fp.homefit!==false), on(fp.jenius!==false), on(fp.team===true)]);
+      });
+      var widths=[5,10,11,10,9,15,26,8,6,8,8,8,7,9,7,8,8,8,7,7];
+      widths.forEach(function(w,i){ ws.getColumn(i+1).width=w; });
+      var hr=ws.getRow(1); hr.font={bold:true,color:{argb:'FFFFFFFF'}}; hr.alignment={horizontal:'center',vertical:'middle'}; hr.height=22;
+      hr.eachCell(function(c){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A2744'}}; });
+      for(var r=2;r<=list.length+1;r++){ var row=ws.getRow(r); row.getCell(1).alignment={horizontal:'right'}; for(var c=8;c<=head.length;c++) row.getCell(c).alignment={horizontal:'center'}; }
+      ws.views=[{state:'frozen',ySplit:1}];
+      var now=new Date();
+      var fname='유니스_FP명단_'+now.getFullYear()+('0'+(now.getMonth()+1)).slice(-2)+('0'+now.getDate()).slice(-2)+'.xlsx';
+      wb.xlsx.writeBuffer().then(function(buf){
+        var blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+        var url=URL.createObjectURL(blob);
+        var a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click();
+        setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+        showToast('✅ '+list.length+'명 엑셀 저장 완료');
+      }).catch(function(){ showToast('⚠️ 엑셀 생성 실패'); });
+    } catch(e) { showToast('⚠️ 엑셀 생성 실패'); }
+  });
+}
+
 function closeFpAddForm(){ var ov=document.getElementById('fpAddOverlay'); if(ov) ov.classList.remove('open'); }
 function submitFpAdd(){
   var id=(document.getElementById('fpAddId').value||'').trim();
@@ -7076,7 +7177,8 @@ function renderFpMgmtTable() {
     return String(a.name||'').localeCompare(String(b.name||''), 'ko');
   });
   var tbody = document.getElementById('fpMgmtBody');
-  tbody.innerHTML = list.map(function(fp) {
+  _fpMgmtLastList = list;
+  tbody.innerHTML = list.map(function(fp, _idx) {
     var _tt = String(fp.title || '');
     var roleLabel;
     if (fp.role === '대표') roleLabel = '👑 대표';
@@ -7086,7 +7188,8 @@ function renderFpMgmtTable() {
     else if (_tt.indexOf('매니저') >= 0) roleLabel = '💼 매니저';
     else roleLabel = 'FP';
     return '<tr>' +
-      '<td style="font-weight:700">' + fp.name + '</td>' +
+      '<td class="fp-no">' + (_idx + 1) + '</td>' +
+      '<td style="font-weight:700;white-space:nowrap">' + fp.name + '<button type="button" class="fp-edit-btn" onclick="openFpEditForm(\'' + fp.id + '\')" title="이름·연락처·이메일·지점·역할 수정">✏️</button></td>' +
       '<td style="font-size:12px;color:var(--text2);font-family:monospace">' + fp.id + '</td>' +
       '<td style="font-size:12px">' + fp.branch + '</td>' +
       '<td style="font-size:12px">' + roleLabel + '</td>' +
@@ -26355,7 +26458,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 143;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 144;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
