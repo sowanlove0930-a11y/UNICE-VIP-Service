@@ -11607,7 +11607,7 @@ function _sichaekGroupCardHtml(g, canManage){
       '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
         '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(g.kind||'')+'</span>'+
         '<span style="font-size:13px;font-weight:700">'+g.insurer+'</span>'+
-        ((c && typeof _cmCampHasRules==='function' && _cmCampHasRules(c.id)) ? '<span title="시책률 등록됨" style="font-size:10px">💰</span>' : '')+
+        ((c && typeof _cmCampHasRules==='function') ? (_cmCampHasRules(c.id) ? '<span title="시책률 등록됨" style="font-size:10px">💰</span>' : ((canManage && typeof _rules!=='undefined' && _rules && typeof _commCanUse==='function' && _commCanUse()) ? '<span style="font-size:9px;color:var(--text3);white-space:nowrap">💰 미등록</span>' : '')) : '')+
         (cnt>1?'<span style="font-size:10px;color:var(--text3)">· '+cnt+'장</span>':'')+
       '</div>'+
       '<div style="display:flex;gap:4px">'+tabs+'</div>'+
@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 148;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 151;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29120,6 +29120,9 @@ body:not(.theme-light) .cm-prog { background:rgba(255,255,255,.1); }
 .cm-disc { font-size:10px; color:var(--text3); border-top:1px solid var(--bdr); padding-top:8px; margin-top:12px; line-height:1.5; }
 .cm-btn-ai { font-size:12px; font-weight:800; padding:8px 12px; border-radius:9px; border:1.5px solid #6D4FB8; background:rgba(109,79,184,.1); color:#6D4FB8; cursor:pointer; font-family:'Noto Sans KR',sans-serif; white-space:nowrap; }
 .cm-btn-ai:disabled { opacity:.6; }
+.cm-loading { display:flex; flex-direction:column; align-items:center; gap:12px; padding:38px 0 30px; color:var(--text3); font-size:12px; }
+.cm-spin { width:30px; height:30px; border-radius:50%; border:3px solid rgba(201,168,76,.25); border-top-color:var(--gold); animation:cmspin .8s linear infinite; }
+@keyframes cmspin { to { transform:rotate(360deg); } }
 .re-reread { font-size:11px; padding:5px 9px; border-width:1px; }
 .cm-bf { display:flex; gap:5px; margin-bottom:10px; }
 .cm-bf span { padding:5px 12px; border-radius:7px; font-size:11px; font-weight:700; border:1px solid var(--bdr2); background:var(--surface); color:var(--text2); cursor:pointer; }
@@ -29150,6 +29153,10 @@ body:not(.theme-light) .cm-rk-bar { background:rgba(255,255,255,.1); }
 .cm-tag.cm-al { background:rgba(46,158,107,.12); color:#1F9268; }
 .cm-tag.cm-br { background:rgba(123,82,208,.12); color:#6D4FB8; }
 .cm-tag.cm-or { background:#FAEEDA; color:#854F0B; }
+.cm-card.cm-gift { border:1.5px solid rgba(199,125,20,.45); background:#FFF9F0; }
+body:not(.theme-light) .cm-card.cm-gift { background:rgba(199,125,20,.08); }
+.cm-gift-item { font-size:12.5px; font-weight:800; color:#C77D14; margin-top:3px; }
+.cm-prog i.cm-gift-bar { background:linear-gradient(90deg,#F4A326,#C77D14); }
 </style>
 
 <!-- 시책률 편집 모달 (기존 시책 카드 ⋯ → 💰 시책률) -->
@@ -29398,16 +29405,25 @@ function _cmScopeOk(d, p, needProd){
   if(d.exclude && d.exclude.length && np){
     for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && np.indexOf(ex) >= 0) return false; }
   }
-  if(d.pay && d.pay.length){
-    var yrs = _cmPayYears(p.prod);
-    if(!yrs){
-      if(np.indexOf('전기납') >= 0 || np.indexOf('일시납') >= 0) return false;
-      return false;
-    }
-    var ok = false;
-    for(i=0;i<d.pay.length;i++){ var y = parseInt(d.pay[i],10); if(y >= yrs.min && y <= yrs.max){ ok = true; break; } }
-    if(!ok) return false;
+  if(d.must && d.must.length){
+    if(!np) return false;
+    for(i=0;i<d.must.length;i++){ var mu = _cmNorm(d.must[i]); if(mu && np.indexOf(mu) < 0) return false; }
   }
+  var pmin = parseInt(d.payMin,10) || 0, pmax = parseInt(d.payMax,10) || 0;
+  if((d.pay && d.pay.length) || pmin || pmax){
+    var yrs = _cmPayYears(p.prod);
+    if(!yrs) return false;
+    if(d.pay && d.pay.length){
+      var ok = false;
+      for(i=0;i<d.pay.length;i++){ var y = parseInt(d.pay[i],10); if(y >= yrs.min && y <= yrs.max){ ok = true; break; } }
+      if(!ok) return false;
+    }
+    if(pmin && yrs.max < pmin) return false;
+    if(pmax && yrs.min > pmax) return false;
+  }
+  var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
+  if(d.amtMin && amt < d.amtMin) return false;
+  if(d.amtMax && amt > d.amtMax) return false;
   return true;
 }
 // rate rules that fit one product row (for the suggestion list / auto pick)
@@ -29538,6 +29554,7 @@ function _reBlank(type){
   if(type === 'tier') return { type:'tier', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], tiers:[{min:0,amt:0}], when:'15차월', cond:'', fps:[], note:'' };
   if(type === 'cond') return { type:'cond', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], conds:[{from:from,to:to,min:0},{from:from,to:to,min:0}], rewards:[{min:0,amt:0}], rewardBy:0, amt:0, when:'15차월', note:'' };
   if(type === 'per') return { type:'per', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], amt:0, when:'15차월', note:'' };
+  if(type === 'gift') return { type:'gift', label:'', item:'', from:from, to:to, keywords:[], exclude:[], cats:[], min:0, rank:0, note:'' };
   return { type:'rate', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], pay:[], pct1:0, pct2:0, when2:'13차월', note:'' };
 }
 function _reAdd(type){ _re.rules.push(_reBlank(type)); _re.edit = _re.edit || {}; _re.edit[_re.rules.length-1] = true; _reRender(); }
@@ -29576,7 +29593,7 @@ function _reFpNames(ids){
   return out.join(', ');
 }
 function _reWonIn(v){ var n = Math.round((v||0)/10000*10)/10; return n ? String(n) : ''; }
-var _RE_TYPE = { rate:['건별 %','#2563EB','rgba(37,99,235,.1)'], tier:['누적 구간','#6D4FB8','rgba(109,79,184,.12)'], cond:['조건 달성','#6D4FB8','rgba(109,79,184,.12)'], per:['건당 정액','#854F0B','#FAEEDA'] };
+var _RE_TYPE = { rate:['건별 %','#2563EB','rgba(37,99,235,.1)'], tier:['누적 구간','#6D4FB8','rgba(109,79,184,.12)'], cond:['조건 달성','#6D4FB8','rgba(109,79,184,.12)'], per:['건당 정액','#854F0B','#FAEEDA'], gift:['🎁 물품·행사','#C77D14','rgba(199,125,20,.12)'] };
 function _reInp(i, k, v, ph, extra){
   return '<input type="text" value="' + _cmEsc(v) + '" placeholder="' + _cmEsc(ph||'') + '" oninput="_reF(' + i + ',\'' + k + '\',this.value)" class="re-in"' + (extra||'') + '>';
 }
@@ -29590,6 +29607,11 @@ function _reSummary(r){
   if(r.type === 'rate'){
     out.push('익월 <b style="color:var(--gold2)">' + _cmPct(r.pct1) + '</b>' + (r.pct2 ? ' · ' + _cmEsc(r.when2||'13차월') + ' <b style="color:var(--gold2)">' + _cmPct(r.pct2) + '</b>' : ''));
     if(r.pay && r.pay.length) sub.push(r.pay.join('·') + '년납');
+    if(r.payMin) sub.push(r.payMin + '년납↑');
+    if(r.payMax) sub.push(r.payMax + '년납 이하');
+    if(r.must && r.must.length) sub.push('포함: ' + r.must.join(', '));
+    if(r.amtMin) sub.push('월초 ' + _cmMan(r.amtMin) + '↑');
+    if(r.amtMax) sub.push('월초 ' + _cmMan(r.amtMax) + ' 이하');
     if(r.keywords && r.keywords.length && r.keywords.join(',') !== r.label) sub.push('대상: ' + r.keywords.join(', '));
   } else if(r.type === 'tier'){
     var ts = []; for(var k=0;k<(r.tiers||[]).length;k++) ts.push(_cmMan(r.tiers[k].min) + '↑ <b style="color:var(--gold2)">' + _cmMan(r.tiers[k].amt) + '</b>');
@@ -29606,6 +29628,8 @@ function _reSummary(r){
   } else if(r.type === 'per'){
     out.push('1건당 <b style="color:var(--gold2)">' + _cmMan(r.amt) + '</b>');
     if(r.when) sub.push(r.when);
+  } else if(r.type === 'gift'){
+    out.push('<b style="color:#C77D14">' + _cmEsc(r.item || '(물품 미입력)') + '</b>' + (r.min ? ' · 보장월초 ' + _cmMan(r.min) + '↑' : '') + (r.rank ? ' · 합산 상위 ' + r.rank + '명' : ''));
   }
   if(r.type !== 'cond' && (r.from || r.to)) sub.push(_reMd(r.from) + '~' + _reMd(r.to));
   if(r.exclude && r.exclude.length) sub.push('제외 ' + r.exclude.join('·'));
@@ -29634,8 +29658,16 @@ function _reRender(){
     h += '<div class="re-row"><span class="re-lb">이름</span>' + _reInp(i,'label',r.label,'상품명 또는 시상명') + '</div>';
     if(r.type === 'rate'){
       h += '<div class="re-row"><span class="re-lb">상품 키워드</span>' + _reInp(i,'_kw',(r.keywords||[]).join(', '),'쉼표로 여러 개 · 비우면 보험사 전체',' onblur="_reList(' + i + ',\'keywords\',this.value)"') + '</div>';
-      h += '<div class="re-row"><span class="re-lb">납기(년)</span>' + _reInp(i,'_pay',(r.pay||[]).join(','),'예: 7  또는 5,7,10 · 비우면 전체',' onblur="_rePay(' + i + ',this.value)"') + '</div>';
+      h += '<div class="re-row"><span class="re-lb">납기(년)</span>' + _reInp(i,'_pay',(r.pay||[]).join(','),'예: 7  또는 5,7,10 · 비우면 전체',' onblur="_rePay(' + i + ',this.value)"') + '<span class="re-lb" style="width:auto">이상</span><input type="text" inputmode="numeric" value="' + (r.payMin||'') + '" oninput="_reNum(' + i + ',\'payMin\',this.value)" class="re-in re-num" placeholder="15"></div>';
+      h += '<div class="re-row"><span class="re-lb">꼭 포함</span>' + _reInp(i,'_must',(r.must||[]).join(', '),'예: 간편 (간편 상품만)',' onblur="_reList(' + i + ',\'must\',this.value)"') + '</div>';
+      h += '<div class="re-row"><span class="re-lb">제외</span>' + _reInp(i,'_ex',(r.exclude||[]).join(', '),'예: 간편 (일반 상품만)',' onblur="_reList(' + i + ',\'exclude\',this.value)"') + '</div>';
+      h += '<div class="re-row"><span class="re-lb">월초 조건</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.amtMin) + '" oninput="_reF(' + i + ',\'amtMin\',_reWon(this.value))" class="re-in re-num"><span style="font-size:11px;color:var(--text2)">만↑ ~</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.amtMax) + '" oninput="_reF(' + i + ',\'amtMax\',_reWon(this.value))" class="re-in re-num"><span style="font-size:11px;color:var(--text2)">만 이하 · 비우면 전체</span></div>';
       h += '<div class="re-row"><span class="re-lb">익월 %</span><input type="text" inputmode="decimal" value="' + (r.pct1||'') + '" oninput="_reNum(' + i + ',\'pct1\',this.value)" class="re-in re-num"> <span class="re-lb" style="width:auto">' + _cmEsc(r.when2||'13차월') + ' %</span><input type="text" inputmode="decimal" value="' + (r.pct2||'') + '" oninput="_reNum(' + i + ',\'pct2\',this.value)" class="re-in re-num"></div>';
+    }
+    if(r.type === 'gift'){
+      h += '<div class="re-row"><span class="re-lb">받는 것</span>' + _reInp(i,'item',r.item,'예: 사미헌 갈비탕 4개 / 불꽃축제 티켓 2매') + '</div>';
+      h += '<div class="re-row"><span class="re-lb">조건</span><span style="font-size:11px;color:var(--text2)">보장월초</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.min) + '" oninput="_reF(' + i + ',\'min\',_reWon(this.value))" class="re-in re-num"><span style="font-size:11px;color:var(--text2)">만↑ 또는 상위</span><input type="text" inputmode="numeric" value="' + (r.rank||'') + '" oninput="_reNum(' + i + ',\'rank\',this.value)" class="re-in re-num" style="flex:0 0 48px"><span style="font-size:11px;color:var(--text2)">명</span></div>';
+      h += '<div class="re-row"><span class="re-lb">제외</span>' + _reInp(i,'_ex',(r.exclude||[]).join(', '),'예: 실손',' onblur="_reList(' + i + ',\'exclude\',this.value)"') + '</div>';
     }
     if(r.type === 'tier' || r.type === 'per' || r.type === 'cond'){
       h += '<div class="re-row"><span class="re-lb">대상 키워드</span>' + _reInp(i,'_kw',(r.keywords||[]).join(', '),'비우면 보험사 전체 (예: 주력상품 이름들)',' onblur="_reList(' + i + ',\'keywords\',this.value)"') + '</div>';
@@ -29679,7 +29711,7 @@ function _reRender(){
   if(_re.showAdd){
     h += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;align-items:center"><span class="re-tag" style="background:var(--bg3);color:var(--text2)">직접 추가</span>'
        + '<span class="perf-co" onclick="_reAdd(\'rate\')">건별 %</span><span class="perf-co" onclick="_reAdd(\'tier\')">누적 구간</span>'
-       + '<span class="perf-co" onclick="_reAdd(\'cond\')">조건 달성</span><span class="perf-co" onclick="_reAdd(\'per\')">건당 정액</span></div>';
+       + '<span class="perf-co" onclick="_reAdd(\'cond\')">조건 달성</span><span class="perf-co" onclick="_reAdd(\'per\')">건당 정액</span><span class="perf-co" onclick="_reAdd(\'gift\')">🎁 물품·행사</span></div>';
   } else {
     h += '<div style="margin-top:4px"><span onclick="_re.showAdd=true;_reRender()" style="font-size:11px;color:var(--text3);cursor:pointer">＋ 읽기에서 빠진 항목 직접 추가 ▾</span></div>';
   }
@@ -29721,9 +29753,13 @@ function _reReadAI(images, campaignId, btn){
   }
 }
 function _reReadAIPost(imgs, campaignId, btn, label){
+  // give up after 2 minutes so the modal never hangs on a lost connection
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var tmr = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, 120000) : null;
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action:'campaignRead', data:{ fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'' } })
-  }).then(function(r){ return r.json(); }).then(function(res){
+    body: JSON.stringify({ action:'campaignRead', data:{ fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'' } }),
+    signal: ctrl ? ctrl.signal : undefined
+  }).then(function(r){ if(tmr) clearTimeout(tmr); return r.json(); }).then(function(res){
     _re.reading = false;
     if(btn){ btn.disabled = false; btn.textContent = label; }
     if(!res || !res.ok){ _re.failed = true; _reRender(); showToast('⚠️ ' + ((res && res.msg) || '읽기 실패')); return; }
@@ -29733,7 +29769,7 @@ function _reReadAIPost(imgs, campaignId, btn, label){
     _re.rules = _re.rules.concat(rules);
     _reRender();
     showToast('✅ ' + rules.length + '개 항목 읽음 · 숫자 확인 후 저장하세요');
-  }).catch(function(){ _re.reading = false; _re.failed = true; _reRender(); if(btn){ btn.disabled = false; btn.textContent = label; } showToast('⚠️ 네트워크 오류'); });
+  }).catch(function(err){ if(tmr) clearTimeout(tmr); _re.reading = false; _re.failed = true; _reRender(); if(btn){ btn.disabled = false; btn.textContent = label; } showToast((err && err.name === 'AbortError') ? '⚠️ 2분 넘게 응답이 없어 중단했습니다 · 다시 읽기를 눌러주세요' : '⚠️ 네트워크 오류 · 다시 읽기를 눌러주세요'); });
 }
 function _reSave(campaignId, replace, cb){
   var rules = [];
@@ -29902,7 +29938,7 @@ function _cmEvalRules(recs, fpId, ym){
   for(var i=0;i<list.length;i++){
     var r = list[i];
     if(r.active === false) continue;
-    if(r.type !== 'tier' && r.type !== 'cond' && r.type !== 'per') continue;
+    if(r.type !== 'tier' && r.type !== 'cond' && r.type !== 'per' && r.type !== 'gift') continue;
     var d = r.data || {};
     if(d.fps && d.fps.length && d.fps.indexOf(fpId) < 0) continue;
     var res = { rule:r, type:r.type, label:(r.title || d.label || r.insurer), insurer:r.insurer, when:d.when||'', bucket:_cmWhenBucket(d.when), amt:0, sum:0, n:0, next:null, need:0, nextAmt:0, text:'', sub:'', active:false, pct:0 };
@@ -29947,6 +29983,15 @@ function _cmEvalRules(recs, fpId, ym){
       }
       var any = false; for(var s2=0;s2<sums.length;s2++){ if(sums[s2] > 0) any = true; }
       res.active = any;
+    } else if(r.type === 'gift'){
+      var gf = r.from || d.from || mFrom, gt = r.to || d.to || mTo;
+      if(!_cmOverlap(gf, gt, mFrom, mTo)) continue;
+      var wg = _cmSumWindow(recs, fpId, r, gf, gt);
+      res.sum = wg.sum; res.n = wg.n; res.amt = 0; res.gift = true; res.item = d.item || ''; res.rank = parseInt(d.rank,10) || 0; res.min = d.min || 0;
+      res.period = gf.substr(5).replace('-','.') + '~' + gt.substr(5).replace('-','.');
+      if(res.min){ res.done = wg.sum >= res.min; res.need = res.done ? 0 : res.min - wg.sum; res.pct = Math.min(100, Math.round(wg.sum / res.min * 100)); }
+      else { res.done = false; res.pct = 0; }
+      res.active = wg.sum > 0;
     } else if(r.type === 'per'){
       var pf = r.from || d.from || mFrom, pt = r.to || d.to || mTo;
       if(!_cmOverlap(pf, pt, mFrom, mTo)) continue;
@@ -29983,8 +30028,10 @@ function _cmBuild(fpId, ym){
     else if(!it.prod) t.noProd++;
     if(it.sc){ t.sc1 += it.sc.m1; if(_cmWhenBucket(it.sc.when2) === 'y3') t.sc3 += it.sc.y2; else t.sc2 += it.sc.y2; }
   }
+  t.gifts = 0;
   for(var e=0;e<evals.length;e++){
     var ev = evals[e];
+    if(ev.gift){ if(ev.done) t.gifts++; continue; }
     if(!ev.amt) continue;
     if(ev.bucket === 'm1') t.sc1 += ev.amt; else if(ev.bucket === 'y3') t.sc3 += ev.amt; else t.sc2 += ev.amt;
   }
@@ -30035,7 +30082,7 @@ function _cmSchedule(recs, ym){
     var cmk = cms[ci];
     var evals = _cmEvalRules(recs, recs[0].fpId, cmk);
     for(var q=0;q<evals.length;q++){
-      var ev = evals[q]; if(!ev.amt) continue;
+      var ev = evals[q]; if(!ev.amt || ev.gift) continue;
       if(seenRule[ev.rule.id]) continue; seenRule[ev.rule.id] = 1;
       var w = String(ev.when||'');
       var o2 = (w.indexOf('익월') >= 0) ? 1 : ((w.indexOf('13') >= 0) ? 13 : 15);
@@ -30058,6 +30105,8 @@ function _cmCanRank(){
   var bk = _pvBranchKey(currentUser.branch||'');
   return isMgr && (bk === 'al' || bk === 'br');
 }
+function _cmBrOrder(b){ var k = _pvBranchKey(b||''); return k === 'al' ? 0 : (k === 'br' ? 1 : (String(b||'').indexOf('교육') >= 0 ? 2 : 3)); }
+function _cmLoadingHtml(txt){ return '<div class="cm-loading"><div class="cm-spin"></div><div>' + (txt || '수수료 예상 준비 중…') + '</div></div>'; }
 function _cmActiveFps(){
   var all = getMergedFpList(), out = [];
   for(var i=0;i<all.length;i++){ var f = all[i]; if(f.active === false) continue; if(f.role === '대표') continue; out.push(f); }
@@ -30082,7 +30131,7 @@ function openCommission(){
   if(!currentUser){ showToast('로그인이 필요합니다'); return; }
   if(!_commCanUse()){ showToast('아직 공개되지 않은 기능입니다'); return; }
   _cmYm = _cmYmOf(new Date());
-  _cmFp = currentUser.id;
+  _cmFp = _cmIsAdmin(currentUser) ? '' : currentUser.id;
   _cmTab = _cmCanRank() ? 'rank' : 'mine';
   _cmBr = _cmIsAdmin(currentUser) ? 'all' : _pvBranchKey(currentUser.branch||'');
   _cmOpen = ''; _cmFromRank = false;
@@ -30092,7 +30141,7 @@ function openCommission(){
   _cmFpList = [];
   if(isAdmin){
     _cmFpList = _cmActiveFps().slice();
-    _cmFpList.sort(function(a,b){ return String(a.branch||'').localeCompare(String(b.branch||'')) || String(a.name||'').localeCompare(String(b.name||'')); });
+    _cmFpList.sort(function(a,b){ return (_cmBrOrder(a.branch) - _cmBrOrder(b.branch)) || String(a.name||'').localeCompare(String(b.name||'')); });
   } else if(team){
     var ids = (team.managers||[]).concat(team.members||[]);
     var all = _cmActiveFps();
@@ -30100,29 +30149,30 @@ function openCommission(){
   }
   var sel = document.getElementById('cmFpSel');
   if(sel){
-    var h = '';
+    var h = isAdmin ? '<option value="">FP를 선택하세요</option>' : '';
     if(_cmFpList.length){
       for(var f=0;f<_cmFpList.length;f++){ var fp = _cmFpList[f]; h += '<option value="' + _cmEsc(fp.id) + '"' + (fp.id === _cmFp ? ' selected' : '') + '>' + _cmEsc(fp.name) + (fp.branch ? ' · ' + _cmEsc(String(fp.branch).replace('지점','')) : '') + '</option>'; }
       if(!isAdmin && (_cmFpList.length === 0 || !_cmFpList.some(function(x){ return x.id === currentUser.id; }))) h = '<option value="' + _cmEsc(currentUser.id) + '" selected>' + _cmEsc(currentUser.name||'') + '</option>' + h;
     }
     sel.innerHTML = h;
-    sel.parentNode.style.display = _cmFpList.length > 1 ? '' : 'none';
+    sel.parentNode.style.display = 'none';
   }
   var rb = document.getElementById('cmRebuildBtn'); if(rb) rb.style.display = '';
   document.getElementById('commOverlay').classList.add('open');
   var body = document.getElementById('cmBody');
-  if(body) body.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">요율표·시책률 불러오는 중…</div>';
+  if(body) body.innerHTML = _cmLoadingHtml();
   var pending = 2;
   function go(){ pending--; if(pending <= 0) _commRender(); }
   _ratesEnsure(function(){ go(); });
   _rulesEnsure(function(){ go(); });
-  if(typeof loadPerfFromGas === 'function'){ loadPerfFromGas(function(){ if(document.getElementById('commOverlay').classList.contains('open')) _commRender(); }, false); }
+  if(typeof loadPerfFromGas === 'function'){ loadPerfFromGas(function(){ if(pending <= 0 && document.getElementById('commOverlay').classList.contains('open')) _commRender(); }, false); }
 }
 // 🔄 새로고침: perf + rules (+ rates rebuild for admin)
 function _cmRefresh(btn){
   if(!currentUser) return;
   var label = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = '새로고침 중…'; }
+  var body0 = document.getElementById('cmBody'); if(body0) body0.innerHTML = _cmLoadingHtml('최신 자료 불러오는 중…');
   var left = 3;
   function done(){ left--; if(left > 0) return; if(btn){ btn.disabled = false; btn.textContent = label; } if(document.getElementById('commOverlay').classList.contains('open')) _commRender(); }
   if(typeof loadPerfFromGas === 'function') loadPerfFromGas(function(){ done(); }, true); else done();
@@ -30151,7 +30201,8 @@ function _cmRowTxt(lab, fee, sc, scTxt, tot){
 function _commRender(){
   var body = document.getElementById('cmBody');
   if(!body) return;
-  var fpId = _cmFp || currentUser.id;
+  var isAdm = _cmIsAdmin(currentUser);
+  var fpId = _cmFp || (isAdm ? '' : currentUser.id);
   var fpObj = null, all = getMergedFpList();
   for(var i=0;i<all.length;i++){ if(all[i].id === fpId){ fpObj = all[i]; break; } }
   var fpName = fpObj ? fpObj.name : (fpId === currentUser.id ? (currentUser.name||'') : fpId);
@@ -30167,13 +30218,16 @@ function _commRender(){
   if(canRank || showTeam) tabs += '<span class="' + (_cmTab==='mine'?'on':'') + '" onclick="_cmSetTab(\'mine\')">' + (_cmIsAdmin(currentUser) ? 'FP 상세' : '내 계약') + '</span>';
   if(showTeam) tabs += '<span class="' + (_cmTab==='team'?'on':'') + '" onclick="_cmSetTab(\'team\')">팀 수수료</span>';
   if(tabs) h += '<div class="cm-seg">' + tabs + '</div>';
-  var selWrap = document.getElementById('cmFpSel'); if(selWrap && selWrap.parentNode) selWrap.parentNode.style.display = (_cmTab === 'mine' && _cmFpList.length > 1) ? '' : 'none';
+  var selWrap = document.getElementById('cmFpSel');
+  if(selWrap && selWrap.parentNode){ selWrap.parentNode.style.display = (_cmTab === 'mine' && _cmFpList.length > 1) ? '' : 'none'; try { selWrap.value = fpId || ''; } catch(eSel) {} }
+  if((!_rates || !COMM_FP_RATE) && _ratesLoading){ body.innerHTML = h + _cmLoadingHtml(); return; }
   if(!_rates || !COMM_FP_RATE){
     h += '<div class="cm-warn">계산 기준을 아직 불러오지 못했습니다. 잠시 후 다시 열어주세요' + (_cmIsAdmin(currentUser) ? ' · 시트에 요율표를 넣은 뒤 "새로고침"을 눌러주세요' : '') + '</div>';
     body.innerHTML = h; return;
   }
   if(_cmTab === 'rank'){ body.innerHTML = h + _cmRankHtml(); return; }
   if(_cmTab === 'team'){ body.innerHTML = h + _cmTeamHtml(team, fpId); return; }
+  if(!fpId){ body.innerHTML = h + '<div class="cm-card" style="text-align:center;color:var(--text3);font-size:12px;padding:22px">위에서 FP를 선택하면 계약별 내역이 나옵니다<br><span class="cm-mini">순위 탭에서 이름을 눌러도 됩니다</span></div>'; return; }
   if(_cmFromRank){ h += '<div class="cm-row" style="margin:2px 0 8px"><span onclick="_cmBackRank()" style="font-size:12px;font-weight:700;color:var(--gold2);cursor:pointer">‹ 순위로</span><b style="font-size:13px">' + _cmEsc(fpName) + '</b><span></span></div>'; }
   var B = _cmBuild(fpId, _cmYm), t = B.t;
   var m1 = t.m1 + t.sc1, y2 = t.y2 + t.sc2, y3 = t.y3 + t.sc3, total = m1 + t.y1 + y2 + y3;
@@ -30185,12 +30239,21 @@ function _commRender(){
      + '</div>';
   if(t.y1) h += '<div class="cm-mini" style="margin:-4px 0 8px 2px">+ 1차년 유지(2~12회·7~12회 분할) ' + _cmMan(t.y1) + '</div>';
   h += '<div class="cm-total"><span>💎 총 예상 (36개월 유지)</span><b>' + _cmMan(total) + '</b></div>';
-  h += '<div class="cm-mini" style="margin:6px 2px 0">' + t.cnt + '건 중 <b style="color:var(--text)">' + t.calc + '건 계산</b>' + (t.noProd ? ' · 상품 미입력 ' + t.noProd + '건' : '') + (t.noRate ? ' · 계산 불가 ' + t.noRate + '건' : '') + '</div>';
+  h += '<div class="cm-row" style="margin:6px 2px 0"><span class="cm-mini">' + t.cnt + '건 중 <b style="color:var(--text)">' + t.calc + '건 계산</b>' + (t.noProd ? ' · 상품 미입력 ' + t.noProd + '건' : '') + (t.noRate ? ' · 계산 불가 ' + t.noRate + '건' : '') + '</span>' + (t.gifts ? '<span style="font-size:11px;font-weight:700;color:#C77D14;white-space:nowrap">🎁 받을 혜택 ' + t.gifts + '개</span>' : '') + '</div>';
   // nudges
   var nud = '';
   for(var e=0;e<B.evals.length;e++){
     var ev = B.evals[e];
     if(!ev.active) continue;
+    if(ev.gift){
+      var gTag = ev.min ? (ev.done ? '<span class="cm-tag" style="background:rgba(31,146,104,.12);color:#1F9268">달성 ✅</span>' : '<span class="cm-tag cm-or">' + _cmMan(ev.need) + ' 더</span>') : (ev.rank ? '<span class="cm-tag cm-or">상위 ' + ev.rank + '명</span>' : '');
+      var gCond = _cmEsc(ev.period||'') + (ev.min ? ' · 보장월초 ' + _cmMan(ev.min) + '↑' : '') + (ev.rank ? ' · 보장월초 합산 상위 ' + ev.rank + '명' : '') + ((ev.rule.data||{}).note ? ' · ' + _cmEsc((ev.rule.data||{}).note) : '');
+      nud += '<div class="cm-card cm-gift"><div class="cm-row"><b style="font-size:12px">' + (ev.rank ? '🎟 ' : '🎁 ') + _cmEsc(ev.insurer) + ' ' + _cmEsc(ev.label) + '</b>' + gTag + '</div>'
+           + (ev.item ? '<div class="cm-gift-item">' + _cmEsc(ev.item) + '</div>' : '')
+           + (ev.min ? '<div class="cm-prog"><i class="cm-gift-bar" style="width:' + (ev.pct||0) + '%"></i></div>' : '<div style="height:4px"></div>')
+           + '<div class="cm-row"><span class="cm-mini">' + gCond + '</span><span class="cm-mini" style="white-space:nowrap">' + (ev.rank ? '내 합산 ' : '지금 ') + '<b style="color:var(--text)">' + _cmMan(ev.sum) + '</b></span></div></div>';
+      continue;
+    }
     if(!ev.amt && !ev.next) continue;
     var right = '';
     if(ev.next && ev.need > 0 && ev.nextAmt > (ev.amt||0)) right = _cmMan(ev.need) + ' 더 → ' + _cmMan(ev.nextAmt);
