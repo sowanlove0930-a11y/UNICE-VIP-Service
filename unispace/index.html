@@ -12924,7 +12924,7 @@ function _sichaekFileChange(e){
       reader.onload = function(ev){
         _sichaekFiles.push({ data: ev.target.result, mime: f.type, name: f.name||'' });
         remain--;
-        if(remain<=0){ _sichaekRenderPrevGrid(); _sichaekUpdateSubmitLabel(); }
+        if(remain<=0){ _sichaekRenderPrevGrid(); _sichaekUpdateSubmitLabel(); if(typeof _sichaekAutoRead==='function') setTimeout(_sichaekAutoRead, 50); }
       };
       reader.readAsDataURL(f);
     })(fl[i]);
@@ -25454,8 +25454,8 @@ function doCheckin() { doSmartCheckin(); }
       </div>
       <div id="sichaekRulesWrap" style="margin:2px 0 14px;border-top:1px solid var(--bdr);padding-top:12px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-          <div style="font-size:12px;color:var(--text2);font-weight:600">💰 시책률 <span style="font-weight:400;color:var(--text3)">(수수료 예상용 · 선택)</span></div>
-          <button type="button" class="cm-btn-ai" onclick="sichaekReadAI(this)">🤖 장표 숫자 읽기</button>
+          <div style="font-size:12px;color:var(--text2);font-weight:600">💰 시책률 <span style="font-weight:400;color:var(--text3)">(자동)</span></div>
+          <span class="cm-btn-ai re-reread" onclick="sichaekReadAI(this)" style="display:none">🔄 다시 읽기</span>
         </div>
         <div id="sichaekRulesBox"></div>
         <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);margin-top:8px;cursor:pointer"><input type="checkbox" id="sichaekRulesApply" checked style="width:15px;height:15px;margin:0;accent-color:#B8860B"> 💰 수수료 예상에 적용</label>
@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 146;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 148;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29120,6 +29120,7 @@ body:not(.theme-light) .cm-prog { background:rgba(255,255,255,.1); }
 .cm-disc { font-size:10px; color:var(--text3); border-top:1px solid var(--bdr); padding-top:8px; margin-top:12px; line-height:1.5; }
 .cm-btn-ai { font-size:12px; font-weight:800; padding:8px 12px; border-radius:9px; border:1.5px solid #6D4FB8; background:rgba(109,79,184,.1); color:#6D4FB8; cursor:pointer; font-family:'Noto Sans KR',sans-serif; white-space:nowrap; }
 .cm-btn-ai:disabled { opacity:.6; }
+.re-reread { font-size:11px; padding:5px 9px; border-width:1px; }
 .cm-bf { display:flex; gap:5px; margin-bottom:10px; }
 .cm-bf span { padding:5px 12px; border-radius:7px; font-size:11px; font-weight:700; border:1px solid var(--bdr2); background:var(--surface); color:var(--text2); cursor:pointer; }
 .cm-bf span.on { background:rgba(201,168,76,.14); border-color:var(--gold); color:var(--gold2); }
@@ -29158,9 +29159,9 @@ body:not(.theme-light) .cm-rk-bar { background:rgba(255,255,255,.1); }
       <div class="mgmt-title" id="rulesTitle" style="font-family:'Noto Sans KR',sans-serif;font-size:15px;letter-spacing:0;color:var(--text);margin:0">💰 시책률</div>
       <button type="button" onclick="closeRules()" class="modal-close-x" aria-label="닫기">✕</button>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-      <button type="button" class="cm-btn-ai" onclick="rulesReadAI(this)">🤖 장표 숫자 읽기</button>
-      <span style="font-size:10.5px;color:var(--text3);align-self:center;line-height:1.4">장표를 읽어 칸을 채웁니다 · 확인 후 저장</span>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:10.5px;color:var(--text3);line-height:1.4;flex:1">장표를 읽어 채운 숫자입니다 · 확인 후 저장</span>
+      <span class="cm-btn-ai re-reread" onclick="rulesReadAI(this)" style="display:none">🔄 다시 읽기</span>
     </div>
     <div style="overflow-y:auto;flex:1;min-height:0" id="rulesBox"></div>
     <button type="button" onclick="rulesSaveClick(this)" style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">저장</button>
@@ -29529,7 +29530,7 @@ function _perfRulePick(i, v){
 // ── 시책률 편집기 (등록 모달 / 시책률 모달 공용) ─────────
 var _re = { rules:[], box:'', insurer:'', kind:'', ym:'', campaignId:'', apply:true, title:'' };
 function _reReset(box, insurer, kind, ym, campaignId){
-  _re = { rules:[], box:box, insurer:insurer||'', kind:kind||'', ym:ym||_cmYmOf(new Date()), campaignId:campaignId||'', apply:true, title:'' };
+  _re = { rules:[], box:box, insurer:insurer||'', kind:kind||'', ym:ym||_cmYmOf(new Date()), campaignId:campaignId||'', apply:true, title:'', reading:false, showAdd:false, failed:false };
 }
 function _reBlank(type){
   var ym = _re.ym || _cmYmOf(new Date());
@@ -29539,8 +29540,8 @@ function _reBlank(type){
   if(type === 'per') return { type:'per', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], amt:0, when:'15차월', note:'' };
   return { type:'rate', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], pay:[], pct1:0, pct2:0, when2:'13차월', note:'' };
 }
-function _reAdd(type){ _re.rules.push(_reBlank(type)); _reRender(); }
-function _reDel(i){ _re.rules.splice(i,1); _reRender(); }
+function _reAdd(type){ _re.rules.push(_reBlank(type)); _re.edit = _re.edit || {}; _re.edit[_re.rules.length-1] = true; _reRender(); }
+function _reDel(i){ _re.rules.splice(i,1); _re.edit = {}; _reRender(); }
 function _reF(i, k, v){ if(_re.rules[i]) _re.rules[i][k] = v; }
 function _reNum(i, k, v){ if(_re.rules[i]) _re.rules[i][k] = parseFloat(String(v).replace(/[^0-9.\-]/g,'')) || 0; }
 function _reWon(v){ var n = parseFloat(String(v).replace(/[^0-9.\-]/g,'')) || 0; return Math.round(n * 10000); }
@@ -29575,24 +29576,61 @@ function _reFpNames(ids){
   return out.join(', ');
 }
 function _reWonIn(v){ var n = Math.round((v||0)/10000*10)/10; return n ? String(n) : ''; }
-var _RE_TYPE = { rate:['비율형','#2563EB','rgba(37,99,235,.1)'], tier:['구간형','#6D4FB8','rgba(109,79,184,.12)'], cond:['조건형','#6D4FB8','rgba(109,79,184,.12)'], per:['건당','#854F0B','#FAEEDA'] };
+var _RE_TYPE = { rate:['건별 %','#2563EB','rgba(37,99,235,.1)'], tier:['누적 구간','#6D4FB8','rgba(109,79,184,.12)'], cond:['조건 달성','#6D4FB8','rgba(109,79,184,.12)'], per:['건당 정액','#854F0B','#FAEEDA'] };
 function _reInp(i, k, v, ph, extra){
   return '<input type="text" value="' + _cmEsc(v) + '" placeholder="' + _cmEsc(ph||'') + '" oninput="_reF(' + i + ',\'' + k + '\',this.value)" class="re-in"' + (extra||'') + '>';
 }
 function _reDate(i, k, v){
   return '<input type="date" value="' + _cmEsc(v||'') + '" onchange="_reF(' + i + ',\'' + k + '\',this.value)" class="re-in re-date">';
 }
+function _reEdit(i){ _re.edit = _re.edit || {}; _re.edit[i] = !_re.edit[i]; _reRender(); }
+function _reMd(d){ return String(d||'').substr(5).replace('-','.'); }
+function _reSummary(r){
+  var out = [], sub = [];
+  if(r.type === 'rate'){
+    out.push('익월 <b style="color:var(--gold2)">' + _cmPct(r.pct1) + '</b>' + (r.pct2 ? ' · ' + _cmEsc(r.when2||'13차월') + ' <b style="color:var(--gold2)">' + _cmPct(r.pct2) + '</b>' : ''));
+    if(r.pay && r.pay.length) sub.push(r.pay.join('·') + '년납');
+    if(r.keywords && r.keywords.length && r.keywords.join(',') !== r.label) sub.push('대상: ' + r.keywords.join(', '));
+  } else if(r.type === 'tier'){
+    var ts = []; for(var k=0;k<(r.tiers||[]).length;k++) ts.push(_cmMan(r.tiers[k].min) + '↑ <b style="color:var(--gold2)">' + _cmMan(r.tiers[k].amt) + '</b>');
+    out.push(ts.join(' · ') || '<span style="color:var(--text3)">구간 없음</span>');
+    if(r.when) sub.push(r.when); if(r.cond) sub.push(r.cond);
+    if(r.keywords && r.keywords.length) sub.push('대상 ' + r.keywords.length + '개');
+    if(r.fps && r.fps.length) sub.push('대상 FP ' + r.fps.length + '명');
+  } else if(r.type === 'cond'){
+    var cs = []; for(var c=0;c<(r.conds||[]).length;c++) cs.push('조건' + (c+1) + ' ' + _reMd(r.conds[c].from) + '~' + _reMd(r.conds[c].to) + ' ' + _cmMan(r.conds[c].min) + '↑');
+    out.push(cs.join(' · '));
+    var rs = []; for(var w=0;w<(r.rewards||[]).length;w++) rs.push(_cmMan(r.rewards[w].min) + '↑ <b style="color:var(--gold2)">' + _cmMan(r.rewards[w].amt) + '</b>');
+    out.push('→ ' + (rs.length ? rs.join(' · ') : ('<b style="color:var(--gold2)">' + _cmMan(r.amt) + '</b>')));
+    if(r.when) sub.push(r.when);
+  } else if(r.type === 'per'){
+    out.push('1건당 <b style="color:var(--gold2)">' + _cmMan(r.amt) + '</b>');
+    if(r.when) sub.push(r.when);
+  }
+  if(r.type !== 'cond' && (r.from || r.to)) sub.push(_reMd(r.from) + '~' + _reMd(r.to));
+  if(r.exclude && r.exclude.length) sub.push('제외 ' + r.exclude.join('·'));
+  if(r.cats && r.cats.length) sub.push(r.cats.join('·'));
+  if(r.note) sub.push(r.note);
+  return out.join('<br>') + (sub.length ? '<div class="cm-mini" style="margin-top:2px">' + _cmEsc(sub.join(' · ')) + '</div>' : '');
+}
 function _reRender(){
   var box = document.getElementById(_re.box);
   if(!box) return;
   var h = '';
   if(!_re.rules.length){
-    h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">시책률이 없습니다. 🤖 장표 읽기 또는 아래 "+ 추가"로 넣어주세요</div>';
+    h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">' + (_re.reading ? '🤖 장표를 읽는 중입니다… (10~30초)' : (_re.failed ? '읽지 못했습니다 · 🔄 다시 읽기 또는 아래에서 직접 추가' : '장표 이미지를 올리면 자동으로 읽어서 채워집니다')) + '</div>';
   }
   for(var i=0;i<_re.rules.length;i++){
     var r = _re.rules[i], tt = _RE_TYPE[r.type] || _RE_TYPE.rate;
+    if(!(_re.edit && _re.edit[i])){
+      // compact summary: numbers to check at a glance; 수정 opens the full form
+      h += '<div class="re-card" style="padding:9px 11px"><div class="re-head" style="margin-bottom:3px"><span class="re-tag" style="color:' + tt[1] + ';background:' + tt[2] + '">' + tt[0] + '</span><b style="font-size:12.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _cmEsc(r.label || '(이름 없음)') + '</b>'
+         + '<span onclick="_reEdit(' + i + ')" style="font-size:11px;font-weight:700;color:var(--gold2);cursor:pointer;white-space:nowrap">수정</span><span onclick="_reDel(' + i + ')" style="color:#C0392B;font-size:12px;cursor:pointer;margin-left:4px">✕</span></div>'
+         + '<div style="font-size:12px;color:var(--text);line-height:1.5">' + _reSummary(r) + '</div></div>';
+      continue;
+    }
     h += '<div class="re-card"><div class="re-head"><span class="re-tag" style="color:' + tt[1] + ';background:' + tt[2] + '">' + tt[0] + '</span>'
-       + '<span style="flex:1"></span><span onclick="_reDel(' + i + ')" style="color:#C0392B;font-size:12px;cursor:pointer;font-weight:700">✕ 삭제</span></div>';
+       + '<span style="flex:1"></span><span onclick="_reEdit(' + i + ')" style="font-size:11px;font-weight:700;color:var(--gold2);cursor:pointer;margin-right:10px">접기 ▴</span><span onclick="_reDel(' + i + ')" style="color:#C0392B;font-size:12px;cursor:pointer;font-weight:700">✕ 삭제</span></div>';
     h += '<div class="re-row"><span class="re-lb">이름</span>' + _reInp(i,'label',r.label,'상품명 또는 시상명') + '</div>';
     if(r.type === 'rate'){
       h += '<div class="re-row"><span class="re-lb">상품 키워드</span>' + _reInp(i,'_kw',(r.keywords||[]).join(', '),'쉼표로 여러 개 · 비우면 보험사 전체',' onblur="_reList(' + i + ',\'keywords\',this.value)"') + '</div>';
@@ -29638,10 +29676,18 @@ function _reRender(){
     h += '<div class="re-row"><span class="re-lb">비고</span>' + _reInp(i,'note',r.note,'') + '</div>';
     h += '</div>';
   }
-  h += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">'
-     + '<span class="perf-co" onclick="_reAdd(\'rate\')">+ 비율형</span><span class="perf-co" onclick="_reAdd(\'tier\')">+ 구간형</span>'
-     + '<span class="perf-co" onclick="_reAdd(\'cond\')">+ 조건형</span><span class="perf-co" onclick="_reAdd(\'per\')">+ 건당</span></div>';
+  if(_re.showAdd){
+    h += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;align-items:center"><span class="re-tag" style="background:var(--bg3);color:var(--text2)">직접 추가</span>'
+       + '<span class="perf-co" onclick="_reAdd(\'rate\')">건별 %</span><span class="perf-co" onclick="_reAdd(\'tier\')">누적 구간</span>'
+       + '<span class="perf-co" onclick="_reAdd(\'cond\')">조건 달성</span><span class="perf-co" onclick="_reAdd(\'per\')">건당 정액</span></div>';
+  } else {
+    h += '<div style="margin-top:4px"><span onclick="_re.showAdd=true;_reRender()" style="font-size:11px;color:var(--text3);cursor:pointer">＋ 읽기에서 빠진 항목 직접 추가 ▾</span></div>';
+  }
   box.innerHTML = h;
+  // the re-read link appears only after a read attempt (success or failure)
+  var wrap = box.parentNode;
+  var lnk = wrap ? wrap.querySelector('.re-reread') : null;
+  if(lnk) lnk.style.display = (_re.rules.length || _re.failed) ? '' : 'none';
 }
 // downscale a dataURL image for the AI call (max 1600px, jpeg)
 function _cmShrink(dataUrl, cb){
@@ -29664,8 +29710,10 @@ function _cmShrink(dataUrl, cb){
 // AI: images [{data,mime}] or campaignId
 function _reReadAI(images, campaignId, btn){
   if(!currentUser) return;
+  if(_re.reading) return;
   var label = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = '🤖 읽는 중… (10~30초)'; }
+  _re.reading = true; _reRender();
   var src = (images||[]).slice(0,4), imgs = [], left = src.length;
   if(!left){ _reReadAIPost(imgs, campaignId, btn, label); return; }
   for(var i=0;i<src.length;i++){
@@ -29676,15 +29724,16 @@ function _reReadAIPost(imgs, campaignId, btn, label){
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
     body: JSON.stringify({ action:'campaignRead', data:{ fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'' } })
   }).then(function(r){ return r.json(); }).then(function(res){
+    _re.reading = false;
     if(btn){ btn.disabled = false; btn.textContent = label; }
-    if(!res || !res.ok){ showToast('⚠️ ' + ((res && res.msg) || '읽기 실패')); return; }
+    if(!res || !res.ok){ _re.failed = true; _reRender(); showToast('⚠️ ' + ((res && res.msg) || '읽기 실패')); return; }
     var rules = res.rules || [];
-    if(!rules.length){ showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
+    if(!rules.length){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
     _re.title = res.title || '';
     _re.rules = _re.rules.concat(rules);
     _reRender();
     showToast('✅ ' + rules.length + '개 항목 읽음 · 숫자 확인 후 저장하세요');
-  }).catch(function(){ if(btn){ btn.disabled = false; btn.textContent = label; } showToast('⚠️ 네트워크 오류'); });
+  }).catch(function(){ _re.reading = false; _re.failed = true; _reRender(); if(btn){ btn.disabled = false; btn.textContent = label; } showToast('⚠️ 네트워크 오류'); });
 }
 function _reSave(campaignId, replace, cb){
   var rules = [];
@@ -29716,6 +29765,15 @@ function _sichaekRulesInit(){
   _reReset('sichaekRulesBox', parts[0] || '', parts[1] || '', ym, '');
   _reRender();
   var tg = document.getElementById('sichaekRulesApply'); if(tg) tg.checked = true;
+}
+// auto-read right after images are chosen (registration modal)
+function _sichaekAutoRead(){
+  if(!_commCanUse() || !_sichaekFiles.length || _re.reading) return;
+  var ov = document.getElementById('sichaekAddOverlay');
+  if(!ov || !ov.classList.contains('open')) return;
+  if(_re.rules.length) return;
+  var btn = document.querySelector('#sichaekRulesWrap .re-reread');
+  sichaekReadAI(btn);
 }
 function sichaekReadAI(btn){
   if(!_sichaekFiles.length){ showToast('⚠️ 먼저 시상 이미지를 선택하세요'); return; }
@@ -29755,6 +29813,7 @@ function openRulesFor(campId, insurer, kind, startWeek){
     }
     _re.rules = mine;
     _reRender();
+    if(!mine.length){ var btn = document.querySelector('#rulesOverlay .re-reread'); _reReadAI([], _rulesCampId, btn); }
   }, true);
 }
 function closeRules(){ document.getElementById('rulesOverlay').classList.remove('open'); }
