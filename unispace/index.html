@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 155;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 157;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29363,6 +29363,8 @@ function _cmPayYears(prod){
 function _rulesEnsure(cb, force){
   if(_rules && !force && (Date.now() - _rulesAt) < 300000){ if(cb) cb(_rules); return; }
   if(!currentUser || !currentUser.id){ if(cb) cb(_rules||[]); return; }
+  // a forced reload must not be answered from the app's 15s shared-GET cache
+  if(force && typeof window._gasShareClear === 'function'){ try { window._gasShareClear(); } catch(eS) {} }
   fetch(UNISPACE_GAS_URL + '?action=getRules&fp=' + encodeURIComponent(currentUser.id) + '&all=1&_=' + Date.now(), { cache:'no-store' })
     .then(function(r){ return r.json(); }).then(function(res){
       if(res && res.ok){
@@ -29375,8 +29377,25 @@ function _rulesEnsure(cb, force){
       if(cb) cb(_rules||[]);
     });
 }
+// signature of a rule's numbers (title and note aside): two saves of the same 장표 must not pay twice
+function _rulesSig(r){
+  var d = r.data || {}, t = r.type || 'rate';
+  function arr(a){ return (a||[]).map(function(x){ return String(x); }).sort().join(','); }
+  var parts = [String(r.insurer||''), t, r.from || d.from || '', r.to || d.to || ''];
+  if(t === 'rate') parts.push(arr(d.keywords), arr(d.must), arr(d.exclude), arr(d.cats), arr(d.pay), d.payMin||0, d.payMax||0, d.amtMin||0, d.amtMax||0, d.pct1||0, d.pct2||0, d.when2||'');
+  else if(t === 'tier') parts.push(arr(d.keywords), arr(d.exclude), arr(d.cats), JSON.stringify(d.tiers||[]), d.when||'', arr(d.fps));
+  else if(t === 'cond') parts.push(arr(d.keywords), arr(d.exclude), JSON.stringify(d.conds||[]), JSON.stringify(d.rewards||[]), d.rewardBy||0, d.amt||0, d.when||'');
+  else if(t === 'per') parts.push(arr(d.keywords), arr(d.exclude), d.amt||0, d.when||'');
+  else if(t === 'gift') parts.push(String(d.item||'').replace(/\s+/g,''), d.min||0, d.rank||0);
+  return parts.join('|');
+}
+function _rulesDedupe(list){
+  var seen = {}, out = [];
+  for(var i=0;i<(list||[]).length;i++){ var sg = _rulesSig(list[i]); if(seen[sg]) continue; seen[sg] = true; out.push(list[i]); }
+  return out;
+}
 function _cmRulesOf(insurer){
-  var out = [], list = _rules || [];
+  var out = [], list = _rulesDedupe(_rules || []);
   for(var i=0;i<list.length;i++){ if(list[i].active !== false && _cmSameInsurer(list[i].insurer, insurer)) out.push(list[i]); }
   return out;
 }
@@ -29723,6 +29742,11 @@ function _reRender(){
   } else {
     h += '<div style="margin-top:4px"><span onclick="_re.showAdd=true;_reRender()" style="font-size:11px;color:var(--text3);cursor:pointer">＋ 읽기에서 빠진 항목 직접 추가 ▾</span></div>';
   }
+  if(_re.campaignId && _re.rules.length && !_re.reading && (parseInt(_re.imgCount, 10) || 0) > 1){
+    var cv = _reCoverage();
+    if(!cv.known) h += '<div class="cm-mini" style="padding:2px 2px 6px">📄 장표 ' + cv.n + '장 · 어느 장표를 읽었는지 기록이 없는 예전 결과 · 🔄 다시 읽기를 누르면 ' + cv.n + '장을 모두 새로 읽습니다</div>';
+    else if(cv.missing.length) h += '<div class="cm-mini" style="padding:2px 2px 6px">📄 장표 ' + cv.n + '장 중 ' + cv.read + '장 읽음 · 🔄 다시 읽기를 누르면 모두 새로 읽습니다</div>';
+  }
   box.innerHTML = h;
   // the re-read link appears only after a read attempt (success or failure)
   var wrap = box.parentNode;
@@ -29772,8 +29796,9 @@ function _reProgressHtml(){
   var multi = p.total > 1 ? ' (' + p.total + '장 동시에 · ' + p.done + '장 완료)' : '';
   return '🤖 AI가 장표를 읽는 중' + multi + ' · <span id="reElapsed">' + _reElapsedText(p.secs || 0) + '</span>';
 }
-// AI: images [{data,mime}] or campaignId. fresh=true ignores a result the server kept from an earlier read
-function _reReadAI(images, campaignId, btn, imgCount, fresh){
+// AI: images [{data,mime}] or campaignId. fresh=true ignores a result the server kept from an earlier read.
+// onlyIdx: read just these 장표 numbers (the ones no rule came from yet)
+function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
   if(!currentUser) return;
   if(_re.reading) return;
   var gen = _reGen;
@@ -29781,7 +29806,8 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh){
   var jobs = [];
   _re.title = _re.title || '';
   var src = (images||[]).slice(0, 6);
-  if(src.length){ for(var i=0;i<src.length;i++) jobs.push({ img:src[i] }); }
+  if(src.length){ for(var i=0;i<src.length;i++) jobs.push({ img:src[i], idx:i }); }
+  else if(onlyIdx && onlyIdx.length){ for(var o=0;o<onlyIdx.length && o<6;o++) jobs.push({ idx:onlyIdx[o] }); }
   else {
     var n = parseInt(imgCount, 10) || parseInt(_re.imgCount, 10) || 1;
     for(var k=0;k<n && k<6;k++) jobs.push({ idx:k });
@@ -29814,7 +29840,7 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh){
     function post(imgs){
       _reReadAIPost(imgs, job.img ? '' : campaignId, (job.img ? undefined : job.idx), !!fresh, function(ok, res){
         if(gen !== _reGen){ clearInterval(tick); _reLinkState(btn, false); _reSyncLink(); return; }
-        if(ok){ var rules = (res && res.rules) || []; if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !_re.title) _re.title = res.title; if(res && res.cached) cached++; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
+        if(ok){ var rules = (res && res.rules) || []; for(var ri=0;ri<rules.length;ri++){ rules[ri].img = job.idx; } if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !_re.title) _re.title = res.title; if(res && res.cached) cached++; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
         else { failed++; if(!firstErr) firstErr = (res && res.msg) || ''; try { console.warn('[시책 읽기] 장표 ' + (j+1) + ' 실패: ' + ((res && res.msg) || '')); } catch(eW) {} }
         doneCnt++;
         _re.progress = { done:doneCnt, total:jobs.length, secs:Math.round((Date.now() - t0) / 1000) }; _reRender();
@@ -29910,9 +29936,11 @@ function _sichaekAutoRead(){
 }
 function sichaekReadAI(btn, auto){
   if(!_sichaekFiles.length){ showToast('⚠️ 먼저 시상 이미지를 선택하세요'); return; }
+  if(_re.reading) return;
   var sel = document.getElementById('sichaekInsurer');
   var parts = (sel ? sel.value : '').split('|');
   _re.insurer = parts[0] || ''; _re.kind = parts[1] || '';
+  if(!auto){ _re.rules = []; _re.edit = {}; _re.failed = false; _reRender(); }
   _reReadAI(_sichaekFiles, '', btn, 0, !auto);
 }
 function _sichaekRulesSubmit(campId){
@@ -29947,13 +29975,33 @@ function openRulesFor(campId, insurer, kind, startWeek, imgCount){
       }
     }
     _re.rules = mine;
-    _reRender();
     _re.imgCount = _rulesImgCount;
-    if(!mine.length){ var btn = document.querySelector('#rulesOverlay .re-reread'); _reReadAI([], _rulesCampId, btn, _rulesImgCount); }
+    _reRender();
+    var btn = document.querySelector('#rulesOverlay .re-reread');
+    if(!mine.length){ _reReadAI([], _rulesCampId, btn, _rulesImgCount); return; }
+    // saved rules exist: 장표 that none of them came from are read now (a read that stopped halfway, or images added later)
+    var cov = _reCoverage();
+    if(cov.known && cov.missing.length) _reReadAI([], _rulesCampId, btn, _rulesImgCount, false, cov.missing);
   }, true);
 }
+// which 장표 numbers the current rules came from. known=false when old rules carry no 장표 number
+function _reCoverage(){
+  var n = parseInt(_re.imgCount, 10) || 0, seen = {}, known = true;
+  for(var i=0;i<_re.rules.length;i++){
+    var v = _re.rules[i].img;
+    if(v === undefined || v === null || v === ''){ known = false; continue; }
+    seen[parseInt(v, 10)] = true;
+  }
+  var missing = [];
+  for(var k=0;k<n;k++){ if(!seen[k]) missing.push(k); }
+  return { n:n, known:known, missing:missing, read:(n - missing.length) };
+}
 function closeRules(){ document.getElementById('rulesOverlay').classList.remove('open'); }
-function rulesReadAI(btn){ _reReadAI([], _rulesCampId, btn, _rulesImgCount, true); }
+function rulesReadAI(btn){
+  if(_re.reading) return;
+  _re.rules = []; _re.edit = {}; _re.failed = false; _reRender();
+  _reReadAI([], _rulesCampId, btn, _rulesImgCount, true);
+}
 function rulesSaveClick(btn){
   var label = btn.textContent; btn.disabled = true; btn.textContent = '저장 중…';
   _reSave(_rulesCampId, true, function(ok){
@@ -30034,7 +30082,9 @@ function _cmTierPick(tiers, sum){
 // evaluate tier/cond/per rules for fp in month ym -> list of results
 function _cmEvalRules(recs, fpId, ym){
   var mFrom = ym + '-01', mTo = _cmMonthEnd(ym);
-  var out = [], list = _rules || [];
+  var nowD = new Date();
+  var today = nowD.getFullYear() + '-' + ((nowD.getMonth()+1) < 10 ? '0' : '') + (nowD.getMonth()+1) + '-' + (nowD.getDate() < 10 ? '0' : '') + nowD.getDate();
+  var out = [], list = _rulesDedupe(_rules || []);
   for(var i=0;i<list.length;i++){
     var r = list[i];
     if(r.active === false) continue;
@@ -30051,6 +30101,8 @@ function _cmEvalRules(recs, fpId, ym){
       res.period = from.substr(5).replace('-','.') + '~' + to.substr(5).replace('-','.');
       if(pk.next){ res.next = pk.next; res.need = pk.next.min - w.sum; res.nextAmt = pk.next.amt; res.pct = Math.min(100, Math.round(w.sum / pk.next.min * 100)); }
       else if(pk.got){ res.pct = 100; }
+      // the window has closed: nothing more can be added
+      if(to < today && res.need > 0){ res.next = null; res.need = 0; res.nextAmt = 0; res.closed = true; }
       res.active = w.sum > 0;
     } else if(r.type === 'cond'){
       var conds = d.conds || [];
@@ -30071,15 +30123,16 @@ function _cmEvalRules(recs, fpId, ym){
       res.period = conds.map(function(x){ return String(x.from||'').substr(5).replace('-','.') + '~' + String(x.to||'').substr(5).replace('-','.'); }).join(' · ');
       if(allOk){
         res.amt = (d.rewards && d.rewards.length) ? (pk2.got ? pk2.got.amt : 0) : (d.amt||0);
-        if(pk2.next){ res.next = pk2.next; res.need = pk2.next.min - baseSum; res.nextAmt = pk2.next.amt; res.needIdx = by; res.pct = Math.min(100, Math.round(baseSum / pk2.next.min * 100)); }
+        if(pk2.next && !((conds[by].to || mTo) < today)){ res.next = pk2.next; res.need = pk2.next.min - baseSum; res.nextAmt = pk2.next.amt; res.needIdx = by; res.pct = Math.min(100, Math.round(baseSum / pk2.next.min * 100)); }
         else res.pct = 100;
       } else {
-        if(unmet.length === 1){
+        // one condition short, and its window is still open: say what it takes
+        if(unmet.length === 1 && !(unmet[0].to < today)){
           var u = unmet[0];
           var target = (d.rewards && d.rewards.length) ? (u.idx === by ? _cmTierPick(d.rewards, (conds[u.idx].min||0)).got : pk2.got) : null;
           var amtIf = (d.rewards && d.rewards.length) ? (target ? target.amt : 0) : (d.amt||0);
           if(amtIf > 0){ res.need = u.need; res.nextAmt = amtIf; res.needIdx = u.idx; res.next = { min:(conds[u.idx].min||0), amt:amtIf }; res.pct = Math.min(100, Math.round(u.sum / (conds[u.idx].min||1) * 100)); }
-        }
+        } else if(unmet.length) res.closed = true;
       }
       var any = false; for(var s2=0;s2<sums.length;s2++){ if(sums[s2] > 0) any = true; }
       res.active = any;
@@ -30091,6 +30144,7 @@ function _cmEvalRules(recs, fpId, ym){
       res.period = gf.substr(5).replace('-','.') + '~' + gt.substr(5).replace('-','.');
       if(res.min){ res.done = wg.sum >= res.min; res.need = res.done ? 0 : res.min - wg.sum; res.pct = Math.min(100, Math.round(wg.sum / res.min * 100)); }
       else { res.done = false; res.pct = 0; }
+      if(!res.done && gt < today) res.closed = true;
       res.active = wg.sum > 0;
     } else if(r.type === 'per'){
       var pf = r.from || d.from || mFrom, pt = r.to || d.to || mTo;
@@ -30280,7 +30334,7 @@ function openCommission(){
   var pending = 2;
   function go(){ pending--; if(pending <= 0) _commRender(); }
   _ratesEnsure(function(){ go(); });
-  _rulesEnsure(function(){ go(); });
+  _rulesEnsure(function(){ go(); }, true);
   if(typeof loadPerfFromGas === 'function'){ loadPerfFromGas(function(){ if(pending <= 0 && document.getElementById('commOverlay').classList.contains('open')) _commRender(); }, false); }
 }
 // 🔄 새로고침: perf + rules (+ rates rebuild for admin)
@@ -30361,6 +30415,7 @@ function _commRender(){
   for(var e=0;e<B.evals.length;e++){
     var ev = B.evals[e];
     if(!ev.active) continue;
+    if(ev.closed && !ev.amt && !ev.done) continue;
     if(ev.gift){
       var gTag = ev.min ? (ev.done ? '<span class="cm-tag" style="background:rgba(31,146,104,.12);color:#1F9268">달성 ✅</span>' : '<span class="cm-tag cm-or">' + _cmMan(ev.need) + ' 더</span>') : (ev.rank ? '<span class="cm-tag cm-or">상위 ' + ev.rank + '명</span>' : '');
       var gCond = _cmEsc(ev.period||'') + (ev.min ? ' · 보장월초 ' + _cmMan(ev.min) + '↑' : '') + (ev.rank ? ' · 보장월초 합산 상위 ' + ev.rank + '명' : '') + ((ev.rule.data||{}).note ? ' · ' + _cmEsc((ev.rule.data||{}).note) : '');
@@ -30520,7 +30575,7 @@ function _cmRankHtml(){
     h += '<div class="cm-rk' + (open ? ' open' : '') + '" onclick="_cmToggleOpen(\'' + _cmEsc(x.id) + '\')">'
        + '<div class="cm-rk-row"><span class="cm-rk-no' + cls + '">' + (k+1) + '</span>'
        + '<div style="flex:1;min-width:0"><div class="cm-row"><span class="cm-rk-nm">' + _cmEsc(x.name) + (isAdmin && _cmBr === 'all' ? ' <span class="cm-tag ' + (x.bk === 'al' ? 'cm-al' : 'cm-br') + '">' + (x.bk === 'al' ? '알파' : '브라보') + '</span>' : '') + (t2.noProd ? ' <span class="cm-tag cm-or">미입력 ' + t2.noProd + '</span>' : '') + '</span><span class="cm-rk-amt">' + (t2.total ? _cmMan(t2.total) : '–') + '</span></div>'
-       + '<div class="cm-row" style="gap:8px;margin-top:4px"><span class="cm-rk-bar"><i style="width:' + Math.round(t2.total / mx * 100) + '%"></i></span><span class="cm-rk-sub">' + (t2.calc ? '익월 ' + _cmMan(m1) + ' · 2차년 ' + _cmMan(y2) + ' · 3차년 ' + _cmMan(y3) : '계산된 건 없음') + '</span></div></div>'
+       + '<div class="cm-row" style="gap:8px;margin-top:4px"><span class="cm-rk-bar"><i style="width:' + Math.round(t2.total / mx * 100) + '%"></i></span><span class="cm-rk-sub">' + (t2.calc ? '익월 ' + _cmMan(m1) + ' · 2차년 ' + _cmMan(y2) + ' · 3차년 ' + _cmMan(y3) : (t2.total ? '시책만 · 수수료는 상품 입력 후' : '계산된 건 없음')) + '</span></div></div>'
        + '<span class="cm-rk-ar">' + (open ? '▴' : '▾') + '</span></div>';
     if(open){
       h += '<div class="cm-rk-detail" onclick="event.stopPropagation()"><table class="cm-t"><tr><th></th><th>수수료</th><th>시책</th><th>합계</th></tr>'
