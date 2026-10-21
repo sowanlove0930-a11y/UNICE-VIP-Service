@@ -5079,7 +5079,7 @@ function _bigGet(key){
 // 2026-10-18: big keys live in IndexedDB (hundreds of MB) instead of localStorage (~5MB).
 //   _BIG is the in-session copy; IndexedDB is only the cache for the next app start.
 //   Phones that cannot open IndexedDB fall back to localStorage as before.
-var _IDB_KEYS = { 'unispace_activities':1, 'unispace_perf_log':1, 'unispace_customers':1, 'unispace_attendance':1, 'unispace_prereport':1 };
+var _IDB_KEYS = { 'unispace_activities':1, 'unispace_perf_log':1, 'unispace_customers':1, 'unispace_attendance':1, 'unispace_prereport':1, 'unispace_rates':1 };
 var _idbOk = null, _idbDb = null;
 function _idbOpen(cb){
   if (_idbDb) { cb(_idbDb); return; }
@@ -6125,6 +6125,7 @@ const SUBMENUS = {
     items: [
       { icon:'✏️', name:'업적 입력',    desc:'FP별 계약 실적 입력', href:'#', action:'perf_input' },
       { icon:'📊', name:'업적 조회',    desc:'월간 · 주간 · 일자별 조회', href:'#', action:'perf_view' },
+      { icon:'💰', name:'수수료 예상',   desc:'체결 건 수수료 · 시책 예상', href:'#', action:'commission', commOnly:true },
       { icon:'🏆', name:'실시간 일보 산출',  desc:'지사 · 지점별 실시간 산출', href:'#', action:'fp_perf' },
       { icon:'👥', name:'매니저 매칭',   desc:'팀 구성 · 매니저/팀원 지정', href:'#', action:'team_config', adminOnly:true },
       { icon:'🎯', name:'목표 조정',     desc:'지점·FP 목표 확인 및 조정', href:'#', action:'goal_adjust', adminOnly:true },
@@ -7395,6 +7396,8 @@ function buildMenuHtml(data) {
     if (item.action === 'fp_perf' && !_canSeeReport(currentUser)) return;
     // admin-only cards (manager matching)
     if (item.adminOnly && !_isPerfAdmin()) return;
+    // commission calculator: 대표·지점장·교육지점장 only (server flag can open it to all)
+    if (item.commOnly && !(typeof _commCanUse === 'function' && _commCanUse())) return;
     if (item.mwOnly && !(typeof _mwCanTouch === 'function' && _mwCanTouch())) return;
     // activity plan: hidden for FPs switched off in account management
     // managers/admins always keep this tab (they review FP plans) regardless of the roster flag
@@ -7486,6 +7489,7 @@ function handleSubClick(e, action) {
   if (action === 'checkin')   { doCheckin(); return false; }
   if (action === 'perf_input'){ openPerfModal(); return false; }
   if (action === 'perf_view'){ openPerfView(); return false; }
+  if (action === 'commission'){ if(typeof openCommission==='function') openCommission(); else showToast('⚠️ 앱을 새로고침해 주세요'); return false; }
   if (action === 'fp_perf'){ openFpPerf(); return false; }
   if (action === 'team_config'){ openTeamEdit(); var _openStamp=Date.now(); _teamOpenStamp=_openStamp; loadTeamsFromGas(function(){ if(_teamOpenStamp===_openStamp && document.getElementById('teamOverlay').classList.contains('open') && !_teamEdited){ _tempTeams=getTeamsDB().map(function(t){ return { id:t.id, branch:t.branch||'', managers:(t.managers||[]).slice(), members:(t.members||[]).slice() }; }); renderTeamList(); } }); return false; }
   if (action === 'goal_adjust'){ openGoalAdj(); loadGoalAdjFromGas(function(){ if(document.getElementById('goalAdjOverlay').classList.contains('open')){ _gaRenderBranchGoal(); _gaRenderFpList(); _gaUpdateSum(); } }); loadPlansFromGas(null, function(){ if(document.getElementById('goalAdjOverlay').classList.contains('open')){ _gaRenderFpList(); _gaUpdateSum(); } }); return false; }
@@ -9622,6 +9626,7 @@ function openPerfModal() {
   _perfPtnReset();
   renderPerfProds();
   document.getElementById('perfModalOverlay').classList.add('open');
+  if(typeof _perfCommPrep==='function') _perfCommPrep();
 }
 
 // 모달 제목/버튼을 수정 모드/신규 모드로 전환
@@ -9665,7 +9670,7 @@ function openPerfEdit(id){
   // 상품 채우기
   if(rec.products && rec.products.length){
     _perfProducts = rec.products.map(function(p){
-      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||''), lump:_perfIsLump(p) };
+      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||''), lump:_perfIsLump(p), prod:(p.prod||''), pk:(p.pk||''), rule:(p.rule||'') };
     });
   } else {
     _perfProducts = [{co:'', cat:'', amount:'', lump:false}];
@@ -9686,6 +9691,7 @@ function openPerfEdit(id){
   }
   renderPerfProds();
   document.getElementById('perfModalOverlay').classList.add('open');
+  if(typeof _perfCommPrep==='function') _perfCommPrep();
 }
 
 // ── 커스텀 계약일 달력 ─────────────────────────────
@@ -9877,6 +9883,7 @@ function renderPerfProds(){
       '<div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:5px">보험사</div>'+
       '<div class="perf-co-wrap">'+chips+'</div>'+
       customInput+
+      (typeof _perfProdBlock==='function' ? _perfProdBlock(i, p) : '')+
       '<div class="perf-amt-row" style="margin-top:8px">'+
         '<input type="text" inputmode="numeric" class="perf-input perf-amt-big" id="perfAmt'+i+'" placeholder="금액 (원)" value="'+(p.amount?Number(p.amount).toLocaleString():'')+'" oninput="onPerfAmtInput('+i+')" style="width:100%">'+
       '</div>'+
@@ -9890,6 +9897,7 @@ function renderPerfProds(){
 }
 function pickPerfCo(i, name){
   _perfSyncProds();
+  if(_perfProducts[i].co !== name){ _perfProducts[i].prod = ''; _perfProducts[i].pk = ''; _perfProducts[i].rule = ''; }
   _perfProducts[i].co = name;
   renderPerfProds();
 }
@@ -9903,6 +9911,7 @@ function pickPerfCat(i, cat){
 function pickPerfCoCustom(i){
   _perfSyncProds();
   _perfProducts[i].co = '직접입력대기'; // 마커: 커스텀 입력 표시
+  _perfProducts[i].prod = ''; _perfProducts[i].pk = ''; _perfProducts[i].rule = '';
   renderPerfProds();
   var el=document.getElementById('perfCoCustom'+i);
   if(el){ el.style.display=''; el.value=''; el.focus(); _perfProducts[i].co=''; }
@@ -9947,6 +9956,7 @@ function confirmPerfInput() {
     if(!amt){ showToast('⚠️ 상품 '+(i+1)+'의 금액을 입력해 주세요'); return; }
     var prod={co:co, cat:p.cat, amount:amt};
     if(_perfIsLump(p)) prod.lump=true;
+    if(p.prod){ prod.prod=p.prod; if(p.pk) prod.pk=p.pk; if(p.rule) prod.rule=p.rule; }
     products.push(prod);
   }
   if(!products.length){ showToast('⚠️ 상품 내역을 입력해 주세요'); return; }
@@ -11378,6 +11388,7 @@ function openSichaekModal(){
   _sichaekTab = 'active';
   document.getElementById('sichaekTabActive').classList.add('sichaek-tab-on');
   document.getElementById('sichaekTabEnded').classList.remove('sichaek-tab-on');
+  if(typeof _rulesEnsure === 'function') _rulesEnsure(function(){ if(_sichaekAllCache && typeof _sichaekRenderByMonth === 'function') _sichaekRenderByMonth(_sichaekLastCanManage); });
   loadSichaek();
 }
 function closeSichaekModal(){ document.getElementById('sichaekOverlay').classList.remove('open'); }
@@ -11557,12 +11568,14 @@ function _sichaekGroupCardHtml(g, canManage){
         if(c){
           mi += _miItem('＋ 장 추가', "_sichaekMenuOpen='';addSichaekImage('"+c.id+"','"+g.insurer+"')", '#1F9268');
           mi += _miItem('↺ 교체', "_sichaekMenuOpen='';openSichaekReplace('"+c.id+"','"+g.insurer+"','"+g.kind+"')", 'var(--gold2)');
+          mi += _miItem('💰 시책률', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"')", '#6D4FB8');
           mi += _miItem('종료', "_sichaekMenuOpen='';endSichaek('"+c.id+"')", '#C0392B');
         } else {
           mi += _miItem('＋ '+selLabel+' 시책 등록', "_sichaekRegPreset('"+gkEnc+"',"+sel+")", '#1F9268');
         }
       } else {
         if(c){
+          mi += _miItem('💰 시책률', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"')", '#6D4FB8');
           mi += _miItem('되돌리기', "_sichaekMenuOpen='';reactivateSichaek('"+c.id+"')", '#1F9268');
           mi += _miItem('삭제', "_sichaekMenuOpen='';deleteSichaek('"+c.id+"')", '#C0392B');
         }
@@ -11594,6 +11607,7 @@ function _sichaekGroupCardHtml(g, canManage){
       '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
         '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(g.kind||'')+'</span>'+
         '<span style="font-size:13px;font-weight:700">'+g.insurer+'</span>'+
+        ((c && typeof _cmCampHasRules==='function' && _cmCampHasRules(c.id)) ? '<span title="시책률 등록됨" style="font-size:10px">💰</span>' : '')+
         (cnt>1?'<span style="font-size:10px;color:var(--text3)">· '+cnt+'장</span>':'')+
       '</div>'+
       '<div style="display:flex;gap:4px">'+tabs+'</div>'+
@@ -12895,6 +12909,7 @@ function openSichaekAdd(presetGk, presetWk){
   var btn = document.getElementById('sichaekSubmitBtn');
   if(btn){ btn.disabled = false; btn.textContent = '등록하기'; }
   document.getElementById('sichaekDrop').style.display = '';
+  if(typeof _sichaekRulesInit === 'function') _sichaekRulesInit();
   document.getElementById('sichaekAddOverlay').classList.add('open');
 }
 function closeSichaekAdd(){ document.getElementById('sichaekAddOverlay').classList.remove('open'); }
@@ -12934,6 +12949,7 @@ function submitSichaek(){
   function _done(){
     btn.disabled = false;
     showToast('✅ 시책이 등록되었습니다' + (total>1 ? ' ('+total+'장)' : ''));
+    if(typeof _sichaekRulesSubmit === 'function') _sichaekRulesSubmit(window._sichaekLastCampId || '');
     closeSichaekAdd();
     _sichaekTab = 'active';
     document.getElementById('sichaekTabActive').classList.add('sichaek-tab-on');
@@ -12950,6 +12966,7 @@ function submitSichaek(){
   }).then(function(r){return r.json();}).then(function(res){
     if(!res || !res.ok){ _fail(res&&res.msg); return; }
     var campId = res.id;
+    window._sichaekLastCampId = campId;
     var idx = 1;
     function _next(){
       if(idx >= total){ _done(); return; }
@@ -25435,6 +25452,14 @@ function doCheckin() { doSmartCheckin(); }
           <div id="sichaekDropTxt" style="font-size:13px;margin-top:4px">사진 선택 또는 촬영 (여러 장 가능)</div>
         </div>
       </div>
+      <div id="sichaekRulesWrap" style="margin:2px 0 14px;border-top:1px solid var(--bdr);padding-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <div style="font-size:12px;color:var(--text2);font-weight:600">💰 시책률 <span style="font-weight:400;color:var(--text3)">(수수료 예상용 · 선택)</span></div>
+          <button type="button" class="cm-btn-ai" onclick="sichaekReadAI(this)">🤖 장표 숫자 읽기</button>
+        </div>
+        <div id="sichaekRulesBox"></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);margin-top:8px;cursor:pointer"><input type="checkbox" id="sichaekRulesApply" checked style="width:15px;height:15px;margin:0;accent-color:#B8860B"> 💰 수수료 예상에 적용</label>
+      </div>
       <button type="button" id="sichaekSubmitBtn" onclick="submitSichaek()" style="width:100%;padding:11px;border:none;border-radius:8px;background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer">등록하기</button>
     </div>
   </div>
@@ -26458,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 144;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 145;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29038,6 +29063,1106 @@ function _jdLinkCopy(kind) {
     navigator.clipboard.writeText(txt).then(function(){ showToast('📋 복사되었습니다'); }).catch(fallback);
   } else { fallback(); }
 }
+</script>
+<!-- ── 수수료 계산기 (2026-10-21, v145): 시책률 편집 모달 · 수수료 예상 모달 ── -->
+<style>
+.re-card { border:1.5px solid var(--gold); border-radius:12px; padding:10px 11px; margin-bottom:9px; background:#FFFCF4; }
+body:not(.theme-light) .re-card { background:rgba(201,168,76,.06); }
+.re-head { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.re-tag { display:inline-block; padding:2px 8px; border-radius:7px; font-size:10px; font-weight:800; white-space:nowrap; }
+.re-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; flex-wrap:wrap; }
+.re-lb { font-size:10.5px; font-weight:700; color:var(--text2); width:62px; flex-shrink:0; }
+.re-in { flex:1; min-width:60px; padding:6px 8px; border:1px solid var(--bdr2); border-radius:8px; background:var(--bg2); color:var(--text); font-size:12px; font-family:'Noto Sans KR',sans-serif; }
+.re-in.re-num { flex:0 0 58px; min-width:0; text-align:right; font-weight:800; color:var(--gold2); padding:6px 6px; }
+.re-in.re-date { flex:0 0 108px; min-width:0; font-size:11px; padding:5px 3px; }
+.re-tier { display:flex; align-items:center; gap:5px; margin-bottom:5px; font-size:11px; color:var(--text2); flex-wrap:wrap; }
+.re-add { display:inline-block; font-size:11px; font-weight:700; color:var(--gold2); border:1px dashed var(--gold); border-radius:8px; padding:4px 10px; cursor:pointer; margin-top:2px; }
+.re-chips { display:flex; gap:4px; flex-wrap:wrap; flex:1; }
+#commOverlay .mgmt-box { max-width:560px; }
+.cm-seg { display:flex; gap:6px; margin-bottom:10px; }
+.cm-seg span { flex:1; text-align:center; padding:8px 4px; border-radius:9px; font-size:12px; font-weight:700; border:1px solid var(--bdr2); background:var(--surface); color:var(--text2); cursor:pointer; user-select:none; }
+.cm-seg span.on { background:linear-gradient(135deg,#C9A84C,#A87B1E); color:#fff; border-color:transparent; }
+.cm-kpis { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin:10px 0; }
+.cm-kpi { border:1px solid var(--bdr2); border-radius:11px; padding:10px 4px; text-align:center; background:var(--surface); min-width:0; overflow:hidden; }
+.cm-k { font-size:10px; color:var(--text2); font-weight:700; white-space:nowrap; }
+.cm-v { font-size:16px; font-weight:900; margin-top:2px; white-space:nowrap; }
+.cm-s { font-size:9.5px; color:var(--text3); margin-top:2px; line-height:1.3; }
+.cm-total { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; border-radius:10px; background:rgba(201,168,76,.1); border:1px solid rgba(201,168,76,.35); font-size:12.5px; font-weight:800; color:var(--gold2); }
+.cm-total b { font-size:17px; font-weight:900; }
+.cm-lbl { font-size:12px; font-weight:700; color:var(--text2); margin:14px 0 6px; }
+.cm-card { background:var(--bg2); border:1px solid var(--bdr); border-radius:12px; padding:11px 12px; margin-bottom:9px; }
+.cm-card.cm-new { border:1.5px solid var(--gold); background:#FFFCF4; }
+body:not(.theme-light) .cm-card.cm-new { background:rgba(201,168,76,.06); }
+.cm-row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.cm-tag { display:inline-block; padding:2px 8px; border-radius:7px; font-size:10px; font-weight:800; background:var(--bg3); color:var(--text2); white-space:nowrap; }
+.cm-prod { font-size:11px; color:var(--text2); margin:2px 0 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cm-mini { font-size:10.5px; color:var(--text3); line-height:1.5; }
+.cm-warn { font-size:11px; color:#854F0B; background:#FAEEDA; border-radius:9px; padding:8px 10px; line-height:1.5; margin-top:4px; }
+.cm-prog { height:8px; border-radius:4px; background:#EFEAE0; overflow:hidden; margin:7px 0 5px; }
+body:not(.theme-light) .cm-prog { background:rgba(255,255,255,.1); }
+.cm-prog i { display:block; height:100%; background:linear-gradient(90deg,#C9A84C,#A87B1E); border-radius:4px; }
+.cm-t { width:100%; border-collapse:collapse; font-size:11.5px; }
+.cm-t th { font-size:10px; color:var(--text3); font-weight:700; text-align:right; padding:3px 4px 5px; border-bottom:1px solid var(--bdr2); }
+.cm-t th:first-child { text-align:left; }
+.cm-t td { padding:7px 4px; border-bottom:1px solid var(--bdr); vertical-align:middle; color:var(--text); }
+.cm-t tr:last-child td { border-bottom:none; }
+.cm-t td.cm-lb { font-size:10.5px; color:var(--text3); width:52px; white-space:nowrap; }
+.cm-t td.cm-n { text-align:right; font-weight:800; white-space:nowrap; }
+.cm-t td.cm-fee { font-weight:600; color:var(--text2); }
+.cm-t td.cm-sc { color:#6D4FB8; font-weight:700; }
+.cm-t td.cm-tot { font-size:12.5px; }
+.cm-bars { display:flex; align-items:flex-end; gap:3px; height:120px; padding-top:14px; }
+.cm-bar { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative; min-width:0; }
+.cm-bar i { font-style:normal; font-size:8.5px; color:var(--text2); font-weight:700; white-space:nowrap; margin-bottom:2px; }
+.cm-barcol { width:100%; background:linear-gradient(180deg,#C9A84C,#A87B1E); border-radius:4px 4px 0 0; display:flex; flex-direction:column; justify-content:flex-start; overflow:hidden; }
+.cm-barsc { width:100%; background:linear-gradient(180deg,#9C85D8,#6D4FB8); }
+.cm-bar span { font-size:8.5px; color:var(--text3); margin-top:3px; white-space:nowrap; }
+.cm-disc { font-size:10px; color:var(--text3); border-top:1px solid var(--bdr); padding-top:8px; margin-top:12px; line-height:1.5; }
+.cm-btn-ai { font-size:12px; font-weight:800; padding:8px 12px; border-radius:9px; border:1.5px solid #6D4FB8; background:rgba(109,79,184,.1); color:#6D4FB8; cursor:pointer; font-family:'Noto Sans KR',sans-serif; white-space:nowrap; }
+.cm-btn-ai:disabled { opacity:.6; }
+</style>
+
+<!-- 시책률 편집 모달 (기존 시책 카드 ⋯ → 💰 시책률) -->
+<div class="mgmt-overlay" id="rulesOverlay" style="z-index:669">
+  <div class="mgmt-box" style="max-width:480px;width:94vw;max-height:92vh;display:flex;flex-direction:column;padding:22px 16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px">
+      <div class="mgmt-title" id="rulesTitle" style="font-family:'Noto Sans KR',sans-serif;font-size:15px;letter-spacing:0;color:var(--text);margin:0">💰 시책률</div>
+      <button type="button" onclick="closeRules()" class="modal-close-x" aria-label="닫기">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <button type="button" class="cm-btn-ai" onclick="rulesReadAI(this)">🤖 장표 숫자 읽기</button>
+      <span style="font-size:10.5px;color:var(--text3);align-self:center;line-height:1.4">장표를 읽어 칸을 채웁니다 · 확인 후 저장</span>
+    </div>
+    <div style="overflow-y:auto;flex:1;min-height:0" id="rulesBox"></div>
+    <button type="button" onclick="rulesSaveClick(this)" style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif">저장</button>
+  </div>
+</div>
+
+<!-- 💰 수수료 예상 모달 -->
+<div class="mgmt-overlay" id="commOverlay">
+  <div class="mgmt-box" style="max-height:90vh;overflow-y:auto;padding:22px 16px 20px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:8px">
+      <div>
+        <div class="mgmt-title">COMMISSION</div>
+        <div style="font-size:19px;font-weight:800;color:var(--text)">💰 수수료 예상</div>
+        <div class="mgmt-sub" style="margin-bottom:0">체결 월 기준 예상 · 대표·지점장만 열람</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <button type="button" id="cmRebuildBtn" onclick="_ratesRebuild()" style="display:none;font-size:11px;font-weight:700;padding:6px 9px;border-radius:8px;border:1px solid var(--bdr2);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap">🔄 요율표 갱신</button>
+        <button type="button" class="modal-close-x" onclick="closeCommission()" aria-label="닫기">✕</button>
+      </div>
+    </div>
+    <div style="margin-bottom:10px;display:none">
+      <select id="cmFpSel" onchange="_cmPickFp(this.value)" style="width:100%;padding:9px 12px;border:1px solid var(--bdr2);border-radius:10px;background:var(--bg2);color:var(--text);font-size:13px;font-weight:700;font-family:'Noto Sans KR',sans-serif"></select>
+    </div>
+    <div id="cmBody"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  수수료 계산기 (2026-10-21, v145) — 요율표 · 시책률 · 수수료 예상
+//  데이터: 요율표(GAS getRates → IndexedDB 'unispace_rates'), 시책률(GAS getRules),
+//          업적 기록(getPerfLog: products[].prod/pk/rule)
+//  금액 규칙: 요율표 값 × 보장월초 = 기준 금액 → FP 지급률 / 지점장(매칭 팀원) 비율 (비율은 서버 getRates가 내려줌, 화면 비노출)
+//  공개 범위: 대표 · 지점장 · 교육지점장 (_commCanUse) — 서버 COMM_OPEN_ALL=1 이면 전 FP
+//  시책: rate(계약 건별 %) · tier(기간 누적 구간) · cond(여러 기간 조건) · per(건당 정액)
+// ============================================================
+// pay rates come from the server (getRates, script properties); never shown on screen
+var COMM_FP_RATE = 0;
+var COMM_MGR_RATE = 0;
+var COMM_SC_RATE = 1.0;
+var COMM_OPEN_ALL = false;
+var RATES_KEY = 'unispace_rates';
+var _rates = null;
+var _ratesCbs = [];
+var _ratesLoading = false;
+var _rules = null;
+var _rulesAt = 0;
+var COMM_INS_MAP = {
+  '라이나':'라이나생명', '미래에셋':'미래에셋', '미래에셋생명':'미래에셋', '신한라이프':'신한생명', '신한':'신한생명', '메리츠':'메리츠화재',
+  'NH농협생명':'NH생명', '농협생명':'NH생명', 'NH농협손보':'NH손보', '농협손보':'NH손보', '카디프':'카디프생명', 'BNP카디프':'카디프생명',
+  '푸본현대':'푸본현대생명', 'iM생명':'iM라이프', 'DGB생명':'iM라이프', 'IBK':'IBK연금보험', 'IBK연금':'IBK연금보험', '현대':'현대해상', '삼성':'삼성생명'
+};
+var COMM_CATS = ['건강상해','종신','저축','기타'];
+
+// who can see the commission feature: 대표 · 지점장 · 교육지점장 (server flag COMM_OPEN_ALL opens it to every FP)
+function _commCanUse(){
+  if(!currentUser) return false;
+  if(COMM_OPEN_ALL) return true;
+  var r = currentUser.role||'', tt = currentUser.title||'', id = currentUser.id||'', br = currentUser.branch||'';
+  return r === '대표' || r === '지점장' || r === '교육지점장' || tt === '지점장' || tt === '교육지점장' || id === 'ktk01' || id === 'H2503162' || br.indexOf('교육') >= 0 || currentUser.level === 'admin';
+}
+function _cmApplyRates(o){
+  if(!o) return;
+  if(o.fpRate) COMM_FP_RATE = parseFloat(o.fpRate) || 0;
+  if(o.mgrRate) COMM_MGR_RATE = parseFloat(o.mgrRate) || 0;
+  if(o.scRate !== undefined && o.scRate !== null && o.scRate !== '') COMM_SC_RATE = parseFloat(o.scRate) || 0;
+  if(o.openAll !== undefined) COMM_OPEN_ALL = !!o.openAll;
+}
+function _cmNorm(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
+function _cmMan(won){
+  var v = Math.round(won||0);
+  if(!v) return '0';
+  return _pvManKw(v) + '만';
+}
+function _cmPct(p){ var n = parseFloat(p)||0; var s = String(Math.round(n*10)/10); return s + '%'; }
+function _cmYmOf(d){ var m = d.getMonth()+1; return d.getFullYear()+'-'+(m<10?'0':'')+m; }
+function _cmYmAdd(ym, n){
+  var y = parseInt(ym.substr(0,4),10), m = parseInt(ym.substr(5,2),10)-1 + n;
+  var d = new Date(y, m, 1);
+  return _cmYmOf(d);
+}
+function _cmMonthEnd(ym){
+  var y = parseInt(ym.substr(0,4),10), m = parseInt(ym.substr(5,2),10);
+  var last = new Date(y, m, 0).getDate();
+  return ym + '-' + (last<10?'0':'') + last;
+}
+function _cmYmLabel(ym){ return parseInt(ym.substr(0,4),10)+'년 '+parseInt(ym.substr(5,2),10)+'월'; }
+function _cmEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── 요율표 ──────────────────────────────────────────
+function _ratesParse(str){ try{ var o = JSON.parse(str||''); if(o && o.rows && o.rows.length) return o; }catch(e){} return null; }
+function _ratesIndex(o){
+  _cmApplyRates(o);
+  o.byIns = {}; o.insList = [];
+  for(var i=0;i<o.rows.length;i++){
+    var r = o.rows[i];
+    if(!o.byIns[r[1]]){ o.byIns[r[1]] = []; o.insList.push(r[1]); }
+    o.byIns[r[1]].push(r);
+  }
+  return o;
+}
+function _ratesEnsure(cb){
+  if(_rates){ if(cb) cb(_rates); return; }
+  var cached = _ratesParse(_bigGet(RATES_KEY));
+  if(cached){ _rates = _ratesIndex(cached); if(cb) cb(_rates); _ratesRefresh(null); return; }
+  _ratesRefresh(cb);
+}
+function _ratesRefresh(cb){
+  if(!currentUser || !currentUser.id){ if(cb) cb(_rates); return; }
+  if(cb) _ratesCbs.push(cb);
+  if(_ratesLoading) return;
+  _ratesLoading = true;
+  var ver = _rates ? _rates.ver : '';
+  var url = UNISPACE_GAS_URL + '?action=getRates&fp=' + encodeURIComponent(currentUser.id) + (ver ? '&ver=' + encodeURIComponent(ver) : '') + '&_=' + Date.now();
+  function fin(){
+    _ratesLoading = false;
+    var cbs = _ratesCbs; _ratesCbs = [];
+    for(var i=0;i<cbs.length;i++){ try{ cbs[i](_rates); }catch(e){} }
+  }
+  fetch(url, { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ok && !res.same && res.rows && res.rows.length){
+      var o = { ver:res.ver, label:res.label||'', rows:res.rows, fpRate:res.fpRate, mgrRate:res.mgrRate, scRate:res.scRate, openAll:!!res.openAll };
+      _lsSet(RATES_KEY, JSON.stringify(o));
+      _rates = _ratesIndex(o);
+    } else if(res && res.ok && res.same && _rates){
+      _rates.ver = res.ver;
+      var chg = (_rates.fpRate !== res.fpRate) || (_rates.mgrRate !== res.mgrRate) || (_rates.scRate !== res.scRate) || (!!_rates.openAll !== !!res.openAll);
+      _rates.fpRate = res.fpRate; _rates.mgrRate = res.mgrRate; _rates.scRate = res.scRate; _rates.openAll = !!res.openAll;
+      _cmApplyRates(_rates);
+      if(chg) _lsSet(RATES_KEY, JSON.stringify({ ver:_rates.ver, label:_rates.label||'', rows:_rates.rows, fpRate:_rates.fpRate, mgrRate:_rates.mgrRate, scRate:_rates.scRate, openAll:_rates.openAll }));
+    } else if(res && res.denied){
+      _rates = null;
+    }
+    fin();
+  }).catch(function(){ fin(); });
+}
+function _ratesRebuild(){
+  if(!currentUser) return;
+  showToast('요율표 갱신 중...');
+  fetch(UNISPACE_GAS_URL + '?action=ratesRebuild&fp=' + encodeURIComponent(currentUser.id) + '&_=' + Date.now(), { cache:'no-store' })
+    .then(function(r){ return r.json(); }).then(function(res){
+      if(!res || !res.ok){ showToast('⚠️ ' + ((res && res.msg) || '갱신 실패')); return; }
+      _rates = null;
+      _ratesRefresh(function(){ showToast('✅ 요율표 갱신 · ' + (res.count||0) + '개 상품' + (res.label ? ' (' + res.label + ')' : '')); if(typeof _commRender === 'function' && document.getElementById('commOverlay').classList.contains('open')) _commRender(); });
+    }).catch(function(){ showToast('⚠️ 네트워크 오류'); });
+}
+function _cmRateInsurer(co){
+  if(!_rates) return '';
+  co = String(co||'').trim();
+  if(!co) return '';
+  if(COMM_INS_MAP[co]) co = COMM_INS_MAP[co];
+  if(_rates.byIns[co]) return co;
+  var n = _cmNorm(co), list = _rates.insList, i;
+  for(i=0;i<list.length;i++){ if(_cmNorm(list[i]) === n) return list[i]; }
+  for(i=0;i<list.length;i++){ var m = _cmNorm(list[i]); if(m.indexOf(n) >= 0 || n.indexOf(m) >= 0) return list[i]; }
+  var n2 = n.replace(/(생명|손해보험|손보|화재|라이프|보험)$/,'');
+  if(n2 && n2.length >= 2){ for(i=0;i<list.length;i++){ if(_cmNorm(list[i]).indexOf(n2) === 0) return list[i]; } }
+  return '';
+}
+function _cmSameInsurer(a, b){
+  var na = _cmNorm(a), nb = _cmNorm(b);
+  if(!na || !nb) return false;
+  if(na === nb) return true;
+  var ra = _cmRateInsurer(a), rb = _cmRateInsurer(b);
+  if(ra && rb) return ra === rb;
+  var ma = COMM_INS_MAP[String(a||'').trim()] || a, mb = COMM_INS_MAP[String(b||'').trim()] || b;
+  return _cmNorm(ma) === _cmNorm(mb);
+}
+function _cmFindRate(co, prod){
+  if(!_rates || !prod) return null;
+  var ins = _cmRateInsurer(co);
+  if(!ins) return null;
+  var arr = _rates.byIns[ins] || [], np = _cmNorm(prod);
+  for(var i=0;i<arr.length;i++){ if(_cmNorm(arr[i][2]) === np) return arr[i]; }
+  return null;
+}
+// years mentioned in a product name ("20년납", "6-10년납", "7년납이상") -> {min,max} or null
+function _cmPayYears(prod){
+  var s = String(prod||'');
+  var re = /(\d{1,2})\s*(?:-|~|–)?\s*(\d{1,2})?\s*년/g, m, min = 0, max = 0;
+  while((m = re.exec(s))){
+    var a = parseInt(m[1],10), b = m[2] ? parseInt(m[2],10) : a;
+    if(a > 60 || b > 60) continue;
+    if(!min || a < min) min = a;
+    if(b > max) max = b;
+  }
+  if(!min) return null;
+  return { min:min, max:max };
+}
+
+// ── 시책률 ──────────────────────────────────────────
+function _rulesEnsure(cb, force){
+  if(_rules && !force && (Date.now() - _rulesAt) < 300000){ if(cb) cb(_rules); return; }
+  if(!currentUser || !currentUser.id){ if(cb) cb(_rules||[]); return; }
+  fetch(UNISPACE_GAS_URL + '?action=getRules&fp=' + encodeURIComponent(currentUser.id) + '&all=1&_=' + Date.now(), { cache:'no-store' })
+    .then(function(r){ return r.json(); }).then(function(res){
+      if(res && res.ok){
+        _rules = res.rules || []; _rulesAt = Date.now();
+        try{ localStorage.setItem('unispace_rules', JSON.stringify(_rules)); }catch(e){}
+      }
+      if(cb) cb(_rules||[]);
+    }).catch(function(){
+      if(!_rules){ try{ _rules = JSON.parse(localStorage.getItem('unispace_rules')||'[]'); }catch(e2){ _rules = []; } }
+      if(cb) cb(_rules||[]);
+    });
+}
+function _cmRulesOf(insurer){
+  var out = [], list = _rules || [];
+  for(var i=0;i<list.length;i++){ if(list[i].active !== false && _cmSameInsurer(list[i].insurer, insurer)) out.push(list[i]); }
+  return out;
+}
+function _cmRuleById(id){
+  var list = _rules || [];
+  for(var i=0;i<list.length;i++){ if(list[i].id === id) return list[i]; }
+  return null;
+}
+function _cmRuleInRange(rule, dateStr){
+  if(!dateStr) return true;
+  if(rule.from && dateStr < rule.from) return false;
+  if(rule.to && dateStr > rule.to) return false;
+  return true;
+}
+// scope test shared by all rule types: cats / keywords / exclude / pay
+function _cmScopeOk(d, p, needProd){
+  d = d || {};
+  var np = _cmNorm(p.prod), i;
+  if(d.cats && d.cats.length){ if(d.cats.indexOf(p.cat||'') < 0) return false; }
+  if(d.keywords && d.keywords.length){
+    if(!np) return false;
+    var hit = false;
+    for(i=0;i<d.keywords.length;i++){ var kw = _cmNorm(d.keywords[i]); if(kw && np.indexOf(kw) >= 0){ hit = true; break; } }
+    if(!hit) return false;
+  } else if(needProd && !np){ return false; }
+  if(d.exclude && d.exclude.length && np){
+    for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && np.indexOf(ex) >= 0) return false; }
+  }
+  if(d.pay && d.pay.length){
+    var yrs = _cmPayYears(p.prod);
+    if(!yrs){
+      if(np.indexOf('전기납') >= 0 || np.indexOf('일시납') >= 0) return false;
+      return false;
+    }
+    var ok = false;
+    for(i=0;i<d.pay.length;i++){ var y = parseInt(d.pay[i],10); if(y >= yrs.min && y <= yrs.max){ ok = true; break; } }
+    if(!ok) return false;
+  }
+  return true;
+}
+// rate rules that fit one product row (for the suggestion list / auto pick)
+function _cmRateRulesFor(p, dateStr){
+  var out = [], list = _cmRulesOf(p.co);
+  for(var i=0;i<list.length;i++){
+    var r = list[i];
+    if(r.type !== 'rate') continue;
+    if(!_cmRuleInRange(r, dateStr)) continue;
+    if(!_cmScopeOk(r.data, p, true)) continue;
+    out.push(r);
+  }
+  return out;
+}
+function _cmPickRule(p, dateStr){
+  if(p.rule === 'none') return null;
+  if(p.rule){ var r = _cmRuleById(p.rule); if(r) return r; }
+  var list = _cmRateRulesFor(p, dateStr);
+  return list.length ? list[0] : null;
+}
+function _cmRuleLabel(r){
+  var d = r.data || {};
+  var s = r.title || d.label || '시책';
+  if(d.pay && d.pay.length) s += ' ' + d.pay.join('·') + '년납';
+  return s;
+}
+function _cmRuleRateTxt(r){
+  var d = r.data || {};
+  var s = '익월 ' + _cmPct(d.pct1);
+  if(d.pct2) s += ' · ' + (d.when2||'13차월') + ' ' + _cmPct(d.pct2);
+  return s;
+}
+
+// ── 업적 입력: 상품 선택 블록 ───────────────────────
+function _perfProdBlock(i, p){
+  if(!_commCanUse()) return '';
+  var h = '<div style="font-size:10px;font-weight:700;color:var(--text3);margin:8px 0 5px">상품명 <span style="font-weight:400">(선택)</span></div>';
+  if(p.prod){
+    var row = _cmFindRate(p.co, p.prod);
+    var rateTxt = row ? (row[3] === null ? '계산 불가' : '') : (_rates ? '계산 불가' : '');
+    h += '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--gold);border-radius:9px;background:rgba(201,168,76,.08)">'
+       + '<span style="flex:1;font-size:11.5px;font-weight:700;color:var(--text);line-height:1.35">' + _cmEsc(p.prod) + (rateTxt ? ' <span style="font-size:10px;color:var(--text3);font-weight:600">(' + rateTxt + ')</span>' : '') + '</span>'
+       + '<span onclick="_perfProdClear(' + i + ')" style="color:var(--text3);font-size:13px;cursor:pointer;padding:2px 4px">✕</span></div>';
+    // campaign suggestion
+    var dateStr = (document.getElementById('perfDate') || {}).value || '';
+    var cands = _cmRateRulesFor(p, dateStr);
+    var picked = _cmPickRule(p, dateStr);
+    if(picked || cands.length){
+      h += '<div style="margin-top:6px;padding:7px 10px;border-radius:9px;background:rgba(109,79,184,.07);border:1px solid rgba(109,79,184,.25);display:flex;align-items:center;gap:8px">'
+         + '<div style="flex:1;font-size:11px;color:var(--text);line-height:1.5">'
+         + (picked ? '<span style="font-weight:800;color:#6D4FB8">🎁 시책</span> ' + _cmEsc(_cmRuleLabel(picked)) + '<br><span style="color:var(--text2)">' + _cmRuleRateTxt(picked) + '</span>'
+                   : '<span style="font-weight:800;color:#6D4FB8">🎁 시책</span> <span style="color:var(--text3)">적용 안 함</span>')
+         + '</div>';
+      if(cands.length > 1 || (picked && cands.length)){
+        h += '<select onchange="_perfRulePick(' + i + ',this.value)" style="font-size:11px;padding:4px 6px;border:1px solid var(--bdr2);border-radius:7px;background:#fff;color:var(--text);max-width:120px">';
+        for(var c=0;c<cands.length;c++){ h += '<option value="' + _cmEsc(cands[c].id) + '"' + (picked && picked.id === cands[c].id ? ' selected' : '') + '>' + _cmEsc(_cmRuleLabel(cands[c])) + '</option>'; }
+        h += '<option value="none"' + (p.rule === 'none' ? ' selected' : '') + '>적용 안 함</option></select>';
+      }
+      h += '</div>';
+    }
+  } else {
+    var ins = _cmRateInsurer(p.co);
+    var ph = !_rates ? '잠시만요…' : (!p.co ? '보험사 선택 후 상품명 검색' : (ins ? '🔍 상품명 검색' : '검색할 수 없는 보험사'));
+    var dis = !_rates ? ' disabled' : '';
+    h += '<div style="position:relative"><input type="text" class="perf-input" id="perfProdQ' + i + '" placeholder="' + ph + '"' + dis + ' autocomplete="off" oninput="_perfProdSearch(' + i + ')" onfocus="_perfProdSearch(' + i + ')" onblur="setTimeout(function(){var l=document.getElementById(\'perfProdList' + i + '\');if(l)l.style.display=\'none\';},200)" style="font-size:12px">'
+       + '<div id="perfProdList' + i + '" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 3px);z-index:7;max-height:210px;overflow-y:auto;background:var(--bg2);border:1px solid var(--bdr2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18)"></div></div>';
+  }
+  return h;
+}
+function _perfProdSearch(i){
+  var inp = document.getElementById('perfProdQ' + i), list = document.getElementById('perfProdList' + i);
+  if(!inp || !list || !_rates) return;
+  var p = _perfProducts[i] || {};
+  var ins = _cmRateInsurer(p.co);
+  if(!ins){ list.innerHTML = '<div style="padding:10px 12px;font-size:11px;color:var(--text3)">' + (p.co ? '검색할 수 없는 보험사입니다' : '위에서 보험사를 먼저 선택하세요') + '</div>'; list.style.display = ''; return; }
+  var q = _cmNorm(inp.value);
+  var toks = q ? q.split(/[,\/]/).filter(function(t){ return t; }) : [];
+  var arr = _rates.byIns[ins] || [], out = [];
+  for(var k=0;k<arr.length;k++){
+    var nm = _cmNorm(arr[k][2]), ok = true;
+    for(var t=0;t<toks.length;t++){ if(nm.indexOf(toks[t]) < 0){ ok = false; break; } }
+    if(ok){ out.push(k); if(out.length >= 40) break; }
+  }
+  var h = '';
+  if(!out.length){ h = '<div style="padding:10px 12px;font-size:11px;color:var(--text3)">검색 결과 없음 · 다른 단어로 찾아보세요</div>'; }
+  for(var o=0;o<out.length;o++){
+    var r = arr[out[o]];
+    h += '<div onmousedown="_perfProdPick(' + i + ',' + out[o] + ')" style="padding:8px 11px;font-size:11px;color:var(--text);border-bottom:1px solid var(--bdr);cursor:pointer;line-height:1.35">' + _cmEsc(r[2]) + (r[3] === null ? ' <span style="color:var(--text3)">(계산 불가)</span>' : '') + '</div>';
+  }
+  if(out.length >= 40) h += '<div style="padding:7px 11px;font-size:10px;color:var(--text3)">40개까지만 표시 · 단어를 더 입력하세요</div>';
+  list.innerHTML = h;
+  list.style.display = '';
+}
+function _perfProdPick(i, idx){
+  _perfSyncProds();
+  var p = _perfProducts[i]; if(!p) return;
+  var ins = _cmRateInsurer(p.co);
+  var r = (_rates.byIns[ins] || [])[idx];
+  if(!r) return;
+  p.prod = r[2]; p.pk = r[0]; p.rule = '';
+  if(!p.cat){
+    var n = _cmNorm(r[2]);
+    if(n.indexOf('종신') >= 0) p.cat = '종신';
+    else if(n.indexOf('연금') >= 0 || n.indexOf('저축') >= 0 || n.indexOf('변액') >= 0) p.cat = '저축';
+    else p.cat = '건강상해';
+  }
+  renderPerfProds();
+}
+function _perfProdClear(i){
+  _perfSyncProds();
+  if(_perfProducts[i]){ _perfProducts[i].prod = ''; _perfProducts[i].pk = ''; _perfProducts[i].rule = ''; }
+  renderPerfProds();
+}
+function _perfRulePick(i, v){
+  _perfSyncProds();
+  if(_perfProducts[i]) _perfProducts[i].rule = v || '';
+  renderPerfProds();
+}
+
+// ── 시책률 편집기 (등록 모달 / 시책률 모달 공용) ─────────
+var _re = { rules:[], box:'', insurer:'', kind:'', ym:'', campaignId:'', apply:true, title:'' };
+function _reReset(box, insurer, kind, ym, campaignId){
+  _re = { rules:[], box:box, insurer:insurer||'', kind:kind||'', ym:ym||_cmYmOf(new Date()), campaignId:campaignId||'', apply:true, title:'' };
+}
+function _reBlank(type){
+  var ym = _re.ym || _cmYmOf(new Date());
+  var from = ym + '-01', to = _cmMonthEnd(ym);
+  if(type === 'tier') return { type:'tier', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], tiers:[{min:0,amt:0}], when:'15차월', cond:'', fps:[], note:'' };
+  if(type === 'cond') return { type:'cond', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], conds:[{from:from,to:to,min:0},{from:from,to:to,min:0}], rewards:[{min:0,amt:0}], rewardBy:0, amt:0, when:'15차월', note:'' };
+  if(type === 'per') return { type:'per', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], amt:0, when:'15차월', note:'' };
+  return { type:'rate', label:'', from:from, to:to, keywords:[], exclude:[], cats:[], pay:[], pct1:0, pct2:0, when2:'13차월', note:'' };
+}
+function _reAdd(type){ _re.rules.push(_reBlank(type)); _reRender(); }
+function _reDel(i){ _re.rules.splice(i,1); _reRender(); }
+function _reF(i, k, v){ if(_re.rules[i]) _re.rules[i][k] = v; }
+function _reNum(i, k, v){ if(_re.rules[i]) _re.rules[i][k] = parseFloat(String(v).replace(/[^0-9.\-]/g,'')) || 0; }
+function _reWon(v){ var n = parseFloat(String(v).replace(/[^0-9.\-]/g,'')) || 0; return Math.round(n * 10000); }
+function _reList(i, k, v){ if(_re.rules[i]) _re.rules[i][k] = String(v).split(/[,\/·]/).map(function(s){ return s.trim(); }).filter(function(s){ return s; }); }
+function _rePay(i, v){ if(_re.rules[i]) _re.rules[i].pay = String(v).split(/[,\/·\s]/).map(function(s){ return parseInt(s,10); }).filter(function(n){ return !isNaN(n); }); }
+function _reCat(i, c){ var r = _re.rules[i]; if(!r) return; r.cats = r.cats || []; var ix = r.cats.indexOf(c); if(ix >= 0) r.cats.splice(ix,1); else r.cats.push(c); _reRender(); }
+function _reTier(i, k, f, v){ var r = _re.rules[i]; if(!r || !r.tiers || !r.tiers[k]) return; r.tiers[k][f] = _reWon(v); }
+function _reTierAdd(i){ var r = _re.rules[i]; if(!r) return; r.tiers = r.tiers || []; r.tiers.push({min:0,amt:0}); _reRender(); }
+function _reTierDel(i, k){ var r = _re.rules[i]; if(!r || !r.tiers) return; r.tiers.splice(k,1); _reRender(); }
+function _reCond(i, k, f, v){ var r = _re.rules[i]; if(!r || !r.conds || !r.conds[k]) return; r.conds[k][f] = (f === 'min') ? _reWon(v) : v; }
+function _reCondAdd(i){ var r = _re.rules[i]; if(!r) return; r.conds = r.conds || []; r.conds.push({from:r.from||'',to:r.to||'',min:0}); _reRender(); }
+function _reCondDel(i, k){ var r = _re.rules[i]; if(!r || !r.conds || r.conds.length <= 1) return; r.conds.splice(k,1); _reRender(); }
+function _reRew(i, k, f, v){ var r = _re.rules[i]; if(!r || !r.rewards || !r.rewards[k]) return; r.rewards[k][f] = _reWon(v); }
+function _reRewAdd(i){ var r = _re.rules[i]; if(!r) return; r.rewards = r.rewards || []; r.rewards.push({min:0,amt:0}); _reRender(); }
+function _reRewDel(i, k){ var r = _re.rules[i]; if(!r || !r.rewards) return; r.rewards.splice(k,1); _reRender(); }
+function _reFps(i, v){
+  var r = _re.rules[i]; if(!r) return;
+  var names = String(v).split(/[,\/·]/).map(function(s){ return s.trim(); }).filter(function(s){ return s; });
+  var list = (typeof getMergedFpList === 'function') ? getMergedFpList() : [];
+  var ids = [], miss = [];
+  for(var n=0;n<names.length;n++){
+    var found = null;
+    for(var f=0;f<list.length;f++){ if(String(list[f].name||'').replace(/\s+/g,'') === names[n].replace(/\s+/g,'') || list[f].id === names[n]){ found = list[f]; break; } }
+    if(found) ids.push(found.id); else miss.push(names[n]);
+  }
+  r.fps = ids;
+  if(miss.length) showToast('⚠️ 못 찾은 이름: ' + miss.join(', '));
+}
+function _reFpNames(ids){
+  var out = [];
+  for(var i=0;i<(ids||[]).length;i++){ out.push((typeof _fpNameById === 'function' ? _fpNameById(ids[i]) : '') || ids[i]); }
+  return out.join(', ');
+}
+function _reWonIn(v){ var n = Math.round((v||0)/10000*10)/10; return n ? String(n) : ''; }
+var _RE_TYPE = { rate:['비율형','#2563EB','rgba(37,99,235,.1)'], tier:['구간형','#6D4FB8','rgba(109,79,184,.12)'], cond:['조건형','#6D4FB8','rgba(109,79,184,.12)'], per:['건당','#854F0B','#FAEEDA'] };
+function _reInp(i, k, v, ph, extra){
+  return '<input type="text" value="' + _cmEsc(v) + '" placeholder="' + _cmEsc(ph||'') + '" oninput="_reF(' + i + ',\'' + k + '\',this.value)" class="re-in"' + (extra||'') + '>';
+}
+function _reDate(i, k, v){
+  return '<input type="date" value="' + _cmEsc(v||'') + '" onchange="_reF(' + i + ',\'' + k + '\',this.value)" class="re-in re-date">';
+}
+function _reRender(){
+  var box = document.getElementById(_re.box);
+  if(!box) return;
+  var h = '';
+  if(!_re.rules.length){
+    h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">시책률이 없습니다. 🤖 장표 읽기 또는 아래 "+ 추가"로 넣어주세요</div>';
+  }
+  for(var i=0;i<_re.rules.length;i++){
+    var r = _re.rules[i], tt = _RE_TYPE[r.type] || _RE_TYPE.rate;
+    h += '<div class="re-card"><div class="re-head"><span class="re-tag" style="color:' + tt[1] + ';background:' + tt[2] + '">' + tt[0] + '</span>'
+       + '<span style="flex:1"></span><span onclick="_reDel(' + i + ')" style="color:#C0392B;font-size:12px;cursor:pointer;font-weight:700">✕ 삭제</span></div>';
+    h += '<div class="re-row"><span class="re-lb">이름</span>' + _reInp(i,'label',r.label,'상품명 또는 시상명') + '</div>';
+    if(r.type === 'rate'){
+      h += '<div class="re-row"><span class="re-lb">상품 키워드</span>' + _reInp(i,'_kw',(r.keywords||[]).join(', '),'쉼표로 여러 개 · 비우면 보험사 전체',' onblur="_reList(' + i + ',\'keywords\',this.value)"') + '</div>';
+      h += '<div class="re-row"><span class="re-lb">납기(년)</span>' + _reInp(i,'_pay',(r.pay||[]).join(','),'예: 7  또는 5,7,10 · 비우면 전체',' onblur="_rePay(' + i + ',this.value)"') + '</div>';
+      h += '<div class="re-row"><span class="re-lb">익월 %</span><input type="text" inputmode="decimal" value="' + (r.pct1||'') + '" oninput="_reNum(' + i + ',\'pct1\',this.value)" class="re-in re-num"> <span class="re-lb" style="width:auto">' + _cmEsc(r.when2||'13차월') + ' %</span><input type="text" inputmode="decimal" value="' + (r.pct2||'') + '" oninput="_reNum(' + i + ',\'pct2\',this.value)" class="re-in re-num"></div>';
+    }
+    if(r.type === 'tier' || r.type === 'per' || r.type === 'cond'){
+      h += '<div class="re-row"><span class="re-lb">대상 키워드</span>' + _reInp(i,'_kw',(r.keywords||[]).join(', '),'비우면 보험사 전체 (예: 주력상품 이름들)',' onblur="_reList(' + i + ',\'keywords\',this.value)"') + '</div>';
+      h += '<div class="re-row"><span class="re-lb">제외</span>' + _reInp(i,'_ex',(r.exclude||[]).join(', '),'예: 펫, 단체, 실손',' onblur="_reList(' + i + ',\'exclude\',this.value)"') + '</div>';
+    }
+    h += '<div class="re-row"><span class="re-lb">분류</span><span class="re-chips">';
+    for(var c=0;c<COMM_CATS.length;c++){ var on = (r.cats||[]).indexOf(COMM_CATS[c]) >= 0; h += '<span class="perf-co' + (on?' perf-co-on':'') + '" onclick="_reCat(' + i + ',\'' + COMM_CATS[c] + '\')">' + COMM_CATS[c] + '</span>'; }
+    h += '<span style="font-size:10px;color:var(--text3);align-self:center">· 안 고르면 전체</span></span></div>';
+    if(r.type !== 'cond'){
+      h += '<div class="re-row"><span class="re-lb">기간</span>' + _reDate(i,'from',r.from) + '<span style="color:var(--text3)">~</span>' + _reDate(i,'to',r.to) + '</div>';
+    }
+    if(r.type === 'tier'){
+      h += '<div class="re-row" style="align-items:flex-start"><span class="re-lb">구간</span><div style="flex:1">';
+      for(var k=0;k<(r.tiers||[]).length;k++){
+        h += '<div class="re-tier"><input type="text" inputmode="decimal" value="' + _reWonIn(r.tiers[k].min) + '" oninput="_reTier(' + i + ',' + k + ',\'min\',this.value)" class="re-in re-num"><span>만↑ →</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.tiers[k].amt) + '" oninput="_reTier(' + i + ',' + k + ',\'amt\',this.value)" class="re-in re-num"><span>만원</span><span onclick="_reTierDel(' + i + ',' + k + ')" style="color:#C0392B;cursor:pointer;margin-left:4px">✕</span></div>';
+      }
+      h += '<div onclick="_reTierAdd(' + i + ')" class="re-add">+ 구간 추가</div></div></div>';
+      h += '<div class="re-row"><span class="re-lb">지급·조건</span>' + _reInp(i,'when',r.when,'예: 15차월') + _reInp(i,'cond',r.cond,'예: 13회차 유지') + '</div>';
+      h += '<div class="re-row"><span class="re-lb">대상 FP</span>' + _reInp(i,'_fps',_reFpNames(r.fps),'비우면 전원 · 이름을 쉼표로 (자격 시상용)',' onblur="_reFps(' + i + ',this.value)"') + '</div>';
+    }
+    if(r.type === 'cond'){
+      h += '<div class="re-row" style="align-items:flex-start"><span class="re-lb">조건</span><div style="flex:1">';
+      for(var q=0;q<(r.conds||[]).length;q++){
+        h += '<div class="re-tier"><span class="re-tag" style="background:var(--bg3);color:var(--text2)">조건 ' + (q+1) + '</span><input type="date" value="' + _cmEsc(r.conds[q].from) + '" onchange="_reCond(' + i + ',' + q + ',\'from\',this.value)" class="re-in re-date"><span>~</span><input type="date" value="' + _cmEsc(r.conds[q].to) + '" onchange="_reCond(' + i + ',' + q + ',\'to\',this.value)" class="re-in re-date"><input type="text" inputmode="decimal" value="' + _reWonIn(r.conds[q].min) + '" oninput="_reCond(' + i + ',' + q + ',\'min\',this.value)" class="re-in re-num"><span>만↑</span><span onclick="_reCondDel(' + i + ',' + q + ')" style="color:#C0392B;cursor:pointer;margin-left:2px">✕</span></div>';
+      }
+      h += '<div onclick="_reCondAdd(' + i + ')" class="re-add">+ 조건 추가</div></div></div>';
+      h += '<div class="re-row" style="align-items:flex-start"><span class="re-lb">시상금</span><div style="flex:1">';
+      h += '<div class="re-tier"><span style="color:var(--text2)">정액</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.amt) + '" oninput="_reF(' + i + ',\'amt\',_reWon(this.value))" class="re-in re-num"><span>만원 (구간이 없을 때)</span></div>';
+      for(var w=0;w<(r.rewards||[]).length;w++){
+        h += '<div class="re-tier"><span style="color:var(--text2)">조건 ' + ((r.rewardBy||0)+1) + ' 금액</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.rewards[w].min) + '" oninput="_reRew(' + i + ',' + w + ',\'min\',this.value)" class="re-in re-num"><span>만↑ →</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.rewards[w].amt) + '" oninput="_reRew(' + i + ',' + w + ',\'amt\',this.value)" class="re-in re-num"><span>만원</span><span onclick="_reRewDel(' + i + ',' + w + ')" style="color:#C0392B;cursor:pointer;margin-left:4px">✕</span></div>';
+      }
+      h += '<div onclick="_reRewAdd(' + i + ')" class="re-add">+ 구간별 시상금 추가</div></div></div>';
+      h += '<div class="re-row"><span class="re-lb">지급</span>' + _reInp(i,'when',r.when,'예: 15차월') + '</div>';
+    }
+    if(r.type === 'per'){
+      h += '<div class="re-row"><span class="re-lb">건당</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.amt) + '" oninput="_reF(' + i + ',\'amt\',_reWon(this.value))" class="re-in re-num"><span style="font-size:11px;color:var(--text2)">만원 · 지급</span>' + _reInp(i,'when',r.when,'예: 15차월') + '</div>';
+    }
+    h += '<div class="re-row"><span class="re-lb">비고</span>' + _reInp(i,'note',r.note,'') + '</div>';
+    h += '</div>';
+  }
+  h += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">'
+     + '<span class="perf-co" onclick="_reAdd(\'rate\')">+ 비율형</span><span class="perf-co" onclick="_reAdd(\'tier\')">+ 구간형</span>'
+     + '<span class="perf-co" onclick="_reAdd(\'cond\')">+ 조건형</span><span class="perf-co" onclick="_reAdd(\'per\')">+ 건당</span></div>';
+  box.innerHTML = h;
+}
+// downscale a dataURL image for the AI call (max 1600px, jpeg)
+function _cmShrink(dataUrl, cb){
+  try {
+    var img = new Image();
+    img.onload = function(){
+      try {
+        var mx = 1600, w = img.width, h = img.height;
+        if(w <= mx && h <= mx && dataUrl.length < 1500000){ cb(dataUrl, 'image/jpeg'); return; }
+        var sc = Math.min(1, mx / Math.max(w, h));
+        var cv = document.createElement('canvas'); cv.width = Math.round(w*sc); cv.height = Math.round(h*sc);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        cb(cv.toDataURL('image/jpeg', 0.85), 'image/jpeg');
+      } catch(e){ cb(dataUrl, 'image/jpeg'); }
+    };
+    img.onerror = function(){ cb(dataUrl, 'image/jpeg'); };
+    img.src = dataUrl;
+  } catch(e2){ cb(dataUrl, 'image/jpeg'); }
+}
+// AI: images [{data,mime}] or campaignId
+function _reReadAI(images, campaignId, btn){
+  if(!currentUser) return;
+  var label = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '🤖 읽는 중… (10~30초)'; }
+  var src = (images||[]).slice(0,4), imgs = [], left = src.length;
+  if(!left){ _reReadAIPost(imgs, campaignId, btn, label); return; }
+  for(var i=0;i<src.length;i++){
+    (function(k){ _cmShrink(src[k].data, function(d, m){ imgs[k] = { data:d, mime:m }; left--; if(left <= 0) _reReadAIPost(imgs, campaignId, btn, label); }); })(i);
+  }
+}
+function _reReadAIPost(imgs, campaignId, btn, label){
+  fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'campaignRead', data:{ fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'' } })
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if(btn){ btn.disabled = false; btn.textContent = label; }
+    if(!res || !res.ok){ showToast('⚠️ ' + ((res && res.msg) || '읽기 실패')); return; }
+    var rules = res.rules || [];
+    if(!rules.length){ showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
+    _re.title = res.title || '';
+    _re.rules = _re.rules.concat(rules);
+    _reRender();
+    showToast('✅ ' + rules.length + '개 항목 읽음 · 숫자 확인 후 저장하세요');
+  }).catch(function(){ if(btn){ btn.disabled = false; btn.textContent = label; } showToast('⚠️ 네트워크 오류'); });
+}
+function _reSave(campaignId, replace, cb){
+  var rules = [];
+  for(var i=0;i<_re.rules.length;i++){
+    var r = _re.rules[i];
+    var o = {};
+    for(var k in r){ if(r.hasOwnProperty(k) && k.charAt(0) !== '_') o[k] = r[k]; }
+    o.title = r.label || '';
+    rules.push(o);
+  }
+  fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action:'rulesSave', data:{ fpCode:currentUser.id, campaignId:campaignId||'', insurer:_re.insurer, kind:_re.kind, rules:rules, replace:!!replace } })
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if(!res || !res.ok){ showToast('⚠️ 시책률 저장 실패: ' + ((res && res.msg) || '')); if(cb) cb(false); return; }
+    _rules = null;
+    _rulesEnsure(null, true);
+    if(cb) cb(true, res);
+  }).catch(function(){ showToast('⚠️ 시책률 저장 · 네트워크 오류'); if(cb) cb(false); });
+}
+// ── 시책 등록 모달 연동 ───────────────────────────
+function _sichaekRulesInit(){
+  var wrap = document.getElementById('sichaekRulesWrap');
+  if(wrap) wrap.style.display = _commCanUse() ? '' : 'none';
+  var sel = document.getElementById('sichaekInsurer');
+  var parts = (sel ? sel.value : '').split('|');
+  var mon = parseInt(String(_sichaekWeekVal||'').replace(/[^0-9]/g,''),10);
+  var now = new Date();
+  var ym = (mon >= 1 && mon <= 12) ? (now.getFullYear() + '-' + (mon<10?'0':'') + mon) : _cmYmOf(now);
+  _reReset('sichaekRulesBox', parts[0] || '', parts[1] || '', ym, '');
+  _reRender();
+  var tg = document.getElementById('sichaekRulesApply'); if(tg) tg.checked = true;
+}
+function sichaekReadAI(btn){
+  if(!_sichaekFiles.length){ showToast('⚠️ 먼저 시상 이미지를 선택하세요'); return; }
+  var sel = document.getElementById('sichaekInsurer');
+  var parts = (sel ? sel.value : '').split('|');
+  _re.insurer = parts[0] || ''; _re.kind = parts[1] || '';
+  _reReadAI(_sichaekFiles, '', btn);
+}
+function _sichaekRulesSubmit(campId){
+  var tg = document.getElementById('sichaekRulesApply');
+  if(!_commCanUse() || !campId || !_re.rules.length || (tg && !tg.checked)) return;
+  var sel = document.getElementById('sichaekInsurer');
+  var parts = (sel ? sel.value : '').split('|');
+  _re.insurer = parts[0] || _re.insurer; _re.kind = parts[1] || _re.kind;
+  _reSave(campId, false, function(ok){ if(ok) showToast('✅ 시책률 ' + _re.rules.length + '개 저장 · 수수료 예상에 반영됩니다'); });
+}
+// ── 기존 시책의 시책률 편집 모달 ──────────────────
+var _rulesCampId = '';
+function openRulesFor(campId, insurer, kind, startWeek){
+  _rulesCampId = campId;
+  var mon = parseInt(String(startWeek||'').replace(/[^0-9]/g,''),10);
+  var now = new Date();
+  var ym = (mon >= 1 && mon <= 12) ? (now.getFullYear() + '-' + (mon<10?'0':'') + mon) : _cmYmOf(now);
+  _reReset('rulesBox', insurer, kind, ym, campId);
+  var ttl = document.getElementById('rulesTitle'); if(ttl) ttl.textContent = '💰 시책률 · ' + insurer + (startWeek ? ' · ' + startWeek : '');
+  var box = document.getElementById('rulesBox'); if(box) box.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px 2px">불러오는 중…</div>';
+  document.getElementById('rulesOverlay').classList.add('open');
+  _rulesEnsure(function(list){
+    var mine = [];
+    for(var i=0;i<(list||[]).length;i++){
+      if(list[i].campaignId === campId){
+        var d = list[i].data || {}, o = {};
+        for(var k in d){ if(d.hasOwnProperty(k)) o[k] = d[k]; }
+        o.id = list[i].id; o.type = list[i].type; o.label = list[i].title || d.label || ''; o.from = list[i].from || d.from || ''; o.to = list[i].to || d.to || '';
+        mine.push(o);
+      }
+    }
+    _re.rules = mine;
+    _reRender();
+  }, true);
+}
+function closeRules(){ document.getElementById('rulesOverlay').classList.remove('open'); }
+function rulesReadAI(btn){ _reReadAI([], _rulesCampId, btn); }
+function rulesSaveClick(btn){
+  var label = btn.textContent; btn.disabled = true; btn.textContent = '저장 중…';
+  _reSave(_rulesCampId, true, function(ok){
+    btn.disabled = false; btn.textContent = label;
+    if(ok){ showToast('✅ 시책률 저장 완료'); closeRules(); if(typeof loadSichaek === 'function') loadSichaek(); }
+  });
+}
+function _cmCampHasRules(campId){
+  var list = _rules || [];
+  for(var i=0;i<list.length;i++){ if(list[i].campaignId === campId && list[i].active !== false) return true; }
+  return false;
+}
+
+// ── 수수료 예상 계산 ───────────────────────────────
+function _cmProdItem(rec, p){
+  var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
+  var row = p.prod ? _cmFindRate(p.co, p.prod) : null;
+  var it = { date:rec.date, fpId:rec.fpId, co:p.co||'', cat:p.cat||'', prod:p.prod||'', amount:amt, lump:_perfIsLump(p), kind:(row ? row[0] : (p.pk||'')), calc:false, noRate:false, fee:null, gross:null, sc:null, rule:null };
+  if(row){
+    if(row[3] === null){ it.noRate = true; }
+    else {
+      var r1 = row[3]||0, r2 = row[4]||0, r3 = row[5]||0, r4 = row[6]||0, r5 = row[7]||0;
+      var g;
+      if(row[0] === '손보') g = { m1:amt*r1, y1:amt*r2, y2:amt*(r3+r4), y3:0, p13:amt*r3, p15:amt*r4, nl:true };
+      else g = { m1:amt*r1, y1:amt*r2, y2:amt*r3, y3:amt*r4 + amt*r5, y3a:amt*r4, y4:amt*r5, nl:false };
+      it.gross = g;
+      it.fee = { m1:g.m1*COMM_FP_RATE, y1:g.y1*COMM_FP_RATE, y2:g.y2*COMM_FP_RATE, y3:g.y3*COMM_FP_RATE };
+      if(g.nl){ it.fee.p13 = g.p13*COMM_FP_RATE; it.fee.p15 = g.p15*COMM_FP_RATE; }
+      it.calc = true;
+    }
+  }
+  if(p.prod){
+    var rule = _cmPickRule(p, rec.date);
+    if(rule){
+      var d = rule.data || {};
+      var s1 = amt*(parseFloat(d.pct1)||0)/100*COMM_SC_RATE, s2 = amt*(parseFloat(d.pct2)||0)/100*COMM_SC_RATE;
+      it.sc = { m1:s1, y2:s2, pct1:parseFloat(d.pct1)||0, pct2:parseFloat(d.pct2)||0, when2:d.when2||'13차월', label:_cmRuleLabel(rule) };
+      it.rule = rule;
+    }
+  }
+  return it;
+}
+function _cmWhenBucket(when){
+  var w = String(when||'');
+  if(w.indexOf('익월') >= 0) return 'm1';
+  if(w.indexOf('3차') >= 0 && w.indexOf('13') < 0) return 'y3';
+  return 'y2';
+}
+function _cmOverlap(a1, a2, b1, b2){ return !(a2 < b1 || a1 > b2); }
+// sum of one fp's rows of the rule's insurer in [from,to] (lump excluded; product optional)
+function _cmSumWindow(recs, fpId, rule, from, to){
+  var s = 0, n = 0, d = rule.data || {};
+  for(var i=0;i<recs.length;i++){
+    var rec = recs[i];
+    if(rec.fpId !== fpId) continue;
+    var dt = String(rec.date||'');
+    if(dt < from || dt > to) continue;
+    var ps = rec.products || [];
+    for(var k=0;k<ps.length;k++){
+      var p = ps[k];
+      if(!_cmSameInsurer(rule.insurer, p.co)) continue;
+      if(_perfIsLump(p)) continue;
+      if(!_cmScopeOk(d, p, false)) continue;
+      s += parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0; n++;
+    }
+  }
+  return { sum:s, n:n };
+}
+function _cmTierPick(tiers, sum){
+  var got = null, next = null;
+  var arr = (tiers||[]).slice().sort(function(a,b){ return a.min - b.min; });
+  for(var i=0;i<arr.length;i++){
+    if(sum >= arr[i].min) got = arr[i];
+    else { next = arr[i]; break; }
+  }
+  return { got:got, next:next };
+}
+// evaluate tier/cond/per rules for fp in month ym -> list of results
+function _cmEvalRules(recs, fpId, ym){
+  var mFrom = ym + '-01', mTo = _cmMonthEnd(ym);
+  var out = [], list = _rules || [];
+  for(var i=0;i<list.length;i++){
+    var r = list[i];
+    if(r.active === false) continue;
+    if(r.type !== 'tier' && r.type !== 'cond' && r.type !== 'per') continue;
+    var d = r.data || {};
+    if(d.fps && d.fps.length && d.fps.indexOf(fpId) < 0) continue;
+    var res = { rule:r, type:r.type, label:(r.title || d.label || r.insurer), insurer:r.insurer, when:d.when||'', bucket:_cmWhenBucket(d.when), amt:0, sum:0, n:0, next:null, need:0, nextAmt:0, text:'', sub:'', active:false, pct:0 };
+    if(r.type === 'tier'){
+      var from = r.from || d.from || mFrom, to = r.to || d.to || mTo;
+      if(!_cmOverlap(from, to, mFrom, mTo)) continue;
+      var w = _cmSumWindow(recs, fpId, r, from, to);
+      var pk = _cmTierPick(d.tiers, w.sum);
+      res.sum = w.sum; res.n = w.n; res.amt = pk.got ? pk.got.amt : 0;
+      res.period = from.substr(5).replace('-','.') + '~' + to.substr(5).replace('-','.');
+      if(pk.next){ res.next = pk.next; res.need = pk.next.min - w.sum; res.nextAmt = pk.next.amt; res.pct = Math.min(100, Math.round(w.sum / pk.next.min * 100)); }
+      else if(pk.got){ res.pct = 100; }
+      res.active = w.sum > 0;
+    } else if(r.type === 'cond'){
+      var conds = d.conds || [];
+      if(!conds.length) continue;
+      var touches = false, sums = [], allOk = true, unmet = [];
+      for(var c=0;c<conds.length;c++){
+        var cf = conds[c].from || mFrom, ct = conds[c].to || mTo;
+        if(_cmOverlap(cf, ct, mFrom, mTo)) touches = true;
+        var ws = _cmSumWindow(recs, fpId, r, cf, ct);
+        sums.push(ws.sum);
+        if(ws.sum < (conds[c].min||0)){ allOk = false; unmet.push({ idx:c, need:(conds[c].min||0) - ws.sum, sum:ws.sum, from:cf, to:ct }); }
+      }
+      if(!touches) continue;
+      var by = Math.min(conds.length-1, Math.max(0, parseInt(d.rewardBy,10)||0));
+      var baseSum = sums[by];
+      var pk2 = (d.rewards && d.rewards.length) ? _cmTierPick(d.rewards, baseSum) : { got:null, next:null };
+      res.sum = baseSum; res.sums = sums; res.conds = conds;
+      res.period = conds.map(function(x){ return String(x.from||'').substr(5).replace('-','.') + '~' + String(x.to||'').substr(5).replace('-','.'); }).join(' · ');
+      if(allOk){
+        res.amt = (d.rewards && d.rewards.length) ? (pk2.got ? pk2.got.amt : 0) : (d.amt||0);
+        if(pk2.next){ res.next = pk2.next; res.need = pk2.next.min - baseSum; res.nextAmt = pk2.next.amt; res.needIdx = by; res.pct = Math.min(100, Math.round(baseSum / pk2.next.min * 100)); }
+        else res.pct = 100;
+      } else {
+        if(unmet.length === 1){
+          var u = unmet[0];
+          var target = (d.rewards && d.rewards.length) ? (u.idx === by ? _cmTierPick(d.rewards, (conds[u.idx].min||0)).got : pk2.got) : null;
+          var amtIf = (d.rewards && d.rewards.length) ? (target ? target.amt : 0) : (d.amt||0);
+          if(amtIf > 0){ res.need = u.need; res.nextAmt = amtIf; res.needIdx = u.idx; res.next = { min:(conds[u.idx].min||0), amt:amtIf }; res.pct = Math.min(100, Math.round(u.sum / (conds[u.idx].min||1) * 100)); }
+        }
+      }
+      var any = false; for(var s2=0;s2<sums.length;s2++){ if(sums[s2] > 0) any = true; }
+      res.active = any;
+    } else if(r.type === 'per'){
+      var pf = r.from || d.from || mFrom, pt = r.to || d.to || mTo;
+      if(!_cmOverlap(pf, pt, mFrom, mTo)) continue;
+      var wp = _cmSumWindow(recs, fpId, r, pf, pt);
+      res.n = wp.n; res.sum = wp.sum; res.amt = wp.n * (d.amt||0); res.pct = res.n ? 100 : 0;
+      res.period = pf.substr(5).replace('-','.') + '~' + pt.substr(5).replace('-','.');
+      res.active = wp.n > 0;
+    }
+    out.push(res);
+  }
+  return out;
+}
+function _cmBuild(fpId, ym){
+  var all = getPerfLog();
+  var recs = [];
+  for(var i=0;i<all.length;i++){ if(all[i].fpId === fpId) recs.push(all[i]); }
+  var items = [];
+  for(var j=0;j<recs.length;j++){
+    var rec = recs[j];
+    if(String(rec.date||'').indexOf(ym) !== 0) continue;
+    var ps = rec.products || [];
+    for(var k=0;k<ps.length;k++) items.push(_cmProdItem(rec, ps[k]));
+  }
+  items.sort(function(a,b){ return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+  var evals = _cmEvalRules(recs, fpId, ym);
+  var t = { m1:0, y1:0, y2:0, y3:0, sc1:0, sc2:0, sc3:0, g1:0, g2:0, g3:0, calc:0, noProd:0, noRate:0, cnt:items.length };
+  for(var m=0;m<items.length;m++){
+    var it = items[m];
+    if(it.calc){
+      t.m1 += it.fee.m1; t.y1 += it.fee.y1; t.y2 += it.fee.y2; t.y3 += it.fee.y3;
+      t.g1 += it.gross.m1; t.g2 += it.gross.y2; t.g3 += it.gross.y3;
+      t.calc++;
+    } else if(it.noRate) t.noRate++;
+    else if(!it.prod) t.noProd++;
+    if(it.sc){ t.sc1 += it.sc.m1; if(_cmWhenBucket(it.sc.when2) === 'y3') t.sc3 += it.sc.y2; else t.sc2 += it.sc.y2; }
+  }
+  for(var e=0;e<evals.length;e++){
+    var ev = evals[e];
+    if(!ev.amt) continue;
+    if(ev.bucket === 'm1') t.sc1 += ev.amt; else if(ev.bucket === 'y3') t.sc3 += ev.amt; else t.sc2 += ev.amt;
+  }
+  return { fpId:fpId, ym:ym, items:items, evals:evals, t:t, recs:recs };
+}
+// 12-month payout projection (next month onward) from contracts of the last 36 months
+function _cmSchedule(recs, ym){
+  var base = _cmYmAdd(ym, 1), months = [];
+  var mi;
+  for(mi=0;mi<12;mi++) months.push({ ym:_cmYmAdd(base, mi), fee:0, sc:0 });
+  var idx = {}; for(mi=0;mi<months.length;mi++) idx[months[mi].ym] = mi;
+  function add(ymX, kind, v){ var p = idx[ymX]; if(p !== undefined && v) months[p][kind] += v; }
+  var lo = _cmYmAdd(ym, -36);
+  var sumRate = {};
+  for(var i=0;i<recs.length;i++){
+    var rec = recs[i], cm = String(rec.date||'').substr(0,7);
+    if(cm < lo || cm > ym) continue;
+    var ps = rec.products || [];
+    for(var k=0;k<ps.length;k++){
+      var it = _cmProdItem(rec, ps[k]);
+      if(it.calc){
+        var f = it.fee, g = it.gross;
+        add(_cmYmAdd(cm,1), 'fee', f.m1);
+        if(g.nl){
+          if(f.y1){ for(var a=7;a<=12;a++) add(_cmYmAdd(cm,a), 'fee', f.y1/6); }
+          add(_cmYmAdd(cm,13), 'fee', f.p13/2); add(_cmYmAdd(cm,14), 'fee', f.p13/2); add(_cmYmAdd(cm,15), 'fee', f.p15);
+        } else {
+          if(f.y1){ for(var b=2;b<=12;b++) add(_cmYmAdd(cm,b), 'fee', f.y1/11); }
+          for(var c=13;c<=24;c++) add(_cmYmAdd(cm,c), 'fee', f.y2/12);
+          if(g.y3a){ for(var d=25;d<=36;d++) add(_cmYmAdd(cm,d), 'fee', g.y3a*COMM_FP_RATE/12); }
+          if(g.y4){ for(var e=37;e<=120;e++) add(_cmYmAdd(cm,e), 'fee', g.y4*COMM_FP_RATE/84); }
+        }
+      }
+      if(it.sc){
+        add(_cmYmAdd(cm,1), 'sc', it.sc.m1);
+        var off = (String(it.sc.when2||'').indexOf('15') >= 0) ? 15 : 13;
+        add(_cmYmAdd(cm,off), 'sc', it.sc.y2);
+      }
+    }
+    sumRate[cm] = 1;
+  }
+  // tier/cond/per: evaluate per contract month, each rule counted once (latest month first)
+  var cms = []; for(var cmk0 in sumRate){ if(sumRate.hasOwnProperty(cmk0)) cms.push(cmk0); }
+  cms.sort(); cms.reverse();
+  var seenRule = {};
+  for(var ci=0;ci<cms.length;ci++){
+    var cmk = cms[ci];
+    var evals = _cmEvalRules(recs, recs[0].fpId, cmk);
+    for(var q=0;q<evals.length;q++){
+      var ev = evals[q]; if(!ev.amt) continue;
+      if(seenRule[ev.rule.id]) continue; seenRule[ev.rule.id] = 1;
+      var w = String(ev.when||'');
+      var o2 = (w.indexOf('익월') >= 0) ? 1 : ((w.indexOf('13') >= 0) ? 13 : 15);
+      add(_cmYmAdd(cmk, o2), 'sc', ev.amt);
+    }
+  }
+  return months;
+}
+
+// ── 수수료 예상 모달 ────────────────────────────────
+var _cmYm = '', _cmFp = '', _cmTab = 'mine', _cmFpList = [], _cmShowSched = false;
+function _cmIsAdmin(u){ return !!(u && (u.role === '대표' || u.level === 'admin' || u.id === 'ktk01')); }
+function _cmTeamOfManager(fpId){
+  var teams = (typeof getTeamsDB === 'function') ? getTeamsDB() : [];
+  for(var i=0;i<teams.length;i++){ if((teams[i].managers||[]).indexOf(fpId) >= 0) return teams[i]; }
+  // no team configured: a branch manager (지점장) falls back to every FP of the same branch
+  var all = getMergedFpList(), me = null, k;
+  for(k=0;k<all.length;k++){ if(all[k].id === fpId){ me = all[k]; break; } }
+  var isMgr = me ? (me.role === '지점장' || String(me.title||'').indexOf('지점장') >= 0) : (fpId === currentUser.id && currentUser.role === '지점장');
+  var br = me ? String(me.branch||'') : String(currentUser.branch||'');
+  if(!isMgr || !br || br.indexOf('교육') >= 0) return null;
+  var mem = [];
+  for(k=0;k<all.length;k++){ if(all[k].id !== fpId && all[k].active !== false && String(all[k].branch||'') === br && all[k].role !== '대표') mem.push(all[k].id); }
+  if(!mem.length) return null;
+  return { id:'branch_' + br, managers:[fpId], members:mem, fallback:true };
+}
+function openCommission(){
+  if(!currentUser){ showToast('로그인이 필요합니다'); return; }
+  if(!_commCanUse()){ showToast('아직 공개되지 않은 기능입니다'); return; }
+  _cmYm = _cmYmOf(new Date());
+  _cmFp = currentUser.id;
+  _cmTab = 'mine';
+  _cmShowSched = false;
+  var isAdmin = _cmIsAdmin(currentUser);
+  var team = _cmTeamOfManager(currentUser.id);
+  _cmFpList = [];
+  if(isAdmin){
+    _cmFpList = getMergedFpList().filter(function(fp){ return fp.role !== '대표'; }).slice();
+    _cmFpList.sort(function(a,b){ return (a.active===false?1:0)-(b.active===false?1:0) || String(a.branch||'').localeCompare(String(b.branch||'')) || String(a.name||'').localeCompare(String(b.name||'')); });
+  } else if(team){
+    var ids = (team.managers||[]).concat(team.members||[]);
+    var all = getMergedFpList();
+    for(var i=0;i<ids.length;i++){ for(var k=0;k<all.length;k++){ if(all[k].id === ids[i]){ _cmFpList.push(all[k]); break; } } }
+  }
+  var sel = document.getElementById('cmFpSel');
+  if(sel){
+    var h = '';
+    if(_cmFpList.length){
+      for(var f=0;f<_cmFpList.length;f++){ var fp = _cmFpList[f]; h += '<option value="' + _cmEsc(fp.id) + '"' + (fp.id === _cmFp ? ' selected' : '') + '>' + _cmEsc(fp.name) + (fp.branch ? ' · ' + _cmEsc(String(fp.branch).replace('지점','')) : '') + (fp.active === false ? ' (퇴사)' : '') + '</option>'; }
+      if(!isAdmin && (_cmFpList.length === 0 || !_cmFpList.some(function(x){ return x.id === currentUser.id; }))) h = '<option value="' + _cmEsc(currentUser.id) + '" selected>' + _cmEsc(currentUser.name||'') + '</option>' + h;
+    }
+    sel.innerHTML = h;
+    sel.parentNode.style.display = _cmFpList.length > 1 ? '' : 'none';
+  }
+  var rb = document.getElementById('cmRebuildBtn'); if(rb) rb.style.display = isAdmin ? '' : 'none';
+  document.getElementById('commOverlay').classList.add('open');
+  var body = document.getElementById('cmBody');
+  if(body) body.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text3);font-size:12px">요율표·시책률 불러오는 중…</div>';
+  var pending = 2;
+  function go(){ pending--; if(pending <= 0) _commRender(); }
+  _ratesEnsure(function(){ go(); });
+  _rulesEnsure(function(){ go(); });
+  if(typeof loadPerfFromGas === 'function'){ loadPerfFromGas(function(){ if(document.getElementById('commOverlay').classList.contains('open')) _commRender(); }, false); }
+}
+function closeCommission(){ document.getElementById('commOverlay').classList.remove('open'); if(typeof _scrollToSubmenu === 'function') _scrollToSubmenu(); }
+function _cmMove(n){ _cmYm = _cmYmAdd(_cmYm, n); _commRender(); }
+function _cmPickFp(v){ _cmFp = v; _cmTab = 'mine'; _commRender(); }
+function _cmSetTab(t){ _cmTab = t; _commRender(); }
+function _cmToggleSched(){ _cmShowSched = !_cmShowSched; _commRender(); }
+function _cmKpi(label, val, sub, color){
+  return '<div class="cm-kpi"><div class="cm-k">' + label + '</div><div class="cm-v" style="color:' + color + '">' + val + '</div>' + (sub ? '<div class="cm-s">' + sub + '</div>' : '') + '</div>';
+}
+function _cmRowTxt(lab, fee, sc, scTxt, tot){
+  return '<tr><td class="cm-lb">' + lab + '</td><td class="cm-n cm-fee">' + fee + '</td><td class="cm-n cm-sc">' + (sc ? sc + (scTxt ? ' <span class="cm-mini">' + scTxt + '</span>' : '') : '<span class="cm-mini">–</span>') + '</td><td class="cm-n cm-tot">' + tot + '</td></tr>';
+}
+function _commRender(){
+  var body = document.getElementById('cmBody');
+  if(!body) return;
+  var fpId = _cmFp || currentUser.id;
+  var fpObj = null, all = getMergedFpList();
+  for(var i=0;i<all.length;i++){ if(all[i].id === fpId){ fpObj = all[i]; break; } }
+  var fpName = fpObj ? fpObj.name : (fpId === currentUser.id ? (currentUser.name||'') : fpId);
+  var team = _cmTeamOfManager(fpId);
+  var showTeam = !!team;
+  if(_cmTab === 'team' && !showTeam) _cmTab = 'mine';
+  var h = '';
+  h += '<div class="cm-seg"><span onclick="_cmMove(-1)">‹</span><span class="on" style="flex:3">' + _cmYmLabel(_cmYm) + ' 체결</span><span onclick="_cmMove(1)">›</span></div>';
+  if(showTeam){
+    h += '<div class="cm-seg"><span class="' + (_cmTab==='mine'?'on':'') + '" onclick="_cmSetTab(\'mine\')">' + (fpId === currentUser.id ? '내 계약' : _cmEsc(fpName) + ' 계약') + '</span><span class="' + (_cmTab==='team'?'on':'') + '" onclick="_cmSetTab(\'team\')">팀 수수료</span></div>';
+  }
+  if(!_rates || !COMM_FP_RATE){
+    h += '<div class="cm-warn">계산 기준을 아직 불러오지 못했습니다. 잠시 후 다시 열어주세요' + (_cmIsAdmin(currentUser) ? ' · 시트에 요율표를 넣은 뒤 "요율표 갱신"을 눌러주세요' : '') + '</div>';
+    body.innerHTML = h; return;
+  }
+  if(_cmTab === 'team'){ body.innerHTML = h + _cmTeamHtml(team, fpId); return; }
+  var B = _cmBuild(fpId, _cmYm), t = B.t;
+  var m1 = t.m1 + t.sc1, y2 = t.y2 + t.sc2, y3 = t.y3 + t.sc3, total = m1 + t.y1 + y2 + y3;
+  var nextYm = _cmYmAdd(_cmYm, 1);
+  h += '<div class="cm-kpis">'
+     + _cmKpi('익월 수령 (' + parseInt(nextYm.substr(5,2),10) + '월)', _cmMan(m1), '수수료 ' + _pvManKw(t.m1) + ' + 시책 ' + _pvManKw(t.sc1), 'var(--gold2)')
+     + _cmKpi('2차년', _cmMan(y2), '수수료 ' + _pvManKw(t.y2) + ' + 시책 ' + _pvManKw(t.sc2), '#2563EB')
+     + _cmKpi('3차년~', _cmMan(y3), (t.sc3 ? '시책 ' + _pvManKw(t.sc3) + ' 포함 · ' : '') + '유지 시', '#6D4FB8')
+     + '</div>';
+  if(t.y1) h += '<div class="cm-mini" style="margin:-4px 0 8px 2px">+ 1차년 유지(2~12회·7~12회 분할) ' + _cmMan(t.y1) + '</div>';
+  h += '<div class="cm-total"><span>💎 총 예상 (36개월 유지)</span><b>' + _cmMan(total) + '</b></div>';
+  h += '<div class="cm-mini" style="margin:6px 2px 0">' + t.cnt + '건 중 <b style="color:var(--text)">' + t.calc + '건 계산</b>' + (t.noProd ? ' · 상품 미입력 ' + t.noProd + '건' : '') + (t.noRate ? ' · 계산 불가 ' + t.noRate + '건' : '') + '</div>';
+  // nudges
+  var nud = '';
+  for(var e=0;e<B.evals.length;e++){
+    var ev = B.evals[e];
+    if(!ev.active) continue;
+    if(!ev.amt && !ev.next) continue;
+    var right = '';
+    if(ev.next && ev.need > 0 && ev.nextAmt > (ev.amt||0)) right = _cmMan(ev.need) + ' 더 → ' + _cmMan(ev.nextAmt);
+    else if(ev.next && ev.need > 0) right = _cmMan(ev.need) + ' 더 → +' + _cmMan(ev.nextAmt);
+    var left = '';
+    if(ev.type === 'per') left = ev.n + '건 → 확보 <b>' + _cmMan(ev.amt) + '</b>';
+    else if(ev.type === 'cond' && ev.sums){
+      var parts = [];
+      for(var c=0;c<ev.sums.length;c++){ parts.push('조건' + (c+1) + ' ' + _cmMan(ev.sums[c]) + '/' + _cmMan(ev.conds[c].min||0)); }
+      left = parts.join(' · ') + (ev.amt ? ' → 확보 <b>' + _cmMan(ev.amt) + '</b>' : '');
+    } else left = '지금 <b>' + _cmMan(ev.sum) + '</b>' + (ev.amt ? ' → 확보 <b style="color:#6D4FB8">' + _cmMan(ev.amt) + '</b>' : '');
+    nud += '<div class="cm-card cm-new"><div class="cm-row"><b style="font-size:12px">' + _cmEsc(ev.insurer) + ' ' + _cmEsc(ev.label) + '</b><span class="cm-tag">' + _cmEsc(ev.period||'') + (ev.when ? ' · ' + _cmEsc(ev.when) : '') + '</span></div>'
+         + '<div class="cm-prog"><i style="width:' + (ev.pct||0) + '%"></i></div>'
+         + '<div class="cm-row"><span class="cm-mini" style="color:var(--text2)">' + left + '</span><span style="font-size:12px;font-weight:800;color:#6D4FB8;white-space:nowrap">' + right + '</span></div></div>';
+  }
+  if(nud) h += '<div class="cm-lbl">🎯 시책 한 걸음 더</div>' + nud;
+  // contracts
+  h += '<div class="cm-lbl">계약별 내역</div>';
+  if(!B.items.length) h += '<div class="cm-card" style="text-align:center;color:var(--text3);font-size:12px;padding:18px">이 달 입력된 계약이 없습니다</div>';
+  for(var k=0;k<B.items.length;k++){
+    var it = B.items[k];
+    h += '<div class="cm-card"><div class="cm-row"><div><span class="cm-mini">' + it.date.substr(5).replace('-','/') + '</span> <b style="font-size:12.5px">' + _cmEsc(it.co) + '</b> ' + (it.cat ? '<span class="cm-tag">' + _cmEsc(it.cat) + '</span>' : '') + (it.lump ? '<span class="cm-tag">일시납</span>' : '') + '</div><b style="color:var(--gold2);white-space:nowrap">월초 ' + _cmMan(it.amount) + '</b></div>'
+       + '<div class="cm-prod">' + (it.prod ? _cmEsc(it.prod) : '(상품 미입력)') + '</div>';
+    if(it.calc){
+      var f = it.fee, sc = it.sc;
+      h += '<table class="cm-t"><tr><th></th><th>수수료</th><th>시책</th><th>합계</th></tr>';
+      h += _cmRowTxt('익월', _cmMan(f.m1), sc && sc.m1 ? _cmMan(sc.m1) : '', sc && sc.m1 ? '(' + _cmPct(sc.pct1) + ')' : '', _cmMan(f.m1 + (sc ? sc.m1 : 0)));
+      if(it.gross.nl){
+        if(f.y1) h += _cmRowTxt('7~12회', _cmMan(f.y1), '', '', _cmMan(f.y1));
+        h += _cmRowTxt('13·14회', _cmMan(f.p13), sc && sc.y2 ? _cmMan(sc.y2) : '', sc && sc.y2 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ')' : '', _cmMan(f.p13 + (sc ? sc.y2 : 0)));
+        h += _cmRowTxt('15회', _cmMan(f.p15), '', '', _cmMan(f.p15));
+      } else {
+        if(f.y1) h += _cmRowTxt('2~12회', _cmMan(f.y1), '', '', _cmMan(f.y1));
+        h += _cmRowTxt('2차년', _cmMan(f.y2), sc && sc.y2 ? _cmMan(sc.y2) : '', sc && sc.y2 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ')' : '', _cmMan(f.y2 + (sc ? sc.y2 : 0)));
+        h += _cmRowTxt((it.gross.y4 ? '3차년~' : '3차년'), _cmMan(f.y3), '', '', _cmMan(f.y3));
+      }
+      h += '</table>';
+      if(sc) h += '<div class="cm-mini" style="margin-top:4px">🎁 ' + _cmEsc(sc.label) + '</div>';
+      if(!it.gross.nl && _cmNorm(it.co).indexOf('한화생명') >= 0) h += '<div class="cm-mini" style="margin-top:3px">2차년은 보너스 포함 · 변동 가능</div>';
+    } else if(it.noRate){
+      h += '<div class="cm-warn">이 상품은 아직 계산할 수 없습니다</div>';
+    } else if(it.prod){
+      h += '<div class="cm-warn">상품을 다시 선택해 주세요 (업적 수정)</div>';
+    } else {
+      h += '<div class="cm-warn">상품 미입력 — 업적 수정에서 상품을 고르면 계산됩니다</div>';
+    }
+    h += '</div>';
+  }
+  // schedule (collapsible)
+  h += '<div class="cm-lbl" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="_cmToggleSched()"><span>📅 월별 입금 예정 (12개월)</span><span class="cm-tag">' + (_cmShowSched ? '접기 ▴' : '예상 보기 ▾') + '</span></div>';
+  if(_cmShowSched){
+    var sch = _cmSchedule(B.recs, _cmYm), mx = 0;
+    for(var s=0;s<sch.length;s++){ mx = Math.max(mx, sch[s].fee + sch[s].sc); }
+    h += '<div class="cm-card"><div class="cm-bars">';
+    for(var s2=0;s2<sch.length;s2++){
+      var tot2 = sch[s2].fee + sch[s2].sc, hp = mx ? Math.round(tot2 / mx * 100) : 0, scp = tot2 ? Math.round(sch[s2].sc / tot2 * 100) : 0;
+      h += '<div class="cm-bar"><i>' + (tot2 ? _pvManKw(tot2) : '') + '</i><div class="cm-barcol" style="height:' + Math.max(hp, tot2 ? 3 : 0) + '%"><div class="cm-barsc" style="height:' + scp + '%"></div></div><span>' + parseInt(sch[s2].ym.substr(5,2),10) + '월</span></div>';
+    }
+    h += '</div><div class="cm-mini" style="margin-top:6px">금색 수수료 · 보라 시책 · 단위 만원 · 예상치</div></div>';
+  }
+  h += '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음 · 시책은 등록된 것만 반영</div>';
+  body.innerHTML = h;
+}
+function _cmTeamHtml(team, mgrId){
+  var ids = (team.members||[]).slice();
+  var rows = [], g1 = 0, g2 = 0, n = 0, cnt = 0, noProd = 0;
+  for(var i=0;i<ids.length;i++){
+    if(ids[i] === mgrId) continue;
+    var B = _cmBuild(ids[i], _cmYm);
+    var nm = (typeof _fpNameById === 'function' ? _fpNameById(ids[i]) : '') || ids[i];
+    rows.push({ id:ids[i], name:nm, g1:B.t.g1, g2:B.t.g2, cnt:B.t.cnt, calc:B.t.calc });
+    g1 += B.t.g1; g2 += B.t.g2; n++; cnt += B.t.calc; noProd += B.t.noProd;
+  }
+  rows.sort(function(a,b){ return b.g1 - a.g1; });
+  var nextYm = _cmYmAdd(_cmYm, 1);
+  var h = '<div class="cm-kpis">'
+    + _cmKpi('지점장 수수료 (' + parseInt(nextYm.substr(5,2),10) + '월)', _cmMan(g1*COMM_MGR_RATE), '팀 ' + n + '명 · ' + cnt + '건', 'var(--gold2)')
+    + _cmKpi('2차년', _cmMan(g2*COMM_MGR_RATE), '유지 시', '#2563EB')
+    + _cmKpi('합계', _cmMan((g1+g2)*COMM_MGR_RATE), '', 'var(--text)')
+    + '</div>';
+  h += '<table class="cm-t"><tr><th>팀원</th><th>건</th><th>익월</th><th>2차년</th></tr>';
+  var zero = 0;
+  for(var r=0;r<rows.length;r++){
+    var x = rows[r];
+    if(!x.g1 && !x.cnt){ zero++; continue; }
+    h += '<tr><td>' + _cmEsc(x.name) + '</td><td class="cm-n" style="font-weight:600">' + x.calc + (x.cnt > x.calc ? '<span class="cm-mini">/' + x.cnt + '</span>' : '') + '</td><td class="cm-n" style="color:var(--gold2)">' + _cmMan(x.g1*COMM_MGR_RATE) + '</td><td class="cm-n">' + _cmMan(x.g2*COMM_MGR_RATE) + '</td></tr>';
+  }
+  if(zero) h += '<tr><td colspan="4" style="text-align:center;color:var(--text3);font-size:11px">이 달 업적 없는 팀원 ' + zero + '명</td></tr>';
+  if(!rows.length) h += '<tr><td colspan="4" style="text-align:center;color:var(--text3)">매니저 매칭에 팀원이 없습니다</td></tr>';
+  h += '</table>';
+  h += '<div class="cm-mini" style="margin-top:8px">팀원이 상품을 입력한 건만' + (noProd ? ' (미입력 ' + noProd + '건 제외)' : '') + (team.fallback ? ' · 매니저 매칭이 없어 같은 지점 전원 기준' : '') + ' · 시책 제외</div>';
+  h += '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음</div>';
+  return h;
+}
+// called when the perf input modal opens: warm up rates / rules, re-render once rates arrive
+function _perfCommPrep(){
+  var need = !_rates;
+  _ratesEnsure(function(){
+    if(!need || !_rates) return;
+    var ov = document.getElementById('perfModalOverlay');
+    if(ov && ov.classList.contains('open')){ _perfSyncProds(); renderPerfProds(); }
+  });
+  _rulesEnsure(null);
+}
+
 </script>
 
 </body>
