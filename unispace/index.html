@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 154;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 155;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29607,7 +29607,10 @@ function _reMd(d){ return String(d||'').substr(5).replace('-','.'); }
 function _reSummary(r){
   var out = [], sub = [];
   if(r.type === 'rate'){
-    out.push('익월 <b style="color:var(--gold2)">' + _cmPct(r.pct1) + '</b>' + (r.pct2 ? ' · ' + _cmEsc(r.when2||'13차월') + ' <b style="color:var(--gold2)">' + _cmPct(r.pct2) + '</b>' : ''));
+    var pcs = [];
+    if(r.pct1 || !r.pct2) pcs.push('익월 <b style="color:var(--gold2)">' + _cmPct(r.pct1) + '</b>');
+    if(r.pct2) pcs.push(_cmEsc(r.when2||'13차월') + ' <b style="color:var(--gold2)">' + _cmPct(r.pct2) + '</b>');
+    out.push(pcs.join(' · '));
     if(r.pay && r.pay.length) sub.push(r.pay.join('·') + '년납');
     if(r.payMin) sub.push(r.payMin + '년납↑');
     if(r.payMax) sub.push(r.payMax + '년납 이하');
@@ -29709,6 +29712,7 @@ function _reRender(){
     if(r.type === 'per'){
       h += '<div class="re-row"><span class="re-lb">건당</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.amt) + '" oninput="_reF(' + i + ',\'amt\',_reWon(this.value))" class="re-in re-num"><span style="font-size:11px;color:var(--text2)">만원 · 지급</span>' + _reInp(i,'when',r.when,'예: 15차월') + '</div>';
     }
+    if(r.type !== 'gift') h += '<div class="re-row"><span class="re-lb">택1 그룹</span>' + _reInp(i,'group',r.group||'','둘 중 큰 것만 받는 시상끼리 같은 이름 · 보통 비움') + '</div>';
     h += '<div class="re-row"><span class="re-lb">비고</span>' + _reInp(i,'note',r.note,'') + '</div>';
     h += '</div>';
   }
@@ -29724,6 +29728,19 @@ function _reRender(){
   var wrap = box.parentNode;
   var lnk = wrap ? wrap.querySelector('.re-reread') : null;
   if(lnk) lnk.style.display = (_re.rules.length || _re.failed) ? '' : 'none';
+  _reSyncLink();
+}
+// the re-read link shows the state of the current editor; a read that outlived its modal must not leave "읽는 중" behind
+function _reLinkState(el, busy){
+  if(!el) return;
+  el.textContent = busy ? '🤖 읽는 중…' : '🔄 다시 읽기';
+  el.style.opacity = busy ? '.55' : '';
+  el.style.pointerEvents = busy ? 'none' : '';
+}
+function _reSyncLink(){
+  var box = document.getElementById(_re.box);
+  var wrap = box ? box.parentNode : null;
+  _reLinkState(wrap ? wrap.querySelector('.re-reread') : null, !!_re.reading);
 }
 // downscale a dataURL image for the AI call (max 1600px, jpeg)
 function _cmShrink(dataUrl, cb){
@@ -29760,8 +29777,6 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh){
   if(!currentUser) return;
   if(_re.reading) return;
   var gen = _reGen;
-  var label = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = '🤖 읽는 중…'; }
   // one request per image: each call stays short and progress is visible
   var jobs = [];
   _re.title = _re.title || '';
@@ -29783,7 +29798,6 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh){
   }, 1000);
   function finish(){
     clearInterval(tick);
-    if(btn){ btn.disabled = false; btn.textContent = label; }
     if(gen !== _reGen) return;
     _re.reading = false; _re.progress = null;
     // keep the 장표 order stable
@@ -29799,7 +29813,7 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh){
     var job = jobs[j];
     function post(imgs){
       _reReadAIPost(imgs, job.img ? '' : campaignId, (job.img ? undefined : job.idx), !!fresh, function(ok, res){
-        if(gen !== _reGen) return;
+        if(gen !== _reGen){ clearInterval(tick); _reLinkState(btn, false); _reSyncLink(); return; }
         if(ok){ var rules = (res && res.rules) || []; if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !_re.title) _re.title = res.title; if(res && res.cached) cached++; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
         else { failed++; if(!firstErr) firstErr = (res && res.msg) || ''; try { console.warn('[시책 읽기] 장표 ' + (j+1) + ' 실패: ' + ((res && res.msg) || '')); } catch(eW) {} }
         doneCnt++;
