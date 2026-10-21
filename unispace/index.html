@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 159;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 160;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29412,6 +29412,26 @@ function _cmRuleInRange(rule, dateStr){
   if(rule.to && dateStr > rule.to) return false;
   return true;
 }
+// keyword inside a normalized product name. The rate table writes names like "하나로H종신보험" while
+// 장표 say "하나로종신": up to 3 non-Hangul characters (letters, digits, _ / -) may sit between keyword characters.
+function _cmKwHit(np, kw){
+  if(!kw) return 0;
+  if(np.indexOf(kw) >= 0) return kw.length * 2;
+  var starts = [], i;
+  for(i=0;i<np.length;i++){ if(np.charAt(i) === kw.charAt(0)) starts.push(i); }
+  for(var s0=0;s0<starts.length;s0++){
+    var pi = starts[s0] + 1, ki = 1, skips = 0, ok = true;
+    while(ki < kw.length){
+      if(pi >= np.length){ ok = false; break; }
+      var ch = np.charAt(pi);
+      if(ch === kw.charAt(ki)){ ki++; pi++; continue; }
+      if(/[a-z0-9_\/\-]/.test(ch) && skips < 3){ skips++; pi++; continue; }
+      ok = false; break;
+    }
+    if(ok) return kw.length;
+  }
+  return 0;
+}
 // scope test shared by all rule types: cats / keywords / exclude / pay
 function _cmScopeOk(d, p, needProd){
   d = d || {};
@@ -29420,7 +29440,7 @@ function _cmScopeOk(d, p, needProd){
   if(d.keywords && d.keywords.length){
     if(!np) return false;
     var hit = false;
-    for(i=0;i<d.keywords.length;i++){ var kw = _cmNorm(d.keywords[i]); if(kw && np.indexOf(kw) >= 0){ hit = true; break; } }
+    for(i=0;i<d.keywords.length;i++){ var kw = _cmNorm(d.keywords[i]); if(kw && _cmKwHit(np, kw)){ hit = true; break; } }
     if(!hit) return false;
   } else if(needProd && !np){ return false; }
   if(d.exclude && d.exclude.length && np){
@@ -29447,6 +29467,51 @@ function _cmScopeOk(d, p, needProd){
   if(d.amtMax && amt > d.amtMax) return false;
   return true;
 }
+// why a rule does not fit a product row: the first failing check, in words (empty = fits)
+function _cmScopeWhy(d, p){
+  d = d || {};
+  var np = _cmNorm(p.prod), i;
+  if(d.cats && d.cats.length && d.cats.indexOf(p.cat||'') < 0) return '분류 (규칙 ' + d.cats.join('·') + ' / 입력 ' + (p.cat||'없음') + ')';
+  if(d.keywords && d.keywords.length){
+    var hit = false;
+    for(i=0;i<d.keywords.length;i++){ var kw = _cmNorm(d.keywords[i]); if(kw && _cmKwHit(np, kw)){ hit = true; break; } }
+    if(!hit) return '상품 키워드 (' + d.keywords.join(', ') + ')';
+  }
+  if(d.exclude && d.exclude.length && np){ for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && np.indexOf(ex) >= 0) return '제외어 "' + d.exclude[i] + '" 포함'; } }
+  if(d.must && d.must.length){ for(i=0;i<d.must.length;i++){ var mu = _cmNorm(d.must[i]); if(mu && np.indexOf(mu) < 0) return '"' + d.must[i] + '" 없음'; } }
+  var pmin = parseInt(d.payMin,10) || 0, pmax = parseInt(d.payMax,10) || 0;
+  if((d.pay && d.pay.length) || pmin || pmax){
+    var yrs = _cmPayYears(p.prod);
+    if(!yrs) return '상품명에 납기(년) 없음';
+    if(d.pay && d.pay.length){ var ok = false; for(i=0;i<d.pay.length;i++){ var y = parseInt(d.pay[i],10); if(y >= yrs.min && y <= yrs.max){ ok = true; break; } } if(!ok) return '납기 (규칙 ' + d.pay.join('·') + '년 / 상품 ' + yrs.min + '년)'; }
+    if(pmin && yrs.max < pmin) return '납기 ' + pmin + '년 이상 필요';
+    if(pmax && yrs.min > pmax) return '납기 ' + pmax + '년 이하 필요';
+  }
+  var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
+  if(d.amtMin && amt < d.amtMin) return '월초 ' + _cmMan(d.amtMin) + ' 이상 필요';
+  if(d.amtMax && amt > d.amtMax) return '월초 ' + _cmMan(d.amtMax) + ' 이하 필요';
+  return '';
+}
+function _cmNoRuleWhy(p, dateStr){
+  var all = _cmRulesOf(p.co);
+  if(!all.length) return _cmEsc(p.co) + ' 시책률이 없습니다 (시책 관리 → 💰 시책률 저장 여부 확인)';
+  var rates = [], inRange = [];
+  for(var i=0;i<all.length;i++){ if(all[i].type !== 'rate') continue; rates.push(all[i]); if(_cmRuleInRange(all[i], dateStr)) inRange.push(all[i]); }
+  if(!rates.length) return _cmEsc(p.co) + ' 건별 % 규칙이 없습니다 (구간·조건형만 ' + all.length + '개)';
+  if(!inRange.length) return '건별 % 규칙 ' + rates.length + '개가 모두 기간 밖 (예: ' + _cmEsc((rates[0].from||'') + '~' + (rates[0].to||'')) + ')';
+  var best = null, bestWhy = '';
+  for(var k=0;k<inRange.length;k++){
+    var d = inRange[k].data || {};
+    if(!(parseFloat(d.pct1)||0) && !(parseFloat(d.pct2)||0)) continue;
+    var why = _cmScopeWhy(d, p);
+    if(!why) return '';
+    // the rule whose keywords matched is the closest one
+    var kwHit = !(d.keywords && d.keywords.length) || why.indexOf('상품 키워드') < 0;
+    if(!best || (kwHit && !best.kwHit)){ best = { r:inRange[k], kwHit:kwHit }; bestWhy = why; }
+  }
+  if(!best) return '건별 % 규칙에 %가 없음';
+  return '가장 가까운 규칙 "' + _cmEsc(best.r.title || (best.r.data||{}).label || '') + '" 불일치: ' + _cmEsc(bestWhy) + ' · 규칙 ' + inRange.length + '개 검사';
+}
 // rate rules that fit one product row (for the suggestion list / auto pick)
 function _cmRateRulesFor(p, dateStr){
   var out = [], list = _cmRulesOf(p.co);
@@ -29458,6 +29523,19 @@ function _cmRateRulesFor(p, dateStr){
     if(!(parseFloat(rd.pct1)||0) && !(parseFloat(rd.pct2)||0)) continue;
     if(!_cmScopeOk(rd, p, true)) continue;
     out.push(r);
+  }
+  // most specific first: longest keyword hit, then the rule with more conditions (납기·포함·제외·월초)
+  var np = _cmNorm(p.prod);
+  function score(r){
+    var d = r.data || {}, best = 0, i;
+    for(i=0;i<(d.keywords||[]).length;i++){ var h = _cmKwHit(np, _cmNorm(d.keywords[i])); if(h > best) best = h; }
+    var conds = ((d.pay&&d.pay.length)?1:0) + (d.payMin?1:0) + (d.payMax?1:0) + ((d.must&&d.must.length)?1:0) + ((d.exclude&&d.exclude.length)?1:0) + (d.amtMin?1:0) + (d.amtMax?1:0) + ((d.cats&&d.cats.length)?1:0);
+    return best * 10 + conds;
+  }
+  if(out.length > 1){
+    var scored = out.map(function(r, idx){ return { r:r, s:score(r), i:idx }; });
+    scored.sort(function(a,b){ return (b.s - a.s) || (a.i - b.i); });
+    out = scored.map(function(x){ return x.r; });
   }
   return out;
 }
@@ -30044,6 +30122,7 @@ function _cmProdItem(rec, p){
     }
   }
   if(p.prod){
+    if(p.rule === 'none') it.ruleOff = true;
     var rule = _cmPickRule(p, rec.date);
     if(rule){
       var d = rule.data || {};
@@ -30504,6 +30583,7 @@ function _commRender(){
       }
       h += '</table>';
       if(sc) h += '<div class="cm-mini" style="margin-top:4px">🎁 ' + _cmEsc(sc.label) + '</div>';
+      else { var why0 = (it.rule === null && it.ruleOff) ? '시책 적용 안 함(업적 입력에서 선택)' : _cmNoRuleWhy({ co:it.co, cat:it.cat, prod:it.prod, amount:it.amount }, it.date); if(why0) h += '<div class="cm-mini" style="margin-top:4px;color:#854F0B">시책 미적용 · ' + why0 + '</div>'; }
       if(!it.gross.nl && _cmNorm(it.co).indexOf('한화생명') >= 0) h += '<div class="cm-mini" style="margin-top:3px">2차년은 보너스 포함 · 변동 가능</div>';
     } else if(it.noRate){
       h += '<div class="cm-warn">이 상품은 아직 계산할 수 없습니다</div>';
