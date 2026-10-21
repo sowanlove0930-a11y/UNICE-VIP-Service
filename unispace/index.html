@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 152;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 154;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29545,7 +29545,9 @@ function _perfRulePick(i, v){
 
 // ── 시책률 편집기 (등록 모달 / 시책률 모달 공용) ─────────
 var _re = { rules:[], box:'', insurer:'', kind:'', ym:'', campaignId:'', apply:true, title:'' };
+var _reGen = 0;
 function _reReset(box, insurer, kind, ym, campaignId){
+  _reGen++;
   _re = { rules:[], box:box, insurer:insurer||'', kind:kind||'', ym:ym||_cmYmOf(new Date()), campaignId:campaignId||'', apply:true, title:'', reading:false, showAdd:false, failed:false };
 }
 function _reBlank(type){
@@ -29634,6 +29636,7 @@ function _reSummary(r){
   if(r.type !== 'cond' && (r.from || r.to)) sub.push(_reMd(r.from) + '~' + _reMd(r.to));
   if(r.exclude && r.exclude.length) sub.push('제외 ' + r.exclude.join('·'));
   if(r.cats && r.cats.length) sub.push(r.cats.join('·'));
+  if(r.group) sub.push('택1 (' + r.group + ' 중 큰 것)');
   if(r.note) sub.push(r.note);
   return out.join('<br>') + (sub.length ? '<div class="cm-mini" style="margin-top:2px">' + _cmEsc(sub.join(' · ')) + '</div>' : '');
 }
@@ -29642,9 +29645,9 @@ function _reRender(){
   if(!box) return;
   var h = '';
   if(!_re.rules.length){
-    h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">' + (_re.reading ? '🤖 장표를 읽는 중입니다… ' + (_re.progress ? '(' + (_re.progress.done+1) + '/' + _re.progress.total + '장, 장당 10~40초)' : '') : (_re.failed ? '읽지 못했습니다 · 🔄 다시 읽기 또는 아래에서 직접 추가' : '장표 이미지를 올리면 자동으로 읽어서 채워집니다')) + '</div>';
+    h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">' + (_re.reading ? _reProgressHtml() : (_re.failed ? '읽지 못했습니다 · 🔄 다시 읽기 또는 아래에서 직접 추가' : '장표 이미지를 올리면 자동으로 읽어서 채워집니다')) + '</div>';
   }
-  if(_re.rules.length && _re.reading && _re.progress) h += '<div style="font-size:11px;color:var(--text3);padding:2px 2px 6px">🤖 다음 장표 읽는 중… (' + Math.min(_re.progress.done+1, _re.progress.total) + '/' + _re.progress.total + '장)</div>';
+  if(_re.rules.length && _re.reading && _re.progress) h += '<div style="font-size:11px;color:var(--text3);padding:2px 2px 6px">' + _reProgressHtml() + '</div>';
   for(var i=0;i<_re.rules.length;i++){
     var r = _re.rules[i], tt = _RE_TYPE[r.type] || _RE_TYPE.rate;
     if(!(_re.edit && _re.edit[i])){
@@ -29740,59 +29743,116 @@ function _cmShrink(dataUrl, cb){
     img.src = dataUrl;
   } catch(e2){ cb(dataUrl, 'image/jpeg'); }
 }
-// AI: images [{data,mime}] or campaignId
-function _reReadAI(images, campaignId, btn, imgCount){
+// progress text while reading; the seconds span is updated by a ticker without re-rendering the box
+function _reElapsedText(secs){
+  var m = Math.floor(secs / 60), sec = secs % 60;
+  var t = (m ? m + '분 ' : '') + sec + '초';
+  if(secs >= 45) t += ' · 표가 크면 2~3분 걸려요. 창을 닫아도 계속 읽고, 다시 열면 결과가 바로 나옵니다';
+  return t;
+}
+function _reProgressHtml(){
+  var p = _re.progress || { done:0, total:1, secs:0 };
+  var multi = p.total > 1 ? ' (' + p.total + '장 동시에 · ' + p.done + '장 완료)' : '';
+  return '🤖 AI가 장표를 읽는 중' + multi + ' · <span id="reElapsed">' + _reElapsedText(p.secs || 0) + '</span>';
+}
+// AI: images [{data,mime}] or campaignId. fresh=true ignores a result the server kept from an earlier read
+function _reReadAI(images, campaignId, btn, imgCount, fresh){
   if(!currentUser) return;
   if(_re.reading) return;
+  var gen = _reGen;
   var label = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = '🤖 읽는 중…'; }
-  // one request per image: each call stays short (no server timeout) and progress is visible
+  // one request per image: each call stays short and progress is visible
   var jobs = [];
+  _re.title = _re.title || '';
   var src = (images||[]).slice(0, 6);
   if(src.length){ for(var i=0;i<src.length;i++) jobs.push({ img:src[i] }); }
   else {
     var n = parseInt(imgCount, 10) || parseInt(_re.imgCount, 10) || 1;
     for(var k=0;k<n && k<6;k++) jobs.push({ idx:k });
   }
-  _re.reading = true; _re.progress = { done:0, total:jobs.length }; _reRender();
-  var got = 0, failed = 0, firstErr = '';
+  _re.reading = true; _re.progress = { done:0, total:jobs.length, secs:0 }; _reRender();
+  var got = 0, failed = 0, firstErr = '', doneCnt = 0, cached = 0, t0 = Date.now();
+  var results = [];
+  var tick = setInterval(function(){
+    if(gen !== _reGen){ clearInterval(tick); return; }
+    var secs = Math.round((Date.now() - t0) / 1000);
+    if(_re.progress) _re.progress.secs = secs;
+    var el = document.getElementById('reElapsed');
+    if(el) el.textContent = _reElapsedText(secs);
+  }, 1000);
   function finish(){
-    _re.reading = false; _re.progress = null;
+    clearInterval(tick);
     if(btn){ btn.disabled = false; btn.textContent = label; }
+    if(gen !== _reGen) return;
+    _re.reading = false; _re.progress = null;
+    // keep the 장표 order stable
+    for(var r=0;r<results.length;r++){ if(results[r] && results[r].length) _re.rules = _re.rules.concat(results[r]); }
+    var secs = Math.round((Date.now() - t0) / 1000);
     if(!got && failed){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ ' + (firstErr || '읽기 실패') + ' · 다시 읽기를 눌러주세요'); return; }
     if(!got){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
     _reRender();
-    showToast('✅ ' + got + '개 항목 읽음' + (failed ? ' · 장표 ' + failed + '장은 실패(다시 읽기)' : '') + ' · 숫자 확인 후 저장하세요');
+    showToast('✅ ' + got + '개 항목 읽음 (' + secs + '초' + (cached ? ' · 아까 읽어둔 결과' : '') + ')' + (failed ? ' · 장표 ' + failed + '장은 실패(다시 읽기)' : '') + ' · 숫자 확인 후 저장하세요');
   }
+  // all 장표 at once: each is its own server run, so the wall time is the slowest one, not the sum
   function runJob(j){
-    if(j >= jobs.length){ finish(); return; }
     var job = jobs[j];
     function post(imgs){
-      _reReadAIPost(imgs, job.img ? '' : campaignId, (job.img ? undefined : job.idx), function(ok, res){
-        if(ok){ var rules = (res && res.rules) || []; if(rules.length){ got += rules.length; _re.rules = _re.rules.concat(rules); } if(res && res.title && !_re.title) _re.title = res.title; }
-        else { failed++; if(!firstErr) firstErr = (res && res.msg) || ''; }
-        _re.progress = { done:j+1, total:jobs.length }; _reRender();
-        runJob(j+1);
+      _reReadAIPost(imgs, job.img ? '' : campaignId, (job.img ? undefined : job.idx), !!fresh, function(ok, res){
+        if(gen !== _reGen) return;
+        if(ok){ var rules = (res && res.rules) || []; if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !_re.title) _re.title = res.title; if(res && res.cached) cached++; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
+        else { failed++; if(!firstErr) firstErr = (res && res.msg) || ''; try { console.warn('[시책 읽기] 장표 ' + (j+1) + ' 실패: ' + ((res && res.msg) || '')); } catch(eW) {} }
+        doneCnt++;
+        _re.progress = { done:doneCnt, total:jobs.length, secs:Math.round((Date.now() - t0) / 1000) }; _reRender();
+        if(doneCnt >= jobs.length) finish();
       });
     }
     if(job.img) _cmShrink(job.img.data, function(d, m){ post([{ data:d, mime:m }]); });
     else post([]);
   }
-  runJob(0);
+  for(var j0=0;j0<jobs.length;j0++) runJob(j0);
 }
-function _reReadAIPost(imgs, campaignId, imageIndex, cb){
-  // give up after 150s per image so the modal never hangs on a lost connection
+// short hash of an image string: cache key for reads of not-yet-saved images
+function _cmHash(str){
+  str = String(str || '');
+  var h = 2166136261, step = Math.max(1, Math.floor(str.length / 200000));
+  for(var i=0;i<str.length;i+=step){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16) + '_' + str.length;
+}
+// The server keeps reading after the browser stops waiting and caches the result under jobKey,
+// so after the first request gives up the client polls for the finished result instead of starting over.
+var _RE_FIRST_MS = 100000, _RE_TOTAL_MS = 330000, _RE_POLL_MS = 6000;
+function _reReadAIPost(imgs, campaignId, imageIndex, fresh, cb){
+  var hasIdx = (imageIndex !== undefined && imageIndex !== null);
+  var jobKey = campaignId ? (campaignId + ':' + (hasIdx ? imageIndex : 'all')) : ('img_' + _cmHash(imgs && imgs[0] ? imgs[0].data : ''));
+  var t0 = Date.now(), finished = false;
+  function end(ok, res){ if(finished) return; finished = true; cb(ok, res); }
+  function poll(){
+    if(finished) return;
+    if(Date.now() - t0 > _RE_TOTAL_MS){ end(false, { msg:'응답 시간 초과 (AI가 5분 넘게 걸림)' }); return; }
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'readPoll', fp:currentUser.id, key:jobKey }) })
+    .then(function(r){ return r.json(); }).then(function(res){
+      if(finished) return;
+      var st = (res && res.ok) ? res.status : '';
+      if(st === 'done' && res.result){ end(!!res.result.ok, res.result); return; }
+      if(st === 'error'){ end(false, res.result || { msg:'읽기 실패' }); return; }
+      if(st === 'running'){ setTimeout(poll, _RE_POLL_MS); return; }
+      // nothing running on the server: the request never arrived, or the server run was cut off
+      end(false, { msg:(st === 'stale') ? '서버 읽기가 중단됨' : '네트워크 오류' });
+    }).catch(function(){ if(!finished) setTimeout(poll, _RE_POLL_MS); });
+  }
   var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-  var tmr = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, 150000) : null;
-  var data = { fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'' };
-  if(imageIndex !== undefined && imageIndex !== null) data.imageIndex = imageIndex;
+  var tmr = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, _RE_FIRST_MS) : null;
+  var data = { fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'', jobKey:jobKey, fresh:!!fresh };
+  if(hasIdx) data.imageIndex = imageIndex;
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
     body: JSON.stringify({ action:'campaignRead', data:data }),
     signal: ctrl ? ctrl.signal : undefined
   }).then(function(r){ if(tmr) clearTimeout(tmr); return r.json(); }).then(function(res){
-    if(!res || !res.ok){ cb(false, res); return; }
-    cb(true, res);
-  }).catch(function(err){ if(tmr) clearTimeout(tmr); cb(false, { msg:(err && err.name === 'AbortError') ? '응답 시간 초과' : '네트워크 오류' }); });
+    if(res && res.pending){ poll(); return; }
+    if(!res || !res.ok){ end(false, res); return; }
+    end(true, res);
+  }).catch(function(){ if(tmr) clearTimeout(tmr); setTimeout(poll, 1500); });
 }
 function _reSave(campaignId, replace, cb){
   var rules = [];
@@ -29832,14 +29892,14 @@ function _sichaekAutoRead(){
   if(!ov || !ov.classList.contains('open')) return;
   if(_re.rules.length) return;
   var btn = document.querySelector('#sichaekRulesWrap .re-reread');
-  sichaekReadAI(btn);
+  sichaekReadAI(btn, true);
 }
-function sichaekReadAI(btn){
+function sichaekReadAI(btn, auto){
   if(!_sichaekFiles.length){ showToast('⚠️ 먼저 시상 이미지를 선택하세요'); return; }
   var sel = document.getElementById('sichaekInsurer');
   var parts = (sel ? sel.value : '').split('|');
   _re.insurer = parts[0] || ''; _re.kind = parts[1] || '';
-  _reReadAI(_sichaekFiles, '', btn);
+  _reReadAI(_sichaekFiles, '', btn, 0, !auto);
 }
 function _sichaekRulesSubmit(campId){
   var tg = document.getElementById('sichaekRulesApply');
@@ -29879,7 +29939,7 @@ function openRulesFor(campId, insurer, kind, startWeek, imgCount){
   }, true);
 }
 function closeRules(){ document.getElementById('rulesOverlay').classList.remove('open'); }
-function rulesReadAI(btn){ _reReadAI([], _rulesCampId, btn, _rulesImgCount); }
+function rulesReadAI(btn){ _reReadAI([], _rulesCampId, btn, _rulesImgCount, true); }
 function rulesSaveClick(btn){
   var label = btn.textContent; btn.disabled = true; btn.textContent = '저장 중…';
   _reSave(_rulesCampId, true, function(ok){
@@ -30028,6 +30088,22 @@ function _cmEvalRules(recs, fpId, ym){
     }
     out.push(res);
   }
+  // rules that are alternatives of each other (same group, "둘 중 큰 것"): only the better one counts
+  var grp = {};
+  for(var gi=0;gi<out.length;gi++){ var gname = String((out[gi].rule.data||{}).group||''); if(!gname) continue; if(!grp[gname]) grp[gname] = []; grp[gname].push(out[gi]); }
+  var drop = [];
+  for(var gk in grp){
+    if(!grp.hasOwnProperty(gk) || grp[gk].length < 2) continue;
+    var best = null;
+    for(var b=0;b<grp[gk].length;b++){
+      var cand = grp[gk][b];
+      if(!best){ best = cand; continue; }
+      if(cand.amt > best.amt) best = cand;
+      else if(cand.amt === best.amt && !best.amt && cand.need > 0 && (best.need <= 0 || cand.need < best.need)) best = cand;
+    }
+    for(var b2=0;b2<grp[gk].length;b2++){ if(grp[gk][b2] !== best) drop.push(grp[gk][b2]); }
+  }
+  if(drop.length) out = out.filter(function(x){ return drop.indexOf(x) < 0; });
   return out;
 }
 function _cmBuild(fpId, ym){
