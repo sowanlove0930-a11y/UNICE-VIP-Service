@@ -9670,7 +9670,7 @@ function openPerfEdit(id){
   // 상품 채우기
   if(rec.products && rec.products.length){
     _perfProducts = rec.products.map(function(p){
-      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||''), lump:_perfIsLump(p), prod:(p.prod||''), pk:(p.pk||''), rule:(p.rule||'') };
+      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||''), lump:_perfIsLump(p), prod:(p.prod||''), pk:(p.pk||''), rule:(p.rule||''), core:(p.core||'') };
     });
   } else {
     _perfProducts = [{co:'', cat:'', amount:'', lump:false}];
@@ -9846,6 +9846,8 @@ function _perfSyncProds(){
     if(cu && cu.style.display!=='none' && cu.value.trim()) _perfProducts[i].co=cu.value.trim();
     var lk=document.getElementById('perfLump'+i);
     if(lk) _perfProducts[i].lump=!!lk.checked;
+    var ce=document.getElementById('perfCore'+i);
+    if(ce){ var cn=parseInt((ce.value||'').replace(/[^0-9]/g,''),10); _perfProducts[i].core=(!isNaN(cn)&&cn>0)?String(cn*10000):''; }
   }
 }
 function renderPerfProds(){
@@ -9956,7 +9958,7 @@ function confirmPerfInput() {
     if(!amt){ showToast('⚠️ 상품 '+(i+1)+'의 금액을 입력해 주세요'); return; }
     var prod={co:co, cat:p.cat, amount:amt};
     if(_perfIsLump(p)) prod.lump=true;
-    if(p.prod){ prod.prod=p.prod; if(p.pk) prod.pk=p.pk; if(p.rule) prod.rule=p.rule; }
+    if(p.prod){ prod.prod=p.prod; if(p.pk) prod.pk=p.pk; if(p.rule) prod.rule=p.rule; if(p.core) prod.core=p.core; }
     products.push(prod);
   }
   if(!products.length){ showToast('⚠️ 상품 내역을 입력해 주세요'); return; }
@@ -26483,7 +26485,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 161;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 163;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29526,15 +29528,23 @@ function _cmIsPartRule(r){
   if(d.base) return true;
   return /핵심담보|보장p/i.test(String(r.title || d.label || '') + ' ' + String(d.note || ''));
 }
-// part-premium rate rules that fit a product row
+// part-premium rate rules (핵심담보 N만↑ 건당 X%) that fit a product row.
+// Each entry: { r, min, core, ok, need } — ok when the typed 핵심담보 premium meets the rule's minimum,
+// need=true when no 핵심담보 premium has been typed for this contract yet.
+function _cmPartMin(d){ return _numWonC(d.coreMin) || _numWonC(d.amtMin) || 0; }
+function _numWonC(v){ var n = parseInt(String(v === undefined || v === null ? '' : v).replace(/[^0-9]/g,''),10); return isNaN(n) ? 0 : n; }
 function _cmPartRulesFor(p, dateStr){
   var out = [], list = _cmRulesOf(p.co);
+  var core = _numWonC(p.core);
   for(var i=0;i<list.length;i++){
     var r = list[i];
     if(r.type !== 'rate' || !_cmIsPartRule(r)) continue;
     if(!_cmRuleInRange(r, dateStr)) continue;
-    if(!_cmScopeOk(r.data || {}, p, true)) continue;
-    out.push(r);
+    var d = r.data || {}, ds = {};
+    for(var k in d){ if(d.hasOwnProperty(k) && k !== 'amtMin' && k !== 'amtMax' && k !== 'coreMin') ds[k] = d[k]; }
+    if(!_cmScopeOk(ds, p, true)) continue;
+    var mn = _cmPartMin(d);
+    out.push({ r:r, min:mn, core:core, need:(!core && mn > 0), ok:(mn > 0 ? core >= mn : true) });
   }
   return out;
 }
@@ -29612,6 +29622,14 @@ function _perfProdBlock(i, p){
       }
       h += '</div>';
     }
+    var pcs = _cmPartRulesFor(p, dateStr);
+    if(pcs.length){
+      var pc0 = pcs[0], pcd = pc0.r.data || {};
+      var coreMan = _numWonC(p.core) ? String(Math.round(_numWonC(p.core) / 10000)) : '';
+      h += '<div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px"><span style="font-weight:700;color:var(--text2);white-space:nowrap">핵심담보 보험료</span>'
+         + '<input type="text" inputmode="numeric" id="perfCore' + i + '" value="' + _cmEsc(coreMan) + '" placeholder="만원" oninput="_perfCoreSet(' + i + ',this.value)" class="perf-input" style="width:64px;font-size:12px;padding:5px 8px">'
+         + '<span style="color:var(--text3)">' + _cmEsc(pc0.r.title || pcd.label || '') + (pc0.min ? ' · ' + _cmMan(pc0.min) + '↑이면 ' : ' · ') + (pcd.pct2 ? _cmEsc(pcd.when2||'13차월') + ' ' + _cmPct(pcd.pct2) : (pcd.pct1 ? '익월 ' + _cmPct(pcd.pct1) : '')) + ' (설계화면 초록색 담보 합계)</span></div>';
+    }
   } else {
     var ins = _cmRateInsurer(p.co);
     var ph = !_rates ? '잠시만요…' : (!p.co ? '보험사 선택 후 상품명 검색' : (ins ? '🔍 상품명 검색' : '검색할 수 없는 보험사'));
@@ -29669,6 +29687,12 @@ function _perfRulePick(i, v){
   _perfSyncProds();
   if(_perfProducts[i]) _perfProducts[i].rule = v || '';
   renderPerfProds();
+}
+// 핵심담보 premium typed in 만원 → kept in 원 on the product row (no re-render: the field keeps focus)
+function _perfCoreSet(i, v){
+  if(!_perfProducts[i]) return;
+  var n = parseInt(String(v||'').replace(/[^0-9]/g,''),10);
+  _perfProducts[i].core = (!isNaN(n) && n > 0) ? String(n * 10000) : '';
 }
 
 // ── 시책률 편집기 (등록 모달 / 시책률 모달 공용) ─────────
@@ -30157,10 +30181,25 @@ function _cmProdItem(rec, p){
       it.sc = { m1:s1, y2:s2, pct1:parseFloat(d.pct1)||0, pct2:parseFloat(d.pct2)||0, when2:d.when2||'13차월', label:_cmRuleLabel(rule) };
       it.rule = rule;
     }
+    // 핵심담보-type rules stack on top of the product's % when their condition is met
     it.parts = _cmPartRulesFor(p, rec.date);
+    for(var pi=0;pi<it.parts.length;pi++){
+      var pt = it.parts[pi];
+      if(!pt.ok) continue;
+      var pd = pt.r.data || {};
+      var base = (pd.base === 'part' && pt.core) ? pt.core : amt;
+      var a1 = base*(parseFloat(pd.pct1)||0)/100*COMM_SC_RATE, a2 = base*(parseFloat(pd.pct2)||0)/100*COMM_SC_RATE;
+      if(!it.sc) it.sc = { m1:0, y2:0, pct1:0, pct2:0, when2:pd.when2||'13차월', label:'' };
+      it.sc.m1 += a1; it.sc.y2 += a2;
+      it.sc.pct1Extra = (it.sc.pct1Extra||0) + (parseFloat(pd.pct1)||0);
+      it.sc.pct2Extra = (it.sc.pct2Extra||0) + (parseFloat(pd.pct2)||0);
+      it.sc.label = (it.sc.label ? it.sc.label + ' + ' : '') + (pt.r.title || pd.label || '핵심담보');
+      pt.applied = true;
+    }
   }
   return it;
 }
+function _cmPctSum(p, extra){ if(!(parseFloat(p)||0)) return _cmPct(extra||0); return _cmPct(p) + (extra ? '+' + _cmPct(extra) : ''); }
 function _cmWhenBucket(when){
   var w = String(when||'');
   if(w.indexOf('익월') >= 0) return 'm1';
@@ -30256,7 +30295,12 @@ function _cmEvalRules(recs, fpId, ym){
       } else {
         var past = [], cur = [], fut = [], ui;
         for(ui=0;ui<unmet.length;ui++){ var uu = unmet[ui]; if(uu.to < today) past.push(uu); else if(uu.from > today) fut.push(uu); else cur.push(uu); }
-        if(past.length){ res.closed = true; }
+        if(past.length){
+          res.closed = true;
+          // the current month is fine but an earlier window is empty: worth telling (records without 상품명 do not count here)
+          var curMet = true; for(c=0;c<conds.length;c++){ var cfx = conds[c].from || mFrom, ctx = conds[c].to || mTo; if(!(ctx < today) && !(cfx > today) && sums[c] < (conds[c].min||0)) curMet = false; }
+          if(curMet && !unmet.some(function(u){ return !(u.to < today); })) res.missedPast = past;
+        }
         else if(cur.length === 1){
           // one open window short: what it pays once every window is met at least at its base amount
           var u = cur[0], amtIf = 0;
@@ -30301,7 +30345,7 @@ function _cmEvalRules(recs, fpId, ym){
   }
   // rules that are alternatives of each other (same group, "둘 중 큰 것"): only the better one counts
   var grp = {};
-  for(var gi=0;gi<out.length;gi++){ var gname = String((out[gi].rule.data||{}).group||''); if(!gname) continue; if(!grp[gname]) grp[gname] = []; grp[gname].push(out[gi]); }
+  for(var gi=0;gi<out.length;gi++){ var gname = String((out[gi].rule.data||{}).group||''); if(!gname) continue; gname = out[gi].type + ':' + gname; if(!grp[gname]) grp[gname] = []; grp[gname].push(out[gi]); }
   var drop = [];
   for(var gk in grp){
     if(!grp.hasOwnProperty(gk) || grp[gk].length < 2) continue;
@@ -30558,7 +30602,7 @@ function _commRender(){
   for(var e=0;e<B.evals.length;e++){
     var ev = B.evals[e];
     if(!ev.active) continue;
-    if(ev.closed && !ev.amt && !ev.done) continue;
+    if(ev.closed && !ev.amt && !ev.done && !ev.missedPast) continue;
     if(ev.gift){
       var gTag = ev.min ? (ev.done ? '<span class="cm-tag" style="background:rgba(31,146,104,.12);color:#1F9268">달성 ✅</span>' : '<span class="cm-tag cm-or">' + _cmMan(ev.need) + ' 더</span>') : (ev.rank ? '<span class="cm-tag cm-or">상위 ' + ev.rank + '명</span>' : '');
       var gCond = _cmEsc(ev.period||'') + (ev.min ? ' · 보장월초 ' + _cmMan(ev.min) + '↑' : '') + (ev.rank ? ' · 보장월초 합산 상위 ' + ev.rank + '명' : '') + ((ev.rule.data||{}).note ? ' · ' + _cmEsc((ev.rule.data||{}).note) : '');
@@ -30568,29 +30612,38 @@ function _commRender(){
            + '<div class="cm-row"><span class="cm-mini">' + gCond + '</span><span class="cm-mini" style="white-space:nowrap">' + (ev.rank ? '내 합산 ' : '지금 ') + '<b style="color:var(--text)">' + _cmMan(ev.sum) + '</b></span></div></div>';
       continue;
     }
-    if(!ev.amt && !ev.next && !ev.onTrack) continue;
+    if(!ev.amt && !ev.next && !ev.onTrack && !ev.missedPast) continue;
     var right = '';
+    if(ev.missedPast){
+      var mp = ev.missedPast.map(function(u){ return _cmMd(u.from) + '~' + _cmMd(u.to) + ' ' + _cmMan(u.sum) + '/' + _cmMan(u.min); }).join(', ');
+      nud += '<div class="cm-card" style="opacity:.75"><div class="cm-row"><b style="font-size:12px">' + _cmEsc(ev.insurer) + ' ' + _cmEsc(ev.label) + '</b><span class="cm-tag">' + _cmEsc(ev.period||'') + '</span></div>'
+           + '<div class="cm-mini" style="margin-top:4px">지난 기간 실적 부족 (' + _cmEsc(mp) + ') → 미해당 · 그 기간 건이 있는데 빠졌다면 업적에 상품명까지 입력하면 집계됩니다</div></div>';
+      continue;
+    }
     if(ev.next && ev.need > 0 && ev.nextAmt > (ev.amt||0)) right = _cmMan(ev.need) + ' 더 → ' + _cmMan(ev.nextAmt);
     else if(ev.next && ev.need > 0) right = _cmMan(ev.need) + ' 더 → +' + _cmMan(ev.nextAmt);
     else if(ev.onTrack && ev.nextAmt) right = '유지 시 ' + _cmMan(ev.nextAmt);
     if(ev.futureN) right += ' <span style="font-weight:400;color:var(--text3)">(' + ev.futureN + '개월 더 유지)</span>';
     var left = '';
-    if(ev.type === 'per') left = ev.n + '건 → 확보 <b>' + _cmMan(ev.amt) + '</b>';
+    var bkLb = ev.amt ? ' <span style="color:var(--text3)">(' + ({m1:'익월', y2:'2차년', y3:'3차년'}[ev.bucket] || '2차년') + ' 합계에 포함)</span>' : '';
+    if(ev.type === 'per') left = ev.n + '건 → 확보 <b>' + _cmMan(ev.amt) + '</b>' + bkLb;
     else if(ev.type === 'cond' && ev.sums){
       var parts = [], todayS = _cmTodayStr();
       for(var c=0;c<ev.sums.length;c++){
         if(String(ev.conds[c].from||'') > todayS) continue;
         parts.push((ev.conds.length > 1 ? _cmMd(ev.conds[c].from) + '~ ' : '') + _cmMan(ev.sums[c]) + '/' + _cmMan(ev.conds[c].min||0));
       }
-      left = parts.join(' · ') + (ev.amt ? ' → 확보 <b>' + _cmMan(ev.amt) + '</b>' : '');
-    } else left = '지금 <b>' + _cmMan(ev.sum) + '</b>' + (ev.amt ? ' → 확보 <b style="color:#6D4FB8">' + _cmMan(ev.amt) + '</b>' : '');
+      left = parts.join(' · ') + (ev.amt ? ' → 확보 <b>' + _cmMan(ev.amt) + '</b>' + bkLb : '');
+    } else left = '지금 <b>' + _cmMan(ev.sum) + '</b>' + (ev.amt ? ' → 확보 <b style="color:#6D4FB8">' + _cmMan(ev.amt) + '</b>' + bkLb : '');
     nud += '<div class="cm-card cm-new"><div class="cm-row"><b style="font-size:12px">' + _cmEsc(ev.insurer) + ' ' + _cmEsc(ev.label) + '</b><span class="cm-tag">' + _cmEsc(ev.period||'') + (ev.when ? ' · ' + _cmEsc(ev.when) : '') + '</span></div>'
          + '<div class="cm-prog"><i style="width:' + (ev.pct||0) + '%"></i></div>'
          + '<div class="cm-row"><span class="cm-mini" style="color:var(--text2)">' + left + '</span><span style="font-size:12px;font-weight:800;color:#6D4FB8;white-space:nowrap">' + right + '</span></div></div>';
   }
-  if(nud) h += '<div class="cm-lbl">🎯 시책 한 걸음 더</div>' + nud;
+  if(nud) h += '<div class="cm-lbl">🎯 시책 한 걸음 더 <span style="font-weight:400;color:var(--text3)">· 구간·조건 시상은 FP 합산 기준</span></div>' + nud;
   // contracts
-  h += '<div class="cm-lbl">계약별 내역</div>';
+  var fpLv = [];
+  for(var ef=0;ef<B.evals.length;ef++){ var evf = B.evals[ef]; if(evf.amt && !evf.gift) fpLv.push(_cmEsc(evf.label) + ' ' + _cmMan(evf.amt) + '(' + ({m1:'익월', y2:'2차년', y3:'3차년'}[evf.bucket] || '2차년') + ')'); }
+  h += '<div class="cm-lbl">계약별 내역' + (fpLv.length ? ' <span style="font-weight:400;color:var(--text3)">· 줄에는 건별 % 시책만 · 합산 시상 ' + fpLv.join(', ') + '은 위 카드에 포함</span>' : '') + '</div>';
   if(!B.items.length) h += '<div class="cm-card" style="text-align:center;color:var(--text3);font-size:12px;padding:18px">이 달 입력된 계약이 없습니다</div>';
   for(var k=0;k<B.items.length;k++){
     var it = B.items[k];
@@ -30599,20 +30652,26 @@ function _commRender(){
     if(it.calc){
       var f = it.fee, sc = it.sc;
       h += '<table class="cm-t"><tr><th></th><th>수수료</th><th>시책</th><th>합계</th></tr>';
-      h += _cmRowTxt('익월', _cmMan(f.m1), sc && sc.m1 ? _cmMan(sc.m1) : '', sc && sc.m1 ? '(' + _cmPct(sc.pct1) + ')' : '', _cmMan(f.m1 + (sc ? sc.m1 : 0)));
+      h += _cmRowTxt('익월', _cmMan(f.m1), sc && sc.m1 ? _cmMan(sc.m1) : '', sc && sc.m1 ? '(' + _cmPctSum(sc.pct1, sc.pct1Extra) + ')' : '', _cmMan(f.m1 + (sc ? sc.m1 : 0)));
       if(it.gross.nl){
         if(f.y1) h += _cmRowTxt('7~12회', _cmMan(f.y1), '', '', _cmMan(f.y1));
-        h += _cmRowTxt('13·14회', _cmMan(f.p13), sc && sc.y2 ? _cmMan(sc.y2) : '', sc && sc.y2 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ')' : '', _cmMan(f.p13 + (sc ? sc.y2 : 0)));
+        h += _cmRowTxt('13·14회', _cmMan(f.p13), sc && sc.y2 ? _cmMan(sc.y2) : '', sc && sc.y2 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPctSum(sc.pct2, sc.pct2Extra) + ')' : '', _cmMan(f.p13 + (sc ? sc.y2 : 0)));
         h += _cmRowTxt('15회', _cmMan(f.p15), '', '', _cmMan(f.p15));
       } else {
         if(f.y1) h += _cmRowTxt('2~12회', _cmMan(f.y1), '', '', _cmMan(f.y1));
-        h += _cmRowTxt('2차년', _cmMan(f.y2), sc && sc.y2 ? _cmMan(sc.y2) : '', sc && sc.y2 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ')' : '', _cmMan(f.y2 + (sc ? sc.y2 : 0)));
+        h += _cmRowTxt('2차년', _cmMan(f.y2), sc && sc.y2 ? _cmMan(sc.y2) : '', sc && sc.y2 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPctSum(sc.pct2, sc.pct2Extra) + ')' : '', _cmMan(f.y2 + (sc ? sc.y2 : 0)));
         h += _cmRowTxt((it.gross.y4 ? '3차년~' : '3차년'), _cmMan(f.y3), '', '', _cmMan(f.y3));
       }
       h += '</table>';
       if(sc){ h += '<div class="cm-mini" style="margin-top:4px">🎁 ' + _cmEsc(sc.label) + '</div>'; }
       else { var why0 = (it.rule === null && it.ruleOff) ? '시책 적용 안 함(업적 입력에서 선택)' : _cmNoRuleWhy({ co:it.co, cat:it.cat, prod:it.prod, amount:it.amount }, it.date); if(why0) h += '<div class="cm-mini" style="margin-top:4px;color:#854F0B">시책 미적용 · ' + why0 + '</div>'; }
-      for(var pr=0;pr<(it.parts||[]).length;pr++){ var pd = it.parts[pr].data || {}; h += '<div class="cm-mini" style="margin-top:3px">＋ ' + _cmEsc(it.parts[pr].title || pd.label || '') + ' ' + (pd.pct1 ? '익월 ' + _cmPct(pd.pct1) : '') + (pd.pct2 ? ' ' + _cmEsc(pd.when2||'13차월') + ' ' + _cmPct(pd.pct2) : '') + ' · ' + _cmEsc(pd.base || '해당 담보 보험료') + ' 기준이라 합산 제외</div>'; }
+      for(var pr=0;pr<(it.parts||[]).length;pr++){
+        var ptx = it.parts[pr], pd = ptx.r.data || {};
+        var pctTxt = (pd.pct1 ? '익월 ' + _cmPct(pd.pct1) : '') + (pd.pct2 ? ' ' + _cmEsc(pd.when2||'13차월') + ' ' + _cmPct(pd.pct2) : '');
+        if(ptx.applied) h += '<div class="cm-mini" style="margin-top:3px;color:#6D4FB8">＋ ' + _cmEsc(ptx.r.title || pd.label || '') + ' ' + pctTxt + ' 적용 (핵심담보 ' + _cmMan(ptx.core) + ')</div>';
+        else if(ptx.need) h += '<div class="cm-mini" style="margin-top:3px;color:#854F0B">＋ ' + _cmEsc(ptx.r.title || pd.label || '') + ' ' + pctTxt + ' — 핵심담보 보험료 ' + _cmMan(ptx.min) + '↑ 이면 해당 · 업적 수정에서 핵심담보 보험료를 입력하면 반영</div>';
+        else h += '<div class="cm-mini" style="margin-top:3px">＋ ' + _cmEsc(ptx.r.title || pd.label || '') + ' ' + pctTxt + ' — 핵심담보 ' + _cmMan(ptx.core) + ' < ' + _cmMan(ptx.min) + ' 이라 미해당</div>';
+      }
       if(!it.gross.nl && _cmNorm(it.co).indexOf('한화생명') >= 0) h += '<div class="cm-mini" style="margin-top:3px">2차년은 보너스 포함 · 변동 가능</div>';
     } else if(it.noRate){
       h += '<div class="cm-warn">이 상품은 아직 계산할 수 없습니다</div>';
