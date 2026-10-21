@@ -11568,14 +11568,14 @@ function _sichaekGroupCardHtml(g, canManage){
         if(c){
           mi += _miItem('＋ 장 추가', "_sichaekMenuOpen='';addSichaekImage('"+c.id+"','"+g.insurer+"')", '#1F9268');
           mi += _miItem('↺ 교체', "_sichaekMenuOpen='';openSichaekReplace('"+c.id+"','"+g.insurer+"','"+g.kind+"')", 'var(--gold2)');
-          mi += _miItem('💰 시책률', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"')", '#6D4FB8');
+          mi += _miItem('💰 시책률', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"',"+imgs.length+")", '#6D4FB8');
           mi += _miItem('종료', "_sichaekMenuOpen='';endSichaek('"+c.id+"')", '#C0392B');
         } else {
           mi += _miItem('＋ '+selLabel+' 시책 등록', "_sichaekRegPreset('"+gkEnc+"',"+sel+")", '#1F9268');
         }
       } else {
         if(c){
-          mi += _miItem('💰 시책률', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"')", '#6D4FB8');
+          mi += _miItem('💰 시책률', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"',"+imgs.length+")", '#6D4FB8');
           mi += _miItem('되돌리기', "_sichaekMenuOpen='';reactivateSichaek('"+c.id+"')", '#1F9268');
           mi += _miItem('삭제', "_sichaekMenuOpen='';deleteSichaek('"+c.id+"')", '#C0392B');
         }
@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 151;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 152;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29642,8 +29642,9 @@ function _reRender(){
   if(!box) return;
   var h = '';
   if(!_re.rules.length){
-    h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">' + (_re.reading ? '🤖 장표를 읽는 중입니다… (10~30초)' : (_re.failed ? '읽지 못했습니다 · 🔄 다시 읽기 또는 아래에서 직접 추가' : '장표 이미지를 올리면 자동으로 읽어서 채워집니다')) + '</div>';
+    h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">' + (_re.reading ? '🤖 장표를 읽는 중입니다… ' + (_re.progress ? '(' + (_re.progress.done+1) + '/' + _re.progress.total + '장, 장당 10~40초)' : '') : (_re.failed ? '읽지 못했습니다 · 🔄 다시 읽기 또는 아래에서 직접 추가' : '장표 이미지를 올리면 자동으로 읽어서 채워집니다')) + '</div>';
   }
+  if(_re.rules.length && _re.reading && _re.progress) h += '<div style="font-size:11px;color:var(--text3);padding:2px 2px 6px">🤖 다음 장표 읽는 중… (' + Math.min(_re.progress.done+1, _re.progress.total) + '/' + _re.progress.total + '장)</div>';
   for(var i=0;i<_re.rules.length;i++){
     var r = _re.rules[i], tt = _RE_TYPE[r.type] || _RE_TYPE.rate;
     if(!(_re.edit && _re.edit[i])){
@@ -29740,36 +29741,58 @@ function _cmShrink(dataUrl, cb){
   } catch(e2){ cb(dataUrl, 'image/jpeg'); }
 }
 // AI: images [{data,mime}] or campaignId
-function _reReadAI(images, campaignId, btn){
+function _reReadAI(images, campaignId, btn, imgCount){
   if(!currentUser) return;
   if(_re.reading) return;
   var label = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = '🤖 읽는 중… (10~30초)'; }
-  _re.reading = true; _reRender();
-  var src = (images||[]).slice(0,4), imgs = [], left = src.length;
-  if(!left){ _reReadAIPost(imgs, campaignId, btn, label); return; }
-  for(var i=0;i<src.length;i++){
-    (function(k){ _cmShrink(src[k].data, function(d, m){ imgs[k] = { data:d, mime:m }; left--; if(left <= 0) _reReadAIPost(imgs, campaignId, btn, label); }); })(i);
+  if(btn){ btn.disabled = true; btn.textContent = '🤖 읽는 중…'; }
+  // one request per image: each call stays short (no server timeout) and progress is visible
+  var jobs = [];
+  var src = (images||[]).slice(0, 6);
+  if(src.length){ for(var i=0;i<src.length;i++) jobs.push({ img:src[i] }); }
+  else {
+    var n = parseInt(imgCount, 10) || parseInt(_re.imgCount, 10) || 1;
+    for(var k=0;k<n && k<6;k++) jobs.push({ idx:k });
   }
+  _re.reading = true; _re.progress = { done:0, total:jobs.length }; _reRender();
+  var got = 0, failed = 0, firstErr = '';
+  function finish(){
+    _re.reading = false; _re.progress = null;
+    if(btn){ btn.disabled = false; btn.textContent = label; }
+    if(!got && failed){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ ' + (firstErr || '읽기 실패') + ' · 다시 읽기를 눌러주세요'); return; }
+    if(!got){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
+    _reRender();
+    showToast('✅ ' + got + '개 항목 읽음' + (failed ? ' · 장표 ' + failed + '장은 실패(다시 읽기)' : '') + ' · 숫자 확인 후 저장하세요');
+  }
+  function runJob(j){
+    if(j >= jobs.length){ finish(); return; }
+    var job = jobs[j];
+    function post(imgs){
+      _reReadAIPost(imgs, job.img ? '' : campaignId, (job.img ? undefined : job.idx), function(ok, res){
+        if(ok){ var rules = (res && res.rules) || []; if(rules.length){ got += rules.length; _re.rules = _re.rules.concat(rules); } if(res && res.title && !_re.title) _re.title = res.title; }
+        else { failed++; if(!firstErr) firstErr = (res && res.msg) || ''; }
+        _re.progress = { done:j+1, total:jobs.length }; _reRender();
+        runJob(j+1);
+      });
+    }
+    if(job.img) _cmShrink(job.img.data, function(d, m){ post([{ data:d, mime:m }]); });
+    else post([]);
+  }
+  runJob(0);
 }
-function _reReadAIPost(imgs, campaignId, btn, label){
-  // give up after 2 minutes so the modal never hangs on a lost connection
+function _reReadAIPost(imgs, campaignId, imageIndex, cb){
+  // give up after 150s per image so the modal never hangs on a lost connection
   var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-  var tmr = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, 120000) : null;
+  var tmr = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, 150000) : null;
+  var data = { fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'' };
+  if(imageIndex !== undefined && imageIndex !== null) data.imageIndex = imageIndex;
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action:'campaignRead', data:{ fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'' } }),
+    body: JSON.stringify({ action:'campaignRead', data:data }),
     signal: ctrl ? ctrl.signal : undefined
   }).then(function(r){ if(tmr) clearTimeout(tmr); return r.json(); }).then(function(res){
-    _re.reading = false;
-    if(btn){ btn.disabled = false; btn.textContent = label; }
-    if(!res || !res.ok){ _re.failed = true; _reRender(); showToast('⚠️ ' + ((res && res.msg) || '읽기 실패')); return; }
-    var rules = res.rules || [];
-    if(!rules.length){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
-    _re.title = res.title || '';
-    _re.rules = _re.rules.concat(rules);
-    _reRender();
-    showToast('✅ ' + rules.length + '개 항목 읽음 · 숫자 확인 후 저장하세요');
-  }).catch(function(err){ if(tmr) clearTimeout(tmr); _re.reading = false; _re.failed = true; _reRender(); if(btn){ btn.disabled = false; btn.textContent = label; } showToast((err && err.name === 'AbortError') ? '⚠️ 2분 넘게 응답이 없어 중단했습니다 · 다시 읽기를 눌러주세요' : '⚠️ 네트워크 오류 · 다시 읽기를 눌러주세요'); });
+    if(!res || !res.ok){ cb(false, res); return; }
+    cb(true, res);
+  }).catch(function(err){ if(tmr) clearTimeout(tmr); cb(false, { msg:(err && err.name === 'AbortError') ? '응답 시간 초과' : '네트워크 오류' }); });
 }
 function _reSave(campaignId, replace, cb){
   var rules = [];
@@ -29828,8 +29851,10 @@ function _sichaekRulesSubmit(campId){
 }
 // ── 기존 시책의 시책률 편집 모달 ──────────────────
 var _rulesCampId = '';
-function openRulesFor(campId, insurer, kind, startWeek){
+var _rulesImgCount = 1;
+function openRulesFor(campId, insurer, kind, startWeek, imgCount){
   _rulesCampId = campId;
+  _rulesImgCount = parseInt(imgCount, 10) || 1;
   var mon = parseInt(String(startWeek||'').replace(/[^0-9]/g,''),10);
   var now = new Date();
   var ym = (mon >= 1 && mon <= 12) ? (now.getFullYear() + '-' + (mon<10?'0':'') + mon) : _cmYmOf(now);
@@ -29849,11 +29874,12 @@ function openRulesFor(campId, insurer, kind, startWeek){
     }
     _re.rules = mine;
     _reRender();
-    if(!mine.length){ var btn = document.querySelector('#rulesOverlay .re-reread'); _reReadAI([], _rulesCampId, btn); }
+    _re.imgCount = _rulesImgCount;
+    if(!mine.length){ var btn = document.querySelector('#rulesOverlay .re-reread'); _reReadAI([], _rulesCampId, btn, _rulesImgCount); }
   }, true);
 }
 function closeRules(){ document.getElementById('rulesOverlay').classList.remove('open'); }
-function rulesReadAI(btn){ _reReadAI([], _rulesCampId, btn); }
+function rulesReadAI(btn){ _reReadAI([], _rulesCampId, btn, _rulesImgCount); }
 function rulesSaveClick(btn){
   var label = btn.textContent; btn.disabled = true; btn.textContent = '저장 중…';
   _reSave(_rulesCampId, true, function(ok){
