@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 158;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 159;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29454,7 +29454,9 @@ function _cmRateRulesFor(p, dateStr){
     var r = list[i];
     if(r.type !== 'rate') continue;
     if(!_cmRuleInRange(r, dateStr)) continue;
-    if(!_cmScopeOk(r.data, p, true)) continue;
+    var rd = r.data || {};
+    if(!(parseFloat(rd.pct1)||0) && !(parseFloat(rd.pct2)||0)) continue;
+    if(!_cmScopeOk(rd, p, true)) continue;
     out.push(r);
   }
   return out;
@@ -30586,7 +30588,10 @@ function _cmRankHtml(){
     if(brTot[bk]){ brTot[bk].t += t.total; brTot[bk].m1 += t.m1 + t.sc1; brTot[bk].y2 += t.y2 + t.sc2; }
     if(_cmBr !== 'all' && bk !== _cmBr) continue;
     if(!t.cnt){ idle++; continue; }
-    list.push({ id:f.id, name:f.name, bk:bk, t:t });
+    var scSrc = [];
+    for(var e2=0;e2<B.evals.length;e2++){ var ev2 = B.evals[e2]; if(ev2.amt) scSrc.push(_cmEsc(ev2.insurer) + ' ' + _cmEsc(ev2.label) + ' ' + _cmMan(ev2.amt)); }
+    for(var it2=0;it2<B.items.length;it2++){ var sc2 = B.items[it2].sc; if(sc2 && (sc2.m1 || sc2.y2)) scSrc.push(_cmEsc(B.items[it2].co) + ' ' + _cmEsc(sc2.label) + ' ' + _cmMan(sc2.m1 + sc2.y2)); }
+    list.push({ id:f.id, name:f.name, bk:bk, t:t, scSrc:scSrc });
     sumT += t.total; sumM1 += t.m1 + t.sc1; calc += t.calc; cnt += t.cnt; noProd += t.noProd;
   }
   list.sort(function(a,b){ return b.t.total - a.t.total; });
@@ -30623,6 +30628,7 @@ function _cmRankHtml(){
          + _cmRowTxt('2차년', _cmMan(t2.y2), t2.sc2 ? _cmMan(t2.sc2) : '', '', _cmMan(y2))
          + _cmRowTxt('3차년~', _cmMan(t2.y3), t2.sc3 ? _cmMan(t2.sc3) : '', '', _cmMan(y3))
          + '<tr><td class="cm-lb">합계</td><td></td><td></td><td class="cm-n cm-tot" style="color:var(--gold2)">' + _cmMan(t2.total) + '</td></tr></table>'
+         + (x.scSrc && x.scSrc.length ? '<div class="cm-mini" style="margin-top:6px">시책 내역: ' + x.scSrc.join(' · ') + '</div>' : '')
          + '<div class="cm-row" style="margin-top:6px"><span class="cm-mini">' + t2.cnt + '건 중 ' + t2.calc + '건 계산' + (t2.noProd ? ' · 미입력 ' + t2.noProd + '건' : '') + '</span><span onclick="_cmShowFp(\'' + _cmEsc(x.id) + '\')" style="font-size:12px;font-weight:700;color:var(--gold2);cursor:pointer">계약별 상세 ›</span></div></div>';
     }
     h += '</div>';
