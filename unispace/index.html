@@ -26483,7 +26483,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 157;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 158;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29262,10 +29262,10 @@ function _cmEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 function _ratesParse(str){ try{ var o = JSON.parse(str||''); if(o && o.rows && o.rows.length) return o; }catch(e){} return null; }
 function _ratesIndex(o){
   _cmApplyRates(o);
-  o.byIns = {}; o.insList = [];
+  o.byIns = {}; o.insList = []; o.kindOf = {};
   for(var i=0;i<o.rows.length;i++){
     var r = o.rows[i];
-    if(!o.byIns[r[1]]){ o.byIns[r[1]] = []; o.insList.push(r[1]); }
+    if(!o.byIns[r[1]]){ o.byIns[r[1]] = []; o.insList.push(r[1]); o.kindOf[r[1]] = r[0]; }
     o.byIns[r[1]].push(r);
   }
   return o;
@@ -29325,7 +29325,9 @@ function _cmRateInsurer(co){
   for(i=0;i<list.length;i++){ if(_cmNorm(list[i]) === n) return list[i]; }
   for(i=0;i<list.length;i++){ var m = _cmNorm(list[i]); if(m.indexOf(n) >= 0 || n.indexOf(m) >= 0) return list[i]; }
   var n2 = n.replace(/(생명|손해보험|손보|화재|라이프|보험)$/,'');
-  if(n2 && n2.length >= 2){ for(i=0;i<list.length;i++){ if(_cmNorm(list[i]).indexOf(n2) === 0) return list[i]; } }
+  // a prefix match must stay on the same side (한화손보 must never become 한화생명)
+  var wantKind = /손해|손보|화재|해상/.test(n) ? '손보' : (/생명|라이프/.test(n) ? '생보' : '');
+  if(n2 && n2.length >= 2){ for(i=0;i<list.length;i++){ if(_cmNorm(list[i]).indexOf(n2) === 0 && (!wantKind || !_rates.kindOf || _rates.kindOf[list[i]] === wantKind)) return list[i]; } }
   return '';
 }
 function _cmSameInsurer(a, b){
@@ -29383,8 +29385,8 @@ function _rulesSig(r){
   function arr(a){ return (a||[]).map(function(x){ return String(x); }).sort().join(','); }
   var parts = [String(r.insurer||''), t, r.from || d.from || '', r.to || d.to || ''];
   if(t === 'rate') parts.push(arr(d.keywords), arr(d.must), arr(d.exclude), arr(d.cats), arr(d.pay), d.payMin||0, d.payMax||0, d.amtMin||0, d.amtMax||0, d.pct1||0, d.pct2||0, d.when2||'');
-  else if(t === 'tier') parts.push(arr(d.keywords), arr(d.exclude), arr(d.cats), JSON.stringify(d.tiers||[]), d.when||'', arr(d.fps));
-  else if(t === 'cond') parts.push(arr(d.keywords), arr(d.exclude), JSON.stringify(d.conds||[]), JSON.stringify(d.rewards||[]), d.rewardBy||0, d.amt||0, d.when||'');
+  else if(t === 'tier') parts.push(arr(d.keywords), JSON.stringify(d.tiers||[]), arr(d.fps));
+  else if(t === 'cond') parts.push(JSON.stringify((d.conds||[]).map(function(x){ return [x.from||'', x.to||'', x.min||0]; })), JSON.stringify((d.rewards||[]).map(function(x){ return [x.min||0, x.amt||0]; })), String(d.rewardBy||0), d.amt||0);
   else if(t === 'per') parts.push(arr(d.keywords), arr(d.exclude), d.amt||0, d.when||'');
   else if(t === 'gift') parts.push(String(d.item||'').replace(/\s+/g,''), d.min||0, d.rank||0);
   return parts.join('|');
@@ -29648,6 +29650,7 @@ function _reSummary(r){
     out.push(cs.join(' · '));
     var rs = []; for(var w=0;w<(r.rewards||[]).length;w++) rs.push(_cmMan(r.rewards[w].min) + '↑ <b style="color:var(--gold2)">' + _cmMan(r.rewards[w].amt) + '</b>');
     out.push('→ ' + (rs.length ? rs.join(' · ') : ('<b style="color:var(--gold2)">' + _cmMan(r.amt) + '</b>')));
+    if(String(r.rewardBy) === 'min') sub.push('모든 기간 중 가장 낮은 금액 기준');
     if(r.when) sub.push(r.when);
   } else if(r.type === 'per'){
     out.push('1건당 <b style="color:var(--gold2)">' + _cmMan(r.amt) + '</b>');
@@ -29722,8 +29725,13 @@ function _reRender(){
       h += '<div onclick="_reCondAdd(' + i + ')" class="re-add">+ 조건 추가</div></div></div>';
       h += '<div class="re-row" style="align-items:flex-start"><span class="re-lb">시상금</span><div style="flex:1">';
       h += '<div class="re-tier"><span style="color:var(--text2)">정액</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.amt) + '" oninput="_reF(' + i + ',\'amt\',_reWon(this.value))" class="re-in re-num"><span>만원 (구간이 없을 때)</span></div>';
+      var rbMin = (String(r.rewardBy) === 'min');
+      var rbSel = '<select onchange="_reF(' + i + ',\'rewardBy\',this.value)" class="re-in" style="width:auto;font-size:11px">';
+      for(var rb=0;rb<(r.conds||[]).length;rb++) rbSel += '<option value="' + rb + '"' + (!rbMin && (parseInt(r.rewardBy,10)||0) === rb ? ' selected' : '') + '>조건 ' + (rb+1) + ' 금액</option>';
+      rbSel += '<option value="min"' + (rbMin ? ' selected' : '') + '>가장 낮은 조건 금액 (모든 기간 같은 구간↑)</option></select>';
+      h += '<div class="re-tier"><span style="color:var(--text2)">구간 기준</span>' + rbSel + '</div>';
       for(var w=0;w<(r.rewards||[]).length;w++){
-        h += '<div class="re-tier"><span style="color:var(--text2)">조건 ' + ((r.rewardBy||0)+1) + ' 금액</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.rewards[w].min) + '" oninput="_reRew(' + i + ',' + w + ',\'min\',this.value)" class="re-in re-num"><span>만↑ →</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.rewards[w].amt) + '" oninput="_reRew(' + i + ',' + w + ',\'amt\',this.value)" class="re-in re-num"><span>만원</span><span onclick="_reRewDel(' + i + ',' + w + ')" style="color:#C0392B;cursor:pointer;margin-left:4px">✕</span></div>';
+        h += '<div class="re-tier"><span style="color:var(--text2)">' + (rbMin ? '가장 낮은 금액' : '조건 ' + ((parseInt(r.rewardBy,10)||0)+1) + ' 금액') + '</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.rewards[w].min) + '" oninput="_reRew(' + i + ',' + w + ',\'min\',this.value)" class="re-in re-num"><span>만↑ →</span><input type="text" inputmode="decimal" value="' + _reWonIn(r.rewards[w].amt) + '" oninput="_reRew(' + i + ',' + w + ',\'amt\',this.value)" class="re-in re-num"><span>만원</span><span onclick="_reRewDel(' + i + ',' + w + ')" style="color:#C0392B;cursor:pointer;margin-left:4px">✕</span></div>';
       }
       h += '<div onclick="_reRewAdd(' + i + ')" class="re-add">+ 구간별 시상금 추가</div></div></div>';
       h += '<div class="re-row"><span class="re-lb">지급</span>' + _reInp(i,'when',r.when,'예: 15차월') + '</div>';
@@ -30080,10 +30088,14 @@ function _cmTierPick(tiers, sum){
   return { got:got, next:next };
 }
 // evaluate tier/cond/per rules for fp in month ym -> list of results
+function _cmTodayStr(){
+  var nowD = new Date();
+  return nowD.getFullYear() + '-' + ((nowD.getMonth()+1) < 10 ? '0' : '') + (nowD.getMonth()+1) + '-' + (nowD.getDate() < 10 ? '0' : '') + nowD.getDate();
+}
+function _cmMd(d){ return String(d||'').substr(5).replace('-','.'); }
 function _cmEvalRules(recs, fpId, ym){
   var mFrom = ym + '-01', mTo = _cmMonthEnd(ym);
-  var nowD = new Date();
-  var today = nowD.getFullYear() + '-' + ((nowD.getMonth()+1) < 10 ? '0' : '') + (nowD.getMonth()+1) + '-' + (nowD.getDate() < 10 ? '0' : '') + nowD.getDate();
+  var today = _cmTodayStr();
   var out = [], list = _rulesDedupe(_rules || []);
   for(var i=0;i<list.length;i++){
     var r = list[i];
@@ -30107,32 +30119,54 @@ function _cmEvalRules(recs, fpId, ym){
     } else if(r.type === 'cond'){
       var conds = d.conds || [];
       if(!conds.length) continue;
-      var touches = false, sums = [], allOk = true, unmet = [];
-      for(var c=0;c<conds.length;c++){
+      var touches = false, sums = [], unmet = [], c;
+      for(c=0;c<conds.length;c++){
         var cf = conds[c].from || mFrom, ct = conds[c].to || mTo;
         if(_cmOverlap(cf, ct, mFrom, mTo)) touches = true;
         var ws = _cmSumWindow(recs, fpId, r, cf, ct);
         sums.push(ws.sum);
-        if(ws.sum < (conds[c].min||0)){ allOk = false; unmet.push({ idx:c, need:(conds[c].min||0) - ws.sum, sum:ws.sum, from:cf, to:ct }); }
+        if(ws.sum < (conds[c].min||0)) unmet.push({ idx:c, need:(conds[c].min||0) - ws.sum, sum:ws.sum, from:cf, to:ct, min:(conds[c].min||0) });
       }
       if(!touches) continue;
-      var by = Math.min(conds.length-1, Math.max(0, parseInt(d.rewardBy,10)||0));
-      var baseSum = sums[by];
-      var pk2 = (d.rewards && d.rewards.length) ? _cmTierPick(d.rewards, baseSum) : { got:null, next:null };
-      res.sum = baseSum; res.sums = sums; res.conds = conds;
+      // which amount picks the reward tier: one window (index) or the lowest of all windows ('min': 연계시상·연속 멤버십)
+      var byMin = (String(d.rewardBy) === 'min' || String(d.rewardBy) === '-1');
+      var by = byMin ? -1 : Math.min(conds.length-1, Math.max(0, parseInt(d.rewardBy,10)||0));
+      var baseSum = byMin ? Math.min.apply(null, sums) : sums[by];
+      var hasRw = !!(d.rewards && d.rewards.length);
+      var pk2 = hasRw ? _cmTierPick(d.rewards, baseSum) : { got:null, next:null };
+      res.sum = baseSum; res.sums = sums; res.conds = conds; res.byMin = byMin;
       res.period = conds.map(function(x){ return String(x.from||'').substr(5).replace('-','.') + '~' + String(x.to||'').substr(5).replace('-','.'); }).join(' · ');
-      if(allOk){
-        res.amt = (d.rewards && d.rewards.length) ? (pk2.got ? pk2.got.amt : 0) : (d.amt||0);
-        if(pk2.next && !((conds[by].to || mTo) < today)){ res.next = pk2.next; res.need = pk2.next.min - baseSum; res.nextAmt = pk2.next.amt; res.needIdx = by; res.pct = Math.min(100, Math.round(baseSum / pk2.next.min * 100)); }
-        else res.pct = 100;
+      if(!unmet.length){
+        res.amt = hasRw ? (pk2.got ? pk2.got.amt : 0) : (d.amt||0);
+        var decideOpen = false;
+        for(c=0;c<conds.length;c++){ if((byMin || c === by) && !((conds[c].to || mTo) < today)) decideOpen = true; }
+        if(pk2.next && decideOpen){
+          res.next = pk2.next; res.need = pk2.next.min - baseSum; res.nextAmt = pk2.next.amt; res.pct = Math.min(100, Math.round(baseSum / pk2.next.min * 100));
+          if(byMin){ var lo = 0; for(c=1;c<sums.length;c++){ if(sums[c] < sums[lo]) lo = c; } res.needIdx = lo; } else res.needIdx = by;
+        } else res.pct = 100;
       } else {
-        // one condition short, and its window is still open: say what it takes
-        if(unmet.length === 1 && !(unmet[0].to < today)){
-          var u = unmet[0];
-          var target = (d.rewards && d.rewards.length) ? (u.idx === by ? _cmTierPick(d.rewards, (conds[u.idx].min||0)).got : pk2.got) : null;
-          var amtIf = (d.rewards && d.rewards.length) ? (target ? target.amt : 0) : (d.amt||0);
-          if(amtIf > 0){ res.need = u.need; res.nextAmt = amtIf; res.needIdx = u.idx; res.next = { min:(conds[u.idx].min||0), amt:amtIf }; res.pct = Math.min(100, Math.round(u.sum / (conds[u.idx].min||1) * 100)); }
-        } else if(unmet.length) res.closed = true;
+        var past = [], cur = [], fut = [], ui;
+        for(ui=0;ui<unmet.length;ui++){ var uu = unmet[ui]; if(uu.to < today) past.push(uu); else if(uu.from > today) fut.push(uu); else cur.push(uu); }
+        if(past.length){ res.closed = true; }
+        else if(cur.length === 1){
+          // one open window short: what it pays once every window is met at least at its base amount
+          var u = cur[0], amtIf = 0;
+          if(!hasRw) amtIf = d.amt||0;
+          else if(byMin){
+            var floor = u.min;
+            for(c=0;c<conds.length;c++){ if(c === u.idx) continue; var v = (sums[c] >= (conds[c].min||0)) ? sums[c] : (conds[c].min||0); if(v < floor) floor = v; }
+            var tg = _cmTierPick(d.rewards, floor).got; amtIf = tg ? tg.amt : 0;
+          } else {
+            var target = (u.idx === by) ? _cmTierPick(d.rewards, u.min).got : pk2.got; amtIf = target ? target.amt : 0;
+          }
+          if(amtIf > 0){ res.need = u.need; res.nextAmt = amtIf; res.needIdx = u.idx; res.next = { min:u.min, amt:amtIf }; res.pct = Math.min(100, Math.round(u.sum / (u.min||1) * 100)); res.futureN = fut.length; }
+        } else if(!cur.length && fut.length){
+          // every window so far is met; the rest are months still to come
+          res.onTrack = true; res.futureN = fut.length;
+          var floor2 = Infinity;
+          for(c=0;c<conds.length;c++){ var v2 = (sums[c] >= (conds[c].min||0)) ? sums[c] : (conds[c].min||0); if(v2 < floor2) floor2 = v2; }
+          var tg2 = hasRw ? _cmTierPick(d.rewards, floor2).got : null; res.nextAmt = tg2 ? tg2.amt : (hasRw ? 0 : (d.amt||0)); res.pct = 100;
+        }
       }
       var any = false; for(var s2=0;s2<sums.length;s2++){ if(sums[s2] > 0) any = true; }
       res.active = any;
@@ -30425,15 +30459,20 @@ function _commRender(){
            + '<div class="cm-row"><span class="cm-mini">' + gCond + '</span><span class="cm-mini" style="white-space:nowrap">' + (ev.rank ? '내 합산 ' : '지금 ') + '<b style="color:var(--text)">' + _cmMan(ev.sum) + '</b></span></div></div>';
       continue;
     }
-    if(!ev.amt && !ev.next) continue;
+    if(!ev.amt && !ev.next && !ev.onTrack) continue;
     var right = '';
     if(ev.next && ev.need > 0 && ev.nextAmt > (ev.amt||0)) right = _cmMan(ev.need) + ' 더 → ' + _cmMan(ev.nextAmt);
     else if(ev.next && ev.need > 0) right = _cmMan(ev.need) + ' 더 → +' + _cmMan(ev.nextAmt);
+    else if(ev.onTrack && ev.nextAmt) right = '유지 시 ' + _cmMan(ev.nextAmt);
+    if(ev.futureN) right += ' <span style="font-weight:400;color:var(--text3)">(' + ev.futureN + '개월 더 유지)</span>';
     var left = '';
     if(ev.type === 'per') left = ev.n + '건 → 확보 <b>' + _cmMan(ev.amt) + '</b>';
     else if(ev.type === 'cond' && ev.sums){
-      var parts = [];
-      for(var c=0;c<ev.sums.length;c++){ parts.push('조건' + (c+1) + ' ' + _cmMan(ev.sums[c]) + '/' + _cmMan(ev.conds[c].min||0)); }
+      var parts = [], todayS = _cmTodayStr();
+      for(var c=0;c<ev.sums.length;c++){
+        if(String(ev.conds[c].from||'') > todayS) continue;
+        parts.push((ev.conds.length > 1 ? _cmMd(ev.conds[c].from) + '~ ' : '') + _cmMan(ev.sums[c]) + '/' + _cmMan(ev.conds[c].min||0));
+      }
       left = parts.join(' · ') + (ev.amt ? ' → 확보 <b>' + _cmMan(ev.amt) + '</b>' : '');
     } else left = '지금 <b>' + _cmMan(ev.sum) + '</b>' + (ev.amt ? ' → 확보 <b style="color:#6D4FB8">' + _cmMan(ev.amt) + '</b>' : '');
     nud += '<div class="cm-card cm-new"><div class="cm-row"><b style="font-size:12px">' + _cmEsc(ev.insurer) + ' ' + _cmEsc(ev.label) + '</b><span class="cm-tag">' + _cmEsc(ev.period||'') + (ev.when ? ' · ' + _cmEsc(ev.when) : '') + '</span></div>'
