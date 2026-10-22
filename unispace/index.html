@@ -11394,18 +11394,27 @@ function openSichaekModal(){
   var addBtn = document.getElementById('sichaekAddBtn');
   if(addBtn) addBtn.style.display = canMng ? '' : 'none';
   _sichaekTab = 'active';
+  _sichaekBulkBtnSync();
   document.getElementById('sichaekTabActive').classList.add('sichaek-tab-on');
   document.getElementById('sichaekTabEnded').classList.remove('sichaek-tab-on');
   if(typeof _rulesEnsure === 'function') _rulesEnsure(function(){ if(_sichaekAllCache && typeof _sichaekRenderByMonth === 'function') _sichaekRenderByMonth(_sichaekLastCanManage); });
   loadSichaek();
 }
 function closeSichaekModal(){ document.getElementById('sichaekOverlay').classList.remove('open'); }
+// the bulk button: managers who use the commission screen, on this month's tab
+function _sichaekBulkBtnSync(){
+  var b = document.getElementById('sichaekBulkBtn');
+  if(!b) return;
+  var ok = _sichaekTab === 'active' && typeof _isManagerUser === 'function' && _isManagerUser(currentUser) && typeof _commCanUse === 'function' && _commCanUse();
+  b.style.display = ok ? '' : 'none';
+}
 
 function switchSichaekTab(tab){
   _sichaekTab = tab;
   if(tab==='ended'){ _sichaekPastMonth = null; } // 항상 최근 지난달부터
   document.getElementById('sichaekTabActive').classList.toggle('sichaek-tab-on', tab==='active');
   document.getElementById('sichaekTabEnded').classList.toggle('sichaek-tab-on', tab==='ended');
+  _sichaekBulkBtnSync();
   // 캐시 있으면 재조회 없이 즉시 분류
   if(_sichaekAllCache){ _sichaekRenderByMonth(_sichaekLastCanManage); }
   else { loadSichaek(); }
@@ -11538,6 +11547,11 @@ function _sichaekToggleMenu(gkEnc){
   _sichaekMenuOpen = (_sichaekMenuOpen === gk) ? '' : gk;
   _sichaekRenderByMonth(_sichaekLastCanManage);
 }
+document.addEventListener('click', function(){
+  if(!_sichaekMenuOpen) return;
+  _sichaekMenuOpen = '';
+  _sichaekRenderByMonth(_sichaekLastCanManage);
+});
 function _sichaekRegPreset(gkEnc, wk){
   var gk = decodeURIComponent(gkEnc);
   _sichaekMenuOpen = '';
@@ -11575,15 +11589,15 @@ function _sichaekGroupCardHtml(g, canManage){
       if(_sichaekTab === 'active'){
         if(c){
           mi += _miItem('＋ 장 추가', "_sichaekMenuOpen='';addSichaekImage('"+c.id+"','"+g.insurer+"')", '#1F9268');
-          mi += _miItem('↺ 교체', "_sichaekMenuOpen='';openSichaekReplace('"+c.id+"','"+g.insurer+"','"+g.kind+"')", 'var(--gold2)');
-          mi += _miItem('💰 시책률', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"',"+imgs.length+")", '#6D4FB8');
+          mi += _miItem('✏️ 수정', "_sichaekMenuOpen='';openSichaekEdit('"+c.id+"')", 'var(--gold2)');
+          mi += _miItem('💰 시책적용', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"',"+imgs.length+")", '#6D4FB8');
           mi += _miItem('종료', "_sichaekMenuOpen='';endSichaek('"+c.id+"')", '#C0392B');
         } else {
           mi += _miItem('＋ '+selLabel+' 시책 등록', "_sichaekRegPreset('"+gkEnc+"',"+sel+")", '#1F9268');
         }
       } else {
         if(c){
-          mi += _miItem('💰 시책률', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"',"+imgs.length+")", '#6D4FB8');
+          mi += _miItem('💰 시책적용', "_sichaekMenuOpen='';openRulesFor('"+c.id+"','"+g.insurer+"','"+g.kind+"','"+String(c.startWeek||'').replace(/'/g,'')+"',"+imgs.length+")", '#6D4FB8');
           mi += _miItem('되돌리기', "_sichaekMenuOpen='';reactivateSichaek('"+c.id+"')", '#1F9268');
           mi += _miItem('삭제', "_sichaekMenuOpen='';deleteSichaek('"+c.id+"')", '#C0392B');
         }
@@ -11615,7 +11629,7 @@ function _sichaekGroupCardHtml(g, canManage){
       '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
         '<span style="font-size:10px;font-weight:700;color:'+kindColor+'">'+(g.kind||'')+'</span>'+
         '<span style="font-size:13px;font-weight:700">'+g.insurer+'</span>'+
-        ((c && typeof _cmCampHasRules==='function') ? (_cmCampHasRules(c.id) ? '<span title="시책률 등록됨" style="font-size:10px">💰</span>' : ((canManage && typeof _rules!=='undefined' && _rules && typeof _commCanUse==='function' && _commCanUse()) ? '<span style="font-size:9px;color:var(--text3);white-space:nowrap">💰 미등록</span>' : '')) : '')+
+        ((c && typeof _cmCampHasRules==='function') ? (_cmCampHasRules(c.id) ? '<span title="시책적용 등록됨" style="font-size:10px">💰</span>' : ((canManage && typeof _rules!=='undefined' && _rules && typeof _commCanUse==='function' && _commCanUse()) ? '<span style="font-size:9px;color:var(--text3);white-space:nowrap">💰 미등록</span>' : '')) : '')+
         (cnt>1?'<span style="font-size:10px;color:var(--text3)">· '+cnt+'장</span>':'')+
       '</div>'+
       '<div style="display:flex;gap:4px">'+tabs+'</div>'+
@@ -25423,6 +25437,7 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" id="sichaekTabActive" class="sichaek-tab sichaek-tab-on" onclick="switchSichaekTab('active')">진행 중</button>
       <button type="button" id="sichaekTabEnded" class="sichaek-tab" onclick="switchSichaekTab('ended')">지난 시책</button>
       <div style="flex:1"></div>
+      <button type="button" id="sichaekBulkBtn" onclick="openRulesBulk()" style="display:none;font-size:13px;font-weight:700;padding:7px 12px;border:1.5px solid var(--gold);border-radius:8px;background:rgba(201,168,76,.08);color:var(--gold2);cursor:pointer">🔄 일괄 시책적용</button>
       <button type="button" id="sichaekAddBtn" onclick="openSichaekAdd()" style="display:none;font-size:13px;font-weight:700;padding:7px 14px;border:none;border-radius:8px;background:var(--gold);color:#fff;cursor:pointer">➕ 시책 등록</button>
     </div>
     <div id="sichaekMonthNav" style="display:none;align-items:center;justify-content:center;gap:6px;padding:8px 0;margin-bottom:6px">
@@ -25502,7 +25517,7 @@ function doCheckin() { doSmartCheckin(); }
       </div>
       <div id="sichaekRulesWrap" style="margin:2px 0 14px;border-top:1px solid var(--bdr);padding-top:12px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-          <div style="font-size:12px;color:var(--text2);font-weight:600">💰 시책률 <span style="font-weight:400;color:var(--text3)">(자동)</span></div>
+          <div style="font-size:12px;color:var(--text2);font-weight:600">💰 시책적용 <span style="font-weight:400;color:var(--text3)">(자동)</span></div>
           <span class="cm-btn-ai re-reread" onclick="sichaekReadAI(this)" style="display:none">🔄 다시 읽기</span>
         </div>
         <div id="sichaekRulesBox"></div>
@@ -25529,6 +25544,31 @@ function doCheckin() { doSmartCheckin(); }
       <button type="button" onclick="sichaekViewPrev(event)" style="font-size:20px;padding:6px 16px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer">‹</button>
       <span id="sichaekViewCount" style="color:#fff;font-size:14px;font-weight:700">1 / 1</span>
       <button type="button" onclick="sichaekViewNext(event)" style="font-size:20px;padding:6px 16px;border:none;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer">›</button>
+    </div>
+  </div>
+</div>
+
+<!-- 시책 수정 모달 (카드 ⋯ → ✏️ 수정): 같은 시책에서 주차·사진만 바꿈, 시책적용은 그대로 -->
+<div class="mgmt-overlay" id="sichaekEditOverlay" style="z-index:668">
+  <div class="mgmt-box" style="max-width:420px;width:92vw;max-height:92vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="mgmt-title">✏️ 시책 수정</div>
+      <button type="button" onclick="closeSichaekEdit()" class="modal-close-x" aria-label="닫기">✕</button>
+    </div>
+    <div style="overflow-y:auto">
+      <div id="sichaekEditInfo" style="font-size:13px;color:var(--text2);background:var(--surface);border-radius:8px;padding:10px;margin-bottom:12px"></div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">적용 주차</div>
+        <div id="sichaekEditWeek" style="display:flex;gap:5px"></div>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">시상 이미지 <span style="font-weight:400;color:var(--text3)">(✕ 빼기 · 사진 추가)</span></div>
+        <input type="file" id="sichaekEditFile" accept="image/*" multiple style="display:none" onchange="_sichaekEditFiles(event)">
+        <div id="sichaekEditGrid" style="display:none;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px"></div>
+        <div onclick="document.getElementById('sichaekEditFile').click()" style="border:1px dashed var(--bdr2);border-radius:8px;padding:12px;text-align:center;color:var(--text3);cursor:pointer;font-size:13px">📤 사진 추가</div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">시책적용은 그대로 이어져요 · 사진을 바꾸면 저장 뒤 다시 읽기를 물어봐요</div>
+      <button type="button" id="sichaekEditBtn" onclick="submitSichaekEdit()" style="width:100%;padding:11px;border:none;border-radius:8px;background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer">수정 저장</button>
     </div>
   </div>
 </div>
@@ -26531,7 +26571,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 182;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 184;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29265,6 +29305,47 @@ body:not(.theme-light) .cm-nudge b { color:#F0B060; }
 .re-fp.ex { background:rgba(154,59,31,.07); color:#8A3A1E; }
 body:not(.theme-light) .pf-fp-tg.ex, body:not(.theme-light) .pf-cb.on.ex .pf-cb-g, body:not(.theme-light) .cm-fpx, body:not(.theme-light) .re-fp.ex { color:#F0A080; }
 body:not(.theme-light) .re-fp { color:#7FD8B0; }
+.rb-sub { font-size:11px; color:var(--text3); margin:-2px 0 9px; }
+.rb-all { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:10px; background:var(--bg3); font-size:12.5px; font-weight:800; margin-bottom:6px; cursor:pointer; }
+.rb-all span:last-child { font-weight:600; color:var(--text3); font-size:11.5px; }
+.rb-sec { font-size:11px; font-weight:800; color:var(--gold2); margin:9px 2px 5px; }
+.rb-sec.nl { color:#3B82F6; }
+.rb-row { display:flex; align-items:center; gap:7px; padding:8px 10px; border:1px solid var(--bdr); border-radius:10px; margin-bottom:5px; font-size:12.5px; cursor:pointer; flex-wrap:wrap; }
+.rb-row b { font-weight:800; }
+.rb-row.tap { border-color:rgba(180,35,24,.35); background:rgba(180,35,24,.04); }
+.rb-row.tapf { border-color:rgba(199,125,20,.45); background:rgba(199,125,20,.05); }
+.rb-row.done { opacity:.7; cursor:default; }
+.rb-cb { flex:none; width:18px; height:18px; border-radius:5px; border:2px solid var(--bdr2); background:var(--bg2); color:#fff; font-size:11px; font-weight:900; display:flex; align-items:center; justify-content:center; }
+.rb-cb.on { border-color:var(--gold); background:var(--gold2); }
+.rb-wk { font-size:10px; font-weight:800; padding:1px 6px; border-radius:6px; background:var(--bg3); color:var(--text2); }
+.rb-m { color:var(--text3); font-size:11px; }
+.rb-r { margin-left:auto; font-size:11px; color:var(--text3); white-space:nowrap; }
+.rb-fp { font-size:10px; font-weight:800; color:#1F9268; background:rgba(31,146,104,.1); padding:1px 6px; border-radius:99px; }
+.rb-st { flex:none; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:99px; white-space:nowrap; }
+.rb-st.ok { background:rgba(31,146,104,.13); color:#1F9268; }
+.rb-st.bad { background:rgba(180,35,24,.10); color:#B42318; }
+.rb-st.fail { background:rgba(199,125,20,.13); color:#C77D14; }
+.rb-st.run { background:rgba(109,79,184,.12); color:#6D4FB8; }
+.rb-st.wait { background:var(--bg3); color:var(--text3); }
+.rb-spin { display:inline-block; width:10px; height:10px; border-radius:50%; border:2px solid rgba(109,79,184,.3); border-top-color:#6D4FB8; vertical-align:-1px; margin-right:4px; animation:cmspin .8s linear infinite; }
+.rb-lk { font-size:11px; font-weight:800; color:#B42318; white-space:nowrap; cursor:pointer; }
+.rb-lk.o { color:#C77D14; }
+.rb-prog { border-radius:11px; background:var(--bg3); padding:9px 11px; margin-bottom:9px; }
+.rb-pt { display:flex; justify-content:space-between; font-size:12px; font-weight:800; }
+.rb-pt span:last-child { color:var(--text3); font-weight:700; }
+.rb-pb { height:7px; border-radius:9px; background:rgba(201,168,76,.2); margin-top:6px; overflow:hidden; }
+.rb-pb i { display:block; height:100%; background:linear-gradient(90deg,var(--gold),var(--gold2)); }
+.rb-go { margin-top:10px; padding:12px; border-radius:11px; background:var(--gold); color:#fff; font-size:14px; font-weight:800; text-align:center; cursor:pointer; }
+.rb-go.dis { opacity:.45; pointer-events:none; }
+.rb-note { font-size:10.5px; color:var(--text3); text-align:center; margin-top:7px; line-height:1.5; }
+.rb-again { font-size:11px; font-weight:700; color:var(--gold2); text-align:center; margin-top:8px; cursor:pointer; }
+.se-tile { position:relative; }
+.se-tile img { width:100%; height:84px; object-fit:cover; border-radius:8px; display:block; border:1px solid var(--bdr); }
+.se-tile.off img { opacity:.3; filter:grayscale(1); }
+.se-tile.new img { border:2px solid var(--gold); }
+.se-x { position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:#C0392B; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.se-undo { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:11px; font-weight:800; color:#fff; background:rgba(0,0,0,.65); padding:4px 8px; border-radius:8px; white-space:nowrap; cursor:pointer; }
+.se-new { position:absolute; left:4px; bottom:4px; font-size:9.5px; font-weight:800; color:#fff; background:var(--gold2); padding:1px 6px; border-radius:6px; }
 .cm-btn-ai { font-size:12px; font-weight:800; padding:8px 12px; border-radius:9px; border:1.5px solid #6D4FB8; background:rgba(109,79,184,.1); color:#6D4FB8; cursor:pointer; font-family:'Noto Sans KR',sans-serif; white-space:nowrap; }
 .cm-btn-ai:disabled { opacity:.6; }
 .cm-loading { display:flex; flex-direction:column; align-items:center; gap:12px; padding:38px 0 30px; color:var(--text3); font-size:12px; }
@@ -29322,10 +29403,20 @@ body:not(.theme-light) .cm-card.cm-gift { background:rgba(199,125,20,.08); }
 </style>
 
 <!-- 시책률 편집 모달 (기존 시책 카드 ⋯ → 💰 시책률) -->
+<!-- 일괄 시책적용 (시책 조회 → 🔄 일괄 시책적용) -->
+<div class="mgmt-overlay" id="rulesBulkOverlay" style="z-index:668">
+  <div class="mgmt-box" style="max-width:460px;width:94vw;max-height:92vh;display:flex;flex-direction:column;padding:20px 16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px">
+      <div class="mgmt-title" style="font-family:'Noto Sans KR',sans-serif;font-size:15px;letter-spacing:0;color:var(--text);margin:0">🔄 일괄 시책적용</div>
+      <button type="button" onclick="closeRulesBulk()" class="modal-close-x" aria-label="닫기">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;min-height:0" id="rbBox"></div>
+  </div>
+</div>
 <div class="mgmt-overlay" id="rulesOverlay" style="z-index:669">
   <div class="mgmt-box" style="max-width:480px;width:94vw;max-height:92vh;display:flex;flex-direction:column;padding:22px 16px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px">
-      <div class="mgmt-title" id="rulesTitle" style="font-family:'Noto Sans KR',sans-serif;font-size:15px;letter-spacing:0;color:var(--text);margin:0">💰 시책률</div>
+      <div class="mgmt-title" id="rulesTitle" style="font-family:'Noto Sans KR',sans-serif;font-size:15px;letter-spacing:0;color:var(--text);margin:0">💰 시책적용</div>
       <button type="button" onclick="closeRules()" class="modal-close-x" aria-label="닫기">✕</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
@@ -29704,7 +29795,7 @@ function _cmScopeWhy(d, p){
 }
 function _cmNoRuleWhy(p, dateStr){
   var all = _cmRulesOf(p.co);
-  if(!all.length) return _cmEsc(p.co) + ' 시책률이 없습니다 (시책 관리 → 💰 시책률 저장 여부 확인)';
+  if(!all.length) return _cmEsc(p.co) + ' 시책적용이 없습니다 (시책 조회 → 카드 ⋯ → 💰 시책적용)';
   var rates = [], inRange = [];
   for(var i=0;i<all.length;i++){ if(all[i].type !== 'rate') continue; rates.push(all[i]); if(_cmRuleInRange(all[i], dateStr)) inRange.push(all[i]); }
   if(!rates.length) return _cmEsc(p.co) + ' 건별 % 규칙이 없습니다 (구간·조건형만 ' + all.length + '개)';
@@ -30418,13 +30509,17 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
 }
 // after a read: the same reward printed on several sheets is kept once, and the per-sheet checks become one summary
 function _reCheckBuild(checks, imgs, failed, secs){
+  var m = _reCheckMake(_re.rules, _re.insurer, checks, imgs, failed, secs);
+  _re.rules = m.rules; _re.check = m.check;
+}
+// one card's read: the same reward printed on several sheets kept once, and the per-sheet checks as one summary
+function _reCheckMake(rules, insurer, checks, imgs, failed, secs){
   var seen = {}, kept = [], dup = 0, q;
-  for(q=0;q<_re.rules.length;q++){
-    var rq = _re.rules[q], sg = _rulesSig({ insurer:_re.insurer, type:rq.type, from:rq.from, to:rq.to, data:rq });
+  for(q=0;q<rules.length;q++){
+    var rq = rules[q], sg = _rulesSig({ insurer:insurer, type:rq.type, from:rq.from, to:rq.to, data:rq });
     if(seen[sg]){ dup++; continue; }
     seen[sg] = 1; kept.push(rq);
   }
-  _re.rules = kept;
   var ck = { imgs:imgs, secs:secs, listN:0, total:kept.length, linked:0, agreeN:0, agreeOf:0, fixes:[], warns:[], errors:[] };
   for(q=0;q<checks.length;q++){
     var c = checks[q]; if(!c) continue;
@@ -30436,7 +30531,7 @@ function _reCheckBuild(checks, imgs, failed, secs){
   if(dup) ck.fixes.unshift('장표 여러 장에 반복된 같은 시상 ' + dup + '개 → 1개로 합침');
   if(failed) ck.errors.push('장표 ' + failed + '장 읽기 실패 — 🔄 다시 읽기');
   var any = false; for(q=0;q<checks.length;q++){ if(checks[q]) any = true; }
-  _re.check = (any || dup || failed) ? ck : null;
+  return { rules:kept, check:(any || dup || failed) ? ck : null };
 }
 function _reCheckHtml(){
   var c = _re.check; if(!c) return '';
@@ -30461,7 +30556,7 @@ function _cmHash(str){
 // The server keeps reading after the browser stops waiting and caches the result under jobKey,
 // so after the first request gives up the client polls for the finished result instead of starting over.
 var _RE_FIRST_MS = 100000, _RE_TOTAL_MS = 330000, _RE_POLL_MS = 6000;
-function _reReadAIPost(imgs, campaignId, imageIndex, fresh, cb){
+function _reReadAIPost(imgs, campaignId, imageIndex, fresh, cb, ctx){
   var hasIdx = (imageIndex !== undefined && imageIndex !== null);
   var jobKey = campaignId ? (campaignId + ':' + (hasIdx ? imageIndex : 'all')) : ('img_' + _cmHash(imgs && imgs[0] ? imgs[0].data : ''));
   var t0 = Date.now(), finished = false;
@@ -30482,7 +30577,8 @@ function _reReadAIPost(imgs, campaignId, imageIndex, fresh, cb){
   }
   var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   var tmr = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, _RE_FIRST_MS) : null;
-  var data = { fpCode:currentUser.id, insurer:_re.insurer, kind:_re.kind, ym:_re.ym, images:imgs, campaignId:campaignId||'', jobKey:jobKey, fresh:!!fresh };
+  var cx = ctx || _re;
+  var data = { fpCode:currentUser.id, insurer:cx.insurer, kind:cx.kind, ym:cx.ym, images:imgs, campaignId:campaignId||'', jobKey:jobKey, fresh:!!fresh };
   if(hasIdx) data.imageIndex = imageIndex;
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
     body: JSON.stringify({ action:'campaignRead', data:data }),
@@ -30493,23 +30589,24 @@ function _reReadAIPost(imgs, campaignId, imageIndex, fresh, cb){
     end(true, res);
   }).catch(function(){ if(tmr) clearTimeout(tmr); setTimeout(poll, 1500); });
 }
-function _reSave(campaignId, replace, cb){
+function _reSave(campaignId, replace, cb){ _reSaveRules(campaignId, _re.insurer, _re.kind, _re.rules, replace, cb); }
+// keepCache: a batch of saves refreshes the rule list once at the end
+function _reSaveRules(campaignId, insurer, kind, list, replace, cb, keepCache){
   var rules = [];
-  for(var i=0;i<_re.rules.length;i++){
-    var r = _re.rules[i];
+  for(var i=0;i<(list || []).length;i++){
+    var r = list[i];
     var o = {};
     for(var k in r){ if(r.hasOwnProperty(k) && k.charAt(0) !== '_') o[k] = r[k]; }
     o.title = r.label || '';
     rules.push(o);
   }
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action:'rulesSave', data:{ fpCode:currentUser.id, campaignId:campaignId||'', insurer:_re.insurer, kind:_re.kind, rules:rules, replace:!!replace } })
+    body: JSON.stringify({ action:'rulesSave', data:{ fpCode:currentUser.id, campaignId:campaignId||'', insurer:insurer, kind:kind, rules:rules, replace:!!replace } })
   }).then(function(r){ return r.json(); }).then(function(res){
-    if(!res || !res.ok){ showToast('⚠️ 시책률 저장 실패: ' + ((res && res.msg) || '')); if(cb) cb(false); return; }
-    _rules = null;
-    _rulesEnsure(null, true);
+    if(!res || !res.ok){ showToast('⚠️ 시책적용 저장 실패: ' + ((res && res.msg) || '')); if(cb) cb(false); return; }
+    if(!keepCache){ _rules = null; _rulesEnsure(null, true); }
     if(cb) cb(true, res);
-  }).catch(function(){ showToast('⚠️ 시책률 저장 · 네트워크 오류'); if(cb) cb(false); });
+  }).catch(function(){ showToast('⚠️ 시책적용 저장 · 네트워크 오류'); if(cb) cb(false); });
 }
 // ── 시책 등록 모달 연동 ───────────────────────────
 function _sichaekRulesInit(){
@@ -30545,7 +30642,7 @@ function _sichaekRulesSubmit(campId){
   if(!_commCanUse() || !campId || !_re.rules.length || (tg && !tg.checked)) return;
   var parts = _sichaekInsVal().split('|');
   _re.insurer = parts[0] || _re.insurer; _re.kind = parts[1] || _re.kind;
-  _reSave(campId, false, function(ok){ if(ok) showToast('✅ 시책률 ' + _re.rules.length + '개 저장 · 수수료 예상에 반영됩니다'); });
+  _reSave(campId, false, function(ok){ if(ok) showToast('✅ 시책적용 ' + _re.rules.length + '개 저장 · 수수료 예상에 반영됩니다'); });
 }
 // ── 기존 시책의 시책률 편집 모달 ──────────────────
 var _rulesCampId = '';
@@ -30557,7 +30654,7 @@ function openRulesFor(campId, insurer, kind, startWeek, imgCount){
   var now = new Date();
   var ym = (mon >= 1 && mon <= 12) ? _cmYmGuess(mon) : _cmYmOf(now);
   _reReset('rulesBox', insurer, kind, ym, campId);
-  var ttl = document.getElementById('rulesTitle'); if(ttl) ttl.textContent = '💰 시책률 · ' + insurer + (startWeek ? ' · ' + startWeek : '');
+  var ttl = document.getElementById('rulesTitle'); if(ttl) ttl.textContent = '💰 시책적용 · ' + insurer + (startWeek ? ' · ' + startWeek : '');
   var box = document.getElementById('rulesBox'); if(box) box.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px 2px">불러오는 중…</div>';
   document.getElementById('rulesOverlay').classList.add('open');
   _rulesEnsure(function(list){
@@ -30593,6 +30690,318 @@ function _reCoverage(){
   return { n:n, known:known, missing:missing, read:(n - missing.length) };
 }
 function closeRules(){ document.getElementById('rulesOverlay').classList.remove('open'); }
+// open the rule window of one card and read its sheets again right away (its pictures changed)
+function _rulesOpenFresh(campId, insurer, kind, startWeek, imgCount){
+  _rulesCampId = campId; _rulesImgCount = parseInt(imgCount, 10) || 1;
+  var mon = _sichaekMonthOf({ startWeek:startWeek });
+  _reReset('rulesBox', insurer, kind, (mon >= 1 && mon <= 12) ? _cmYmGuess(mon) : _cmYmOf(new Date()), campId);
+  _re.imgCount = _rulesImgCount; _re.edit = {};
+  var ttl = document.getElementById('rulesTitle'); if(ttl) ttl.textContent = '💰 시책적용 · ' + insurer + (startWeek ? ' · ' + startWeek : '');
+  document.getElementById('rulesOverlay').classList.add('open');
+  _reRender();
+  _reReadAI([], campId, document.querySelector('#rulesOverlay .re-reread'), _rulesImgCount, true);
+}
+
+// ── bulk apply: this month's chosen cards read again (two cards at a time), the cards that passed saved in one go ──
+var _rb = { cards:[], run:false, gen:0, t0:0, t1:0, tick:null, saving:false };
+var RB_PAR = 2;
+function _rbSavedAt(campId){
+  var list = _rules || [], best = '';
+  for(var i=0;i<list.length;i++){ if(list[i].campaignId === campId && String(list[i].updatedAt || '') > best) best = String(list[i].updatedAt || ''); }
+  return best;
+}
+function _rbWhen(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  var now = new Date();
+  function p2(n){ return (n < 10 ? '0' : '') + n; }
+  if(d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return '오늘 ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  return (d.getMonth() + 1) + '/' + d.getDate();
+}
+function _rbDur(ms){ var t = Math.max(0, Math.round(ms / 1000)), m = Math.floor(t / 60); return (m ? m + '분 ' : '') + (t % 60) + '초'; }
+function _rbFpN(rules){ var seen = {}, n = 0; for(var i=0;i<(rules || []).length;i++){ var its = _cmFpItems(rules[i]); for(var k=0;k<its.length;k++){ if(!seen[its[k].k]){ seen[its[k].k] = 1; n++; } } } return n; }
+function _rbBuild(){
+  var all = _sichaekAllCache || [], curM = _sichaekCurMonth(), cards = [], perIns = {};
+  var order = SICHAEK_LIFE_ORDER.concat(SICHAEK_NON_ORDER);
+  var list = all.filter(function(c){ return _sichaekMonthOf(c) === curM && c.status !== 'ended'; });
+  list.sort(function(a, b){
+    var ka = (a.kind === '손보') ? 1 : 0, kb = (b.kind === '손보') ? 1 : 0;
+    if(ka !== kb) return ka - kb;
+    var ia = order.indexOf(a.insurer), ib = order.indexOf(b.insurer);
+    if(ia < 0) ia = 999; if(ib < 0) ib = 999;
+    if(ia !== ib) return ia - ib;
+    return _sichaekWeekOf(a) - _sichaekWeekOf(b);
+  });
+  list.forEach(function(c){ perIns[c.insurer] = (perIns[c.insurer] || 0) + 1; });
+  list.forEach(function(c){
+    var n = (c.images && c.images.length) ? c.images.length : (c.imageUrl ? 1 : 0);
+    if(!n) return;
+    var wk = _sichaekWeekOf(c), mon = _sichaekMonthOf(c), at = _rbSavedAt(c.id);
+    cards.push({ id:c.id, insurer:c.insurer || '', kind:c.kind || '', week:String(c.startWeek || ''), wkLbl:(wk ? wk + '주' : (perIns[c.insurer] > 1 ? '월간' : '')),
+      n:Math.min(n, 6), ym:(mon >= 1 && mon <= 12) ? _cmYmGuess(mon) : _cmYmOf(new Date()), at:at, on:(_rbWhen(at).indexOf('오늘') !== 0),
+      st:'wait', done:0, failed:0, rules:null, check:null, err:'', t0:0 });
+  });
+  _rb.cards = cards;
+}
+function openRulesBulk(){
+  document.getElementById('rulesBulkOverlay').classList.add('open');
+  var kept = _rb.run || _rb.saving || _rb.cards.some(function(c){ return c.st === 'ok' || c.st === 'bad' || c.st === 'fail'; });
+  if(kept){ _rbRender(); return; }
+  document.getElementById('rbBox').innerHTML = '<div class="rb-note" style="padding:24px 0">불러오는 중…</div>';
+  _rulesEnsure(function(){ _rbBuild(); _rbRender(); }, true);
+}
+function closeRulesBulk(){ document.getElementById('rulesBulkOverlay').classList.remove('open'); }
+function _rbTog(i){ var c = _rb.cards[i]; if(!c || _rb.run) return; c.on = !c.on; _rbRender(); }
+function _rbAll(){ if(_rb.run) return; var allOn = _rb.cards.every(function(c){ return c.on; }); _rb.cards.forEach(function(c){ c.on = !allOn; }); _rbRender(); }
+function _rbGo(){
+  if(_rb.run) return;
+  _rb.gen++; _rb.run = true; _rb.t0 = Date.now(); _rb.t1 = 0;
+  if(_rb.tick) clearInterval(_rb.tick);
+  _rb.tick = setInterval(_rbTick, 1000);
+}
+function _rbStart(){
+  if(_rb.run || _rb.saving) return;
+  var n = 0;
+  _rb.cards.forEach(function(c){ if(c.on && c.st !== 'saved'){ c.st = 'queue'; n++; } });
+  if(!n){ showToast('⚠️ 읽을 카드를 골라 주세요'); return; }
+  _rbGo(); _rbPump(); _rbRender();
+}
+function _rbRetry(i){
+  var c = _rb.cards[i];
+  if(!c || c.st === 'read' || c.st === 'queue' || _rb.saving) return;
+  c.st = 'queue';
+  if(!_rb.run) _rbGo();
+  _rbPump(); _rbRender();
+}
+function _rbPump(){
+  if(!_rb.run) return;
+  var active = 0, i;
+  for(i=0;i<_rb.cards.length;i++){ if(_rb.cards[i].st === 'read') active++; }
+  for(i=0;i<_rb.cards.length && active < RB_PAR;i++){ if(_rb.cards[i].st === 'queue'){ _rbReadCard(_rb.cards[i]); active++; } }
+  if(!active){
+    _rb.run = false; _rb.t1 = Date.now();
+    if(_rb.tick){ clearInterval(_rb.tick); _rb.tick = null; }
+    showToast('🔄 다 읽었어요 · 통과 ' + _rb.cards.filter(function(c){ return c.st === 'ok'; }).length + '개');
+  }
+}
+// one card: one server read per sheet (all at once, like the card's own re-read), fresh
+function _rbReadCard(card){
+  var gen = _rb.gen, results = [], checks = [], got = 0, doneCnt = 0, firstErr = '';
+  var ctx = { insurer:card.insurer, kind:card.kind, ym:card.ym };
+  card.st = 'read'; card.done = 0; card.failed = 0; card.t0 = Date.now(); card.err = ''; card.rules = null; card.check = null;
+  for(var j=0;j<card.n;j++){
+    (function(j){
+      _reReadAIPost([], card.id, j, true, function(ok, res){
+        if(gen !== _rb.gen) return;
+        if(ok){
+          var rules = (res && res.rules) || [];
+          for(var ri=0;ri<rules.length;ri++) rules[ri].img = j;
+          if(rules.length){ got += rules.length; results[j] = rules; }
+          if(res && res.check) checks[j] = res.check;
+        } else { card.failed++; if(!firstErr) firstErr = (res && res.msg) || ''; }
+        doneCnt++; card.done = doneCnt;
+        if(doneCnt >= card.n) _rbCardDone(card, results, checks, got, firstErr);
+        else _rbRender();
+      }, ctx);
+    })(j);
+  }
+}
+function _rbCardDone(card, results, checks, got, firstErr){
+  var all = [];
+  for(var r=0;r<results.length;r++){ if(results[r] && results[r].length) all = all.concat(results[r]); }
+  var m = _reCheckMake(all, card.insurer, checks, card.n, card.failed, Math.round((Date.now() - card.t0) / 1000));
+  card.rules = m.rules; card.check = m.check;
+  if(!got){ card.st = 'fail'; card.err = firstErr || '읽은 항목 없음'; }
+  else if(card.failed) card.st = 'fail';
+  else if(m.check && m.check.errors && m.check.errors.length) card.st = 'bad';
+  else card.st = 'ok';
+  _rbPump(); _rbRender();
+}
+function _rbTick(){
+  var el = document.getElementById('rbTime');
+  if(el) el.textContent = _rbDur(Date.now() - _rb.t0);
+  for(var i=0;i<_rb.cards.length;i++){
+    var c = _rb.cards[i];
+    if(c.st !== 'read') continue;
+    var s2 = document.getElementById('rbSt' + i);
+    if(s2) s2.innerHTML = '<span class="rb-spin"></span>' + c.done + '/' + c.n + '장 · ' + _rbDur(Date.now() - c.t0);
+  }
+}
+// a card's result in the usual rule window: check, fix and save it there
+function _rbOpen(i){
+  var c = _rb.cards[i];
+  if(!c || !c.rules) return;
+  _rulesCampId = c.id; _rulesImgCount = c.n;
+  _reReset('rulesBox', c.insurer, c.kind, c.ym, c.id);
+  _re.rules = JSON.parse(JSON.stringify(c.rules)); _re.check = c.check; _re.imgCount = c.n; _re.edit = {};
+  var ttl = document.getElementById('rulesTitle'); if(ttl) ttl.textContent = '💰 시책적용 · ' + c.insurer + (c.week ? ' · ' + c.week : '');
+  document.getElementById('rulesOverlay').classList.add('open');
+  _reRender();
+}
+function _rbMarkSaved(campId){
+  var hit = false;
+  for(var i=0;i<_rb.cards.length;i++){ var c = _rb.cards[i]; if(c.id === campId && (c.st === 'ok' || c.st === 'bad' || c.st === 'fail')){ c.st = 'saved'; c.on = false; hit = true; } }
+  var ov = document.getElementById('rulesBulkOverlay');
+  if(hit && ov && ov.classList.contains('open')) _rbRender();
+}
+function _rbSaveAll(){
+  if(_rb.run || _rb.saving) return;
+  var list = _rb.cards.filter(function(c){ return c.st === 'ok' && c.rules && c.rules.length; });
+  if(!list.length) return;
+  showConfirm({ icon:'💰', title:'일괄 시책적용 저장', msg:'통과한 <b>' + list.length + '개</b> 카드를 새로 읽은 내용으로 저장할까요?<br><span style="font-size:12px;color:var(--text3)">카드마다 기존 시책적용은 바뀝니다</span>', okLabel:'저장' }).then(function(yes){
+    if(!yes) return;
+    _rb.saving = true; _rbRender();
+    var k = 0, saved = 0;
+    (function next(){
+      if(k >= list.length){
+        _rb.saving = false; _rules = null; _rulesEnsure(null, true);
+        if(typeof loadSichaek === 'function') loadSichaek();
+        _rbRender();
+        showToast('✅ ' + saved + '개 카드 시책적용 저장' + (saved < list.length ? ' · ' + (list.length - saved) + '개 실패' : ''));
+        return;
+      }
+      var c = list[k++];
+      c.st = 'saving'; _rbRender();
+      _reSaveRules(c.id, c.insurer, c.kind, c.rules, true, function(ok){ if(ok){ c.st = 'saved'; c.on = false; saved++; } else c.st = 'ok'; next(); }, true);
+    })();
+  });
+}
+function _rbReset(){ if(_rb.run || _rb.saving) return; _rulesEnsure(function(){ _rbBuild(); _rbRender(); }, true); }
+function _rbRender(){
+  var box = document.getElementById('rbBox');
+  if(!box) return;
+  var C = _rb.cards, h = '', i;
+  if(!C.length){ box.innerHTML = '<div class="rb-note" style="padding:24px 0">이번 달 진행 중 시책이 없어요</div>'; return; }
+  var started = C.some(function(c){ return c.st !== 'wait'; });
+  if(!started){
+    var selN = 0, selImg = 0, allImg = 0, allOn = true, last = '';
+    for(i=0;i<C.length;i++){ allImg += C[i].n; if(C[i].on){ selN++; selImg += C[i].n; } else allOn = false; }
+    h += '<div class="rb-sub">이번 달 진행 중 시책 · 카드 ' + RB_PAR + '개씩 동시에</div>';
+    h += '<div class="rb-all" onclick="_rbAll()"><span class="rb-cb' + (allOn ? ' on' : '') + '">' + (allOn ? '✓' : '') + '</span>전체 <span>' + C.length + '개 · ' + allImg + '장</span></div>';
+    for(i=0;i<C.length;i++){
+      var c = C[i], kd = (c.kind === '손보') ? '손보' : '생보';
+      if(kd !== last){ h += '<div class="rb-sec' + (kd === '손보' ? ' nl' : '') + '">' + (kd === '손보' ? '손해보험' : '생명보험') + '</div>'; last = kd; }
+      h += '<div class="rb-row" onclick="_rbTog(' + i + ')"><span class="rb-cb' + (c.on ? ' on' : '') + '">' + (c.on ? '✓' : '') + '</span><b>' + _cmEsc(c.insurer) + '</b>' + (c.wkLbl ? '<span class="rb-wk">' + c.wkLbl + '</span>' : '')
+         + '<span class="rb-m">' + c.n + '장</span><span class="rb-r">' + (c.at ? '저장 ' + _rbWhen(c.at) : '시책적용 없음') + '</span></div>';
+    }
+    h += '<div class="rb-go' + (selN ? '' : ' dis') + '" onclick="_rbStart()">▶ 읽기 시작 · ' + selN + '개 · ' + selImg + '장</div>';
+    h += '<div class="rb-note">읽는 동안 화면은 켜 두세요 · 저장은 다 읽은 뒤</div>';
+    box.innerHTML = h;
+    return;
+  }
+  var tot = 0, fin = 0, okN = 0;
+  for(i=0;i<C.length;i++){ var x = C[i]; if(x.st === 'wait') continue; tot++; if(x.st !== 'queue' && x.st !== 'read') fin++; if(x.st === 'ok') okN++; }
+  h += '<div class="rb-prog"><div class="rb-pt"><span>' + fin + ' / ' + tot + ' 카드</span><span id="rbTime">' + _rbDur((_rb.run ? Date.now() : (_rb.t1 || Date.now())) - _rb.t0) + '</span></div><div class="rb-pb"><i style="width:' + (tot ? Math.round(fin / tot * 100) : 0) + '%"></i></div></div>';
+  for(i=0;i<C.length;i++){
+    var d = C[i];
+    if(d.st === 'wait') continue;
+    var st = '', cls = '', act = '', det = '', tap = '';
+    if(d.st === 'queue') st = '<span class="rb-st wait">대기</span>';
+    else if(d.st === 'read') st = '<span class="rb-st run" id="rbSt' + i + '"><span class="rb-spin"></span>' + d.done + '/' + d.n + '장 · ' + _rbDur(Date.now() - d.t0) + '</span>';
+    else if(d.st === 'ok'){ st = '<span class="rb-st ok">✅ 통과</span>'; tap = ' onclick="_rbOpen(' + i + ')"'; }
+    else if(d.st === 'bad'){ st = '<span class="rb-st bad">❌ 확인 ' + ((d.check && d.check.errors) ? d.check.errors.length : 0) + '건</span>'; cls = ' tap'; tap = ' onclick="_rbOpen(' + i + ')"'; act = '<span class="rb-lk">눌러서 확인 ›</span>'; }
+    else if(d.st === 'fail'){ st = '<span class="rb-st fail">⚠️ ' + (d.failed ? d.failed + '장 실패' : '실패') + '</span>'; cls = ' tapf'; act = '<span class="rb-lk o" onclick="event.stopPropagation();_rbRetry(' + i + ')">🔄 다시</span>'; if(d.rules && d.rules.length) tap = ' onclick="_rbOpen(' + i + ')"'; }
+    else if(d.st === 'saving') st = '<span class="rb-st run"><span class="rb-spin"></span>저장 중</span>';
+    else if(d.st === 'saved'){ st = '<span class="rb-st ok">저장 ✓</span>'; cls = ' done'; }
+    if(d.rules && d.st !== 'read' && d.st !== 'queue'){ var fpn = _rbFpN(d.rules); det = '<span class="rb-m">규칙 ' + d.rules.length + '</span>' + (fpn ? '<span class="rb-fp">FP 체크 ' + fpn + '</span>' : ''); }
+    h += '<div class="rb-row' + cls + '"' + tap + '>' + st + '<b>' + _cmEsc(d.insurer) + '</b>' + (d.wkLbl ? '<span class="rb-wk">' + d.wkLbl + '</span>' : '') + det + (act ? '<span style="margin-left:auto">' + act + '</span>' : '') + '</div>';
+  }
+  if(!_rb.run){
+    h += '<div class="rb-go' + ((okN && !_rb.saving) ? '' : ' dis') + '" onclick="_rbSaveAll()">' + (_rb.saving ? '저장 중…' : '✅ 통과 ' + okN + '개 한 번에 저장') + '</div>';
+    h += '<div class="rb-note">❌·⚠️는 눌러서 확인 후 따로 저장 · 저장하면 카드별 시책적용 교체</div>';
+    if(!_rb.saving) h += '<div class="rb-again" onclick="_rbReset()">↺ 처음부터 다시 고르기</div>';
+  } else h += '<div class="rb-note">읽는 동안 화면은 켜 두세요 · 다 읽으면 저장 버튼이 나와요</div>';
+  box.innerHTML = h;
+}
+
+// ── campaign edit: the same campaign (its rules stay linked) — week and pictures ──
+var _sichaekEdit = null;
+function openSichaekEdit(id){
+  var c = null, all = _sichaekAllCache || [];
+  for(var i=0;i<all.length;i++){ if(all[i].id === id){ c = all[i]; break; } }
+  if(!c){ showToast('⚠️ 시책을 찾을 수 없습니다'); return; }
+  var imgs = (c.images && c.images.length) ? c.images.slice() : (c.imageUrl ? [c.imageUrl] : []);
+  _sichaekEdit = { id:id, insurer:c.insurer || '', kind:c.kind || '', week0:String(c.startWeek || ''), week:String(c.startWeek || ''), mon:(_sichaekMonthOf(c) || _sichaekCurMonth()),
+    keep:imgs.map(function(u, k){ return { url:u, idx:k, on:true }; }), add:[], busy:false };
+  document.getElementById('sichaekEditInfo').innerHTML = '<b>' + _cmEsc(c.insurer || '') + '</b> · 지금 ' + _cmEsc(_sichaekWeekOf(c) ? _sichaekWeekOf(c) + '주차' : '월간 공통') + ' · 사진 ' + imgs.length + '장';
+  var btn = document.getElementById('sichaekEditBtn'); if(btn){ btn.disabled = false; btn.textContent = '수정 저장'; }
+  _sichaekEditRender();
+  document.getElementById('sichaekEditOverlay').classList.add('open');
+}
+function closeSichaekEdit(){ document.getElementById('sichaekEditOverlay').classList.remove('open'); }
+function _sichaekEditVals(mon){ var v = []; for(var w=1;w<=4;w++) v.push({ v:mon + '월 ' + w + '주차', l:w + '주' }); v.push({ v:mon + '월 공통', l:'월간 공통' }); return v; }
+function _sichaekEditRender(){
+  var E = _sichaekEdit;
+  if(!E) return;
+  var vals = _sichaekEditVals(E.mon), h = '', i;
+  for(i=0;i<vals.length;i++){
+    var on = (vals[i].v === E.week || (i === 4 ? _sichaekWeekOf({ startWeek:E.week }) === 0 && /공통/.test(E.week) : _sichaekWeekOf({ startWeek:E.week }) === i + 1));
+    h += '<span onclick="_sichaekEditWeek(' + i + ')" style="flex:' + (i === 4 ? '1.6' : '1') + ';text-align:center;font-size:12px;font-weight:700;padding:8px 0;border-radius:8px;cursor:pointer;border:1px solid ' + (on ? 'var(--gold)' : 'var(--bdr2)') + ';' + (on ? 'background:var(--gold);color:#fff' : 'background:var(--bg2);color:var(--text2)') + '">' + vals[i].l + '</span>';
+  }
+  document.getElementById('sichaekEditWeek').innerHTML = h;
+  var g = '';
+  for(i=0;i<E.keep.length;i++){
+    var it = E.keep[i];
+    g += '<div class="se-tile' + (it.on ? '' : ' off') + '"><img src="' + _cmEsc(_sichaekThumb(it.url, 300)) + '" alt="장표' + (i + 1) + '">'
+       + (it.on ? '<span class="se-x" onclick="_sichaekEditKeep(' + i + ')">✕</span>' : '<span class="se-undo" onclick="_sichaekEditKeep(' + i + ')">빼기 취소</span>') + '</div>';
+  }
+  for(i=0;i<E.add.length;i++){
+    g += '<div class="se-tile new"><img src="' + E.add[i].data + '" alt="새 사진' + (i + 1) + '"><span class="se-x" onclick="_sichaekEditDrop(' + i + ')">✕</span><span class="se-new">새 사진</span></div>';
+  }
+  var grid = document.getElementById('sichaekEditGrid');
+  grid.innerHTML = g; grid.style.display = g ? 'grid' : 'none';
+}
+function _sichaekEditWeek(i){ var E = _sichaekEdit; if(!E || E.busy) return; E.week = _sichaekEditVals(E.mon)[i].v; _sichaekEditRender(); }
+function _sichaekEditKeep(i){ var E = _sichaekEdit; if(!E || E.busy || !E.keep[i]) return; E.keep[i].on = !E.keep[i].on; _sichaekEditRender(); }
+function _sichaekEditDrop(i){ var E = _sichaekEdit; if(!E || E.busy) return; E.add.splice(i, 1); _sichaekEditRender(); }
+function _sichaekEditFiles(e){
+  var fl = e.target.files, E = _sichaekEdit;
+  if(!fl || !fl.length || !E) return;
+  var remain = fl.length;
+  for(var i=0;i<fl.length;i++){
+    (function(f){
+      var reader = new FileReader();
+      reader.onload = function(ev){ E.add.push({ data:ev.target.result, mime:f.type }); remain--; if(remain <= 0) _sichaekEditRender(); };
+      reader.readAsDataURL(f);
+    })(fl[i]);
+  }
+  e.target.value = '';
+}
+// week first, then pictures taken out from the back (earlier positions stay valid), then new pictures in order
+function submitSichaekEdit(){
+  var E = _sichaekEdit;
+  if(!E || E.busy) return;
+  var rem = [], keepN = 0, k;
+  for(k=0;k<E.keep.length;k++){ if(E.keep[k].on) keepN++; else rem.push(E.keep[k].idx); }
+  if(keepN + E.add.length < 1){ showToast('⚠️ 사진이 1장 이상 있어야 해요'); return; }
+  var wkChanged = !!E.week && E.week !== E.week0, picChanged = rem.length > 0 || E.add.length > 0;
+  if(!wkChanged && !picChanged){ closeSichaekEdit(); showToast('바뀐 내용이 없어요'); return; }
+  var steps = [];
+  if(wkChanged) steps.push({ action:'updateCampaign', data:{ fpCode:currentUser.id, id:E.id, startWeek:E.week } });
+  rem.sort(function(a, b){ return b - a; });
+  for(k=0;k<rem.length;k++) steps.push({ action:'deleteCampaignImage', data:{ fpCode:currentUser.id, id:E.id, imgIdx:rem[k] } });
+  for(k=0;k<E.add.length;k++) steps.push({ action:'addCampaignImage', data:{ fpCode:currentUser.id, id:E.id, photoBase64:E.add[k].data, mimeType:E.add[k].mime } });
+  var btn = document.getElementById('sichaekEditBtn'), i = 0, nImg = keepN + E.add.length;
+  E.busy = true; btn.disabled = true;
+  function fin(okAll, msg){
+    E.busy = false; btn.disabled = false; btn.textContent = '수정 저장';
+    loadSichaek();
+    if(!okAll){ showToast('⚠️ ' + msg + (i ? ' · ' + i + '/' + steps.length + '단계까지 저장됨' : '')); return; }
+    closeSichaekEdit();
+    showToast('✅ 시책을 수정했습니다');
+    if(picChanged) uniConfirm('장표 사진이 바뀌었어요.\n시책적용을 다시 읽을까요?', function(){ _rulesOpenFresh(E.id, E.insurer, E.kind, E.week || E.week0, nImg); });
+  }
+  (function next(){
+    if(i >= steps.length){ fin(true); return; }
+    btn.textContent = '저장 중… (' + (i + 1) + '/' + steps.length + ')';
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:steps[i].action, data:steps[i].data }) })
+      .then(function(r){ return r.json(); }).then(function(res){
+        if(!res || !res.ok){ var m = (res && res.msg) || '수정 실패'; fin(false, /알 수 없는/.test(m) ? '서버(GAS)를 새 버전으로 올려 주세요' : m); return; }
+        i++; next();
+      }).catch(function(){ fin(false, '네트워크 오류'); });
+  })();
+}
 function rulesReadAI(btn){
   if(_re.reading) return;
   _re.rules = []; _re.edit = {}; _re.failed = false; _reRender();
@@ -30602,7 +31011,7 @@ function rulesSaveClick(btn){
   var label = btn.textContent; btn.disabled = true; btn.textContent = '저장 중…';
   _reSave(_rulesCampId, true, function(ok){
     btn.disabled = false; btn.textContent = label;
-    if(ok){ showToast('✅ 시책률 저장 완료'); closeRules(); if(typeof loadSichaek === 'function') loadSichaek(); }
+    if(ok){ showToast('✅ 시책적용 저장 완료'); closeRules(); if(typeof loadSichaek === 'function') loadSichaek(); if(typeof _rbMarkSaved === 'function') _rbMarkSaved(_rulesCampId); }
   });
 }
 function _cmCampHasRules(campId){
@@ -31203,9 +31612,14 @@ function _commRender(){
       resC += '<div class="cm-card">' + evHead(ev, '<span class="cm-tag" style="background:rgba(109,79,184,.12);color:#6D4FB8">' + (bkName[ev.bucket] || '2차년') + '</span>')
             + '<div class="cm-row" style="margin-top:4px"><span class="cm-mini">' + _cmEsc(nowTxt) + (ev.type === 'cond' ? '' : ' · ' + _cmEsc(ev.period||'')) + (ev.when ? ' · ' + _cmEsc(ev.when) : '') + '</span><b style="font-size:14px;color:#6D4FB8;white-space:nowrap">' + _cmMan(ev.amt) + '</b></div></div>';
     }
-    var right = '';
-    if(ev.next && ev.need > 0 && ev.nextAmt > (ev.amt||0)) right = _cmMan(ev.need) + ' 더 → ' + _cmMan(ev.nextAmt);
-    else if(ev.next && ev.need > 0) right = _cmMan(ev.need) + ' 더 → +' + _cmMan(ev.nextAmt);
+    // the reward it adds and the new total on the right; the premium still to sell goes after the figures on the left
+    var right = '', needTxt = '';
+    if(ev.next && ev.need > 0){
+      var gainN = (ev.nextAmt > (ev.amt||0)) ? ev.nextAmt - (ev.amt||0) : ev.nextAmt;
+      right = '추가 ' + _cmMan(gainN) + ((ev.amt && ev.nextAmt > ev.amt) ? ' 더해서 ' + _cmMan(ev.nextAmt) : '');
+      var nwC = (ev.type === 'cond' && ev.conds && ev.conds.length > 1 && ev.needIdx >= 0 && ev.conds[ev.needIdx]) ? (parseInt(String(ev.conds[ev.needIdx].from || '').substr(5, 2), 10) || 0) : 0;
+      needTxt = (nwC ? nwC + '월 ' : '') + _cmMan(ev.need) + ' 더 하면';
+    }
     else if(ev.onTrack && ev.nextAmt) right = '유지 시 ' + _cmMan(ev.nextAmt);
     if(!right){
       // the window closed below the first tier: listed under 'not applicable' (period over)
@@ -31216,7 +31630,7 @@ function _commRender(){
     nudN++;
     nudC += '<div class="cm-card cm-new">' + evHead(ev, tagP)
           + '<div class="cm-prog"><i style="width:' + (ev.pct||0) + '%"></i></div>'
-          + '<div class="cm-row"><span class="cm-mini" style="color:var(--text2)">' + _cmEsc(nowTxt) + (ev.amt ? ' · 확보 ' + _cmMan(ev.amt) : '') + '</span><span style="font-size:12px;font-weight:800;color:#6D4FB8;white-space:nowrap">' + right + '</span></div></div>';
+          + '<div class="cm-row"><span class="cm-mini" style="color:var(--text2)">' + _cmEsc(nowTxt) + (ev.amt ? ' · 확보 ' + _cmMan(ev.amt) : '') + (needTxt ? ' · <b style="color:var(--text)">' + _cmEsc(needTxt) + '</b>' : '') + '</span><span style="font-size:12px;font-weight:800;color:#6D4FB8;white-space:nowrap">' + right + '</span></div></div>';
   }
   // rules of this FP's insurers that counted nothing: the reason, so a wrong keyword or a missing 상품명 is visible
   var insSeen = {};
