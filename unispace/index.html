@@ -26598,7 +26598,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 185;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 186;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29683,19 +29683,50 @@ function _cmInsKey(s){ var raw = String(s||'').trim(); var m = (_rates ? _cmRate
 function _rulesSig(r){
   var d = r.data || {}, t = r.type || 'rate';
   function arr(a){ return (a||[]).map(function(x){ return String(x); }).sort().join(','); }
-  var parts = [_cmInsKey(r.insurer), t, (t === 'cond' ? '' : (r.from || d.from || '')), (t === 'cond' ? '' : (r.to || d.to || ''))];
+  // a gift with month conditions is read from its conditions, like a cond rule: its own period does not matter
+  var byConds = (t === 'cond') || (t === 'gift' && d.conds && d.conds.length);
+  var parts = [_cmInsKey(r.insurer), t, (byConds ? '' : (r.from || d.from || '')), (byConds ? '' : (r.to || d.to || ''))];
   if(t === 'rate') parts.push(arr(d.keywords), arr(d.must), arr(d.exclude), arr(d.cats), arr(d.pay), d.payMin||0, d.payMax||0, d.amtMin||0, d.amtMax||0, d.pct1||0, d.pct2||0, d.when2||'');
   else if(t === 'tier') parts.push(arr(d.keywords), JSON.stringify(d.tiers||[]), arr(d.fps));
   else if(t === 'cond') parts.push(JSON.stringify((d.conds||[]).map(function(x){ return [x.from||'', x.to||'', x.min||0]; })), JSON.stringify((d.rewards||[]).map(function(x){ return [x.min||0, x.amt||0]; })), d.amt||0, String(d.rewardBy === undefined ? '' : d.rewardBy));
   else if(t === 'per') parts.push(arr(d.keywords), arr(d.exclude), d.amt||0, d.when||'');
-  else if(t === 'gift') parts.push(String(d.item||'').replace(/\s+/g,''), d.min||0, d.rank||0, JSON.stringify(d.conds||[]));
-  parts.push(arr(d.prods), d.prodsAll ? 'all:' + arr(d.except) : '');
+  else if(t === 'gift') parts.push(_rulesItemKey(d.item), d.min||0, d.rank||0, JSON.stringify((d.conds||[]).map(function(x){ return [x.from||'', x.to||'', x.min||0]; })));
+  // one reward printed on several weekly sheets: "every product but a few" is one scope, whichever few a reading listed
+  if(t !== 'rate' && d.prodsAll) parts.push('all');
+  else parts.push(arr(d.prods), d.prodsAll ? 'all:' + arr(d.except) : '');
+  // a cond or gift reward scoped by words alone: different words are different rewards
+  if((t === 'cond' || t === 'gift') && !d.prodsAll && !(d.prods && d.prods.length)) parts.push(arr(d.keywords));
   return parts.join('|');
 }
+// a gift's item in a comparable form: "A or B or C" and "pick one: A / B / C" are the same item
+function _rulesItemKey(s){ return String(s||'').replace(/택\s*1/g, '').replace(/\bor\b/gi, '').replace(/[\s\/()+.,:·|~'"-]/g, '').toLowerCase(); }
+// how new a rule's sheet is: the campaign id carries its registration time (camp_<ms>), else the save time
+function _cmRuleAge(r){
+  var m = String((r && r.campaignId) || '').match(/(\d{12,13})/);
+  if(m) return parseInt(m[1], 10);
+  var t = Date.parse((r && (r.createdAt || r.updatedAt)) || '');
+  return isNaN(t) ? 0 : t;
+}
 function _rulesDedupe(list){
-  var seen = {}, out = [];
-  for(var i=0;i<(list||[]).length;i++){ var sg = _rulesSig(list[i]); if(seen[sg]) continue; seen[sg] = true; out.push(list[i]); }
-  return out;
+  var seen = {}, out = [], i;
+  for(i=0;i<(list||[]).length;i++){ var sg = _rulesSig(list[i]); if(seen[sg]) continue; seen[sg] = true; out.push(list[i]); }
+  // a later sheet that extends a period: the same cond reward whose windows start on the same days with the same
+  // minimums but end later replaces the earlier sheet's copy (two sheets of one campaign are left as they are)
+  var fam = {}, drop = {};
+  for(i=0;i<out.length;i++){
+    var r = out[i], d = r.data || {};
+    if(r.type !== 'cond' || !(d.conds && d.conds.length > 1)) continue;
+    var key = [_cmInsKey(r.insurer), JSON.stringify((d.rewards||[]).map(function(x){ return [x.min||0, x.amt||0]; })), d.amt||0, String(d.rewardBy === undefined ? '' : d.rewardBy),
+      JSON.stringify(d.conds.map(function(x){ return [x.from||'', x.min||0]; })),
+      d.prodsAll ? 'all' : ((d.prods && d.prods.length) ? d.prods.slice().sort().join(',') : 'kw:' + (d.keywords||[]).slice().sort().join(','))].join('|');
+    if(fam[key] === undefined){ fam[key] = i; continue; }
+    var j = fam[key], a = out[j];
+    if(String(a.campaignId||'') === String(r.campaignId||'')) continue;
+    if(_cmRuleAge(r) >= _cmRuleAge(a)){ drop[j] = true; fam[key] = i; } else drop[i] = true;
+  }
+  var res = [];
+  for(i=0;i<out.length;i++){ if(!drop[i]) res.push(out[i]); }
+  return res;
 }
 function _cmRulesOf(insurer){
   var out = [], list = _rulesDedupe(_rules || []);
@@ -29961,8 +29992,9 @@ function _cmRateRulesFor(p, dateStr){
   }
   if(out.length > 1){
     var scored = out.map(function(r, idx){ return { r:r, s:score(r), i:idx }; });
-    // equal fit: the rule of the shorter period wins (a weekly rate over the month's rate)
-    scored.sort(function(a,b){ return (b.s - a.s) || (_cmRuleSpan(a.r) - _cmRuleSpan(b.r)) || (a.i - b.i); });
+    // equal fit: the rule of the shorter period wins (a weekly rate over the month's rate), then the newest sheet
+    // (a later week's sheet restates the month's rate, or raises it)
+    scored.sort(function(a,b){ return (b.s - a.s) || (_cmRuleSpan(a.r) - _cmRuleSpan(b.r)) || (_cmRuleAge(b.r) - _cmRuleAge(a.r)) || (a.i - b.i); });
     out = scored.map(function(x){ return x.r; });
   }
   return out;
@@ -30803,7 +30835,21 @@ function openRulesBulk(){
   var kept = _rb.run || _rb.saving || _rb.cards.some(function(c){ return c.st === 'ok' || c.st === 'bad' || c.st === 'fail'; });
   if(kept){ _rbRender(); return; }
   document.getElementById('rbBox').innerHTML = '<div class="rb-note" style="padding:24px 0">불러오는 중…</div>';
-  _rulesEnsure(function(){ _rbBuild(); _rbRender(); }, true);
+  _rbFresh();
+}
+// the list comes from the campaigns on the server now (a card registered a minute ago is not missed), with fresh rules
+function _rbFresh(){
+  var done = false;
+  function build(){ if(done) return; done = true; _rulesEnsure(function(){ _rbBuild(); _rbRender(); }, true); }
+  try {
+    fetch(UNISPACE_GAS_URL + '?action=getCampaigns&fp=' + encodeURIComponent(currentUser.id) + '&status=all&_t=' + Date.now()).then(function(r){ return r.json(); }).then(function(res){
+      if(res && res.ok && res.campaigns){
+        _sichaekAllCache = res.campaigns;
+        try{ localStorage.setItem(SICHAEK_CACHE_KEY, JSON.stringify({ campaigns:res.campaigns, canManage:res.canManage, at:Date.now() })); }catch(e){}
+      }
+      build();
+    }).catch(build);
+  } catch(e) { build(); }
 }
 function closeRulesBulk(){ document.getElementById('rulesBulkOverlay').classList.remove('open'); }
 function _rbTog(i){ var c = _rb.cards[i]; if(!c || _rb.run) return; c.on = !c.on; _rbRender(); }
@@ -30982,7 +31028,7 @@ function _rbSaveAll(){
     })();
   });
 }
-function _rbReset(){ if(_rb.run || _rb.saving) return; _rulesEnsure(function(){ _rbBuild(); _rbRender(); }, true); }
+function _rbReset(){ if(_rb.run || _rb.saving) return; document.getElementById('rbBox').innerHTML = '<div class="rb-note" style="padding:24px 0">불러오는 중…</div>'; _rbFresh(); }
 function _rbRender(){
   var box = document.getElementById('rbBox');
   if(!box) return;
@@ -31338,6 +31384,8 @@ function _cmEvalRules(recs, fpId, ym){
           res.onTrack = true; res.futureN = fut.length;
           var floor2 = Infinity;
           for(c=0;c<conds.length;c++){ var v2 = (sums[c] >= (conds[c].min||0)) ? sums[c] : (conds[c].min||0); if(v2 < floor2) floor2 = v2; }
+          // a reward picked by one window: that window's amount (the other windows only have to reach their minimum)
+          if(!byMin) floor2 = (sums[by] >= (conds[by].min||0)) ? sums[by] : (conds[by].min||0);
           var tg2 = hasRw ? _cmTierPick(d.rewards, floor2).got : null; res.nextAmt = tg2 ? tg2.amt : (hasRw ? 0 : (d.amt||0)); res.pct = 100;
         }
       }
