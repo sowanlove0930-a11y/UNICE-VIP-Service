@@ -1080,6 +1080,13 @@ body.theme-light .pv-bf.on { background:#FAEEDA; border-color:#B8860B; color:#85
 .pv-tbl .pv-numcol { width:22px; padding-left:2px; padding-right:2px; text-align:right; color:#B4AE9E; font-weight:800; font-size:10px; line-height:16px; font-variant-numeric:tabular-nums; white-space:nowrap; }
 /* 상품 칸도 같은 줄높이 -> 상품이 2줄이면 번호도 2줄로 정확히 맞음 */
 .pv-tbl .pv-prodcol { line-height:16px; color:var(--text2); }
+.pv-pm { display:inline-block; margin-left:4px; font-size:9px; font-weight:800; line-height:13px; padding:0 5px; border-radius:99px; vertical-align:1px; }
+.pv-pm.ok { background:rgba(31,146,104,.14); color:#1F9268; }
+.pv-pm.no { background:rgba(224,122,46,.14); color:#C4621B; }
+body:not(.theme-light) .pv-pm.no { color:#F0A060; }
+.pv-pmsum { margin-top:6px; padding:0 4px; font-size:11px; color:var(--text3); text-align:right; }
+.pv-pmsum b { color:#1F9268; }
+.pv-pmsum span { color:#C4621B; font-weight:700; }
 .pv-daysum { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:var(--surface); border:1px solid var(--bdr); border-radius:9px; margin-top:10px; font-size:12px; font-weight:700; color:var(--text2); }
 .pv-daysum b { color:var(--gold2); }
 .pv-trend { display:flex; align-items:flex-end; gap:2px; height:100px; padding:8px 0 0; }
@@ -10658,8 +10665,8 @@ function renderPerfView(){
     listRecs = listRecs.filter(function(r){ return _pvBranchKey(r.branch)===_pvBranch; });
   }
   // 필터된 합계 (합계줄용)
-  var fSum=0, fCnt=0;
-  listRecs.forEach(function(r){ fSum+=(parseInt(r.total)||0); fCnt+=_perfCntOf(r); });
+  var fSum=0, fCnt=0, pmIn=0, pmAll=0;
+  listRecs.forEach(function(r){ fSum+=(parseInt(r.total)||0); fCnt+=_perfCntOf(r); (r.products||[]).forEach(function(p){ pmAll++; if(p.prod) pmIn++; }); });
   var brLabel = _pvBranch==='al'?' · 알파':_pvBranch==='br'?' · 브라보':'';
 
   var listEl = document.getElementById('pvList');
@@ -10676,7 +10683,8 @@ function renderPerfView(){
         var kind=(typeof _perfClassify==='function')?_perfClassify(p.co):'etc';
         var badge = kind==='life' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#2E6E8E;color:#fff;margin-right:4px">생</span>' : (kind==='non' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#A85532;color:#fff;margin-right:4px">손</span>' : '');
         var lumpB = _perfIsLump(p) ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FAC775;color:#412402;margin-right:4px">일시납</span>' : '';
-        return '<span style="display:inline-block;white-space:nowrap'+(_perfIsLump(p)?';color:#854F0B':'')+'">'+lumpB+badge+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원</span>';
+        var pm = p.prod ? '<span class="pv-pm ok" title="' + String(p.prod).replace(/"/g,'&quot;') + '">✓</span>' : '<span class="pv-pm no">미입력</span>';
+        return '<span style="display:inline-block;white-space:nowrap'+(_perfIsLump(p)?';color:#854F0B':'')+'">'+lumpB+badge+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원'+pm+'</span>';
       }).join('<br>');
       var dateCol = (_pvRange!=='today') ? '<td style="white-space:nowrap;color:var(--text3)">'+(r.date?r.date.slice(5):'')+'</td>' : '';
       var delCol = canDel ? '<td class="pv-edit-col" style="text-align:center;width:46px;white-space:nowrap;padding-left:2px;padding-right:2px"><span onclick="event.stopPropagation();openPerfEdit(\''+r.id+'\')" style="color:#2563EB;font-size:13px;cursor:pointer;padding:2px" title="수정">✏️</span><span onclick="event.stopPropagation();deletePerfRec(\''+r.id+'\')" style="color:#C0392B;font-size:13px;cursor:pointer;padding:2px" title="삭제">🗑️</span></td>' : '';
@@ -10693,7 +10701,8 @@ function renderPerfView(){
     var dateHead = (_pvRange!=='today') ? '<th>날짜</th>' : '';
     var delHead = canDel ? '<th></th>' : '';
     listEl.innerHTML = '<table class="pv-tbl"><thead><tr><th class="pv-numcol">#</th>'+dateHead+'<th>FP</th><th>상품</th><th style="text-align:right">금액</th>'+delHead+'</tr></thead><tbody>'+rows+'</tbody></table>'+
-      '<div class="pv-daysum"><span>'+(_pvRange==='today'?'이 날':_pvRange==='week'?'이번 주':_pvRange==='range'?'기간':'이번 달')+' 합계'+brLabel+'</span><span><b>'+fSum.toLocaleString()+'원</b> · '+fCnt+'건</span></div>';
+      '<div class="pv-daysum"><span>'+(_pvRange==='today'?'이 날':_pvRange==='week'?'이번 주':_pvRange==='range'?'기간':'이번 달')+' 합계'+brLabel+'</span><span><b>'+fSum.toLocaleString()+'원</b> · '+fCnt+'건</span></div>'+
+      (pmAll ? '<div class="pv-pmsum">📝 상품명 입력 <b>'+pmIn+'</b>/'+pmAll+'건'+(pmAll > pmIn ? ' · <span>미입력 '+(pmAll - pmIn)+'건</span>' : ' · 모두 입력 ✓')+'</div>' : '');
   }
 
   // 일자별 추이 (지점 필터 반영)
@@ -26598,7 +26607,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 193;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 194;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -31754,7 +31763,7 @@ function _cmSchedule(recs, ym){
 
 // ── 수수료 예상 모달 ────────────────────────────────
 var _cmZeroOpen = false;
-var _cmAcc = { res:true, nud:true, miss:false, ct:true };
+var _cmAcc = { res:false, nud:false, miss:false, ct:false };
 function _cmAccToggle(k){ _cmAcc[k] = !_cmAcc[k]; _commRender(); }
 function _cmAccHtml(k, title, sum, body, tone){
   var open = !!_cmAcc[k];
@@ -31809,6 +31818,9 @@ function openCommission(){
   _cmBr = _cmIsAdmin(currentUser) ? 'all' : _pvBranchKey(currentUser.branch||'');
   _cmOpen = ''; _cmFromRank = false;
   _cmShowSched = false;
+  // the first screen: every section folded (the simulation keeps the contracts typed in, folded too)
+  _cmAcc = { res:false, nud:false, miss:false, ct:false };
+  _cmSim.open = { me:false, mgr:false };
   var isAdmin = _cmIsAdmin(currentUser);
   // a team (and the FP picker) only for the two branch managers: any other account sees its own figures only
   var team = (isAdmin || !_cmCanRank()) ? null : _cmTeamOfManager(currentUser.id);
