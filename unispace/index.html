@@ -26598,7 +26598,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 186;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 190;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29798,6 +29798,30 @@ function _cmInSet(d, key, np){
   if(!d[mk]){ var m = {}, a = d[key] || []; for(var i=0;i<a.length;i++) m[_cmNorm(a[i])] = 1; d[mk] = m; }
   return !!d[mk][np];
 }
+// a non-life savings or pension product: a reward for all products of a non-life sheet is for protection products
+// (a coverage share under 15% earns nothing), so it stays out unless a rule links it by number or names it
+var _CM_NL_SAV = /저축|연금/;
+var _CM_NL_SAV_WHY = '저축·연금 상품 → 손보 전 상품 시책 제외';
+var _cmNlSavMemo = { rates:null, m:{} };
+function _cmNlSaving(p){
+  var prod = String((p && p.prod) || '');
+  if(!prod || !_CM_NL_SAV.test(prod) || !_rates) return false;
+  if(_cmNlSavMemo.rates !== _rates) _cmNlSavMemo = { rates:_rates, m:{} };
+  var k = String(p.co || '') + '|' + prod;
+  if(_cmNlSavMemo.m[k] === undefined){
+    var row = _cmFindRate(p.co, prod), kind = row ? row[0] : '';
+    // a name missing from the table: the insurer's own rows tell life from non-life
+    if(!row){ var ins = _cmRateInsurer(p.co), arr = ins ? (_rates.byIns[ins] || []) : []; kind = arr.length ? arr[0][0] : ''; }
+    _cmNlSavMemo.m[k] = (kind === '손보');
+  }
+  return _cmNlSavMemo.m[k];
+}
+// the rule covers every product of the insurer (no linked products, no keywords, no required words, no savings category)
+function _cmAllScope(d){
+  if((d.prods && d.prods.length) || (d.keywords && d.keywords.length) || (d.must && d.must.length)) return false;
+  for(var i=0;i<(d.cats||[]).length;i++){ if(_CM_NL_SAV.test(String(d.cats[i]))) return false; }
+  return true;
+}
 // scope test shared by all rule types: cats / keywords / exclude / pay
 function _cmScopeOk(d, p, needProd){
   d = d || {};
@@ -29811,6 +29835,7 @@ function _cmScopeOk(d, p, needProd){
     if(!_cmKwAny(np, d.keywords, !needProd)) return false;
   } else if(needProd && !np){ return false; }
   if(!linked && d.prodsAll && d.except && d.except.length && np && _cmInSet(d, 'except', np)) return false;
+  if(np && _cmAllScope(d) && _cmNlSaving(p)) return false;
   // a row whose name says it includes simplified underwriting covers both types: an exclude on that word still fits it
   var npx = _cmNpEx(np);
   if(d.exclude && d.exclude.length && np){
@@ -29846,6 +29871,7 @@ function _cmScopeWhy(d, p){
   if(d.prods && d.prods.length){ if(!np || !_cmInSet(d, 'prods', np)) return '연결된 상품이 아님 (' + d.prods.length + '개 상품에만 적용)'; }
   else if(d.keywords && d.keywords.length && !_cmKwAny(np, d.keywords)) return '상품 키워드 (' + d.keywords.join(', ') + ')';
   if(d.prodsAll && d.except && d.except.length && np && _cmInSet(d, 'except', np)) return '제외 상품';
+  if(np && _cmAllScope(d) && _cmNlSaving(p)) return _CM_NL_SAV_WHY;
   if(d.exclude && d.exclude.length && np){ var npx = _cmNpEx(np); for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && npx.indexOf(ex) >= 0) return '제외어 "' + d.exclude[i] + '" 포함'; } }
   if(d.must && d.must.length){ for(i=0;i<d.must.length;i++){ var mu = _cmNorm(d.must[i]); if(mu && np.indexOf(mu) < 0) return '"' + d.must[i] + '" 없음'; } }
   var pmin = parseInt(d.payMin,10) || 0, pmax = parseInt(d.payMax,10) || 0;
@@ -29880,6 +29906,7 @@ function _cmNoRuleWhy(p, dateStr){
     if(!best || (kwHit && !best.kwHit)){ best = { r:inRange[k], kwHit:kwHit }; bestWhy = why; }
   }
   if(!best) return '건별 % 규칙에 %가 없음';
+  if(bestWhy === _CM_NL_SAV_WHY) return _CM_NL_SAV_WHY;
   return '가장 가까운 규칙 "' + _cmEsc(best.r.title || (best.r.data||{}).label || '') + '" 불일치: ' + _cmEsc(bestWhy) + ' · 규칙 ' + inRange.length + '개 검사';
 }
 // a % that applies to a part of the premium (핵심담보 보험료, 보장P): shown as a note, not added to totals
@@ -30127,7 +30154,7 @@ function _perfCoreRules(p, dateStr){
 }
 // reward of one core-cover rule for this row: from the monthly premium, or from the typed core premium when the reward is a % of it
 function _perfCoreGain(pt, p){
-  var d = pt.r.data || {}, base = (d.base === 'part') ? _numWonC(p.core) : _numWonC(p.amount), out = [];
+  var d = pt.r.data || {}, base = (d.base === 'part') ? _numWonC(p.core) : _cmScAmt(p.co, p.prod, _numWonC(p.amount)), out = [];
   var p1 = parseFloat(d.pct1) || 0, p2 = parseFloat(d.pct2) || 0;
   if(p1) out.push('익월 ' + (base ? '+' + _cmMan(base * p1 / 100 * COMM_SC_RATE) : _cmPct(p1)));
   if(p2) out.push(_cmEsc(d.when2 || '13차월') + ' ' + (base ? '+' + _cmMan(base * p2 / 100 * COMM_SC_RATE) : _cmPct(p2)));
@@ -30222,7 +30249,7 @@ function _cmFpInDate(r, dateStr){
 function _cmShort(s, n){ s = String(s || ''); return s.length > n ? s.substr(0, n - 1) + '…' : s; }
 // what one FP-check item moves on this contract, in a few words: the money of a % rule, else the reward names
 function _cmFpEffect(G, p){
-  var parts = [], seen = {}, amt = _numWonC(p.amount);
+  var parts = [], seen = {}, amt = _cmScAmt(p.co, p.prod, _numWonC(p.amount));
   for(var j=0;j<G.rules.length;j++){
     var r = G.rules[j], d = r.data || {}, tx = '';
     if(r.type === 'rate'){
@@ -31190,7 +31217,8 @@ function _cmCampHasRules(campId){
 function _cmProdItem(rec, p){
   var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
   var row = p.prod ? _cmFindRate(p.co, p.prod) : null;
-  var it = { date:rec.date, fpId:rec.fpId, co:p.co||'', cat:p.cat||'', prod:p.prod||'', amount:amt, lump:_perfIsLump(p), kind:(row ? row[0] : (p.pk||'')), calc:false, noRate:false, fee:null, gross:null, sc:null, rule:null };
+  var scAmt = _perfIsLump(p) ? amt : _cmScAmt(p.co, p.prod, amt);
+  var it = { date:rec.date, fpId:rec.fpId, co:p.co||'', cat:p.cat||'', prod:p.prod||'', amount:amt, scAmt:scAmt, lump:_perfIsLump(p), kind:(row ? row[0] : (p.pk||'')), calc:false, noRate:false, fee:null, gross:null, sc:null, rule:null };
   // a single premium must not be multiplied by monthly rates: only rows whose name marks a single premium carry those rates
   var lumpRow = !!(row && /일시납/.test(String(row[2]||'')));
   it.lumpRow = lumpRow;
@@ -31201,8 +31229,9 @@ function _cmProdItem(rec, p){
     else {
       var r1 = row[3]||0, r2 = row[4]||0, r3 = row[5]||0, r4 = row[6]||0, r5 = row[7]||0;
       var g;
-      if(row[0] === '손보') g = { m1:amt*r1, y1:amt*r2, y2:amt*(r3+r4), y3:0, p13:amt*r3, p15:amt*r4, nl:true };
-      else g = { m1:amt*r1, y1:amt*r2, y2:amt*r3, y3:amt*r4, y3a:amt*r4, y4:amt*r5, nl:false };
+      // the commission is paid on the counted premium as well (a unit insurer counts one unit per contract)
+      if(row[0] === '손보') g = { m1:scAmt*r1, y1:scAmt*r2, y2:scAmt*(r3+r4), y3:0, p13:scAmt*r3, p15:scAmt*r4, nl:true };
+      else g = { m1:scAmt*r1, y1:scAmt*r2, y2:scAmt*r3, y3:scAmt*r4, y3a:scAmt*r4, y4:scAmt*r5, nl:false };
       it.gross = g;
       // y4 (years 4-10) is kept apart: the totals cover 36 months
       it.fee = { m1:g.m1*COMM_FP_RATE, y1:g.y1*COMM_FP_RATE, y2:g.y2*COMM_FP_RATE, y3:g.y3*COMM_FP_RATE, y4:(g.y4||0)*COMM_FP_RATE };
@@ -31217,13 +31246,13 @@ function _cmProdItem(rec, p){
     if(rule && (it.lump || lumpRow) && !_cmLumpRule(rule)) rule = null;
     if(rule){
       var d = rule.data || {};
-      var s1 = amt*(parseFloat(d.pct1)||0)/100*COMM_SC_RATE, s2 = amt*(parseFloat(d.pct2)||0)/100*COMM_SC_RATE;
+      var s1 = scAmt*(parseFloat(d.pct1)||0)/100*COMM_SC_RATE, s2 = scAmt*(parseFloat(d.pct2)||0)/100*COMM_SC_RATE;
       it.sc = { m1:s1, y2:s2, pct1:parseFloat(d.pct1)||0, pct2:parseFloat(d.pct2)||0, when2:d.when2||'13차월', label:_cmRuleLabel(rule) };
       it.rule = rule;
       var rx = _cmRateExtra(p, rec.date, rule, (it.lump || lumpRow));
       if(rx){
         var dx = rx.data || {}, x1 = parseFloat(dx.pct1)||0, x2 = parseFloat(dx.pct2)||0;
-        it.sc.m1 += amt*x1/100*COMM_SC_RATE; it.sc.y2 += amt*x2/100*COMM_SC_RATE;
+        it.sc.m1 += scAmt*x1/100*COMM_SC_RATE; it.sc.y2 += scAmt*x2/100*COMM_SC_RATE;
         if(x1) it.sc.pct1 = x1;
         if(x2){ it.sc.pct2 = x2; it.sc.when2 = dx.when2 || '13차월'; }
         it.sc.label += ' + ' + _cmRuleLabel(rx);
@@ -31236,7 +31265,7 @@ function _cmProdItem(rec, p){
       var pt = it.parts[pi];
       if(!pt.ok) continue;
       var pd = pt.r.data || {};
-      var base = (pd.base === 'part' && pt.core) ? pt.core : amt;
+      var base = (pd.base === 'part' && pt.core) ? pt.core : scAmt;
       var a1 = base*(parseFloat(pd.pct1)||0)/100*COMM_SC_RATE, a2 = base*(parseFloat(pd.pct2)||0)/100*COMM_SC_RATE;
       if(!it.sc) it.sc = { m1:0, y2:0, pct1:0, pct2:0, when2:pd.when2||'13차월', label:'' };
       // the picked rule pays nothing later on: the first add-on that does names the month (13th / 15th)
@@ -31261,8 +31290,18 @@ function _cmWhenBucket(when){
 }
 function _cmOverlap(a1, a2, b1, b2){ return !(a2 < b1 || a1 > b2); }
 // sum of one fp's rows of the rule's insurer in [from,to] (lump excluded; product optional)
-function _cmSumWindow(recs, fpId, rule, from, to){
-  var s = 0, n = 0, d = rule.data || {};
+// a row without a product name, in a window of an earlier month: what can still be checked without the name
+function _cmUnkOk(d, p){
+  if(d.cats && d.cats.length && d.cats.indexOf(p.cat||'') < 0) return false;
+  var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
+  if(d.amtMin && amt < d.amtMin) return false;
+  if(d.amtMax && amt > d.amtMax) return false;
+  return true;
+}
+// pastOk: the window closed before the month being shown, where rows saved before product names were asked count as
+// the insurer's activity (unk = that part of the sum)
+function _cmSumWindow(recs, fpId, rule, from, to, pastOk){
+  var s = 0, n = 0, unk = 0, d = rule.data || {};
   for(var i=0;i<recs.length;i++){
     var rec = recs[i];
     if(rec.fpId !== fpId) continue;
@@ -31273,12 +31312,17 @@ function _cmSumWindow(recs, fpId, rule, from, to){
       var p = ps[k];
       if(!_cmSameInsurer(rule.insurer, p.co)) continue;
       if(_perfIsLump(p)) continue;
-      if(!_cmScopeOk(d, p, false)) continue;
+      var isUnk = false;
+      if(!_cmScopeOk(d, p, false)){
+        if(!(pastOk && !p.prod && _cmUnkOk(d, p))) continue;
+        isUnk = true;
+      }
       if(!_cmFpOk(d, p)) continue;
-      s += parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0; n++;
+      var a = _cmScAmt(p.co, p.prod, parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0);
+      s += a; n++; if(isUnk) unk += a;
     }
   }
-  return { sum:s, n:n };
+  return { sum:s, n:n, unk:unk };
 }
 function _cmTierPick(tiers, sum){
   var got = null, next = null;
@@ -31288,6 +31332,44 @@ function _cmTierPick(tiers, sum){
     else { next = arr[i]; break; }
   }
   return { got:got, next:next };
+}
+// Lina (branch rule 2026-10-22): a contract counts up to one unit for rewards (whole-life excepted) and an FP's Lina
+// premium in a tier or cond reward is cut into units, each unit paid like one FP's reward
+var CM_UNIT_WON = 300000;
+var _cmUnitMemo = { rates:null, m:{} };
+function _cmUnitOf(ins){
+  if(_cmUnitMemo.rates !== _rates) _cmUnitMemo = { rates:_rates, m:{} };
+  var k = String(ins || '');
+  if(_cmUnitMemo.m[k] === undefined) _cmUnitMemo.m[k] = _cmSameInsurer(k, '라이나생명') ? CM_UNIT_WON : 0;
+  return _cmUnitMemo.m[k];
+}
+// the premium one contract brings to a reward (the per-contract cap of a unit insurer)
+function _cmScAmt(co, prod, amt){
+  var u = _cmUnitOf(co);
+  if(!u || /종신/.test(String(prod || ''))) return amt;
+  return Math.min(amt, u);
+}
+// tier pick over units: every full unit takes the reward of one unit, the rest takes its own tier; the plain pick of
+// the whole sum is kept when it pays more. next = the nearest sum that pays more, with what it pays
+function _cmUnitPick(tiers, sum, unit){
+  if(!unit) return _cmTierPick(tiers, sum);
+  var arr = (tiers||[]).slice().sort(function(a,b){ return a.min - b.min; }), i;
+  var one = _cmTierPick(arr, unit).got, per = one ? one.amt : 0;
+  function byUnit(x){ var f = Math.floor(x / unit), g = _cmTierPick(arr, x - f * unit).got; return f * per + (g ? g.amt : 0); }
+  function plain(x){ var g = _cmTierPick(arr, x).got; return g ? g.amt : 0; }
+  function val(x){ return Math.max(byUnit(x), plain(x)); }
+  var amt = val(sum), full = Math.floor(sum / unit), rest = sum - full * unit, ths = [(full + 1) * unit];
+  for(i=0;i<arr.length;i++){ if(arr[i].min > rest) ths.push(full * unit + arr[i].min); if(arr[i].min > sum) ths.push(arr[i].min); }
+  ths.sort(function(a,b){ return a - b; });
+  var next = null;
+  for(i=0;i<ths.length;i++){ if(ths[i] > sum){ var v = val(ths[i]); if(v > amt){ next = { min:ths[i], amt:v }; break; } } }
+  var won = byUnit(sum) > plain(sum);
+  return { got:(amt > 0 ? { min:sum, amt:amt } : null), next:next, unit:unit, full:(won ? full : 0), rest:(won ? rest : 0) };
+}
+// unit text like 30x3 or 30x2 + 15 (in 10k won): shown when the sum was paid as more than one unit
+function _cmUnitTxt(pk){
+  if(!pk || !pk.unit || !pk.full || (pk.full < 2 && !pk.rest)) return '';
+  return _cmMan(pk.unit) + (pk.full > 1 ? '×' + pk.full : '') + (pk.rest > 0 ? ' + ' + _cmMan(pk.rest) : '');
 }
 // evaluate tier/cond/per rules for fp in month ym -> list of results
 // windows that are whole months read as "10·11·12월"; anything else as date ranges
@@ -31322,7 +31404,7 @@ function _cmEvalRules(recs, fpId, ym){
       var from = r.from || d.from || mFrom, to = r.to || d.to || mTo;
       if(!_cmOverlap(from, to, mFrom, mTo)) continue;
       var w = _cmSumWindow(recs, fpId, r, from, to);
-      var pk = _cmTierPick(d.tiers, w.sum);
+      var pk = _cmUnitPick(d.tiers, w.sum, _cmUnitOf(r.insurer)); res.unitTxt = _cmUnitTxt(pk);
       res.sum = w.sum; res.n = w.n; res.amt = pk.got ? pk.got.amt : 0;
       res.period = from.substr(5).replace('-','.') + '~' + to.substr(5).replace('-','.');
       if(pk.next){ res.next = pk.next; res.need = pk.next.min - w.sum; res.nextAmt = pk.next.amt; res.pct = Math.min(100, Math.round(w.sum / pk.next.min * 100)); }
@@ -31333,11 +31415,12 @@ function _cmEvalRules(recs, fpId, ym){
     } else if(r.type === 'cond'){
       var conds = d.conds || [];
       if(!conds.length) continue;
-      var touches = false, sums = [], unmet = [], c;
+      var touches = false, sums = [], unmet = [], unkM = [], c;
       for(c=0;c<conds.length;c++){
         var cf = conds[c].from || mFrom, ct = conds[c].to || mTo;
         if(_cmOverlap(cf, ct, mFrom, mTo)) touches = true;
-        var ws = _cmSumWindow(recs, fpId, r, cf, ct);
+        var ws = _cmSumWindow(recs, fpId, r, cf, ct, ct < mFrom);
+        if(ws.unk > 0) unkM.push(parseInt(cf.substr(5, 2), 10) + '월');
         sums.push(ws.sum);
         if(ws.sum < (conds[c].min||0)) unmet.push({ idx:c, need:(conds[c].min||0) - ws.sum, sum:ws.sum, from:cf, to:ct, min:(conds[c].min||0) });
       }
@@ -31347,8 +31430,9 @@ function _cmEvalRules(recs, fpId, ym){
       var by = byMin ? -1 : Math.min(conds.length-1, Math.max(0, parseInt(d.rewardBy,10)||0));
       var baseSum = byMin ? Math.min.apply(null, sums) : sums[by];
       var hasRw = !!(d.rewards && d.rewards.length);
-      var pk2 = hasRw ? _cmTierPick(d.rewards, baseSum) : { got:null, next:null };
+      var unitR = _cmUnitOf(r.insurer), pk2 = hasRw ? _cmUnitPick(d.rewards, baseSum, unitR) : { got:null, next:null }; if(hasRw) res.unitTxt = _cmUnitTxt(pk2);
       res.sum = baseSum; res.sums = sums; res.conds = conds; res.byMin = byMin;
+      res.unkTxt = unkM.length ? unkM.join('·') + ' 상품명 없는 건 포함' : '';
       res.period = _cmCondPeriod(conds, mFrom, mTo);
       if(!unmet.length){
         res.amt = hasRw ? (pk2.got ? pk2.got.amt : 0) : (d.amt||0);
@@ -31374,9 +31458,9 @@ function _cmEvalRules(recs, fpId, ym){
           else if(byMin){
             var floor = u.min;
             for(c=0;c<conds.length;c++){ if(c === u.idx) continue; var v = (sums[c] >= (conds[c].min||0)) ? sums[c] : (conds[c].min||0); if(v < floor) floor = v; }
-            var tg = _cmTierPick(d.rewards, floor).got; amtIf = tg ? tg.amt : 0;
+            var tg = _cmUnitPick(d.rewards, floor, unitR).got; amtIf = tg ? tg.amt : 0;
           } else {
-            var target = (u.idx === by) ? _cmTierPick(d.rewards, u.min).got : pk2.got; amtIf = target ? target.amt : 0;
+            var target = (u.idx === by) ? _cmUnitPick(d.rewards, u.min, unitR).got : pk2.got; amtIf = target ? target.amt : 0;
           }
           if(amtIf > 0){ res.need = u.need; res.nextAmt = amtIf; res.needIdx = u.idx; res.next = { min:u.min, amt:amtIf }; res.pct = Math.min(100, Math.round(u.sum / (u.min||1) * 100)); res.futureN = fut.length; }
         } else if(!cur.length && fut.length){
@@ -31386,7 +31470,7 @@ function _cmEvalRules(recs, fpId, ym){
           for(c=0;c<conds.length;c++){ var v2 = (sums[c] >= (conds[c].min||0)) ? sums[c] : (conds[c].min||0); if(v2 < floor2) floor2 = v2; }
           // a reward picked by one window: that window's amount (the other windows only have to reach their minimum)
           if(!byMin) floor2 = (sums[by] >= (conds[by].min||0)) ? sums[by] : (conds[by].min||0);
-          var tg2 = hasRw ? _cmTierPick(d.rewards, floor2).got : null; res.nextAmt = tg2 ? tg2.amt : (hasRw ? 0 : (d.amt||0)); res.pct = 100;
+          var tg2 = hasRw ? _cmUnitPick(d.rewards, floor2, unitR).got : null; res.nextAmt = tg2 ? tg2.amt : (hasRw ? 0 : (d.amt||0)); res.pct = 100;
         }
       }
       var any = false; for(var s2=0;s2<sums.length;s2++){ if(sums[s2] > 0) any = true; }
@@ -31397,7 +31481,7 @@ function _cmEvalRules(recs, fpId, ym){
       for(c=0;c<d.conds.length;c++){
         var gcf = d.conds[c].from || mFrom, gct = d.conds[c].to || mTo, gmin = d.conds[c].min || 0;
         if(_cmOverlap(gcf, gct, mFrom, mTo)){ gTouch = true; if(gCur < 0) gCur = c; }
-        var gw2 = _cmSumWindow(recs, fpId, r, gcf, gct); gs.push(gw2.sum);
+        var gw2 = _cmSumWindow(recs, fpId, r, gcf, gct, gct < mFrom); gs.push(gw2.sum);
         if(gw2.sum < gmin){ gAll = false; if(gct < today) gPast = true; else if(gcf > today) gFut++; else if(!gNeed){ gNeed = gmin - gw2.sum; gPct = Math.min(100, Math.round(gw2.sum / (gmin||1) * 100)); } }
       }
       if(!gTouch) continue;
@@ -31474,12 +31558,12 @@ function _cmBuild(fpId, ym, cut){
       if(!inWin) continue;
       if(!_cmScopeOk(ad, { co:ait.co, cat:ait.cat, prod:ait.prod, amount:ait.amount }, false)) continue;
       if(!_cmFpOk(ad, ait)) continue;
-      pool.push(ait); tot += ait.amount;
+      pool.push(ait); tot += ait.scAmt;
     }
     if(!pool.length) continue;
     var bk = (av.bucket === 'm1') ? 'm1' : (av.bucket === 'y3' ? 'y3' : 'y2');
     for(var ap=0;ap<pool.length;ap++){
-      var share = (av.type === 'per') ? (1 / pool.length) : (tot ? pool[ap].amount / tot : 1 / pool.length);
+      var share = (av.type === 'per') ? (1 / pool.length) : (tot ? pool[ap].scAmt / tot : 1 / pool.length);
       var part = av.amt * share;
       if(!pool[ap].alloc) pool[ap].alloc = { m1:0, y2:0, y3:0, y2at15:0, labels:[] };
       pool[ap].alloc[bk] += part;
@@ -31775,6 +31859,8 @@ function _commRender(){
       for(var c=0;c<ev.sums.length;c++){ if(String(ev.conds[c].from||'') > todayS) continue; parts.push((ev.conds.length > 1 ? _cmMd(ev.conds[c].from) + '~ ' : '') + _cmMan(ev.sums[c]) + '/' + _cmMan(ev.conds[c].min||0)); }
       nowTxt = parts.join(' · ');
     } else nowTxt = '지금 ' + _cmMan(ev.sum);
+    if(ev.unitTxt) nowTxt += ' (' + ev.unitTxt + ')';
+    if(ev.unkTxt) nowTxt += ' · ' + ev.unkTxt;
     if(ev.amt){
       resN++; resSum += ev.amt;
       resC += '<div class="cm-card">' + evHead(ev, '<span class="cm-tag" style="background:rgba(109,79,184,.12);color:#6D4FB8">' + (bkName[ev.bucket] || '2차년') + '</span>')
@@ -31831,12 +31917,12 @@ function _commRender(){
   for(var ri=0;ri<B.items.length;ri++){
     var rit = B.items[ri];
     if(!rit.sc) continue;
-    if(rit.rule){ var rdd = rit.rule.data || {}; rgAdd(rit.rule, rit.co, rit.amount * (parseFloat(rdd.pct1)||0) / 100 * COMM_SC_RATE, rit.amount * (parseFloat(rdd.pct2)||0) / 100 * COMM_SC_RATE, rdd.when2, parseFloat(rdd.pct1)||0, parseFloat(rdd.pct2)||0); }
-    if(rit.rule2){ var rdd2 = rit.rule2.data || {}; rgAdd(rit.rule2, rit.co, rit.amount * (parseFloat(rdd2.pct1)||0) / 100 * COMM_SC_RATE, rit.amount * (parseFloat(rdd2.pct2)||0) / 100 * COMM_SC_RATE, rdd2.when2, parseFloat(rdd2.pct1)||0, parseFloat(rdd2.pct2)||0); }
+    if(rit.rule){ var rdd = rit.rule.data || {}; rgAdd(rit.rule, rit.co, rit.scAmt * (parseFloat(rdd.pct1)||0) / 100 * COMM_SC_RATE, rit.scAmt * (parseFloat(rdd.pct2)||0) / 100 * COMM_SC_RATE, rdd.when2, parseFloat(rdd.pct1)||0, parseFloat(rdd.pct2)||0); }
+    if(rit.rule2){ var rdd2 = rit.rule2.data || {}; rgAdd(rit.rule2, rit.co, rit.scAmt * (parseFloat(rdd2.pct1)||0) / 100 * COMM_SC_RATE, rit.scAmt * (parseFloat(rdd2.pct2)||0) / 100 * COMM_SC_RATE, rdd2.when2, parseFloat(rdd2.pct1)||0, parseFloat(rdd2.pct2)||0); }
     for(var rp=0;rp<(rit.parts||[]).length;rp++){
       var rpt = rit.parts[rp];
       if(!rpt.applied) continue;
-      var rpd = rpt.r.data || {}, rbase = (rpd.base === 'part' && rpt.core) ? rpt.core : rit.amount;
+      var rpd = rpt.r.data || {}, rbase = (rpd.base === 'part' && rpt.core) ? rpt.core : rit.scAmt;
       rgAdd(rpt.r, rit.co, rbase * (parseFloat(rpd.pct1)||0) / 100 * COMM_SC_RATE, rbase * (parseFloat(rpd.pct2)||0) / 100 * COMM_SC_RATE, rpd.when2, parseFloat(rpd.pct1)||0, parseFloat(rpd.pct2)||0);
     }
   }
@@ -31860,7 +31946,7 @@ function _commRender(){
     var it = B.items[k];
     // this contract's total over 36 months (fee + its rewards); the 4-10th year part stays apart like the totals above
     var cal0 = it.alloc || { m1:0, y2:0, y3:0 }, ctot = (it.calc ? it.fee.m1 + it.fee.y1 + it.fee.y2 + it.fee.y3 : 0) + (it.sc ? it.sc.m1 + it.sc.y2 : 0) + cal0.m1 + cal0.y2 + cal0.y3;
-    ct += '<div class="cm-ct"><div class="cm-ct-h"><span class="cm-ct-no">' + (k+1) + '</span><span class="cm-mini">' + it.date.substr(5).replace('-','/') + '</span><b style="font-size:12.5px">' + _cmEsc(it.co) + '</b>' + (it.cat ? '<span class="cm-tag">' + _cmEsc(it.cat) + '</span>' : '') + (it.lump ? '<span class="cm-tag">일시납</span>' : '') + '<span class="cm-ct-amt"><span class="cm-ct-mo">월초 ' + _cmMan(it.amount) + '</span>' + (ctot > 0 ? '총 ' + _cmMan(ctot) : '') + '</span></div><div class="cm-ct-b">'
+    ct += '<div class="cm-ct"><div class="cm-ct-h"><span class="cm-ct-no">' + (k+1) + '</span><span class="cm-mini">' + it.date.substr(5).replace('-','/') + '</span><b style="font-size:12.5px">' + _cmEsc(it.co) + '</b>' + (it.cat ? '<span class="cm-tag">' + _cmEsc(it.cat) + '</span>' : '') + (it.lump ? '<span class="cm-tag">일시납</span>' : '') + '<span class="cm-ct-amt"><span class="cm-ct-mo">월초 ' + _cmMan(it.amount) + (_cmMan(it.scAmt) !== _cmMan(it.amount) ? '→' + _cmMan(it.scAmt) : '') + '</span>' + (ctot > 0 ? '총 ' + _cmMan(ctot) : '') + '</span></div><div class="cm-ct-b">'
        + (it.prod ? '<div class="cm-prod">' + _cmEsc(it.prod) + '</div>' : '');
     if(it.calc){
       var f = it.fee, sc = it.sc;
@@ -31889,9 +31975,10 @@ function _commRender(){
       ct += '</table>';
       // breakdown of the 시책 figures: 건별 % → 핵심담보 → FP-level 시상 (this contract's share)
       var brk = [];
-      if(sc && sc.pct1) brk.push('익월 ' + _cmPct(sc.pct1) + ' ' + _cmMan(it.amount * sc.pct1 / 100 * COMM_SC_RATE));
-      if(sc && sc.pct2) brk.push(_cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ' ' + _cmMan(it.amount * sc.pct2 / 100 * COMM_SC_RATE));
-      for(var pb=0;pb<(it.parts||[]).length;pb++){ if(it.parts[pb].applied){ var pbd = it.parts[pb].r.data || {}; var pbase = (pbd.base === 'part' && it.parts[pb].core) ? it.parts[pb].core : it.amount; if(pbd.pct1) brk.push(_cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct1)) + ' ' + _cmMan(pbase * pbd.pct1 / 100 * COMM_SC_RATE)); if(pbd.pct2) brk.push(_cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct2)) + ' ' + _cmMan(pbase * pbd.pct2 / 100 * COMM_SC_RATE)); } }
+      if(_cmMan(it.scAmt) !== _cmMan(it.amount)) brk.push('건당 ' + _cmMan(it.scAmt) + '까지 인정 (수수료·시책)');
+      if(sc && sc.pct1) brk.push('익월 ' + _cmPct(sc.pct1) + ' ' + _cmMan(it.scAmt * sc.pct1 / 100 * COMM_SC_RATE));
+      if(sc && sc.pct2) brk.push(_cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ' ' + _cmMan(it.scAmt * sc.pct2 / 100 * COMM_SC_RATE));
+      for(var pb=0;pb<(it.parts||[]).length;pb++){ if(it.parts[pb].applied){ var pbd = it.parts[pb].r.data || {}; var pbase = (pbd.base === 'part' && it.parts[pb].core) ? it.parts[pb].core : it.scAmt; if(pbd.pct1) brk.push(_cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct1)) + ' ' + _cmMan(pbase * pbd.pct1 / 100 * COMM_SC_RATE)); if(pbd.pct2) brk.push(_cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct2)) + ' ' + _cmMan(pbase * pbd.pct2 / 100 * COMM_SC_RATE)); } }
       for(var pl=0;pl<al.labels.length;pl++) brk.push(_cmEsc(al.labels[pl]));
       if(brk.length) ct += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책 내역: ' + brk.join(' · ') + '</div>';
       if(sc){ ct += '<div class="cm-mini" style="margin-top:4px">🎁 ' + _cmEsc(sc.label) + '</div>'; }
@@ -31902,7 +31989,7 @@ function _commRender(){
         if(ptx.fpOnly) continue;
         var pctTxt = (pd.pct1 ? '익월 ' + _cmPct(pd.pct1) : '') + (pd.pct2 ? ' ' + _cmEsc(pd.when2||'13차월') + ' ' + _cmPct(pd.pct2) : '');
         var plab = pd.coreLabel || '핵심담보 보험료', pIsPart = (pd.base === 'part');
-        var pGain = it.amount * ((parseFloat(pd.pct1)||0) + (parseFloat(pd.pct2)||0)) / 100 * COMM_SC_RATE;
+        var pGain = it.scAmt * ((parseFloat(pd.pct1)||0) + (parseFloat(pd.pct2)||0)) / 100 * COMM_SC_RATE;
         var pT = _cmEsc(ptx.r.title || pd.label || '');
         if(ptx.auto){
           if(ptx.applied) ct += '<div class="cm-mini" style="margin-top:3px">🟢 ' + (ptx.min ? '월초 ' + _cmMan(ptx.min) + '↑ → ' : '') + pT + ' 자동' + (pd.base === 'part' ? ' · 보장P = 월초' : '') + '</div>';
