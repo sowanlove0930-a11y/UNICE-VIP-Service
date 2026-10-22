@@ -11347,6 +11347,7 @@ var _sichaekPastMonth = null;  // 지난 시책 탭에서 보고 있는 월(1~12
 var SICHAEK_CACHE_KEY = 'unispace_sichaek_cache';
 var _sichaekWkSel = {};    // insurer|kind -> selected week (0=monthly, 1..4)
 var _sichaekMenuOpen = ''; // group key with open manage menu
+var _sichaekDupSel = {};   // insurer|kind|week -> picked campaign when one slot holds several
 // resize drive thumbnail url (card=w400, viewer=w1600). non-drive urls pass through
 function _sichaekThumb(url, w){
   var s = String(url||'');
@@ -11542,6 +11543,18 @@ function _sichaekSelWk(gkEnc, w){
   _sichaekMenuOpen = '';
   _sichaekRenderByMonth(_sichaekLastCanManage);
 }
+// registration day of a campaign (M/D): createdAt, else the time in its id
+function _sichaekRegLbl(c){
+  var d = new Date((c && c.createdAt) || '');
+  if(isNaN(d.getTime())){ var m = String((c && c.id) || '').match(/(\d{12,13})/); if(m) d = new Date(parseInt(m[1], 10)); }
+  return isNaN(d.getTime()) ? '' : (d.getMonth() + 1) + '/' + d.getDate();
+}
+function _sichaekDupPick(gkEnc, w, i){
+  var gk = decodeURIComponent(gkEnc);
+  _sichaekDupSel[gk + '|' + w] = i;
+  _sichaekMenuOpen = '';
+  _sichaekRenderByMonth(_sichaekLastCanManage);
+}
 function _sichaekToggleMenu(gkEnc){
   var gk = decodeURIComponent(gkEnc);
   _sichaekMenuOpen = (_sichaekMenuOpen === gk) ? '' : gk;
@@ -11564,7 +11577,10 @@ function _sichaekGroupCardHtml(g, canManage){
   for(var w2=1; w2<=4; w2++){ if(g.byWk[w2]) hasWeekly = true; }
   var hasMonthly = !!g.byWk[0];
   var sel = _sichaekDefaultWk(g);
-  var c = (g.byWk[sel] && g.byWk[sel][0]) || null;
+  var bucket = g.byWk[sel] || [];
+  var pi = _sichaekDupSel[g.key + '|' + sel] || 0;
+  if(pi >= bucket.length) pi = 0;
+  var c = bucket[pi] || null;
   var imgs = c ? ((c.images && c.images.length) ? c.images : (c.imageUrl ? [c.imageUrl] : [])) : [];
   var cnt = imgs.length;
   var badge = cnt>1 ? '<span style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px">\uD83D\uDCD1 1/'+cnt+'</span>' : '';
@@ -11602,6 +11618,7 @@ function _sichaekGroupCardHtml(g, canManage){
           mi += _miItem('삭제', "_sichaekMenuOpen='';deleteSichaek('"+c.id+"')", '#C0392B');
         }
       }
+      if(mi && bucket.length > 1 && c) mi = '<div style="font-size:10px;font-weight:800;color:#3657B8;background:#EEF3FF;padding:5px 12px;white-space:nowrap">' + _sichaekRegLbl(c) + ' 등록분</div>' + mi;
       if(mi){
         menuBox = '<div style="position:absolute;top:36px;left:6px;background:var(--bg2);border:1px solid var(--bdr2);border-radius:10px;box-shadow:0 6px 16px rgba(0,0,0,.22);overflow:hidden;z-index:6;min-width:118px">'+mi+'</div>';
       }
@@ -11623,6 +11640,16 @@ function _sichaekGroupCardHtml(g, canManage){
   } else {
     tabs += _wkTab(0, '월간 공통', 2);
   }
+  // one slot, several campaigns: pick which one the card (and its menu) shows
+  var dupHtml = '';
+  if(bucket.length > 1){
+    var CIRC = ['①','②','③','④','⑤','⑥'];
+    for(var bi=0; bi<bucket.length; bi++){
+      var bc = bucket[bi], bHas = (typeof _cmCampHasRules === 'function') && _cmCampHasRules(bc.id);
+      dupHtml += '<span class="sk-pk' + (bi === pi ? ' on' : '') + '" onclick="event.stopPropagation();_sichaekDupPick(\'' + gkEnc + '\',' + sel + ',' + bi + ')">' + (CIRC[bi] || (bi + 1)) + ' ' + _sichaekRegLbl(bc) + (bHas ? ' 💰' : '') + '</span>';
+    }
+    dupHtml = '<div class="sk-pick">' + dupHtml + '</div><div class="sk-dupn">같은 칸 ' + bucket.length + '개 · 같은 장표면 하나 정리</div>';
+  }
   var h = '<div class="sichaek-card" style="cursor:default">'+
     '<div style="position:relative">'+imgArea+badge+menuBtn+menuBox+'</div>'+
     '<div style="padding:9px 11px">'+
@@ -11632,7 +11659,7 @@ function _sichaekGroupCardHtml(g, canManage){
         ((c && typeof _cmCampHasRules==='function') ? (_cmCampHasRules(c.id) ? '<span title="시책적용 등록됨" style="font-size:10px">💰</span>' : ((canManage && typeof _rules!=='undefined' && _rules && typeof _commCanUse==='function' && _commCanUse()) ? '<span style="font-size:9px;color:var(--text3);white-space:nowrap">💰 미등록</span>' : '')) : '')+
         (cnt>1?'<span style="font-size:10px;color:var(--text3)">· '+cnt+'장</span>':'')+
       '</div>'+
-      '<div style="display:flex;gap:4px">'+tabs+'</div>'+
+      '<div style="display:flex;gap:4px">'+tabs+'</div>'+dupHtml+
     '</div>'+
   '</div>';
   return h;
@@ -26571,7 +26598,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 184;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 185;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29339,6 +29366,16 @@ body:not(.theme-light) .re-fp { color:#7FD8B0; }
 .rb-go.dis { opacity:.45; pointer-events:none; }
 .rb-note { font-size:10.5px; color:var(--text3); text-align:center; margin-top:7px; line-height:1.5; }
 .rb-again { font-size:11px; font-weight:700; color:var(--gold2); text-align:center; margin-top:8px; cursor:pointer; }
+.rb-st.hold { background:#FFF4DB; color:#8A5A00; }
+.rb-hold { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:800; color:#8A5A00; background:#FFF4DB; border:1px solid #F1D193; border-radius:10px; padding:7px 10px; margin-bottom:8px; }
+.rb-hold span { margin-left:auto; font-size:11px; font-weight:700; color:#A0761E; }
+.rb-why { font-size:11px; font-weight:800; color:#C77D14; cursor:pointer; }
+.rb-reg { font-size:10px; font-weight:800; padding:1px 6px; border-radius:6px; background:#EEF3FF; color:#3657B8; }
+.rb-dup { font-size:10px; font-weight:800; padding:1px 6px; border-radius:99px; background:#FFF1E6; color:#B4540A; border:1px solid #F5C9A3; }
+.sk-pick { display:flex; gap:4px; margin-top:6px; }
+.sk-pk { flex:1; text-align:center; font-size:10.5px; font-weight:800; padding:4px 0; border-radius:7px; border:1px solid var(--bdr2); color:var(--text2); background:var(--bg2); cursor:pointer; white-space:nowrap; }
+.sk-pk.on { border-color:#3657B8; color:#3657B8; background:#EEF3FF; }
+.sk-dupn { font-size:10.5px; font-weight:800; color:#B4540A; margin-top:5px; line-height:1.4; }
 .se-tile { position:relative; }
 .se-tile img { width:100%; height:84px; object-fit:cover; border-radius:8px; display:block; border:1px solid var(--bdr); }
 .se-tile.off img { opacity:.3; filter:grayscale(1); }
@@ -30580,6 +30617,7 @@ function _reReadAIPost(imgs, campaignId, imageIndex, fresh, cb, ctx){
   var cx = ctx || _re;
   var data = { fpCode:currentUser.id, insurer:cx.insurer, kind:cx.kind, ym:cx.ym, images:imgs, campaignId:campaignId||'', jobKey:jobKey, fresh:!!fresh };
   if(hasIdx) data.imageIndex = imageIndex;
+  if(cx.runId) data.runId = cx.runId;
   fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
     body: JSON.stringify({ action:'campaignRead', data:data }),
     signal: ctrl ? ctrl.signal : undefined
@@ -30703,8 +30741,22 @@ function _rulesOpenFresh(campId, insurer, kind, startWeek, imgCount){
 }
 
 // ── bulk apply: this month's chosen cards read again (two cards at a time), the cards that passed saved in one go ──
-var _rb = { cards:[], run:false, gen:0, t0:0, t1:0, tick:null, saving:false };
-var RB_PAR = 2;
+var _rb = { cards:[], run:false, gen:0, t0:0, t1:0, tick:null, saving:false, par:2, hold:false, holdLeft:0, holdWhy:'', holdT:null, runId:'' };
+// sheets on the server at once (1 after an AI limit), tries per sheet, waits before a retry (ms)
+var RB_PAR = 2, RB_TRIES = 3, RB_WAIT = 8000, RB_WAIT_LIMIT = 45000;
+// a failure in a few words and what follows: 0 = no automatic retry, 1 = retry shortly, 2 = AI limit (pause, then one sheet at a time)
+var RB_WHY = [
+  [/권한/, '권한 없음', 0], [/크레딧/, 'AI 크레딧 부족', 0], [/월 사용 한도/, 'AI 월 한도', 0], [/키 오류|키 없음|_KEY|API key/i, 'AI 키 확인', 0],
+  [/하루 한도/, 'AI 하루 한도', 0], [/한도|429|RESOURCE_EXHAUSTED|quota|rate.?limit/i, 'AI 한도', 2],
+  [/혼잡|과부하|overload|503|529|UNAVAILABLE/i, 'AI 혼잡', 1], [/시간 초과|timeout|timed out/i, '시간 초과', 1],
+  [/중단/, '서버 중단', 1], [/네트워크|연결/, '연결 끊김', 1], [/서버 오류|Exception|Service|too many/i, '서버 오류', 1],
+  [/거절/, 'AI 거절', 0], [/사진|이미지/, '사진 문제', 0], [/해석|JSON|빈 응답/i, 'AI 답 이상', 1], [/HTTP \d{3}/, 'AI 오류', 1]
+];
+function _rbWhy(msg){
+  var s = String(msg || '');
+  for(var i=0;i<RB_WHY.length;i++){ if(RB_WHY[i][0].test(s)) return { k:RB_WHY[i][1], how:RB_WHY[i][2] }; }
+  return { k:(s.replace(/\s*[\(\[—].*$/, '').slice(0, 14) || '실패'), how:1 };
+}
 function _rbSavedAt(campId){
   var list = _rules || [], best = '';
   for(var i=0;i<list.length;i++){ if(list[i].campaignId === campId && String(list[i].updatedAt || '') > best) best = String(list[i].updatedAt || ''); }
@@ -30733,14 +30785,16 @@ function _rbBuild(){
     if(ia !== ib) return ia - ib;
     return _sichaekWeekOf(a) - _sichaekWeekOf(b);
   });
-  list.forEach(function(c){ perIns[c.insurer] = (perIns[c.insurer] || 0) + 1; });
+  var dupN = {};
+  list.forEach(function(c){ perIns[c.insurer] = (perIns[c.insurer] || 0) + 1; var dk = c.insurer + '|' + c.kind + '|' + _sichaekWeekOf(c); dupN[dk] = (dupN[dk] || 0) + 1; });
   list.forEach(function(c){
     var n = (c.images && c.images.length) ? c.images.length : (c.imageUrl ? 1 : 0);
     if(!n) return;
-    var wk = _sichaekWeekOf(c), mon = _sichaekMonthOf(c), at = _rbSavedAt(c.id);
+    var wk = _sichaekWeekOf(c), mon = _sichaekMonthOf(c), at = _rbSavedAt(c.id), dup = dupN[c.insurer + '|' + c.kind + '|' + wk];
     cards.push({ id:c.id, insurer:c.insurer || '', kind:c.kind || '', week:String(c.startWeek || ''), wkLbl:(wk ? wk + '주' : (perIns[c.insurer] > 1 ? '월간' : '')),
+      dup:(dup > 1 ? dup : 0), reg:(dup > 1 ? _sichaekRegLbl(c) : ''),
       n:Math.min(n, 6), ym:(mon >= 1 && mon <= 12) ? _cmYmGuess(mon) : _cmYmOf(new Date()), at:at, on:(_rbWhen(at).indexOf('오늘') !== 0),
-      st:'wait', done:0, failed:0, rules:null, check:null, err:'', t0:0 });
+      st:'wait', done:0, failed:0, rules:null, check:null, err:'', why:'', t0:0, sh:[] });
   });
   _rb.cards = cards;
 }
@@ -30754,79 +30808,140 @@ function openRulesBulk(){
 function closeRulesBulk(){ document.getElementById('rulesBulkOverlay').classList.remove('open'); }
 function _rbTog(i){ var c = _rb.cards[i]; if(!c || _rb.run) return; c.on = !c.on; _rbRender(); }
 function _rbAll(){ if(_rb.run) return; var allOn = _rb.cards.every(function(c){ return c.on; }); _rb.cards.forEach(function(c){ c.on = !allOn; }); _rbRender(); }
-function _rbGo(){
+// a new run starts the clock at 0; a retry after the run keeps counting from where it stopped
+function _rbGo(keep){
   if(_rb.run) return;
-  _rb.gen++; _rb.run = true; _rb.t0 = Date.now(); _rb.t1 = 0;
+  var prev = (keep && _rb.t1 && _rb.t0) ? (_rb.t1 - _rb.t0) : 0;
+  _rb.gen++; _rb.run = true; _rb.t0 = Date.now() - prev; _rb.t1 = 0;
   if(_rb.tick) clearInterval(_rb.tick);
   _rb.tick = setInterval(_rbTick, 1000);
 }
+function _rbSheets(c){ var a = []; for(var j=0;j<c.n;j++) a.push({ st:'queue', tries:0, rules:null, check:null, err:'', why:'', left:0 }); return a; }
 function _rbStart(){
   if(_rb.run || _rb.saving) return;
   var n = 0;
-  _rb.cards.forEach(function(c){ if(c.on && c.st !== 'saved'){ c.st = 'queue'; n++; } });
+  _rb.cards.forEach(function(c){ if(c.on && c.st !== 'saved'){ c.st = 'queue'; c.sh = _rbSheets(c); c.done = 0; c.failed = 0; c.t0 = 0; c.err = ''; c.why = ''; c.rules = null; c.check = null; n++; } });
   if(!n){ showToast('⚠️ 읽을 카드를 골라 주세요'); return; }
-  _rbGo(); _rbPump(); _rbRender();
+  _rb.runId = 'rb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  _rb.par = RB_PAR; _rb.hold = false; _rb.holdLeft = 0;
+  _rbGo(false); _rbPump(); _rbRender();
 }
+// a failed card again: only its failed sheets (all of them when none failed, e.g. nothing was read)
 function _rbRetry(i){
   var c = _rb.cards[i];
   if(!c || c.st === 'read' || c.st === 'queue' || _rb.saving) return;
-  c.st = 'queue';
-  if(!_rb.run) _rbGo();
+  var any = false;
+  (c.sh || []).forEach(function(x){ if(x.st === 'bad'){ x.st = 'queue'; x.tries = 0; x.err = ''; x.why = ''; any = true; } });
+  if(!any) c.sh = _rbSheets(c);
+  c.st = 'queue'; c.err = ''; c.why = ''; c.t0 = 0;
+  if(!_rb.run) _rbGo(true);
   _rbPump(); _rbRender();
 }
+function _rbNext(){
+  for(var i=0;i<_rb.cards.length;i++){
+    var c = _rb.cards[i];
+    if(c.st !== 'queue' && c.st !== 'read') continue;
+    for(var j=0;j<c.sh.length;j++){ if(c.sh[j].st === 'queue') return { c:c, j:j }; }
+  }
+  return null;
+}
+// the queue: at most _rb.par sheets on the server at once, in card order; nothing new starts during an AI-limit pause
 function _rbPump(){
   if(!_rb.run) return;
-  var active = 0, i;
-  for(i=0;i<_rb.cards.length;i++){ if(_rb.cards[i].st === 'read') active++; }
-  for(i=0;i<_rb.cards.length && active < RB_PAR;i++){ if(_rb.cards[i].st === 'queue'){ _rbReadCard(_rb.cards[i]); active++; } }
-  if(!active){
+  var active = 0, waiting = 0, i, j, nx;
+  for(i=0;i<_rb.cards.length;i++){ var c = _rb.cards[i]; for(j=0;j<(c.sh || []).length;j++){ if(c.sh[j].st === 'read') active++; else if(c.sh[j].st === 'wait') waiting++; } }
+  if(!_rb.hold){ while(active < _rb.par && (nx = _rbNext())){ _rbReadSheet(nx.c, nx.j); active++; } }
+  if(!active && !waiting && !_rb.hold && !_rbNext()){
     _rb.run = false; _rb.t1 = Date.now();
     if(_rb.tick){ clearInterval(_rb.tick); _rb.tick = null; }
     showToast('🔄 다 읽었어요 · 통과 ' + _rb.cards.filter(function(c){ return c.st === 'ok'; }).length + '개');
   }
 }
-// one card: one server read per sheet (all at once, like the card's own re-read), fresh
-function _rbReadCard(card){
-  var gen = _rb.gen, results = [], checks = [], got = 0, doneCnt = 0, firstErr = '';
-  var ctx = { insurer:card.insurer, kind:card.kind, ym:card.ym };
-  card.st = 'read'; card.done = 0; card.failed = 0; card.t0 = Date.now(); card.err = ''; card.rules = null; card.check = null;
-  for(var j=0;j<card.n;j++){
-    (function(j){
-      _reReadAIPost([], card.id, j, true, function(ok, res){
-        if(gen !== _rb.gen) return;
-        if(ok){
-          var rules = (res && res.rules) || [];
-          for(var ri=0;ri<rules.length;ri++) rules[ri].img = j;
-          if(rules.length){ got += rules.length; results[j] = rules; }
-          if(res && res.check) checks[j] = res.check;
-        } else { card.failed++; if(!firstErr) firstErr = (res && res.msg) || ''; }
-        doneCnt++; card.done = doneCnt;
-        if(doneCnt >= card.n) _rbCardDone(card, results, checks, got, firstErr);
-        else _rbRender();
-      }, ctx);
-    })(j);
-  }
+// one sheet on the server (fresh, named by this run); a failure waits and goes back to the queue while tries remain
+function _rbReadSheet(card, j){
+  var gen = _rb.gen, sh = card.sh[j];
+  sh.st = 'read'; sh.tries++;
+  if(!card.t0) card.t0 = Date.now();
+  card.st = 'read';
+  var ctx = { insurer:card.insurer, kind:card.kind, ym:card.ym, runId:_rb.runId };
+  _reReadAIPost([], card.id, j, true, function(ok, res){
+    if(gen !== _rb.gen || sh.st !== 'read') return;
+    if(ok){
+      var rules = (res && res.rules) || [];
+      for(var ri=0;ri<rules.length;ri++) rules[ri].img = j;
+      sh.rules = rules; sh.check = (res && res.check) || null; sh.st = 'ok'; sh.err = ''; sh.why = '';
+    } else {
+      sh.err = String((res && res.msg) || '');
+      var w = _rbWhy(sh.err);
+      sh.why = w.k;
+      if(w.how && sh.tries < RB_TRIES){
+        var ms = (w.how === 2) ? RB_WAIT_LIMIT : RB_WAIT;
+        sh.st = 'wait'; sh.left = Math.round(ms / 1000);
+        if(w.how === 2) _rbHold(ms, w.k);
+        setTimeout(function(){ if(gen !== _rb.gen || sh.st !== 'wait') return; sh.st = 'queue'; _rbPump(); _rbRender(); }, ms);
+      } else sh.st = 'bad';
+    }
+    _rbSheetDone(card);
+  }, ctx);
 }
-function _rbCardDone(card, results, checks, got, firstErr){
-  var all = [];
-  for(var r=0;r<results.length;r++){ if(results[r] && results[r].length) all = all.concat(results[r]); }
+// an AI limit: everything pauses, then one sheet at a time for the rest of the run
+function _rbHold(ms, why){
+  _rb.par = 1;
+  if(_rb.hold && _rb.holdLeft * 1000 >= ms) return;
+  var gen = _rb.gen;
+  _rb.hold = true; _rb.holdLeft = Math.round(ms / 1000); _rb.holdWhy = why || 'AI 한도';
+  if(_rb.holdT) clearTimeout(_rb.holdT);
+  _rb.holdT = setTimeout(function(){ _rb.holdT = null; if(gen !== _rb.gen) return; _rb.hold = false; _rbPump(); _rbRender(); }, ms);
+}
+function _rbSheetDone(card){
+  var fin = 0, bad = 0;
+  for(var j=0;j<card.sh.length;j++){ var x = card.sh[j]; if(x.st === 'ok') fin++; else if(x.st === 'bad'){ fin++; bad++; } }
+  card.done = fin; card.failed = bad;
+  if(fin >= card.sh.length) _rbCardDone(card);
+  else { _rbPump(); _rbRender(); }
+}
+function _rbCardDone(card){
+  var all = [], checks = [], firstErr = '', why = '';
+  for(var j=0;j<card.sh.length;j++){
+    var x = card.sh[j];
+    if(x.st === 'ok'){ if(x.rules && x.rules.length) all = all.concat(x.rules); if(x.check) checks[j] = x.check; }
+    else if(!firstErr){ firstErr = x.err; why = x.why; }
+  }
   var m = _reCheckMake(all, card.insurer, checks, card.n, card.failed, Math.round((Date.now() - card.t0) / 1000));
-  card.rules = m.rules; card.check = m.check;
-  if(!got){ card.st = 'fail'; card.err = firstErr || '읽은 항목 없음'; }
+  card.rules = m.rules; card.check = m.check; card.err = firstErr; card.why = why;
+  if(!all.length){ card.st = 'fail'; if(!card.why) card.why = '읽은 항목 없음'; }
   else if(card.failed) card.st = 'fail';
   else if(m.check && m.check.errors && m.check.errors.length) card.st = 'bad';
   else card.st = 'ok';
   _rbPump(); _rbRender();
 }
+// a card being read: spinner while a sheet is on the server, else the wait before its next try
+function _rbLive(c){
+  var rd = 0, wt = null;
+  for(var j=0;j<(c.sh || []).length;j++){ if(c.sh[j].st === 'read') rd++; else if(c.sh[j].st === 'wait' && !wt) wt = c.sh[j]; }
+  if(rd) return { cls:'run', html:'<span class="rb-spin"></span>' + c.done + '/' + c.n + '장 · ' + _rbDur(Date.now() - c.t0), why:'' };
+  if(wt) return { cls:'hold', html:'다시 ' + (wt.tries + 1) + '/' + RB_TRIES + ' · ' + Math.max(0, wt.left) + '초 뒤', why:wt.why };
+  return { cls:'wait', html:'대기', why:'' };
+}
 function _rbTick(){
+  if(_rb.hold && _rb.holdLeft > 0) _rb.holdLeft--;
   var el = document.getElementById('rbTime');
   if(el) el.textContent = _rbDur(Date.now() - _rb.t0);
+  var hs = document.getElementById('rbHoldS');
+  if(hs) hs.textContent = Math.max(0, _rb.holdLeft) + '초';
   for(var i=0;i<_rb.cards.length;i++){
     var c = _rb.cards[i];
     if(c.st !== 'read') continue;
+    for(var j=0;j<c.sh.length;j++){ if(c.sh[j].st === 'wait' && c.sh[j].left > 0) c.sh[j].left--; }
     var s2 = document.getElementById('rbSt' + i);
-    if(s2) s2.innerHTML = '<span class="rb-spin"></span>' + c.done + '/' + c.n + '장 · ' + _rbDur(Date.now() - c.t0);
+    if(s2){ var lv = _rbLive(c); s2.className = 'rb-st ' + lv.cls; s2.innerHTML = lv.html; }
   }
+}
+// the whole message behind a short reason
+function _rbWhyMsg(i){
+  var c = _rb.cards[i], m = c ? c.err : '';
+  if(c && !m){ for(var j=0;j<(c.sh || []).length;j++){ if(c.sh[j].err){ m = c.sh[j].err; break; } } }
+  if(m) showToast('⚠️ ' + String(m).slice(0, 140));
 }
 // a card's result in the usual rule window: check, fix and save it there
 function _rbOpen(i){
@@ -30877,41 +30992,46 @@ function _rbRender(){
   if(!started){
     var selN = 0, selImg = 0, allImg = 0, allOn = true, last = '';
     for(i=0;i<C.length;i++){ allImg += C[i].n; if(C[i].on){ selN++; selImg += C[i].n; } else allOn = false; }
-    h += '<div class="rb-sub">이번 달 진행 중 시책 · 카드 ' + RB_PAR + '개씩 동시에</div>';
+    h += '<div class="rb-sub">이번 달 진행 중 시책 · 한 번에 ' + RB_PAR + '장씩 읽어요</div>';
     h += '<div class="rb-all" onclick="_rbAll()"><span class="rb-cb' + (allOn ? ' on' : '') + '">' + (allOn ? '✓' : '') + '</span>전체 <span>' + C.length + '개 · ' + allImg + '장</span></div>';
     for(i=0;i<C.length;i++){
       var c = C[i], kd = (c.kind === '손보') ? '손보' : '생보';
       if(kd !== last){ h += '<div class="rb-sec' + (kd === '손보' ? ' nl' : '') + '">' + (kd === '손보' ? '손해보험' : '생명보험') + '</div>'; last = kd; }
       h += '<div class="rb-row" onclick="_rbTog(' + i + ')"><span class="rb-cb' + (c.on ? ' on' : '') + '">' + (c.on ? '✓' : '') + '</span><b>' + _cmEsc(c.insurer) + '</b>' + (c.wkLbl ? '<span class="rb-wk">' + c.wkLbl + '</span>' : '')
+         + (c.reg ? '<span class="rb-reg">' + c.reg + ' 등록</span>' : '') + (c.dup ? '<span class="rb-dup">같은 칸 ' + c.dup + '개</span>' : '')
          + '<span class="rb-m">' + c.n + '장</span><span class="rb-r">' + (c.at ? '저장 ' + _rbWhen(c.at) : '시책적용 없음') + '</span></div>';
     }
     h += '<div class="rb-go' + (selN ? '' : ' dis') + '" onclick="_rbStart()">▶ 읽기 시작 · ' + selN + '개 · ' + selImg + '장</div>';
     h += '<div class="rb-note">읽는 동안 화면은 켜 두세요 · 저장은 다 읽은 뒤</div>';
+    if(C.some(function(x){ return x.dup; })) h += '<div class="rb-note">같은 칸 시책은 시책적용이 둘 다 계산돼요 · 같은 장표면 하나 정리</div>';
     box.innerHTML = h;
     return;
   }
   var tot = 0, fin = 0, okN = 0;
   for(i=0;i<C.length;i++){ var x = C[i]; if(x.st === 'wait') continue; tot++; if(x.st !== 'queue' && x.st !== 'read') fin++; if(x.st === 'ok') okN++; }
   h += '<div class="rb-prog"><div class="rb-pt"><span>' + fin + ' / ' + tot + ' 카드</span><span id="rbTime">' + _rbDur((_rb.run ? Date.now() : (_rb.t1 || Date.now())) - _rb.t0) + '</span></div><div class="rb-pb"><i style="width:' + (tot ? Math.round(fin / tot * 100) : 0) + '%"></i></div></div>';
+  if(_rb.run && _rb.hold) h += '<div class="rb-hold">⏳ ' + _cmEsc(_rb.holdWhy) + ' → 잠깐 쉬고 이어서<span id="rbHoldS">' + Math.max(0, _rb.holdLeft) + '초</span></div>';
   for(i=0;i<C.length;i++){
     var d = C[i];
     if(d.st === 'wait') continue;
-    var st = '', cls = '', act = '', det = '', tap = '';
+    var st = '', cls = '', act = '', det = '', tap = '', why = '';
     if(d.st === 'queue') st = '<span class="rb-st wait">대기</span>';
-    else if(d.st === 'read') st = '<span class="rb-st run" id="rbSt' + i + '"><span class="rb-spin"></span>' + d.done + '/' + d.n + '장 · ' + _rbDur(Date.now() - d.t0) + '</span>';
+    else if(d.st === 'read'){ var lv = _rbLive(d); st = '<span class="rb-st ' + lv.cls + '" id="rbSt' + i + '">' + lv.html + '</span>'; why = lv.why; }
     else if(d.st === 'ok'){ st = '<span class="rb-st ok">✅ 통과</span>'; tap = ' onclick="_rbOpen(' + i + ')"'; }
     else if(d.st === 'bad'){ st = '<span class="rb-st bad">❌ 확인 ' + ((d.check && d.check.errors) ? d.check.errors.length : 0) + '건</span>'; cls = ' tap'; tap = ' onclick="_rbOpen(' + i + ')"'; act = '<span class="rb-lk">눌러서 확인 ›</span>'; }
-    else if(d.st === 'fail'){ st = '<span class="rb-st fail">⚠️ ' + (d.failed ? d.failed + '장 실패' : '실패') + '</span>'; cls = ' tapf'; act = '<span class="rb-lk o" onclick="event.stopPropagation();_rbRetry(' + i + ')">🔄 다시</span>'; if(d.rules && d.rules.length) tap = ' onclick="_rbOpen(' + i + ')"'; }
+    else if(d.st === 'fail'){ why = d.why; st = '<span class="rb-st fail">⚠️ ' + (d.failed ? d.failed + '장 실패' : '실패') + '</span>'; cls = ' tapf'; act = '<span class="rb-lk o" onclick="event.stopPropagation();_rbRetry(' + i + ')">🔄 다시</span>'; if(d.rules && d.rules.length) tap = ' onclick="_rbOpen(' + i + ')"'; }
     else if(d.st === 'saving') st = '<span class="rb-st run"><span class="rb-spin"></span>저장 중</span>';
     else if(d.st === 'saved'){ st = '<span class="rb-st ok">저장 ✓</span>'; cls = ' done'; }
-    if(d.rules && d.st !== 'read' && d.st !== 'queue'){ var fpn = _rbFpN(d.rules); det = '<span class="rb-m">규칙 ' + d.rules.length + '</span>' + (fpn ? '<span class="rb-fp">FP 체크 ' + fpn + '</span>' : ''); }
-    h += '<div class="rb-row' + cls + '"' + tap + '>' + st + '<b>' + _cmEsc(d.insurer) + '</b>' + (d.wkLbl ? '<span class="rb-wk">' + d.wkLbl + '</span>' : '') + det + (act ? '<span style="margin-left:auto">' + act + '</span>' : '') + '</div>';
+    if(d.rules && d.rules.length && d.st !== 'read' && d.st !== 'queue'){ var fpn = _rbFpN(d.rules); det = '<span class="rb-m">규칙 ' + d.rules.length + '</span>' + (fpn ? '<span class="rb-fp">FP 체크 ' + fpn + '</span>' : ''); }
+    h += '<div class="rb-row' + cls + '"' + tap + '>' + st + '<b>' + _cmEsc(d.insurer) + '</b>' + (d.wkLbl ? '<span class="rb-wk">' + d.wkLbl + '</span>' : '') + (d.reg ? '<span class="rb-reg">' + d.reg + ' 등록</span>' : '') + det
+       + (why ? '<span class="rb-why" onclick="event.stopPropagation();_rbWhyMsg(' + i + ')">' + _cmEsc(why) + '</span>' : '') + (act ? '<span style="margin-left:auto">' + act + '</span>' : '') + '</div>';
   }
   if(!_rb.run){
     h += '<div class="rb-go' + ((okN && !_rb.saving) ? '' : ' dis') + '" onclick="_rbSaveAll()">' + (_rb.saving ? '저장 중…' : '✅ 통과 ' + okN + '개 한 번에 저장') + '</div>';
     h += '<div class="rb-note">❌·⚠️는 눌러서 확인 후 따로 저장 · 저장하면 카드별 시책적용 교체</div>';
+    if(C.some(function(x){ return x.st === 'fail'; })) h += '<div class="rb-note">⚠️ 이유를 누르면 자세히 · 🔄 다시는 실패한 장만 다시 읽어요</div>';
     if(!_rb.saving) h += '<div class="rb-again" onclick="_rbReset()">↺ 처음부터 다시 고르기</div>';
-  } else h += '<div class="rb-note">읽는 동안 화면은 켜 두세요 · 다 읽으면 저장 버튼이 나와요</div>';
+  } else h += '<div class="rb-note">한 번에 ' + _rb.par + '장씩 · 실패한 장은 자동으로 ' + (RB_TRIES - 1) + '번 더 · 화면은 켜 두세요</div>';
   box.innerHTML = h;
 }
 
