@@ -12902,17 +12902,34 @@ function openSichaekAdd(presetGk, presetWk){
   if(presetGk){
     var sel = document.getElementById('sichaekInsurer');
     if(sel){
+      var hit = false;
       for(var i=0;i<sel.options.length;i++){
-        if(sel.options[i].value === presetGk){ sel.selectedIndex = i; break; }
+        if(sel.options[i].value === presetGk){ sel.selectedIndex = i; hit = true; break; }
       }
+      // a company registered by typed name: open with that name filled in
+      if(!hit && String(presetGk).indexOf('|') > 0){ var pgk = String(presetGk).split('|'); sel.value = '__custom'; var ci0 = document.getElementById('sichaekInsCustom'); if(ci0) ci0.value = pgk[0]; var ck0 = document.getElementById('sichaekKindCustom'); if(ck0) ck0.value = (pgk[1] === '손보' ? '손보' : '생보'); }
     }
   }
+  _sichaekInsToggle();
   _sichaekRenderPrevGrid();
   var btn = document.getElementById('sichaekSubmitBtn');
   if(btn){ btn.disabled = false; btn.textContent = '등록하기'; }
   document.getElementById('sichaekDrop').style.display = '';
   if(typeof _sichaekRulesInit === 'function') _sichaekRulesInit();
   document.getElementById('sichaekAddOverlay').classList.add('open');
+}
+// insurer of the campaign being registered: a listed company or a typed name (name|kind)
+function _sichaekInsVal(){
+  var sel = document.getElementById('sichaekInsurer');
+  if(!sel) return '';
+  if(sel.value !== '__custom') return sel.value;
+  var ci = document.getElementById('sichaekInsCustom'), ck = document.getElementById('sichaekKindCustom');
+  var nm = String(ci ? ci.value : '').replace(/\|/g, '').trim();
+  return nm ? nm + '|' + (ck && ck.value === '손보' ? '손보' : '생보') : '';
+}
+function _sichaekInsToggle(){
+  var sel = document.getElementById('sichaekInsurer'), row = document.getElementById('sichaekInsCustomRow');
+  if(row) row.style.display = (sel && sel.value === '__custom') ? 'flex' : 'none';
 }
 function closeSichaekAdd(){ document.getElementById('sichaekAddOverlay').classList.remove('open'); }
 
@@ -12936,7 +12953,8 @@ function _sichaekFileChange(e){
 
 function submitSichaek(){
   if(!_sichaekFiles.length){ showToast('⚠️ 시상 이미지를 선택하세요'); return; }
-  var iv = document.getElementById('sichaekInsurer').value;
+  var iv = _sichaekInsVal();
+  if(!iv){ showToast('⚠️ 보험사 이름을 입력해 주세요'); return; }
   var parts = iv.split('|');
   var insurer = parts[0];
   var kind = parts[1] || '';
@@ -25422,7 +25440,7 @@ function doCheckin() { doSmartCheckin(); }
     <div style="overflow-y:auto">
       <div style="margin-bottom:12px">
         <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">보험사</div>
-        <select id="sichaekInsurer" style="width:100%;padding:9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text1);font-size:14px">
+        <select id="sichaekInsurer" onchange="_sichaekInsToggle()" style="width:100%;padding:9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text1);font-size:14px">
           <optgroup label="생명보험">
             <option value="한화생명|생보">한화생명</option>
             <option value="라이나생명|생보">라이나생명</option>
@@ -25430,6 +25448,19 @@ function doCheckin() { doSmartCheckin(); }
             <option value="신한라이프|생보">신한라이프</option>
             <option value="흥국생명|생보">흥국생명</option>
             <option value="메트라이프|생보">메트라이프</option>
+            <option value="삼성생명|생보">삼성생명</option>
+            <option value="교보생명|생보">교보생명</option>
+            <option value="동양생명|생보">동양생명</option>
+            <option value="KB라이프|생보">KB라이프 (KB생명)</option>
+            <option value="NH농협생명|생보">NH농협생명</option>
+            <option value="DB생명|생보">DB생명</option>
+            <option value="ABL생명|생보">ABL생명</option>
+            <option value="iM라이프|생보">iM라이프</option>
+            <option value="KDB생명|생보">KDB생명</option>
+            <option value="푸본현대생명|생보">푸본현대생명</option>
+            <option value="하나생명|생보">하나생명</option>
+            <option value="BNP카디프|생보">BNP파리바카디프</option>
+            <option value="IBK연금보험|생보">IBK연금보험</option>
           </optgroup>
           <optgroup label="손해보험">
             <option value="한화손보|손보">한화손보</option>
@@ -25438,8 +25469,17 @@ function doCheckin() { doSmartCheckin(); }
             <option value="메리츠화재|손보">메리츠화재</option>
             <option value="KB손보|손보">KB손보</option>
             <option value="삼성화재|손보">삼성화재</option>
+            <option value="흥국화재|손보">흥국화재</option>
+            <option value="롯데손보|손보">롯데손보</option>
+            <option value="하나손보|손보">하나손보</option>
+            <option value="MG손보|손보">MG손보</option>
+            <option value="NH농협손보|손보">NH농협손보</option>
+          </optgroup>
+          <optgroup label="기타">
+            <option value="__custom">직접 입력…</option>
           </optgroup>
         </select>
+        <div id="sichaekInsCustomRow" style="display:none;gap:6px;margin-top:6px"><input type="text" id="sichaekInsCustom" placeholder="보험사 이름 (예: 캐롯손보)" style="flex:1;min-width:0;padding:9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text1);font-size:14px"><select id="sichaekKindCustom" style="padding:9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--bg2);color:var(--text1);font-size:14px"><option value="생보">생명보험</option><option value="손보">손해보험</option></select></div>
       </div>
       <div style="margin-bottom:12px">
         <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:5px">적용 주차</div>
@@ -26485,7 +26525,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 169;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 176;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29120,6 +29160,74 @@ body:not(.theme-light) .cm-prog { background:rgba(255,255,255,.1); }
 .cm-barsc { width:100%; background:linear-gradient(180deg,#9C85D8,#6D4FB8); }
 .cm-bar span { font-size:8.5px; color:var(--text3); margin-top:3px; white-space:nowrap; }
 .cm-disc { font-size:10px; color:var(--text3); border-top:1px solid var(--bdr); padding-top:8px; margin-top:12px; line-height:1.5; }
+.cm-td { border-radius:14px; padding:11px 12px 10px; margin:0 0 10px; border:1.5px solid rgba(201,168,76,.55); background:linear-gradient(160deg,rgba(201,168,76,.17),rgba(201,168,76,.04) 60%,rgba(201,168,76,0)); }
+.cm-td-h { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.cm-td-h b { font-size:13px; color:var(--text); }
+.cm-td-big { font-size:30px; font-weight:900; color:var(--gold2); letter-spacing:-.5px; line-height:1.15; margin-top:3px; white-space:nowrap; }
+.cm-td-big small { font-size:16px; font-weight:800; margin-left:1px; }
+.cm-td-big em { font-style:normal; font-size:10.5px; font-weight:700; color:var(--text3); margin-left:6px; letter-spacing:0; }
+.cm-td-big.z { color:var(--text3); opacity:.75; }
+.cm-td-wait { font-size:12px; font-weight:700; color:var(--text2); margin-top:2px; }
+.cm-td-wait span { display:block; font-size:11px; font-weight:500; color:var(--text3); margin-top:2px; }
+.cm-td-ch { display:flex; gap:6px; margin-top:8px; }
+.cm-td-ch > div { flex:1; min-width:0; background:var(--bg2); border:1px solid var(--bdr); border-radius:10px; padding:6px 8px; font-size:10.5px; color:var(--text2); }
+.cm-td-ch b { display:block; font-size:14px; color:var(--text); margin-top:1px; }
+.cm-td-r { display:flex; align-items:center; gap:7px; padding:6px 1px; border-top:1px solid var(--bdr); font-size:11.5px; }
+.cm-td-r:first-child { border-top:none; }
+.cm-td-tm { width:31px; flex:none; font-size:10px; color:var(--text3); }
+.cm-td-nm { flex:none; font-weight:800; color:var(--text); }
+.cm-td-pd { flex:1; min-width:0; font-size:10.5px; color:var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cm-td-am { flex:none; font-size:12.5px; font-weight:800; color:var(--gold2); white-space:nowrap; }
+.cm-td-me { font-size:9px; font-weight:800; color:#6D4FB8; background:rgba(109,79,184,.12); padding:1px 6px; border-radius:99px; margin-left:3px; }
+.cm-td-more { text-align:center; font-size:11px; font-weight:700; color:var(--gold2); padding:6px 0 2px; cursor:pointer; }
+.cm-td-miss { margin-top:7px; background:rgba(239,159,39,.10); border:1px dashed rgba(239,159,39,.6); border-radius:9px; padding:7px 9px; font-size:10.5px; color:var(--text2); line-height:1.55; }
+.cm-td-miss b { color:#B45309; }
+body:not(.theme-light) .cm-td-miss b { color:#F0B060; }
+.cm-wk { margin-top:10px; background:var(--bg2); border:1px solid var(--bdr); border-radius:11px; padding:8px 10px 6px; }
+.cm-wk-bars { display:flex; align-items:flex-end; height:62px; margin-top:4px; }
+.cm-wk-c { flex:1; min-width:0; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+.cm-wk-c i { font-style:normal; font-size:9px; color:var(--text3); margin-bottom:2px; white-space:nowrap; }
+.cm-wk-c b { display:block; width:20px; border-radius:5px 5px 2px 2px; background:rgba(201,168,76,.42); }
+.cm-wk-c.td b { background:linear-gradient(180deg,#E2BE5A,#A87B1E); box-shadow:0 0 0 3px rgba(201,168,76,.2); }
+.cm-wk-c.td i { color:var(--gold2); font-weight:800; }
+.cm-wk-c.fu b { width:4px; height:4px; border-radius:99px; background:var(--bdr2); }
+.cm-wk-c.wt b { height:20px; background:transparent; border:1.5px dashed rgba(201,168,76,.8); box-shadow:none; }
+.cm-wk-d { display:flex; padding-top:3px; }
+.cm-wk-d span { flex:1; text-align:center; font-size:10px; color:var(--text3); }
+.cm-wk-d span.td { color:var(--gold2); font-weight:800; }
+.cm-tdp { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:7px; padding:7px 10px; border-radius:10px; background:rgba(201,168,76,.12); border:1px solid rgba(201,168,76,.45); font-size:11px; color:var(--text2); }
+.cm-tdp b { font-size:14px; color:var(--gold2); white-space:nowrap; }
+.cm-tdp.z { background:var(--bg3); border-color:var(--bdr); }
+.cm-tdp.z b { font-size:12px; color:var(--text3); }
+.cm-lk { border:1.5px solid rgba(201,168,76,.55); border-radius:16px; padding:18px 14px 14px; text-align:center; background:linear-gradient(170deg,rgba(201,168,76,.14),rgba(201,168,76,0) 60%); }
+.cm-lk-ic { font-size:30px; line-height:1; }
+.cm-lk-t { font-size:15px; font-weight:800; color:var(--text); margin-top:8px; }
+.cm-lk-s { font-size:11.5px; color:var(--text2); margin-top:3px; }
+.cm-lk-steps { display:flex; justify-content:center; gap:6px; margin-top:8px; }
+.cm-lk-steps b { font-size:10px; font-weight:800; padding:2px 9px; border-radius:99px; background:var(--bg3); color:var(--text3); }
+.cm-lk-steps b.on { background:var(--gold2); color:#fff; }
+.cm-dots { display:flex; justify-content:center; gap:14px; margin:16px 0 8px; }
+.cm-dots i { display:block; width:15px; height:15px; border-radius:50%; border:2px solid var(--gold); }
+.cm-dots i.f { background:var(--gold2); border-color:var(--gold2); }
+.cm-dots.err i { border-color:#D64545; }
+.cm-dots.err i.f { background:#D64545; }
+.cm-lk-msg { min-height:17px; font-size:11.5px; font-weight:700; color:var(--text3); margin-bottom:8px; }
+.cm-lk-msg.err { color:#D64545; }
+.cm-pad { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; max-width:270px; margin:0 auto; }
+.cm-pad span { height:50px; border-radius:14px; background:var(--bg2); border:1px solid var(--bdr2); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; color:var(--text); cursor:pointer; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; }
+.cm-pad span:active { background:rgba(201,168,76,.18); border-color:var(--gold); }
+.cm-pad span.x { background:transparent; border:none; cursor:default; }
+.cm-pad span.bk { font-size:17px; color:var(--text2); }
+.cm-pad.busy { opacity:.45; pointer-events:none; }
+.cm-lk-hint { font-size:11px; color:var(--text2); background:var(--bg3); border-radius:9px; padding:7px 9px; margin-top:12px; line-height:1.5; }
+.cm-lk-hint b { color:var(--gold2); }
+.cm-lk-rule { font-size:10.5px; color:var(--text3); margin-top:10px; line-height:1.5; }
+.cm-lk-lnk { display:inline-block; font-size:11px; color:var(--text3); text-decoration:underline; margin-top:10px; cursor:pointer; }
+.cm-ubar { display:flex; justify-content:space-between; align-items:center; gap:8px; background:rgba(31,146,104,.08); border:1px solid rgba(31,146,104,.35); border-radius:11px; padding:8px 10px; font-size:11px; color:var(--text2); margin-bottom:9px; }
+.cm-ubar b { color:#1F9268; }
+.cm-ubar-b { flex:none; font-weight:800; color:var(--gold2); border:1px solid rgba(201,168,76,.6); border-radius:8px; padding:4px 8px; background:var(--bg2); white-space:nowrap; cursor:pointer; }
+.cm-pin-rst { margin-top:10px; display:flex; justify-content:space-between; align-items:center; gap:8px; border-top:1px dashed var(--bdr2); padding-top:9px; font-size:10.5px; color:var(--text2); }
+.cm-pin-rst b { flex:none; font-size:11px; font-weight:800; color:#D64545; border:1px solid rgba(214,69,69,.45); background:rgba(214,69,69,.06); border-radius:9px; padding:6px 10px; white-space:nowrap; cursor:pointer; }
 .cm-btn-ai { font-size:12px; font-weight:800; padding:8px 12px; border-radius:9px; border:1.5px solid #6D4FB8; background:rgba(109,79,184,.1); color:#6D4FB8; cursor:pointer; font-family:'Noto Sans KR',sans-serif; white-space:nowrap; }
 .cm-btn-ai:disabled { opacity:.6; }
 .cm-loading { display:flex; flex-direction:column; align-items:center; gap:12px; padding:38px 0 30px; color:var(--text3); font-size:12px; }
@@ -29226,6 +29334,8 @@ var COMM_FP_RATE = 0;
 var COMM_MGR_RATE = 0;
 var COMM_SC_RATE = 1.0;
 var COMM_OPEN_ALL = false;
+// open-to-all flag of the last server answer, kept so the menu shows from app start
+try { COMM_OPEN_ALL = localStorage.getItem('unispace_comm_open') === '1'; } catch(eCo) {}
 var RATES_KEY = 'unispace_rates';
 var _rates = null;
 var _ratesCbs = [];
@@ -29235,7 +29345,8 @@ var _rulesAt = 0;
 var COMM_INS_MAP = {
   '라이나':'라이나생명', '미래에셋':'미래에셋', '미래에셋생명':'미래에셋', '신한라이프':'신한생명', '신한':'신한생명', '메리츠':'메리츠화재',
   'NH농협생명':'NH생명', '농협생명':'NH생명', 'NH농협손보':'NH손보', '농협손보':'NH손보', '카디프':'카디프생명', 'BNP카디프':'카디프생명',
-  '푸본현대':'푸본현대생명', 'iM생명':'iM라이프', 'DGB생명':'iM라이프', 'IBK':'IBK연금보험', 'IBK연금':'IBK연금보험', '현대':'현대해상', '삼성':'삼성생명'
+  '푸본현대':'푸본현대생명', 'iM생명':'iM라이프', 'DGB생명':'iM라이프', 'IBK':'IBK연금보험', 'IBK연금':'IBK연금보험', '현대':'현대해상', '삼성':'삼성생명',
+  'KB생명':'KB라이프', 'KB라이프생명':'KB라이프', '푸르덴셜':'KB라이프', 'NH농협손해보험':'NH손보'
 };
 var COMM_CATS = ['건강상해','종신','저축','기타'];
 
@@ -29244,14 +29355,15 @@ function _commCanUse(){
   if(!currentUser) return false;
   if(COMM_OPEN_ALL) return true;
   var r = currentUser.role||'', tt = currentUser.title||'', id = currentUser.id||'', br = currentUser.branch||'';
-  return r === '대표' || r === '지점장' || r === '교육지점장' || tt === '지점장' || tt === '교육지점장' || id === 'ktk01' || id === 'H2503162' || br.indexOf('교육') >= 0 || currentUser.level === 'admin';
+  // trial before the full opening: accounts with the manager title see their own commission (the server checks the same)
+  return r === '대표' || r === '지점장' || r === '교육지점장' || tt === '지점장' || tt === '교육지점장' || id === 'ktk01' || id === 'H2503162' || br.indexOf('교육') >= 0 || currentUser.level === 'admin' || String(tt).indexOf('매니저') >= 0;
 }
 function _cmApplyRates(o){
   if(!o) return;
   if(o.fpRate) COMM_FP_RATE = parseFloat(o.fpRate) || 0;
   if(o.mgrRate) COMM_MGR_RATE = parseFloat(o.mgrRate) || 0;
   if(o.scRate !== undefined && o.scRate !== null && o.scRate !== '') COMM_SC_RATE = parseFloat(o.scRate) || 0;
-  if(o.openAll !== undefined) COMM_OPEN_ALL = !!o.openAll;
+  if(o.openAll !== undefined){ COMM_OPEN_ALL = !!o.openAll; try { localStorage.setItem('unispace_comm_open', COMM_OPEN_ALL ? '1' : '0'); } catch(eCo) {} }
 }
 function _cmNorm(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
 function _cmMan(won){
@@ -29271,6 +29383,9 @@ function _cmMonthEnd(ym){
   var last = new Date(y, m, 0).getDate();
   return ym + '-' + (last<10?'0':'') + last;
 }
+// the card's month in the year nearest to today: a December card read in January stays in last year
+function _cmYmGuess(mon){ var now = new Date(), y = now.getFullYear(), cm = now.getMonth() + 1; if(mon - cm > 6) y--; else if(cm - mon > 6) y++; return y + '-' + (mon<10?'0':'') + mon; }
+function _cmRuleSpan(r){ var f = Date.parse(r.from || ''), t = Date.parse(r.to || ''); return (isNaN(f) || isNaN(t)) ? 99999 : Math.round((t - f) / 86400000); }
 function _cmYmLabel(ym){ return parseInt(ym.substr(0,4),10)+'년 '+parseInt(ym.substr(5,2),10)+'월'; }
 function _cmEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -29317,6 +29432,8 @@ function _ratesRefresh(cb){
       if(chg) _lsSet(RATES_KEY, JSON.stringify({ ver:_rates.ver, label:_rates.label||'', rows:_rates.rows, fpRate:_rates.fpRate, mgrRate:_rates.mgrRate, scRate:_rates.scRate, openAll:_rates.openAll }));
     } else if(res && res.denied){
       _rates = null;
+      // closed again on the server: drop the remembered open flag
+      if(COMM_OPEN_ALL){ COMM_OPEN_ALL = false; try { localStorage.setItem('unispace_comm_open', '0'); } catch(eCo) {} }
     }
     fin();
   }).catch(function(){ fin(); });
@@ -29396,15 +29513,17 @@ function _rulesEnsure(cb, force){
     });
 }
 // signature of a rule's numbers (title and note aside): two saves of the same 장표 must not pay twice
+function _cmInsKey(s){ var raw = String(s||'').trim(); var m = (_rates ? _cmRateInsurer(raw) : '') || COMM_INS_MAP[raw] || raw; return _cmNorm(m); }
 function _rulesSig(r){
   var d = r.data || {}, t = r.type || 'rate';
   function arr(a){ return (a||[]).map(function(x){ return String(x); }).sort().join(','); }
-  var parts = [String(r.insurer||''), t, r.from || d.from || '', r.to || d.to || ''];
+  var parts = [_cmInsKey(r.insurer), t, (t === 'cond' ? '' : (r.from || d.from || '')), (t === 'cond' ? '' : (r.to || d.to || ''))];
   if(t === 'rate') parts.push(arr(d.keywords), arr(d.must), arr(d.exclude), arr(d.cats), arr(d.pay), d.payMin||0, d.payMax||0, d.amtMin||0, d.amtMax||0, d.pct1||0, d.pct2||0, d.when2||'');
   else if(t === 'tier') parts.push(arr(d.keywords), JSON.stringify(d.tiers||[]), arr(d.fps));
-  else if(t === 'cond') parts.push(JSON.stringify((d.conds||[]).map(function(x){ return [x.from||'', x.to||'', x.min||0]; })), JSON.stringify((d.rewards||[]).map(function(x){ return [x.min||0, x.amt||0]; })), d.amt||0);
+  else if(t === 'cond') parts.push(JSON.stringify((d.conds||[]).map(function(x){ return [x.from||'', x.to||'', x.min||0]; })), JSON.stringify((d.rewards||[]).map(function(x){ return [x.min||0, x.amt||0]; })), d.amt||0, String(d.rewardBy === undefined ? '' : d.rewardBy));
   else if(t === 'per') parts.push(arr(d.keywords), arr(d.exclude), d.amt||0, d.when||'');
-  else if(t === 'gift') parts.push(String(d.item||'').replace(/\s+/g,''), d.min||0, d.rank||0);
+  else if(t === 'gift') parts.push(String(d.item||'').replace(/\s+/g,''), d.min||0, d.rank||0, JSON.stringify(d.conds||[]));
+  parts.push(arr(d.prods), d.prodsAll ? 'all:' + arr(d.except) : '');
   return parts.join('|');
 }
 function _rulesDedupe(list){
@@ -29450,13 +29569,21 @@ function _cmKwHit(np, kw){
 }
 var _CM_KW_TAIL = /(건강보험|종신보험|정기보험|연금보험|저축보험|통합보험|상해보험|보험|종신|연금)$/;
 var _CM_KW_VARIANT = /(플러스|plus|프리미엄|premium|간편|기본형|표준형|해약환급금미지급형|무배당|갱신형|비갱신형)/g;
+// a shortened keyword must still name a product family: a stem that is only a variant word or a tail word would match half the table
+var _CM_KW_GENERIC = /^(건강|종합|통합|실속|든든|더|the|new|무|변액|달러|일반)$/;
+function _cmKwStemOk(s){
+  if(!s || s.length < 2) return false;
+  if(!s.replace(_CM_KW_VARIANT, '')) return false;
+  if(!s.replace(_CM_KW_TAIL, '')) return false;
+  return !_CM_KW_GENERIC.test(s);
+}
 function _cmKwScore(np, kw, broad){
   if(!kw) return 0;
   var cands = [kw], i;
   // 가동·구간 시상 names a product family: "새로담는건강보험플러스" should also hit "새로담는간편건강보험"
-  if(broad){ var kb = kw.replace(_CM_KW_VARIANT, ''); if(kb && kb !== kw && kb.length >= 2) cands.push(kb); }
+  if(broad){ var kb = kw.replace(_CM_KW_VARIANT, ''); if(kb !== kw && _cmKwStemOk(kb)) cands.push(kb); }
   var n0 = cands.length;
-  for(i=0;i<n0;i++){ var short = cands[i].replace(_CM_KW_TAIL, ''); if(short && short !== cands[i] && short.length >= 2) cands.push(short); }
+  for(i=0;i<n0;i++){ var short = cands[i].replace(_CM_KW_TAIL, ''); if(short !== cands[i] && _cmKwStemOk(short)) cands.push(short); }
   var best = 0;
   for(i=0;i<cands.length;i++){ var h = _cmKwHit(np, cands[i]); if(h > best) best = h; }
   return best;
@@ -29467,17 +29594,30 @@ function _cmKwAny(np, keywords, broad){
   for(var i=0;i<(keywords||[]).length;i++){ var h = _cmKwScore(npk, _cmNormKw(keywords[i]), broad); if(h > best) best = h; }
   return best;
 }
+function _cmNpEx(np){ return String(np||'').replace(/\(?간편가입포함\)?/g, ''); }
+// rate-table rows a reading linked to the rule (prods) or left out of an all-products rule (except)
+function _cmInSet(d, key, np){
+  var mk = '_m' + key;
+  if(!d[mk]){ var m = {}, a = d[key] || []; for(var i=0;i<a.length;i++) m[_cmNorm(a[i])] = 1; d[mk] = m; }
+  return !!d[mk][np];
+}
 // scope test shared by all rule types: cats / keywords / exclude / pay
 function _cmScopeOk(d, p, needProd){
   d = d || {};
   var np = _cmNorm(p.prod), i;
   if(d.cats && d.cats.length){ if(d.cats.indexOf(p.cat||'') < 0) return false; }
-  if(d.keywords && d.keywords.length){
+  var linked = !!(d.prods && d.prods.length);
+  if(linked){
+    if(!np || !_cmInSet(d, 'prods', np)) return false;
+  } else if(d.keywords && d.keywords.length){
     if(!np) return false;
     if(!_cmKwAny(np, d.keywords, !needProd)) return false;
   } else if(needProd && !np){ return false; }
+  if(!linked && d.prodsAll && d.except && d.except.length && np && _cmInSet(d, 'except', np)) return false;
+  // a row whose name says it includes simplified underwriting covers both types: an exclude on that word still fits it
+  var npx = _cmNpEx(np);
   if(d.exclude && d.exclude.length && np){
-    for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && np.indexOf(ex) >= 0) return false; }
+    for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && npx.indexOf(ex) >= 0) return false; }
   }
   if(d.must && d.must.length){
     if(!np) return false;
@@ -29486,14 +29626,15 @@ function _cmScopeOk(d, p, needProd){
   var pmin = parseInt(d.payMin,10) || 0, pmax = parseInt(d.payMax,10) || 0;
   if((d.pay && d.pay.length) || pmin || pmax){
     var yrs = _cmPayYears(p.prod);
-    if(!yrs) return false;
-    if(d.pay && d.pay.length){
+    // a linked row whose name carries no payment term serves every term: the reading chose it, the FP picks the rule
+    if(!yrs && !linked) return false;
+    if(yrs && d.pay && d.pay.length){
       var ok = false;
       for(i=0;i<d.pay.length;i++){ var y = parseInt(d.pay[i],10); if(y >= yrs.min && y <= yrs.max){ ok = true; break; } }
       if(!ok) return false;
     }
-    if(pmin && yrs.max < pmin) return false;
-    if(pmax && yrs.min > pmax) return false;
+    if(yrs && pmin && yrs.max < pmin) return false;
+    if(yrs && pmax && yrs.min > pmax) return false;
   }
   var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
   if(d.amtMin && amt < d.amtMin) return false;
@@ -29505,16 +29646,18 @@ function _cmScopeWhy(d, p){
   d = d || {};
   var np = _cmNorm(p.prod), i;
   if(d.cats && d.cats.length && d.cats.indexOf(p.cat||'') < 0) return '분류 (규칙 ' + d.cats.join('·') + ' / 입력 ' + (p.cat||'없음') + ')';
-  if(d.keywords && d.keywords.length && !_cmKwAny(np, d.keywords)) return '상품 키워드 (' + d.keywords.join(', ') + ')';
-  if(d.exclude && d.exclude.length && np){ for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && np.indexOf(ex) >= 0) return '제외어 "' + d.exclude[i] + '" 포함'; } }
+  if(d.prods && d.prods.length){ if(!np || !_cmInSet(d, 'prods', np)) return '연결된 상품이 아님 (' + d.prods.length + '개 상품에만 적용)'; }
+  else if(d.keywords && d.keywords.length && !_cmKwAny(np, d.keywords)) return '상품 키워드 (' + d.keywords.join(', ') + ')';
+  if(d.prodsAll && d.except && d.except.length && np && _cmInSet(d, 'except', np)) return '제외 상품';
+  if(d.exclude && d.exclude.length && np){ var npx = _cmNpEx(np); for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && npx.indexOf(ex) >= 0) return '제외어 "' + d.exclude[i] + '" 포함'; } }
   if(d.must && d.must.length){ for(i=0;i<d.must.length;i++){ var mu = _cmNorm(d.must[i]); if(mu && np.indexOf(mu) < 0) return '"' + d.must[i] + '" 없음'; } }
   var pmin = parseInt(d.payMin,10) || 0, pmax = parseInt(d.payMax,10) || 0;
   if((d.pay && d.pay.length) || pmin || pmax){
     var yrs = _cmPayYears(p.prod);
-    if(!yrs) return '상품명에 납기(년) 없음';
-    if(d.pay && d.pay.length){ var ok = false; for(i=0;i<d.pay.length;i++){ var y = parseInt(d.pay[i],10); if(y >= yrs.min && y <= yrs.max){ ok = true; break; } } if(!ok) return '납기 (규칙 ' + d.pay.join('·') + '년 / 상품 ' + yrs.min + '년)'; }
-    if(pmin && yrs.max < pmin) return '납기 ' + pmin + '년 이상 필요';
-    if(pmax && yrs.min > pmax) return '납기 ' + pmax + '년 이하 필요';
+    if(!yrs && !(d.prods && d.prods.length)) return '상품명에 납기(년) 없음';
+    if(yrs && d.pay && d.pay.length){ var ok = false; for(i=0;i<d.pay.length;i++){ var y = parseInt(d.pay[i],10); if(y >= yrs.min && y <= yrs.max){ ok = true; break; } } if(!ok) return '납기 (규칙 ' + d.pay.join('·') + '년 / 상품 ' + yrs.min + '년)'; }
+    if(yrs && pmin && yrs.max < pmin) return '납기 ' + pmin + '년 이상 필요';
+    if(yrs && pmax && yrs.min > pmax) return '납기 ' + pmax + '년 이하 필요';
   }
   var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
   if(d.amtMin && amt < d.amtMin) return '월초 ' + _cmMan(d.amtMin) + ' 이상 필요';
@@ -29536,7 +29679,7 @@ function _cmNoRuleWhy(p, dateStr){
     var why = _cmScopeWhy(d, p);
     if(!why) return '';
     // the rule whose keywords matched is the closest one
-    var kwHit = !(d.keywords && d.keywords.length) || _cmKwAny(_cmNorm(p.prod), d.keywords) > 0;
+    var kwHit = (d.prods && d.prods.length) ? _cmInSet(d, 'prods', _cmNorm(p.prod)) : (!(d.keywords && d.keywords.length) || _cmKwAny(_cmNorm(p.prod), d.keywords) > 0);
     if(!best || (kwHit && !best.kwHit)){ best = { r:inRange[k], kwHit:kwHit }; bestWhy = why; }
   }
   if(!best) return '건별 % 규칙에 %가 없음';
@@ -29564,7 +29707,7 @@ function _cmPartRulesFor(p, dateStr){
     for(var k in d){ if(d.hasOwnProperty(k) && k !== 'amtMin' && k !== 'amtMax' && k !== 'coreMin') ds[k] = d[k]; }
     if(!_cmScopeOk(ds, p, true)) continue;
     var mn = _cmPartMin(d);
-    out.push({ r:r, min:mn, core:core, need:(!core && mn > 0), ok:(mn > 0 ? core >= mn : true) });
+    out.push({ r:r, min:mn, core:core, need:!core, ok:(core > 0 && core >= mn) });
   }
   return out;
 }
@@ -29585,13 +29728,16 @@ function _cmRateRulesFor(p, dateStr){
   var np = _cmNorm(p.prod);
   function score(r){
     var d = r.data || {}, best = 0, i;
-    best = _cmKwAny(np, d.keywords);
-    var conds = ((d.pay&&d.pay.length)?1:0) + (d.payMin?1:0) + (d.payMax?1:0) + ((d.must&&d.must.length)?1:0) + ((d.exclude&&d.exclude.length)?1:0) + (d.amtMin?1:0) + (d.amtMax?1:0) + ((d.cats&&d.cats.length)?1:0);
+    best = (d.prods && d.prods.length && _cmInSet(d, 'prods', np)) ? 100 : _cmKwAny(np, d.keywords);
+    // an exclude word that was set aside on such a row is not counted as a condition (keeps the simplified rule as default)
+    var exOn = false; if(d.exclude && d.exclude.length){ var npx = _cmNpEx(np); for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(!ex) continue; if(!(np.indexOf(ex) >= 0 && npx.indexOf(ex) < 0)) exOn = true; } }
+    var conds = ((d.pay&&d.pay.length)?1:0) + (d.payMin?1:0) + (d.payMax?1:0) + ((d.must&&d.must.length)?1:0) + (exOn?1:0) + (d.amtMin?1:0) + (d.amtMax?1:0) + ((d.cats&&d.cats.length)?1:0);
     return best * 10 + conds;
   }
   if(out.length > 1){
     var scored = out.map(function(r, idx){ return { r:r, s:score(r), i:idx }; });
-    scored.sort(function(a,b){ return (b.s - a.s) || (a.i - b.i); });
+    // equal fit: the rule of the shorter period wins (a weekly rate over the month's rate)
+    scored.sort(function(a,b){ return (b.s - a.s) || (_cmRuleSpan(a.r) - _cmRuleSpan(b.r)) || (a.i - b.i); });
     out = scored.map(function(x){ return x.r; });
   }
   return out;
@@ -29646,7 +29792,7 @@ function _perfProdBlock(i, p){
     if(pcs.length){
       var pc0 = pcs[0], pcd = pc0.r.data || {};
       var coreMan = _numWonC(p.core) ? String(Math.round(_numWonC(p.core) / 10000)) : '';
-      h += '<div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px"><span style="font-weight:700;color:var(--text2);white-space:nowrap">핵심담보 보험료</span>'
+      h += '<div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px"><span style="font-weight:700;color:var(--text2);white-space:nowrap">' + _cmEsc(pcd.coreLabel || '핵심담보 보험료') + '</span>'
          + '<input type="text" inputmode="numeric" id="perfCore' + i + '" value="' + _cmEsc(coreMan) + '" placeholder="만원" oninput="_perfCoreSet(' + i + ',this.value)" class="perf-input" style="width:64px;font-size:12px;padding:5px 8px">'
          + '<span style="color:var(--text3)">' + _cmEsc(pc0.r.title || pcd.label || '') + (pc0.min ? ' · ' + _cmMan(pc0.min) + '↑이면 ' : ' · ') + (pcd.pct2 ? _cmEsc(pcd.when2||'13차월') + ' ' + _cmPct(pcd.pct2) : (pcd.pct1 ? '익월 ' + _cmPct(pcd.pct1) : '')) + ' (설계화면 초록색 담보 합계)</span></div>';
     }
@@ -29813,6 +29959,11 @@ function _reSummary(r){
   if(r.exclude && r.exclude.length) sub.push('제외 ' + r.exclude.join('·'));
   if(r.cats && r.cats.length) sub.push(r.cats.join('·'));
   if(r.group) sub.push('택1 (' + r.group + ' 중 큰 것)');
+  if(r.prods && r.prods.length) sub.push('상품 ' + r.prods.length + '개: ' + String(r.prods[0]).slice(0, 22) + (r.prods.length > 1 ? '… 외 ' + (r.prods.length - 1) : ''));
+  else if(r.prodsAll) sub.push('전 상품' + (r.except && r.except.length ? ' (제외 ' + r.except.length + '개)' : ''));
+  if(r.needFps) sub.push('대상 FP 지정 필요');
+  if(r.unsupported && r.unsupported.length) sub.push('참고: ' + r.unsupported.join(', '));
+  if(r._agree === true) sub.push('두 번 일치 ✅'); else if(r._agree === false) sub.push('세 번째 판정');
   if(r.note) sub.push(r.note);
   return out.join('<br>') + (sub.length ? '<div class="cm-mini" style="margin-top:2px">' + _cmEsc(sub.join(' · ')) + '</div>' : '');
 }
@@ -29820,6 +29971,7 @@ function _reRender(){
   var box = document.getElementById(_re.box);
   if(!box) return;
   var h = '';
+  if(_re.check && !_re.reading) h += _reCheckHtml();
   if(!_re.rules.length){
     h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">' + (_re.reading ? _reProgressHtml() : (_re.failed ? '읽지 못했습니다 · 🔄 다시 읽기 또는 아래에서 직접 추가' : '장표 이미지를 올리면 자동으로 읽어서 채워집니다')) + '</div>';
   }
@@ -29973,7 +30125,8 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
   }
   _re.reading = true; _re.progress = { done:0, total:jobs.length, secs:0 }; _reRender();
   var got = 0, failed = 0, firstErr = '', doneCnt = 0, cached = 0, t0 = Date.now();
-  var results = [];
+  var results = [], checks = [];
+  _re.check = null;
   var tick = setInterval(function(){
     if(gen !== _reGen){ clearInterval(tick); return; }
     var secs = Math.round((Date.now() - t0) / 1000);
@@ -29987,6 +30140,7 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
     _re.reading = false; _re.progress = null;
     // keep the 장표 order stable
     for(var r=0;r<results.length;r++){ if(results[r] && results[r].length) _re.rules = _re.rules.concat(results[r]); }
+    _reCheckBuild(checks, jobs.length, failed, Math.round((Date.now() - t0) / 1000));
     var secs = Math.round((Date.now() - t0) / 1000);
     if(!got && failed){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ ' + (firstErr || '읽기 실패') + ' · 다시 읽기를 눌러주세요'); return; }
     if(!got){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
@@ -29999,7 +30153,7 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
     function post(imgs){
       _reReadAIPost(imgs, job.img ? '' : campaignId, (job.img ? undefined : job.idx), !!fresh, function(ok, res){
         if(gen !== _reGen){ clearInterval(tick); _reLinkState(btn, false); _reSyncLink(); return; }
-        if(ok){ var rules = (res && res.rules) || []; for(var ri=0;ri<rules.length;ri++){ rules[ri].img = job.idx; } if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !_re.title) _re.title = res.title; if(res && res.cached) cached++; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
+        if(ok){ var rules = (res && res.rules) || []; for(var ri=0;ri<rules.length;ri++){ rules[ri].img = job.idx; } if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !_re.title) _re.title = res.title; if(res && res.cached) cached++; if(res && res.check) checks[j] = res.check; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
         else { failed++; if(!firstErr) firstErr = (res && res.msg) || ''; try { console.warn('[시책 읽기] 장표 ' + (j+1) + ' 실패: ' + ((res && res.msg) || '')); } catch(eW) {} }
         doneCnt++;
         _re.progress = { done:doneCnt, total:jobs.length, secs:Math.round((Date.now() - t0) / 1000) }; _reRender();
@@ -30010,6 +30164,41 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
     else post([]);
   }
   for(var j0=0;j0<jobs.length;j0++) runJob(j0);
+}
+// after a read: the same reward printed on several sheets is kept once, and the per-sheet checks become one summary
+function _reCheckBuild(checks, imgs, failed, secs){
+  var seen = {}, kept = [], dup = 0, q;
+  for(q=0;q<_re.rules.length;q++){
+    var rq = _re.rules[q], sg = _rulesSig({ insurer:_re.insurer, type:rq.type, from:rq.from, to:rq.to, data:rq });
+    if(seen[sg]){ dup++; continue; }
+    seen[sg] = 1; kept.push(rq);
+  }
+  _re.rules = kept;
+  var ck = { imgs:imgs, secs:secs, listN:0, total:kept.length, linked:0, agreeN:0, agreeOf:0, fixes:[], warns:[], errors:[] };
+  for(q=0;q<checks.length;q++){
+    var c = checks[q]; if(!c) continue;
+    ck.listN = Math.max(ck.listN, c.listN || 0);
+    if(c.agree !== null && c.agree !== undefined){ ck.agreeOf++; if(c.agree) ck.agreeN++; }
+    ck.fixes = ck.fixes.concat(c.fixes || []); ck.warns = ck.warns.concat(c.warns || []); ck.errors = ck.errors.concat(c.errors || []);
+  }
+  for(q=0;q<kept.length;q++){ if((kept[q].prods && kept[q].prods.length) || kept[q].prodsAll) ck.linked++; }
+  if(dup) ck.fixes.unshift('장표 여러 장에 반복된 같은 시상 ' + dup + '개 → 1개로 합침');
+  if(failed) ck.errors.push('장표 ' + failed + '장 읽기 실패 — 🔄 다시 읽기');
+  var any = false; for(q=0;q<checks.length;q++){ if(checks[q]) any = true; }
+  _re.check = (any || dup || failed) ? ck : null;
+}
+function _reCheckHtml(){
+  var c = _re.check; if(!c) return '';
+  var ok = !c.errors.length;
+  function stat(v, l){ return '<div style="flex:1;background:#fff;border-radius:9px;padding:6px 4px;text-align:center;border:1px solid ' + (ok ? 'rgba(31,146,104,.2)' : 'rgba(180,35,24,.2)') + '"><div style="font-size:15px;font-weight:800;color:' + (ok ? '#1F9268' : '#B42318') + '">' + v + '</div><div style="font-size:10px;color:var(--text2)">' + l + '</div></div>'; }
+  function list(title, arr, col, bg){ if(!arr.length) return ''; var x = '<div style="font-size:11.5px;font-weight:800;margin:9px 2px 5px">' + title + ' <span style="font-weight:500;color:var(--text3)">' + arr.length + '건</span></div>'; for(var i=0;i<arr.length;i++) x += '<div style="font-size:11px;line-height:1.45;color:var(--text);background:' + bg + ';border-left:3px solid ' + col + ';border-radius:8px;padding:6px 9px;margin-bottom:4px">' + _cmEsc(arr[i]) + '</div>'; return x; }
+  var h = '<div style="border-radius:12px;padding:10px 11px;margin:2px 0 4px;background:' + (ok ? '#EEF8F3' : '#FDF1F0') + ';border:1px solid ' + (ok ? 'rgba(31,146,104,.35)' : 'rgba(180,35,24,.35)') + '">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><b style="font-size:13px;color:' + (ok ? '#1F9268' : '#B42318') + '">' + (ok ? '✅ 자동 점검 통과' : '❌ 확인 필요 ' + c.errors.length + '건') + '</b><span style="font-size:10.5px;color:var(--text3);white-space:nowrap">장표 ' + c.imgs + '장 · ' + c.secs + '초' + (c.listN ? ' · 요율표 ' + c.listN + '개와 연결' : '') + '</span></div>'
+    + '<div style="display:flex;gap:6px;margin-top:7px">' + stat(c.total, '시책 규칙') + stat(c.linked + '/' + c.total, '상품 연결') + (c.agreeOf ? stat(c.agreeN + '/' + c.agreeOf, '두 번 읽기 일치') : '') + '</div></div>';
+  h += list('❌ 확인 필요', c.errors, '#B42318', '#FDF1F0');
+  h += list('🔧 앱이 자동으로 바로잡은 것', c.fixes, '#6D4FB8', 'rgba(109,79,184,.06)');
+  h += list('⚠️ 참고로만 저장', c.warns, '#C77D14', '#FFFBF2');
+  return h + '<div style="height:6px"></div>';
 }
 // short hash of an image string: cache key for reads of not-yet-saved images
 function _cmHash(str){
@@ -30075,11 +30264,10 @@ function _reSave(campaignId, replace, cb){
 function _sichaekRulesInit(){
   var wrap = document.getElementById('sichaekRulesWrap');
   if(wrap) wrap.style.display = _commCanUse() ? '' : 'none';
-  var sel = document.getElementById('sichaekInsurer');
-  var parts = (sel ? sel.value : '').split('|');
+  var parts = _sichaekInsVal().split('|');
   var mon = parseInt(String(_sichaekWeekVal||'').replace(/[^0-9]/g,''),10);
   var now = new Date();
-  var ym = (mon >= 1 && mon <= 12) ? (now.getFullYear() + '-' + (mon<10?'0':'') + mon) : _cmYmOf(now);
+  var ym = (mon >= 1 && mon <= 12) ? _cmYmGuess(mon) : _cmYmOf(now);
   _reReset('sichaekRulesBox', parts[0] || '', parts[1] || '', ym, '');
   _reRender();
   var tg = document.getElementById('sichaekRulesApply'); if(tg) tg.checked = true;
@@ -30096,8 +30284,7 @@ function _sichaekAutoRead(){
 function sichaekReadAI(btn, auto){
   if(!_sichaekFiles.length){ showToast('⚠️ 먼저 시상 이미지를 선택하세요'); return; }
   if(_re.reading) return;
-  var sel = document.getElementById('sichaekInsurer');
-  var parts = (sel ? sel.value : '').split('|');
+  var parts = _sichaekInsVal().split('|');
   _re.insurer = parts[0] || ''; _re.kind = parts[1] || '';
   if(!auto){ _re.rules = []; _re.edit = {}; _re.failed = false; _reRender(); }
   _reReadAI(_sichaekFiles, '', btn, 0, !auto);
@@ -30105,8 +30292,7 @@ function sichaekReadAI(btn, auto){
 function _sichaekRulesSubmit(campId){
   var tg = document.getElementById('sichaekRulesApply');
   if(!_commCanUse() || !campId || !_re.rules.length || (tg && !tg.checked)) return;
-  var sel = document.getElementById('sichaekInsurer');
-  var parts = (sel ? sel.value : '').split('|');
+  var parts = _sichaekInsVal().split('|');
   _re.insurer = parts[0] || _re.insurer; _re.kind = parts[1] || _re.kind;
   _reSave(campId, false, function(ok){ if(ok) showToast('✅ 시책률 ' + _re.rules.length + '개 저장 · 수수료 예상에 반영됩니다'); });
 }
@@ -30118,7 +30304,7 @@ function openRulesFor(campId, insurer, kind, startWeek, imgCount){
   _rulesImgCount = parseInt(imgCount, 10) || 1;
   var mon = parseInt(String(startWeek||'').replace(/[^0-9]/g,''),10);
   var now = new Date();
-  var ym = (mon >= 1 && mon <= 12) ? (now.getFullYear() + '-' + (mon<10?'0':'') + mon) : _cmYmOf(now);
+  var ym = (mon >= 1 && mon <= 12) ? _cmYmGuess(mon) : _cmYmOf(now);
   _reReset('rulesBox', insurer, kind, ym, campId);
   var ttl = document.getElementById('rulesTitle'); if(ttl) ttl.textContent = '💰 시책률 · ' + insurer + (startWeek ? ' · ' + startWeek : '');
   var box = document.getElementById('rulesBox'); if(box) box.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:8px 2px">불러오는 중…</div>';
@@ -30179,15 +30365,20 @@ function _cmProdItem(rec, p){
   var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
   var row = p.prod ? _cmFindRate(p.co, p.prod) : null;
   var it = { date:rec.date, fpId:rec.fpId, co:p.co||'', cat:p.cat||'', prod:p.prod||'', amount:amt, lump:_perfIsLump(p), kind:(row ? row[0] : (p.pk||'')), calc:false, noRate:false, fee:null, gross:null, sc:null, rule:null };
+  // a single premium must not be multiplied by monthly rates: only rows whose name marks a single premium carry those rates
+  var lumpRow = !!(row && /일시납/.test(String(row[2]||'')));
+  it.lumpRow = lumpRow;
+  if(it.lump && row && !lumpRow){ it.lumpSkip = true; row = null; }
   if(row){
     if(row[3] === null){ it.noRate = true; }
     else {
       var r1 = row[3]||0, r2 = row[4]||0, r3 = row[5]||0, r4 = row[6]||0, r5 = row[7]||0;
       var g;
       if(row[0] === '손보') g = { m1:amt*r1, y1:amt*r2, y2:amt*(r3+r4), y3:0, p13:amt*r3, p15:amt*r4, nl:true };
-      else g = { m1:amt*r1, y1:amt*r2, y2:amt*r3, y3:amt*r4 + amt*r5, y3a:amt*r4, y4:amt*r5, nl:false };
+      else g = { m1:amt*r1, y1:amt*r2, y2:amt*r3, y3:amt*r4, y3a:amt*r4, y4:amt*r5, nl:false };
       it.gross = g;
-      it.fee = { m1:g.m1*COMM_FP_RATE, y1:g.y1*COMM_FP_RATE, y2:g.y2*COMM_FP_RATE, y3:g.y3*COMM_FP_RATE };
+      // y4 (years 4-10) is kept apart: the totals cover 36 months
+      it.fee = { m1:g.m1*COMM_FP_RATE, y1:g.y1*COMM_FP_RATE, y2:g.y2*COMM_FP_RATE, y3:g.y3*COMM_FP_RATE, y4:(g.y4||0)*COMM_FP_RATE };
       if(g.nl){ it.fee.p13 = g.p13*COMM_FP_RATE; it.fee.p15 = g.p15*COMM_FP_RATE; }
       it.calc = true;
     }
@@ -30195,6 +30386,8 @@ function _cmProdItem(rec, p){
   if(p.prod){
     if(p.rule === 'none') it.ruleOff = true;
     var rule = _cmPickRule(p, rec.date);
+    // a single premium only takes a % written for single premiums
+    if(rule && (it.lump || lumpRow) && !_cmLumpRule(rule)) rule = null;
     if(rule){
       var d = rule.data || {};
       var s1 = amt*(parseFloat(d.pct1)||0)/100*COMM_SC_RATE, s2 = amt*(parseFloat(d.pct2)||0)/100*COMM_SC_RATE;
@@ -30202,7 +30395,7 @@ function _cmProdItem(rec, p){
       it.rule = rule;
     }
     // 핵심담보-type rules stack on top of the product's % when their condition is met
-    it.parts = _cmPartRulesFor(p, rec.date);
+    it.parts = (it.lump || lumpRow) ? [] : _cmPartRulesFor(p, rec.date);
     for(var pi=0;pi<it.parts.length;pi++){
       var pt = it.parts[pi];
       if(!pt.ok) continue;
@@ -30219,6 +30412,8 @@ function _cmProdItem(rec, p){
   }
   return it;
 }
+function _cmLumpRule(r){ var d = r.data || {}; return /일시납/.test((d.keywords||[]).join(' ') + ' ' + (d.must||[]).join(' ') + ' ' + String(r.title||'') + ' ' + String(d.label||'')); }
+function _cmTitlePct(t, p){ var ps = _cmPct(p); return String(t).indexOf(ps) >= 0 ? String(t) : String(t) + ' ' + ps; }
 function _cmPctSum(p, extra){ if(!(parseFloat(p)||0)) return _cmPct(extra||0); return _cmPct(p) + (extra ? '+' + _cmPct(extra) : ''); }
 function _cmWhenBucket(when){
   var w = String(when||'');
@@ -30281,6 +30476,8 @@ function _cmEvalRules(recs, fpId, ym){
     if(r.type !== 'tier' && r.type !== 'cond' && r.type !== 'per' && r.type !== 'gift') continue;
     var d = r.data || {};
     if(d.fps && d.fps.length && d.fps.indexOf(fpId) < 0) continue;
+    // a reward for named FPs only: nobody counts until the FPs are set
+    if((d.needFps || /대상\s*FP\s*지정/.test(String(d.note||''))) && !(d.fps && d.fps.length)) continue;
     var res = { rule:r, type:r.type, label:(r.title || d.label || r.insurer), insurer:r.insurer, when:d.when||'', bucket:_cmWhenBucket(d.when), amt:0, sum:0, n:0, next:null, need:0, nextAmt:0, text:'', sub:'', active:false, pct:0 };
     if(r.type === 'tier'){
       var from = r.from || d.from || mFrom, to = r.to || d.to || mTo;
@@ -30327,9 +30524,9 @@ function _cmEvalRules(recs, fpId, ym){
         for(ui=0;ui<unmet.length;ui++){ var uu = unmet[ui]; if(uu.to < today) past.push(uu); else if(uu.from > today) fut.push(uu); else cur.push(uu); }
         if(past.length){
           res.closed = true;
-          // the current month is fine but an earlier window is empty: worth telling (records without 상품명 do not count here)
-          var curMet = true; for(c=0;c<conds.length;c++){ var cfx = conds[c].from || mFrom, ctx = conds[c].to || mTo; if(!(ctx < today) && !(cfx > today) && sums[c] < (conds[c].min||0)) curMet = false; }
-          if(curMet && !unmet.some(function(u){ return !(u.to < today); })) res.missedPast = past;
+          // a window closed short: the rule can no longer pay. Shown only when this FP had business in its windows (records without a product name do not count here)
+          var anyPast = false; for(c=0;c<sums.length;c++){ if(sums[c] > 0) anyPast = true; }
+          if(anyPast) res.missedPast = past;
         }
         else if(cur.length === 1){
           // one open window short: what it pays once every window is met at least at its base amount
@@ -30353,6 +30550,21 @@ function _cmEvalRules(recs, fpId, ym){
       }
       var any = false; for(var s2=0;s2<sums.length;s2++){ if(sums[s2] > 0) any = true; }
       res.active = any;
+    } else if(r.type === 'gift' && d.conds && d.conds.length){
+      // every window must reach its minimum (membership gifts)
+      var gTouch = false, gAll = true, gPast = false, gs = [], gNeed = 0, gPct = 100, gFut = 0, gCur = -1;
+      for(c=0;c<d.conds.length;c++){
+        var gcf = d.conds[c].from || mFrom, gct = d.conds[c].to || mTo, gmin = d.conds[c].min || 0;
+        if(_cmOverlap(gcf, gct, mFrom, mTo)){ gTouch = true; if(gCur < 0) gCur = c; }
+        var gw2 = _cmSumWindow(recs, fpId, r, gcf, gct); gs.push(gw2.sum);
+        if(gw2.sum < gmin){ gAll = false; if(gct < today) gPast = true; else if(gcf > today) gFut++; else if(!gNeed){ gNeed = gmin - gw2.sum; gPct = Math.min(100, Math.round(gw2.sum / (gmin||1) * 100)); } }
+      }
+      if(!gTouch) continue;
+      res.gift = true; res.amt = 0; res.item = d.item || ''; res.rank = 0; res.min = d.conds[gCur].min || 0; res.sum = gs[gCur] || 0;
+      res.period = _cmCondPeriod(d.conds, mFrom, mTo);
+      res.done = gAll; res.closed = !gAll && gPast; res.need = gNeed; res.pct = gAll ? 100 : gPct; res.futureN = gFut; res.onTrack = !gAll && !gPast && !gNeed;
+      var gAny = false; for(c=0;c<gs.length;c++){ if(gs[c] > 0) gAny = true; }
+      res.active = gAny;
     } else if(r.type === 'gift'){
       var gf = r.from || d.from || mFrom, gt = r.to || d.to || mTo;
       if(!_cmOverlap(gf, gt, mFrom, mTo)) continue;
@@ -30391,10 +30603,11 @@ function _cmEvalRules(recs, fpId, ym){
   if(drop.length) out = out.filter(function(x){ return drop.indexOf(x) < 0; });
   return out;
 }
-function _cmBuild(fpId, ym){
+// cut (optional, yyyy-mm-dd): only records up to that day (one day's gain = total with the day minus total without it)
+function _cmBuild(fpId, ym, cut){
   var all = getPerfLog();
   var recs = [];
-  for(var i=0;i<all.length;i++){ if(all[i].fpId === fpId) recs.push(all[i]); }
+  for(var i=0;i<all.length;i++){ if(all[i].fpId === fpId && (!cut || String(all[i].date||'') <= cut)) recs.push(all[i]); }
   var items = [];
   for(var j=0;j<recs.length;j++){
     var rec = recs[j];
@@ -30426,17 +30639,18 @@ function _cmBuild(fpId, ym){
     for(var ap=0;ap<pool.length;ap++){
       var share = (av.type === 'per') ? (1 / pool.length) : (tot ? pool[ap].amount / tot : 1 / pool.length);
       var part = av.amt * share;
-      if(!pool[ap].alloc) pool[ap].alloc = { m1:0, y2:0, y3:0, labels:[] };
+      if(!pool[ap].alloc) pool[ap].alloc = { m1:0, y2:0, y3:0, y2at15:0, labels:[] };
       pool[ap].alloc[bk] += part;
+      if(bk === 'y2' && String(av.when||'').indexOf('15') >= 0) pool[ap].alloc.y2at15 += part;
       pool[ap].alloc.labels.push(av.label + ' ' + _cmMan(part) + (pool.length > 1 ? '(' + Math.round(share * 100) + '%)' : ''));
     }
   }
-  var t = { m1:0, y1:0, y2:0, y3:0, sc1:0, sc2:0, sc3:0, g1:0, g2:0, g3:0, calc:0, noProd:0, noRate:0, cnt:items.length };
+  var t = { m1:0, y1:0, y2:0, y3:0, y4:0, sc1:0, sc2:0, sc3:0, g1:0, g2:0, g3:0, gy1:0, gy4:0, calc:0, noProd:0, noRate:0, cnt:items.length };
   for(var m=0;m<items.length;m++){
     var it = items[m];
     if(it.calc){
-      t.m1 += it.fee.m1; t.y1 += it.fee.y1; t.y2 += it.fee.y2; t.y3 += it.fee.y3;
-      t.g1 += it.gross.m1; t.g2 += it.gross.y2; t.g3 += it.gross.y3;
+      t.m1 += it.fee.m1; t.y1 += it.fee.y1; t.y2 += it.fee.y2; t.y3 += it.fee.y3; t.y4 += it.fee.y4 || 0;
+      t.g1 += it.gross.m1; t.g2 += it.gross.y2; t.g3 += it.gross.y3; t.gy1 += it.gross.y1 || 0; t.gy4 += it.gross.y4 || 0;
       t.calc++;
     } else if(it.noRate) t.noRate++;
     else if(!it.prod) t.noProd++;
@@ -30535,7 +30749,11 @@ function _cmActiveFps(){
   return out;
 }
 function _cmIsAdmin(u){ return !!(u && (u.role === '대표' || u.level === 'admin' || u.id === 'ktk01')); }
+// the education branch manager is neither a team manager nor a team member for the manager commission
+function _cmIsEduFp(f){ return !!f && (f.id === 'H2503162' || String(f.title||'').indexOf('교육') >= 0 || String(f.role||'').indexOf('교육') >= 0 || String(f.branch||'').indexOf('교육') >= 0); }
+function _cmFpById(id){ var all = getMergedFpList(); for(var i=0;i<all.length;i++){ if(all[i].id === id) return all[i]; } return (currentUser && currentUser.id === id) ? currentUser : null; }
 function _cmTeamOfManager(fpId){
+  if(_cmIsEduFp(_cmFpById(fpId)) || fpId === 'H2503162') return null;
   var teams = (typeof getTeamsDB === 'function') ? getTeamsDB() : [];
   for(var i=0;i<teams.length;i++){ if((teams[i].managers||[]).indexOf(fpId) >= 0) return teams[i]; }
   // no team configured: a branch manager (지점장) falls back to every FP of the same branch
@@ -30552,6 +30770,7 @@ function _cmTeamOfManager(fpId){
 function openCommission(){
   if(!currentUser){ showToast('로그인이 필요합니다'); return; }
   if(!_commCanUse()){ showToast('아직 공개되지 않은 기능입니다'); return; }
+  _cmPinLock();
   _cmYm = _cmYmOf(new Date());
   _cmFp = _cmIsAdmin(currentUser) ? '' : currentUser.id;
   _cmTab = _cmCanRank() ? 'rank' : 'mine';
@@ -30559,7 +30778,8 @@ function openCommission(){
   _cmOpen = ''; _cmFromRank = false;
   _cmShowSched = false;
   var isAdmin = _cmIsAdmin(currentUser);
-  var team = _cmTeamOfManager(currentUser.id);
+  // a team (and the FP picker) only for the two branch managers: any other account sees its own figures only
+  var team = (isAdmin || !_cmCanRank()) ? null : _cmTeamOfManager(currentUser.id);
   _cmFpList = [];
   if(isAdmin){
     _cmFpList = _cmActiveFps().slice();
@@ -30605,7 +30825,7 @@ function _cmRefresh(btn){
       .catch(function(){ _ratesRefresh(function(){ done(); }); });
   } else { _ratesRefresh(function(){ done(); }); }
 }
-function closeCommission(){ document.getElementById('commOverlay').classList.remove('open'); if(typeof _scrollToSubmenu === 'function') _scrollToSubmenu(); }
+function closeCommission(){ _cmPinLock(); document.getElementById('commOverlay').classList.remove('open'); if(typeof _scrollToSubmenu === 'function') _scrollToSubmenu(); }
 function _cmMove(n){ _cmYm = _cmYmAdd(_cmYm, n); _commRender(); }
 function _cmPickFp(v){ _cmFp = v; _cmTab = 'mine'; _cmFromRank = false; _commRender(); }
 function _cmSetTab(t){ _cmTab = t; _cmFromRank = false; if(t !== 'mine' && t !== 'team') _cmFp = currentUser.id; _commRender(); }
@@ -30625,30 +30845,38 @@ function _commRender(){
   if(!body) return;
   var isAdm = _cmIsAdmin(currentUser);
   var fpId = _cmFp || (isAdm ? '' : currentUser.id);
+  // only the head and the two branch managers open another FP's figures
+  if(!isAdm && !_cmCanRank()) fpId = currentUser.id;
   var fpObj = null, all = getMergedFpList();
   for(var i=0;i<all.length;i++){ if(all[i].id === fpId){ fpObj = all[i]; break; } }
   var fpName = fpObj ? fpObj.name : (fpId === currentUser.id ? (currentUser.name||'') : fpId);
-  var team = _cmTeamOfManager(fpId);
-  var showTeam = !!team && !_cmIsAdmin(currentUser);
+  // the manager's own team, whichever FP is picked in the list
+  var team = (_cmIsAdmin(currentUser) || !_cmCanRank()) ? null : _cmTeamOfManager(currentUser.id);
+  var showTeam = !!team, showMgr = _cmIsAdmin(currentUser);
   var canRank = _cmCanRank();
   if(_cmTab === 'team' && !team) _cmTab = 'mine';
+  if(_cmTab === 'mgr' && !showMgr) _cmTab = 'mine';
   if(_cmTab === 'rank' && !canRank) _cmTab = 'mine';
+  // the manager tab locks again as soon as another tab is shown
+  if(_cmTab !== 'team') _cmPinLock();
   var h = '';
   h += '<div class="cm-seg"><span onclick="_cmMove(-1)">‹</span><span class="on" style="flex:3">' + _cmYmLabel(_cmYm) + ' 체결</span><span onclick="_cmMove(1)">›</span></div>';
   var tabs = '';
   if(canRank) tabs += '<span class="' + (_cmTab==='rank'?'on':'') + '" onclick="_cmSetTab(\'rank\')">' + (_cmIsAdmin(currentUser) ? '지사 순위' : '지점 순위') + '</span>';
   if(canRank || showTeam) tabs += '<span class="' + (_cmTab==='mine'?'on':'') + '" onclick="_cmSetTab(\'mine\')">' + (_cmIsAdmin(currentUser) ? 'FP 상세' : '내 계약') + '</span>';
-  if(showTeam) tabs += '<span class="' + (_cmTab==='team'?'on':'') + '" onclick="_cmSetTab(\'team\')">팀 수수료</span>';
+  if(showTeam) tabs += '<span class="' + (_cmTab==='team'?'on':'') + '" onclick="_cmSetTab(\'team\')">' + (_cmPinOk ? '' : '🔒 ') + '지점장 수수료</span>';
+  if(showMgr) tabs += '<span class="' + (_cmTab==='mgr'?'on':'') + '" onclick="_cmSetTab(\'mgr\')">지점장 수수료</span>';
   if(tabs) h += '<div class="cm-seg">' + tabs + '</div>';
   var selWrap = document.getElementById('cmFpSel');
   if(selWrap && selWrap.parentNode){ selWrap.parentNode.style.display = (_cmTab === 'mine' && _cmFpList.length > 1) ? '' : 'none'; try { selWrap.value = fpId || ''; } catch(eSel) {} }
   if((!_rates || !COMM_FP_RATE) && _ratesLoading){ body.innerHTML = h + _cmLoadingHtml(); return; }
   if(!_rates || !COMM_FP_RATE){
-    h += '<div class="cm-warn">계산 기준을 아직 불러오지 못했습니다. 잠시 후 다시 열어주세요' + (_cmIsAdmin(currentUser) ? ' · 시트에 요율표를 넣은 뒤 "새로고침"을 눌러주세요' : '') + '</div>';
+    h += '<div class="cm-warn">계산 기준을 아직 불러오지 못했습니다. 잠시 후 다시 열어주세요' + (_cmIsAdmin(currentUser) ? ' · 요율표 시트와 스크립트 속성 COMM_FP_RATE 확인 후 "새로고침"을 눌러주세요' : '') + '</div>';
     body.innerHTML = h; return;
   }
   if(_cmTab === 'rank'){ body.innerHTML = h + _cmRankHtml(); return; }
-  if(_cmTab === 'team'){ body.innerHTML = h + _cmTeamHtml(team, fpId); return; }
+  if(_cmTab === 'team'){ body.innerHTML = h + (_cmPinOk ? _cmPinBar() + _cmTeamHtml(team, currentUser.id) : _cmPinHtml()); return; }
+  if(_cmTab === 'mgr'){ body.innerHTML = h + _cmMgrAdminHtml(); return; }
   if(!fpId){ body.innerHTML = h + '<div class="cm-card" style="text-align:center;color:var(--text3);font-size:12px;padding:22px">위에서 FP를 선택하면 계약별 내역이 나옵니다<br><span class="cm-mini">순위 탭에서 이름을 눌러도 됩니다</span></div>'; return; }
   if(_cmFromRank){ h += '<div class="cm-row" style="margin:2px 0 8px"><span onclick="_cmBackRank()" style="font-size:12px;font-weight:700;color:var(--gold2);cursor:pointer">‹ 순위로</span><b style="font-size:13px">' + _cmEsc(fpName) + '</b><span></span></div>'; }
   var B = _cmBuild(fpId, _cmYm), t = B.t;
@@ -30657,9 +30885,10 @@ function _commRender(){
   h += '<div class="cm-kpis">'
      + _cmKpi('익월 수령 (' + parseInt(nextYm.substr(5,2),10) + '월)', _cmMan(m1), '수수료 ' + _pvManKw(t.m1) + ' + 시책 ' + _pvManKw(t.sc1), 'var(--gold2)')
      + _cmKpi('2차년', _cmMan(y2), '수수료 ' + _pvManKw(t.y2) + ' + 시책 ' + _pvManKw(t.sc2), '#2563EB')
-     + _cmKpi('3차년~', _cmMan(y3), (t.sc3 ? '시책 ' + _pvManKw(t.sc3) + ' 포함 · ' : '') + '유지 시', '#6D4FB8')
+     + _cmKpi('3차년', _cmMan(y3), (t.sc3 ? '시책 ' + _pvManKw(t.sc3) + ' 포함 · ' : '') + '유지 시', '#6D4FB8')
      + '</div>';
   if(t.y1) h += '<div class="cm-mini" style="margin:-4px 0 8px 2px">+ 1차년 유지(2~12회·7~12회 분할) ' + _cmMan(t.y1) + '</div>';
+  if(t.y4) h += '<div class="cm-mini" style="margin:-4px 0 8px 2px">+ 4~10차년 유지 ' + _cmMan(t.y4) + ' (36개월 총액에는 미포함)</div>';
   h += '<div class="cm-total"><span>💎 총 예상 (36개월 유지)</span><b>' + _cmMan(total) + '</b></div>';
   // ── 시책 결과(달성) / 한 걸음 더(더 하면 받는 것) / 해당 안 됨 — three accordions ──
   var resC = '', resN = 0, resSum = 0, resGift = 0, nudC = '', nudN = 0, missC = '', missN = 0;
@@ -30682,7 +30911,7 @@ function _commRender(){
         missC += '<div class="cm-card" style="opacity:.75">' + evHead(ev, '<span class="cm-tag">기간 종료</span>', gIcon) + '<div class="cm-mini" style="margin-top:4px">' + gCond + ' · 지금 ' + _cmMan(ev.sum) + ' → 미달성</div></div>';
       } else {
         nudN++;
-        var gTag = ev.min ? '<span class="cm-tag cm-or">' + _cmMan(ev.need) + ' 더</span>' : (ev.rank ? '<span class="cm-tag cm-or">상위 ' + ev.rank + '명</span>' : '');
+        var gTag = ev.onTrack ? '<span class="cm-tag cm-or">유지 시 달성' + (ev.futureN ? ' · ' + ev.futureN + '개월 더' : '') + '</span>' : (ev.min ? '<span class="cm-tag cm-or">' + _cmMan(ev.need) + ' 더</span>' : (ev.rank ? '<span class="cm-tag cm-or">상위 ' + ev.rank + '명</span>' : ''));
         nudC += '<div class="cm-card cm-gift">' + evHead(ev, gTag, gIcon)
               + (ev.item ? '<div class="cm-gift-item">' + _cmEsc(ev.item) + '</div>' : '')
               + (ev.min ? '<div class="cm-prog"><i class="cm-gift-bar" style="width:' + (ev.pct||0) + '%"></i></div>' : '<div style="height:4px"></div>')
@@ -30713,7 +30942,11 @@ function _commRender(){
     if(ev.next && ev.need > 0 && ev.nextAmt > (ev.amt||0)) right = _cmMan(ev.need) + ' 더 → ' + _cmMan(ev.nextAmt);
     else if(ev.next && ev.need > 0) right = _cmMan(ev.need) + ' 더 → +' + _cmMan(ev.nextAmt);
     else if(ev.onTrack && ev.nextAmt) right = '유지 시 ' + _cmMan(ev.nextAmt);
-    if(!right) continue;
+    if(!right){
+      // the window closed below the first tier: listed under 'not applicable' (period over)
+      if(ev.closed && !ev.amt){ missN++; missC += '<div class="cm-card" style="opacity:.75">' + evHead(ev, '<span class="cm-tag">기간 종료</span>') + '<div class="cm-mini" style="margin-top:4px">' + _cmEsc(nowTxt) + ' · ' + _cmEsc(ev.period||'') + ' → 미해당</div></div>'; }
+      continue;
+    }
     if(ev.futureN) right += ' <span style="font-weight:400;color:var(--text3)">(' + ev.futureN + '개월 더 유지)</span>';
     nudN++;
     nudC += '<div class="cm-card cm-new">' + evHead(ev, tagP)
@@ -30731,9 +30964,9 @@ function _commRender(){
     var zd = zv.rule.data || {}, zwhy = '';
     var zItems = []; for(var zj=0;zj<B.items.length;zj++){ if(_cmSameInsurer(B.items[zj].co, zv.insurer)) zItems.push(B.items[zj]); }
     var noProd = 0, kwMiss = 0, exMiss = 0;
-    for(var zq=0;zq<zItems.length;zq++){ var zp = zItems[zq]; if(!zp.prod){ noProd++; continue; } if(zd.keywords && zd.keywords.length && !_cmKwAny(_cmNorm(zp.prod), zd.keywords, true)) kwMiss++; else if(!_cmScopeOk(zd, { co:zp.co, cat:zp.cat, prod:zp.prod, amount:zp.amount }, false)) exMiss++; }
+    for(var zq=0;zq<zItems.length;zq++){ var zp = zItems[zq]; if(!zp.prod){ noProd++; continue; } if((zd.prods && zd.prods.length) ? !_cmInSet(zd, 'prods', _cmNorm(zp.prod)) : (zd.keywords && zd.keywords.length && !_cmKwAny(_cmNorm(zp.prod), zd.keywords, true))) kwMiss++; else if(!_cmScopeOk(zd, { co:zp.co, cat:zp.cat, prod:zp.prod, amount:zp.amount }, false)) exMiss++; }
     if(noProd && noProd === zItems.length) zwhy = '이 달 ' + _cmEsc(zv.insurer) + ' ' + zItems.length + '건 모두 상품명 미입력 (상품명 입력된 건만 집계)';
-    else if(kwMiss) zwhy = '대상 상품(' + _cmEsc((zd.keywords||[]).join(', ')) + ')이 아님' + (noProd ? ' · 미입력 ' + noProd + '건' : '');
+    else if(kwMiss) zwhy = '대상 상품(' + _cmEsc((zd.prods && zd.prods.length) ? ('연결 ' + zd.prods.length + '개') : (zd.keywords||[]).join(', ')) + ')이 아님' + (noProd ? ' · 미입력 ' + noProd + '건' : '');
     else if(exMiss) zwhy = '제외어·분류 조건에 걸림 (' + exMiss + '건)';
     else if(zv.type === 'tier' || zv.type === 'cond') zwhy = '해당 기간(' + _cmEsc(zv.period||'') + ')에 집계된 건 없음';
     if(!zwhy) continue;
@@ -30759,32 +30992,41 @@ function _commRender(){
       var n2 = s2t ? (sc && sc.y2 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPctSum(sc.pct2, sc.pct2Extra) + (al.y2 ? '+합산' : '') + ')' : '(합산)') : '';
       ct += _cmRowTxt('익월', _cmMan(f.m1), s1t ? _cmMan(s1t) : '', n1, _cmMan(f.m1 + s1t));
       if(it.gross.nl){
+        // non-life: a reward paid at month 15 sits on the 15th-premium row
+        var sc15 = (sc && sc.y2 && String(sc.when2||'').indexOf('15') >= 0) ? sc.y2 : 0, sc13 = (sc && sc.y2 && !sc15) ? sc.y2 : 0;
+        var al15 = al.y2at15 || 0, al13 = al.y2 - al15;
+        var s13 = Math.round(s2t - sc15 - al15), s15 = Math.round(s3t + sc15 + al15);
+        var n13 = s13 ? (sc13 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPctSum(sc.pct2, sc.pct2Extra) + (al13 >= 1 ? '+합산' : '') + ')' : '(합산)') : '';
+        var n15 = s15 ? (sc15 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPctSum(sc.pct2, sc.pct2Extra) + ((al15 >= 1 || s3t >= 1) ? '+합산' : '') + ')' : '(합산)') : '';
         if(f.y1) ct += _cmRowTxt('7~12회', _cmMan(f.y1), '', '', _cmMan(f.y1));
-        ct += _cmRowTxt('13·14회', _cmMan(f.p13), s2t ? _cmMan(s2t) : '', n2, _cmMan(f.p13 + s2t));
-        ct += _cmRowTxt('15회', _cmMan(f.p15), s3t ? _cmMan(s3t) : '', s3t ? '(합산)' : '', _cmMan(f.p15 + s3t));
+        ct += _cmRowTxt('13·14회', _cmMan(f.p13), s13 ? _cmMan(s13) : '', n13, _cmMan(f.p13 + s13));
+        ct += _cmRowTxt('15회', _cmMan(f.p15), s15 ? _cmMan(s15) : '', n15, _cmMan(f.p15 + s15));
       } else {
         if(f.y1) ct += _cmRowTxt('2~12회', _cmMan(f.y1), '', '', _cmMan(f.y1));
         ct += _cmRowTxt('2차년', _cmMan(f.y2), s2t ? _cmMan(s2t) : '', n2, _cmMan(f.y2 + s2t));
-        ct += _cmRowTxt((it.gross.y4 ? '3차년~' : '3차년'), _cmMan(f.y3), s3t ? _cmMan(s3t) : '', s3t ? '(합산)' : '', _cmMan(f.y3 + s3t));
+        ct += _cmRowTxt('3차년', _cmMan(f.y3), s3t ? _cmMan(s3t) : '', s3t ? '(합산)' : '', _cmMan(f.y3 + s3t));
+        if(f.y4) ct += _cmRowTxt('4~10차년', _cmMan(f.y4), '', '', _cmMan(f.y4));
       }
       ct += '</table>';
       // breakdown of the 시책 figures: 건별 % → 핵심담보 → FP-level 시상 (this contract's share)
       var brk = [];
       if(sc && sc.pct1) brk.push('익월 ' + _cmPct(sc.pct1) + ' ' + _cmMan(it.amount * sc.pct1 / 100 * COMM_SC_RATE));
       if(sc && sc.pct2) brk.push(_cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ' ' + _cmMan(it.amount * sc.pct2 / 100 * COMM_SC_RATE));
-      for(var pb=0;pb<(it.parts||[]).length;pb++){ if(it.parts[pb].applied){ var pbd = it.parts[pb].r.data || {}; var pbase = (pbd.base === 'part' && it.parts[pb].core) ? it.parts[pb].core : it.amount; if(pbd.pct1) brk.push(_cmEsc(it.parts[pb].r.title || '핵심담보') + ' ' + _cmPct(pbd.pct1) + ' ' + _cmMan(pbase * pbd.pct1 / 100 * COMM_SC_RATE)); if(pbd.pct2) brk.push(_cmEsc(it.parts[pb].r.title || '핵심담보') + ' ' + _cmPct(pbd.pct2) + ' ' + _cmMan(pbase * pbd.pct2 / 100 * COMM_SC_RATE)); } }
+      for(var pb=0;pb<(it.parts||[]).length;pb++){ if(it.parts[pb].applied){ var pbd = it.parts[pb].r.data || {}; var pbase = (pbd.base === 'part' && it.parts[pb].core) ? it.parts[pb].core : it.amount; if(pbd.pct1) brk.push(_cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct1)) + ' ' + _cmMan(pbase * pbd.pct1 / 100 * COMM_SC_RATE)); if(pbd.pct2) brk.push(_cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct2)) + ' ' + _cmMan(pbase * pbd.pct2 / 100 * COMM_SC_RATE)); } }
       for(var pl=0;pl<al.labels.length;pl++) brk.push(_cmEsc(al.labels[pl]));
       if(brk.length) ct += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책 내역: ' + brk.join(' · ') + '</div>';
       if(sc){ ct += '<div class="cm-mini" style="margin-top:4px">🎁 ' + _cmEsc(sc.label) + '</div>'; }
-      else { var why0 = (it.rule === null && it.ruleOff) ? '시책 적용 안 함(업적 입력에서 선택)' : _cmNoRuleWhy({ co:it.co, cat:it.cat, prod:it.prod, amount:it.amount }, it.date); if(why0) ct += '<div class="cm-mini" style="margin-top:4px;color:#854F0B">시책 미적용 · ' + why0 + '</div>'; }
+      else { var why0 = (it.rule === null && it.ruleOff) ? '시책 적용 안 함(업적 입력에서 선택)' : ((it.lump || it.lumpRow) ? '일시납 — 일시납 전용 시책만 적용' : _cmNoRuleWhy({ co:it.co, cat:it.cat, prod:it.prod, amount:it.amount }, it.date)); if(why0) ct += '<div class="cm-mini" style="margin-top:4px;color:#854F0B">시책 미적용 · ' + why0 + '</div>'; }
       for(var pr=0;pr<(it.parts||[]).length;pr++){
         var ptx = it.parts[pr], pd = ptx.r.data || {};
         var pctTxt = (pd.pct1 ? '익월 ' + _cmPct(pd.pct1) : '') + (pd.pct2 ? ' ' + _cmEsc(pd.when2||'13차월') + ' ' + _cmPct(pd.pct2) : '');
         if(ptx.applied) ct += '<div class="cm-mini" style="margin-top:3px">핵심담보 보험료 ' + _cmMan(ptx.core) + ' 입력됨 → ' + _cmEsc(ptx.r.title || pd.label || '') + ' 해당</div>';
-        else if(ptx.need) ct += '<div class="cm-mini" style="margin-top:3px;color:#854F0B">＋ ' + _cmEsc(ptx.r.title || pd.label || '') + ' ' + pctTxt + ' — 핵심담보 보험료 ' + _cmMan(ptx.min) + '↑ 이면 해당 · 업적 수정에서 핵심담보 보험료를 입력하면 반영</div>';
+        else if(ptx.need) ct += '<div class="cm-mini" style="margin-top:3px;color:#854F0B">＋ ' + _cmEsc(ptx.r.title || pd.label || '') + ' ' + pctTxt + ' — 핵심담보 보험료 ' + (ptx.min ? _cmMan(ptx.min) + '↑ 이면 해당 · ' : '') + '업적 수정에서 핵심담보 보험료를 입력하면 반영</div>';
         else ct += '<div class="cm-mini" style="margin-top:3px">＋ ' + _cmEsc(ptx.r.title || pd.label || '') + ' ' + pctTxt + ' — 핵심담보 ' + _cmMan(ptx.core) + ' < ' + _cmMan(ptx.min) + ' 이라 미해당</div>';
       }
       if(!it.gross.nl && _cmNorm(it.co).indexOf('한화생명') >= 0) ct += '<div class="cm-mini" style="margin-top:3px">2차년은 보너스 포함 · 변동 가능</div>';
+    } else if(it.lumpSkip){
+      ct += '<div class="cm-warn">일시납 건 — 월납 요율로는 계산하지 않습니다 (요율표의 일시납 상품을 고르면 계산)</div>';
     } else if(it.noRate){
       ct += '<div class="cm-warn">이 상품은 아직 계산할 수 없습니다</div>';
     } else if(it.prod){
@@ -30792,6 +31034,7 @@ function _commRender(){
     } else {
       ct += '<div class="cm-warn">상품 미입력 — 업적 수정에서 상품을 고르면 계산됩니다</div>';
     }
+    if(!it.calc && it.sc && (it.sc.m1 || it.sc.y2)) ct += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책: 익월 ' + _cmMan(it.sc.m1) + (it.sc.y2 ? ' · ' + _cmEsc(it.sc.when2) + ' ' + _cmMan(it.sc.y2) : '') + ' · 🎁 ' + _cmEsc(it.sc.label) + '</div>';
     if(!it.calc && it.alloc) ct += '<table class="cm-t"><tr><th></th><th>수수료</th><th>시책</th><th>합계</th></tr>' + (it.alloc.m1 ? _cmRowTxt('익월', '', _cmMan(it.alloc.m1), '', _cmMan(it.alloc.m1)) : '') + (it.alloc.y2 ? _cmRowTxt('2차년', '', _cmMan(it.alloc.y2), '', _cmMan(it.alloc.y2)) : '') + (it.alloc.y3 ? _cmRowTxt('3차년', '', _cmMan(it.alloc.y3), '', _cmMan(it.alloc.y3)) : '') + '</table><div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책 내역: ' + _cmEsc(it.alloc.labels.join(' · ')) + '</div>';
     ct += '</div></div>';
   }
@@ -30811,36 +31054,333 @@ function _commRender(){
   h += '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음 · 시책은 등록된 것만 반영</div>';
   body.innerHTML = h;
 }
-function _cmTeamHtml(team, mgrId){
-  var ids = (team.members||[]).slice();
-  var rows = [], g1 = 0, g2 = 0, n = 0, cnt = 0, noProd = 0;
-  var actMap = {}; var actList = _cmActiveFps(); for(var a0=0;a0<actList.length;a0++) actMap[actList[a0].id] = 1;
+// manager commission: the team members' rate-table amounts of this month's contracts, no rewards, at the manager rate
+function _cmMgrCalc(team, mgrId){
+  var act = {}, al = _cmActiveFps(), a;
+  for(a=0;a<al.length;a++) act[al[a].id] = al[a];
+  var rows = [], s = { g1:0, gy1:0, g2:0, g3:0, gy4:0 }, cnt = 0, noProd = 0, n = 0, ids = (team && team.members) || [];
   for(var i=0;i<ids.length;i++){
-    if(ids[i] === mgrId) continue;
-    if(!actMap[ids[i]]) continue;
-    var B = _cmBuild(ids[i], _cmYm);
-    var nm = (typeof _fpNameById === 'function' ? _fpNameById(ids[i]) : '') || ids[i];
-    rows.push({ id:ids[i], name:nm, g1:B.t.g1, g2:B.t.g2, cnt:B.t.cnt, calc:B.t.calc });
-    g1 += B.t.g1; g2 += B.t.g2; n++; cnt += B.t.calc; noProd += B.t.noProd;
+    var id = ids[i];
+    if(id === mgrId || !act[id] || _cmIsEduFp(act[id])) continue;
+    var t = _cmBuild(id, _cmYm).t; n++;
+    var r = { id:id, name:act[id].name || id, cnt:t.cnt, calc:t.calc, g1:t.g1, gy1:t.gy1, g2:t.g2, g3:t.g3, gy4:t.gy4 };
+    r.g36 = r.g1 + r.gy1 + r.g2 + r.g3;
+    rows.push(r);
+    s.g1 += r.g1; s.gy1 += r.gy1; s.g2 += r.g2; s.g3 += r.g3; s.gy4 += r.gy4; cnt += t.calc; noProd += t.noProd;
   }
-  rows.sort(function(a,b){ return b.g1 - a.g1; });
-  var nextYm = _cmYmAdd(_cmYm, 1);
-  var h = '<div class="cm-kpis">'
-    + _cmKpi('지점장 수수료 (' + parseInt(nextYm.substr(5,2),10) + '월)', _cmMan(g1*COMM_MGR_RATE), '팀 ' + n + '명 · ' + cnt + '건', 'var(--gold2)')
-    + _cmKpi('2차년', _cmMan(g2*COMM_MGR_RATE), '유지 시', '#2563EB')
-    + _cmKpi('합계', _cmMan((g1+g2)*COMM_MGR_RATE), '', 'var(--text)')
-    + '</div>';
-  h += '<table class="cm-t"><tr><th>팀원</th><th>건</th><th>익월</th><th>2차년</th></tr>';
-  var zero = 0;
-  for(var r=0;r<rows.length;r++){
-    var x = rows[r];
-    if(!x.g1 && !x.cnt){ zero++; continue; }
-    h += '<tr><td>' + _cmEsc(x.name) + '</td><td class="cm-n" style="font-weight:600">' + x.calc + (x.cnt > x.calc ? '<span class="cm-mini">/' + x.cnt + '</span>' : '') + '</td><td class="cm-n" style="color:var(--gold2)">' + _cmMan(x.g1*COMM_MGR_RATE) + '</td><td class="cm-n">' + _cmMan(x.g2*COMM_MGR_RATE) + '</td></tr>';
+  rows.sort(function(x,y){ return y.g36 - x.g36; });
+  s.g36 = s.g1 + s.gy1 + s.g2 + s.g3;
+  return { rows:rows, s:s, n:n, cnt:cnt, noProd:noProd };
+}
+function _cmMgrRows(M){
+  var R = COMM_MGR_RATE, zero = 0;
+  var h = '<table class="cm-t"><tr><th>팀원</th><th>건</th><th>익월</th><th>2차년</th><th>36개월</th></tr>';
+  for(var r=0;r<M.rows.length;r++){
+    var x = M.rows[r];
+    if(!x.g36 && !x.cnt){ zero++; continue; }
+    h += '<tr><td>' + _cmEsc(x.name) + '</td><td class="cm-n" style="font-weight:600">' + x.calc + (x.cnt > x.calc ? '<span class="cm-mini">/' + x.cnt + '</span>' : '') + '</td><td class="cm-n" style="color:var(--gold2)">' + _cmMan(x.g1*R) + '</td><td class="cm-n">' + _cmMan(x.g2*R) + '</td><td class="cm-n" style="font-weight:700">' + _cmMan(x.g36*R) + '</td></tr>';
   }
-  if(zero) h += '<tr><td colspan="4" style="text-align:center;color:var(--text3);font-size:11px">이 달 업적 없는 팀원 ' + zero + '명</td></tr>';
-  if(!rows.length) h += '<tr><td colspan="4" style="text-align:center;color:var(--text3)">매니저 매칭에 팀원이 없습니다</td></tr>';
-  h += '</table>';
-  h += '<div class="cm-mini" style="margin-top:8px">팀원이 상품을 입력한 건만' + (noProd ? ' (미입력 ' + noProd + '건 제외)' : '') + (team.fallback ? ' · 매니저 매칭이 없어 같은 지점 전원 기준' : '') + ' · 시책 제외</div>';
+  if(zero) h += '<tr><td colspan="5" style="text-align:center;color:var(--text3);font-size:11px">이 달 업적 없는 팀원 ' + zero + '명</td></tr>';
+  if(!M.rows.length) h += '<tr><td colspan="5" style="text-align:center;color:var(--text3)">매니저 매칭에 팀원이 없습니다</td></tr>';
+  return h + '</table>';
+}
+function _cmTeamHtml(team, mgrId){
+  var M = _cmMgrCalc(team, mgrId), s = M.s, R = COMM_MGR_RATE;
+  var mine = s.g36 * R, own = _cmBuild(mgrId, _cmYm).t.total, nextYm = _cmYmAdd(_cmYm, 1);
+  var h = ((_cmYm === _cmTodayStr().substr(0,7)) ? _cmTodayHtml(team, mgrId) : '') + '<div class="cm-card" style="padding:11px 12px">'
+    + '<div class="cm-row" style="padding:3px 0"><span style="font-size:12px">🏢 지점장 수수료 <span class="cm-mini">(팀원 계약 원장 기준)</span></span><b style="font-size:14px">' + _cmMan(mine) + '</b></div>'
+    + '<div class="cm-row" style="padding:3px 0"><span style="font-size:12px">✍️ 내 계약 수수료 <span class="cm-mini">(본인 체결)</span></span><b style="font-size:14px">' + _cmMan(own) + '</b></div>'
+    + '<div class="cm-row" style="border-top:1px dashed var(--bdr2);margin-top:5px;padding-top:7px"><b style="font-size:12.5px">💎 나의 총 예상 (36개월)</b><b style="font-size:17px;color:var(--gold2)">' + _cmMan(mine + own) + '</b></div></div>';
+  h += '<div class="cm-lbl" style="display:flex;justify-content:space-between"><span>🏢 지점장 수수료</span><span style="font-weight:400;color:var(--text3)">시책 없음 · 원장 따라감</span></div>';
+  h += '<div class="cm-kpis" style="grid-template-columns:repeat(4,1fr)">'
+    + _cmKpi('익월 (' + parseInt(nextYm.substr(5,2),10) + '월)', _cmMan(s.g1*R), '', 'var(--gold2)')
+    + _cmKpi('1차년 유지', _cmMan(s.gy1*R), '', 'var(--text)')
+    + _cmKpi('2차년', _cmMan(s.g2*R), '', '#2563EB')
+    + _cmKpi('3차년', _cmMan(s.g3*R), '', '#6D4FB8') + '</div>';
+  h += '<div class="cm-lbl" style="display:flex;justify-content:space-between"><span>팀원별 · ' + M.n + '명</span><span style="font-weight:400;color:var(--text3)">원장 큰 순</span></div>';
+  h += _cmMgrRows(M);
+  h += '<div class="cm-mini" style="margin-top:8px">팀원이 상품을 입력한 건만' + (M.noProd ? ' (미입력 ' + M.noProd + '건 제외)' : '') + (team.fallback ? ' · 매니저 매칭이 없어 같은 지점 전원 기준' : '') + ' · 비활성 FP 제외 · 내 계약은 "내 계약" 탭' + (s.gy4 ? ' · 4~10차년 유지 ' + _cmMan(s.gy4*R) + ' 별도(36개월 미포함)' : '') + '</div>';
+  h += '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음</div>';
+  return h;
+}
+// ── access PIN of the manager tab: checked by the server (salted hash), 1111 until the manager makes one, 5 misses lock 10 minutes ──
+var _cmPinOk = false, _cmPinBuf = '', _cmPinStep = 'enter', _cmPinCur = '', _cmPinNew = '', _cmPinMode = '', _cmPinMsg = '', _cmPinErr = false, _cmPinBusy = false, _cmPinGen = 0;
+function _cmPinLock(){ _cmPinOk = false; _cmPinBuf = ''; _cmPinStep = 'enter'; _cmPinCur = ''; _cmPinNew = ''; _cmPinMode = ''; _cmPinMsg = ''; _cmPinErr = false; _cmPinBusy = false; _cmPinGen++; }
+function _cmPinWeak(p){ return /^(\d)\1{3}$/.test(p) || p === '1234'; }
+function _cmPinIsSet(){ try { return localStorage.getItem('unispace_mgrpin_set_' + currentUser.id) === '1'; } catch(e) { return false; } }
+function _cmPinFlag(on){ try { localStorage.setItem('unispace_mgrpin_set_' + currentUser.id, on ? '1' : '0'); } catch(e) {} }
+function _cmPinPost(body, cb){
+  body.fp = currentUser.id;
+  fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body:JSON.stringify(body) })
+    .then(function(r){ return r.json(); }).then(function(res){ cb(res || { ok:false }); })
+    .catch(function(){ cb({ ok:false, net:true }); });
+}
+function _cmPinFail(res){
+  if(res.net) return '인터넷 연결을 확인해 주세요';
+  if(res.msg === '알 수 없는 액션') return '서버(GAS)를 새 버전으로 올려야 합니다';
+  if(res.locked) return res.msg || '5번 틀려서 10분 동안 잠겼어요';
+  if(res.left !== undefined && res.left !== null) return '비밀번호가 맞지 않아요 · ' + res.left + '번 더 틀리면 10분 동안 잠겨요';
+  return res.msg || '다시 눌러주세요';
+}
+function _cmPinKey(k){
+  if(_cmPinBusy || _cmPinOk) return;
+  if(k === 'b'){ _cmPinBuf = _cmPinBuf.slice(0, -1); _cmPinErr = false; _cmPinMsg = ''; _commRender(); return; }
+  if(!/^[0-9]$/.test(k) || _cmPinBuf.length >= 4) return;
+  if(_cmPinErr){ _cmPinErr = false; _cmPinMsg = ''; }
+  _cmPinBuf += k;
+  if(_cmPinBuf.length === 4){
+    // keep the fourth dot on screen for a moment, then check
+    var pin = _cmPinBuf, g = _cmPinGen;
+    _cmPinBusy = true; _commRender();
+    setTimeout(function(){ if(g === _cmPinGen) _cmPinDone(pin); }, 150);
+    return;
+  }
+  _commRender();
+}
+function _cmPinDone(pin){
+  var st = _cmPinStep, g = _cmPinGen;
+  if(st === 'enter' || st === 'cur'){
+    _cmPinMsg = '확인 중…'; _commRender();
+    _cmPinPost({ action:'mgrPinCheck', pin:pin }, function(res){
+      if(g !== _cmPinGen) return;
+      _cmPinBusy = false; _cmPinBuf = ''; _cmPinMsg = ''; _cmPinErr = false;
+      if(res.ok){
+        _cmPinFlag(!res.mustChange);
+        if(res.mustChange){ _cmPinCur = pin; _cmPinMode = 'first'; _cmPinStep = 'new1'; }
+        else if(st === 'cur'){ _cmPinCur = pin; _cmPinStep = 'new1'; }
+        else _cmPinOk = true;
+      } else {
+        _cmPinErr = true; _cmPinMsg = _cmPinFail(res);
+        if(res.pinSet === false) _cmPinFlag(false);
+      }
+      _commRender();
+    });
+    return;
+  }
+  _cmPinBusy = false; _cmPinBuf = '';
+  if(st === 'new1'){
+    if(_cmPinWeak(pin)){ _cmPinErr = true; _cmPinMsg = '같은 숫자 4개나 1234는 쓸 수 없어요'; }
+    else { _cmPinNew = pin; _cmPinStep = 'new2'; _cmPinMsg = ''; _cmPinErr = false; }
+    _commRender(); return;
+  }
+  if(pin !== _cmPinNew){ _cmPinErr = true; _cmPinMsg = '두 번 누른 번호가 달라요 · 새 비밀번호부터 다시 눌러주세요'; _cmPinNew = ''; _cmPinStep = 'new1'; _commRender(); return; }
+  _cmPinBusy = true; _cmPinMsg = '저장 중…'; _commRender();
+  _cmPinPost({ action:'mgrPinSet', cur:_cmPinCur, next:pin }, function(res){
+    if(g !== _cmPinGen) return;
+    _cmPinBusy = false; _cmPinMsg = ''; _cmPinErr = false;
+    if(res.ok){
+      var first = (_cmPinMode === 'first');
+      _cmPinFlag(true); _cmPinCur = ''; _cmPinNew = ''; _cmPinMode = ''; _cmPinStep = 'enter'; _cmPinOk = true;
+      if(typeof showToast === 'function') showToast(first ? '✅ 내 비밀번호를 만들었어요' : '✅ 비밀번호를 바꿨어요');
+    } else {
+      _cmPinErr = true; _cmPinMsg = _cmPinFail(res);
+      if(res.weak){ _cmPinNew = ''; _cmPinStep = 'new1'; }
+      else { _cmPinCur = ''; _cmPinNew = ''; _cmPinMode = ''; _cmPinStep = 'enter'; }
+    }
+    _commRender();
+  });
+}
+function _cmPinChange(){ _cmPinLock(); _cmPinMode = 'change'; _cmPinStep = 'cur'; _commRender(); }
+// cancel is offered only while changing, which starts from the opened tab
+function _cmPinCancel(){ _cmPinLock(); _cmPinOk = true; _commRender(); }
+function _cmPinForgot(){ if(typeof showAppAlert === 'function') showAppAlert('대표님께 <b>지점장 수수료 비밀번호 초기화</b>를 요청해 주세요.<br>초기화되면 1111로 들어가 새 비밀번호를 만들면 됩니다.', { icon:'🔑', title:'비밀번호를 잊었어요' }); }
+function _cmPinBar(){ return '<div class="cm-ubar"><span>🔓 <b>열림</b> · 다른 탭으로 가거나 화면을 닫으면 다시 잠겨요</span><span class="cm-ubar-b" onclick="_cmPinChange()">🔑 비밀번호 변경</span></div>'; }
+function _cmPinHtml(){
+  var st = _cmPinStep, first = (_cmPinMode === 'first'), chg = (_cmPinMode === 'change'), i;
+  var ic = '🔒', tt = '접근 비밀번호를 눌러주세요', sub = '지점장 수수료 · 숫자 4자리', steps = '';
+  if(st === 'cur'){ ic = '🔑'; tt = '지금 비밀번호를 눌러주세요'; sub = '비밀번호 바꾸기'; }
+  else if(st === 'new1' || st === 'new2'){
+    ic = '🔑'; tt = first ? '내 비밀번호 만들기' : '새 비밀번호 정하기';
+    sub = (st === 'new1') ? '팀원이 모르는 숫자 4자리로 정해 주세요' : '한 번 더 눌러주세요';
+    steps = '<div class="cm-lk-steps"><b' + (st === 'new1' ? ' class="on"' : '') + '>① 새 비밀번호</b><b' + (st === 'new2' ? ' class="on"' : '') + '>② 한 번 더</b></div>';
+  }
+  var nf = _cmPinErr ? 4 : _cmPinBuf.length, dots = '', pad = '', keys = ['1','2','3','4','5','6','7','8','9','','0','b'];
+  for(i=0;i<4;i++) dots += '<i' + (i < nf ? ' class="f"' : '') + '></i>';
+  for(i=0;i<keys.length;i++){
+    var k = keys[i];
+    if(!k){ pad += '<span class="x"></span>'; continue; }
+    pad += '<span' + (k === 'b' ? ' class="bk"' : '') + ' onclick="_cmPinKey(\'' + k + '\')">' + (k === 'b' ? '⌫' : k) + '</span>';
+  }
+  var h = '<div class="cm-lk"><div class="cm-lk-ic">' + ic + '</div><div class="cm-lk-t">' + tt + '</div><div class="cm-lk-s">' + sub + '</div>' + steps
+    + '<div class="cm-dots' + (_cmPinErr ? ' err' : '') + '">' + dots + '</div>'
+    + '<div class="cm-lk-msg' + (_cmPinErr ? ' err' : '') + '">' + _cmEsc(_cmPinMsg) + '</div>'
+    + '<div class="cm-pad' + (_cmPinBusy ? ' busy' : '') + '">' + pad + '</div>';
+  if(st === 'enter' && !_cmPinIsSet()) h += '<div class="cm-lk-hint">처음 비밀번호는 <b>1111</b>이에요 · 넣으면 바로 내 비밀번호를 만들어요</div>';
+  if(st === 'new1' || st === 'new2') h += '<div class="cm-lk-rule">1111 · 0000처럼 같은 숫자 4개, 1234는 쓸 수 없어요</div>';
+  if(chg) h += '<div class="cm-lk-lnk" onclick="_cmPinCancel()">취소</div>';
+  else if(st === 'enter') h += '<div class="cm-lk-lnk" onclick="_cmPinForgot()">비밀번호를 잊었어요</div>';
+  return h + '</div>';
+}
+// head only: back to 1111 (the manager makes a new one on the next visit)
+function _cmPinReset(id){
+  var f = _cmFpById(id), name = f ? f.name : id;
+  showConfirm({ icon:'🔑', iconCls:'confirm-icon-gold', title:'지점장 수수료 비밀번호 초기화', msg:'<b>' + _cmEsc(name) + '</b> 지점장의 지점장 수수료 비밀번호를<br><b>1111</b>로 초기화할까요?', okLabel:'초기화', okCls:'gold' }).then(function(ok){
+    if(!ok) return;
+    showToast('🔑 초기화 중...');
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body:JSON.stringify({ action:'mgrPinReset', fp:currentUser.id, by:currentUser.id, target:id }) })
+      .then(function(r){ return r.json(); }).then(function(res){
+        if(res && res.ok) showToast('🔑 ' + name + ' 지점장 비밀번호를 1111로 초기화했어요');
+        else showToast('⚠️ ' + ((res && res.msg === '알 수 없는 액션') ? '서버(GAS)를 새 버전으로 올려야 합니다' : ((res && res.msg) || '초기화 실패')));
+      }).catch(function(){ showToast('⚠️ 서버 연결 실패'); });
+  });
+}
+// lock again when the app goes to the background; number keys work on a PC
+try {
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) return;
+    _cmPinLock();
+    var ov = document.getElementById('commOverlay');
+    if(ov && ov.classList.contains('open') && _cmTab === 'team') _commRender();
+  });
+  document.addEventListener('keydown', function(e){
+    var ov = document.getElementById('commOverlay');
+    if(!ov || !ov.classList.contains('open') || _cmTab !== 'team' || _cmPinOk) return;
+    var tg = e.target && e.target.tagName;
+    if(tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT') return;
+    if(/^[0-9]$/.test(e.key || '')){ e.preventDefault(); _cmPinKey(e.key); }
+    else if(e.key === 'Backspace'){ e.preventDefault(); _cmPinKey('b'); }
+  });
+} catch(ePin) {}
+// ── today's earnings: top card of the manager tab, a line on the head's manager cards ──
+var _cmTodayAll = false;
+function _cmTodayToggle(){ _cmTodayAll = !_cmTodayAll; _commRender(); }
+function _cmYmd(d){ var m = d.getMonth() + 1, dd = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (dd < 10 ? '0' : '') + dd; }
+function _cmDayAdd(ymd, n){ return _cmYmd(new Date(parseInt(ymd.substr(0,4),10), parseInt(ymd.substr(5,2),10) - 1, parseInt(ymd.substr(8,2),10) + n)); }
+// own commission gained on one day: month total with that day in, minus the total without it (a reward step reached that day counts too)
+function _cmOwnDay(fpId, ymd){
+  var ym = ymd.substr(0,7), a = _cmBuild(fpId, ym, ymd).t, b = _cmBuild(fpId, ym, _cmDayAdd(ymd, -1)).t;
+  return { total:Math.max(0, a.total - b.total), m1:Math.max(0, (a.m1 + a.sc1) - (b.m1 + b.sc1)) };
+}
+// contracts of [from, to] for a manager: team rate-table amount per day, next-month part of the last day, the last day's rows (own rows too), days with own records
+function _cmMgrDays(team, mgrId, from, to){
+  var act = {}, al = _cmActiveFps(), mem = {}, ids = (team && team.members) || [], a;
+  for(a=0;a<al.length;a++) act[al[a].id] = al[a];
+  for(a=0;a<ids.length;a++){ if(ids[a] !== mgrId && act[ids[a]] && !_cmIsEduFp(act[ids[a]])) mem[ids[a]] = act[ids[a]]; }
+  var day = {}, m1 = 0, rows = [], od = {}, log = getPerfLog();
+  for(var i=0;i<log.length;i++){
+    var rec = log[i], d = String(rec.date||''), mine = (rec.fpId === mgrId);
+    if(d < from || d > to || (!mine && !mem[rec.fpId])) continue;
+    if(mine) od[d] = 1;
+    var ps = rec.products || [];
+    for(var k=0;k<ps.length;k++){
+      var it = _cmProdItem(rec, ps[k]);
+      if(!mine && it.calc){ var g = it.gross; day[d] = (day[d] || 0) + g.m1 + g.y1 + g.y2 + g.y3; if(d === to) m1 += g.m1; }
+      if(d === to) rows.push({ rec:rec, it:it, mine:mine, name:(mine ? '' : (mem[rec.fpId].name || rec.fpName || '')) });
+    }
+  }
+  return { day:day, m1:m1, rows:rows, od:od };
+}
+// entry time (HH:MM) when it was entered on that day
+function _cmHm(iso, ymd){
+  var t = iso ? new Date(iso) : null;
+  if(!t || isNaN(t.getTime()) || _cmYmd(t) !== ymd) return '';
+  var hh = t.getHours(), mm = t.getMinutes();
+  return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+}
+function _cmTodayBrief(team, mgrId){
+  var today = _cmTodayStr(), D = _cmMgrDays(team, mgrId, today, today), n = 0, miss = 0;
+  for(var i=0;i<D.rows.length;i++){ if(D.rows[i].mine) continue; if(D.rows[i].it.prod) n++; else miss++; }
+  return { team:(D.day[today] || 0) * COMM_MGR_RATE, n:n, miss:miss, own:(D.od[today] ? _cmOwnDay(mgrId, today).total : 0) };
+}
+function _cmTodayPill(tp){
+  var any = tp.n || tp.miss;
+  return '<div class="cm-tdp' + (tp.team > 0 ? '' : ' z') + '"><span>☀️ 오늘 · ' + (any ? '팀원 ' + tp.n + '건' + (tp.miss ? ' · 미입력 ' + tp.miss + '건' : '') : '아직 계약 전') + (tp.own > 0 ? ' <span class="cm-mini">(본인 +' + _cmMan(tp.own) + ' 별도)</span>' : '') + '</span><b>' + (tp.team > 0 ? '+' + _cmMan(tp.team) : '0') + '</b></div>';
+}
+// manager's card: today's team contracts at the manager rate + own commission gained today, today's rows, this week by day
+function _cmTodayHtml(team, mgrId){
+  var R = COMM_MGR_RATE, now = new Date(), today = _cmTodayStr(), yd = _cmDayAdd(today, -1), wd = (now.getDay() + 6) % 7, wk = [], i;
+  for(i=0;i<7;i++) wk.push(_cmDayAdd(today, i - wd));
+  var D = _cmMgrDays(team, mgrId, (yd < wk[0] ? yd : wk[0]), today), val = {}, ownT = { total:0, m1:0 }, days = [yd].concat(wk);
+  for(i=0;i<days.length;i++){
+    var dd = days[i];
+    if(dd > today || val.hasOwnProperty(dd)) continue;
+    var od = D.od[dd] ? _cmOwnDay(mgrId, dd) : { total:0, m1:0 };
+    if(dd === today) ownT = od;
+    val[dd] = (D.day[dd] || 0) * R + od.total;
+  }
+  var teamT = (D.day[today] || 0) * R, tot = teamT + ownT.total, m1 = D.m1 * R + ownT.m1;
+  var rows = D.rows.slice().sort(function(a,b){ var x = String(a.rec.createdAt||''), y = String(b.rec.createdAt||''); return x < y ? 1 : (x > y ? -1 : 0); });
+  var list = [], miss = [], nT = 0, nO = 0, ownRows = 0;
+  for(i=0;i<rows.length;i++){
+    var w = rows[i], it = w.it, amt = 0, ok = false;
+    if(!it.prod){ miss.push(w); continue; }
+    if(w.mine){ amt = (it.calc ? it.fee.m1 + it.fee.y1 + it.fee.y2 + it.fee.y3 : 0) + (it.sc ? it.sc.m1 + it.sc.y2 : 0); ok = it.calc || !!it.sc; nO++; ownRows += amt; }
+    else { if(it.calc){ var g = it.gross; amt = (g.m1 + g.y1 + g.y2 + g.y3) * R; ok = true; } nT++; }
+    list.push({ w:w, amt:amt, ok:ok });
+  }
+  var wdn = ['일','월','화','수','목','금','토'], hm = _cmHm(now.toISOString(), today);
+  var h = '<div class="cm-td"><div class="cm-td-h"><b>☀️ 오늘의 수익</b><span class="cm-mini">' + parseInt(today.substr(5,2),10) + '월 ' + parseInt(today.substr(8,2),10) + '일 (' + wdn[now.getDay()] + ')' + (hm ? ' · ' + hm + ' 기준' : '') + '</span></div>';
+  if(!rows.length){
+    h += '<div class="cm-td-big z">0<small>원</small></div><div class="cm-td-wait">☕ 오늘 첫 계약을 기다리는 중<span>오늘 첫 계약의 주인공은 누구일까요? 🙌</span></div>';
+  } else {
+    h += '<div class="cm-td-big' + (tot > 0 ? '' : ' z') + '">' + (tot > 0 ? '+' + _pvManKw(tot) + '<small>만</small>' : '0<small>원</small>') + '<em>36개월 기준</em></div>';
+    h += '<div class="cm-mini" style="color:var(--text2)">' + (list.length ? '팀원 ' + nT + '건' + (nO ? ' + 내 계약 ' + nO + '건' : '') : '오늘 계약 ' + rows.length + '건 · 계산된 건 없음') + (m1 > 0 ? ' · 다음 달 바로 받는 돈 <b style="color:var(--text)">' + _cmMan(m1) + '</b>' : '') + '</div>';
+    h += '<div class="cm-td-ch"><div>🏢 지점장 수수료<b>' + (teamT > 0 ? '+' + _cmMan(teamT) : '0') + '</b></div><div>✍️ 내 계약<b>' + (ownT.total > 0 ? '+' + _cmMan(ownT.total) : '0') + '</b></div></div>';
+    if(list.length){
+      h += '<div class="cm-row" style="margin:10px 1px 3px"><b style="font-size:11px;color:var(--text)">오늘 들어온 계약</b><span class="cm-mini">최근 입력 순</span></div><div>';
+      var lim = _cmTodayAll ? list.length : Math.min(list.length, 5);
+      for(i=0;i<lim;i++){
+        var L = list[i], it2 = L.w.it, tm = _cmHm(L.w.rec.createdAt, today);
+        h += '<div class="cm-td-r"><span class="cm-td-tm">' + tm + '</span><span class="cm-td-nm">' + (L.w.mine ? '나<span class="cm-td-me">내 계약</span>' : _cmEsc(L.w.name)) + '</span>'
+           + '<span class="cm-td-pd">' + _cmEsc(it2.co + (it2.cat ? ' · ' + it2.cat : '')) + ' ' + _cmMan(it2.amount) + '</span>'
+           + '<span class="cm-td-am">' + (L.ok ? (L.amt > 0 ? '+' + _cmMan(L.amt) : '0') : '<span class="cm-mini">계산 불가</span>') + '</span></div>';
+      }
+      h += '</div>';
+      if(list.length > 5) h += '<div class="cm-td-more" onclick="_cmTodayToggle()">' + (_cmTodayAll ? '접기 ▴' : '＋ ' + (list.length - 5) + '건 더 보기 ▾') + '</div>';
+      var rem = ownT.total - ownRows;
+      if(rem >= 1000) h += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">🎁 내 계약 시책 달성분 +' + _cmMan(rem) + ' (구간·건수 시상)</div>';
+    }
+    if(miss.length){
+      var mm = [];
+      for(i=0;i<miss.length && i<4;i++){ var mw = miss[i]; mm.push('<span style="white-space:nowrap">' + (mw.mine ? '나' : _cmEsc(mw.name)) + ' (' + _cmEsc(mw.it.co) + ' ' + _cmMan(mw.it.amount) + ')</span>'); }
+      h += '<div class="cm-td-miss">🔎 <b>상품 미입력 ' + miss.length + '건</b> · ' + mm.join(' · ') + (miss.length > 4 ? ' 외 ' + (miss.length - 4) + '건' : '') + '<br>업적 수정에서 상품을 고르면 바로 더해져요</div>';
+    }
+  }
+  // this week by day, Monday first; bar height = share of the week's best day
+  var mx = 0, ws = 0, lab = '', dn = ['월','화','수','목','금','토','일'];
+  for(i=0;i<7;i++){ if(wk[i] <= today){ mx = Math.max(mx, val[wk[i]] || 0); ws += val[wk[i]] || 0; } }
+  h += '<div class="cm-wk"><div class="cm-row" style="font-size:10.5px;color:var(--text2)"><span>이번 주</span><span>합계 <b style="color:var(--text)">' + (ws > 0 ? '+' + _cmMan(ws) : '0') + '</b> · 어제 ' + ((val[yd] || 0) > 0 ? '+' + _cmMan(val[yd]) : '0') + '</span></div><div class="cm-wk-bars">';
+  for(i=0;i<7;i++){
+    var dv = wk[i], v = val[dv] || 0, cls = '', lb = '', hp = 0;
+    if(dv > today) cls = ' fu';
+    else if(dv === today && !(v > 0)){ cls = ' td wt'; lb = '?'; }
+    else { if(dv === today) cls = ' td'; lb = v > 0 ? _pvManKw(v) : ''; hp = (mx > 0 && v > 0) ? Math.max(6, Math.round(v / mx * 78)) : 4; }
+    h += '<div class="cm-wk-c' + cls + '"><i>' + lb + '</i><b' + (hp ? ' style="height:' + hp + '%"' : '') + '></b></div>';
+    lab += '<span' + (dv === today ? ' class="td"' : '') + '>' + dn[i] + '</span>';
+  }
+  h += '</div><div class="cm-wk-d">' + lab + '</div></div></div>';
+  return h;
+}
+// head of branch view: both branch managers' commission (education manager excluded), tap a card for its members
+var _cmMgrOpen = '';
+function _cmMgrToggle(id){ _cmMgrOpen = (_cmMgrOpen === id) ? '' : id; _commRender(); }
+function _cmMgrList(){
+  var all = _cmActiveFps(), out = [];
+  for(var i=0;i<all.length;i++){ var f = all[i], bk = _pvBranchKey(f.branch||''); if((bk === 'al' || bk === 'br') && (f.role === '지점장' || String(f.title||'').indexOf('지점장') >= 0) && !_cmIsEduFp(f)) out.push(f); }
+  out.sort(function(a,b){ return _cmBrOrder(a.branch) - _cmBrOrder(b.branch); });
+  return out;
+}
+function _cmMgrAdminHtml(){
+  var R = COMM_MGR_RATE, list = _cmMgrList(), h = '', tot = { g36:0, g1:0, g2:0, tdT:0, tdN:0 }, shown = 0, isCur = (_cmYm === _cmTodayStr().substr(0,7));
+  for(var i=0;i<list.length;i++){
+    var f = list[i], team = _cmTeamOfManager(f.id);
+    if(!team) continue;
+    var M = _cmMgrCalc(team, f.id), s = M.s, own = _cmBuild(f.id, _cmYm).t.total, bk = _pvBranchKey(f.branch||''), open = (_cmMgrOpen === f.id);
+    var tp = isCur ? _cmTodayBrief(team, f.id) : null;
+    tot.g36 += s.g36; tot.g1 += s.g1; tot.g2 += s.g2; shown++;
+    if(tp){ tot.tdT += tp.team; tot.tdN += tp.n; }
+    h += '<div class="cm-rk' + (open ? ' open' : '') + '" onclick="_cmMgrToggle(\'' + _cmEsc(f.id) + '\')" style="padding:11px 12px">'
+       + '<div class="cm-row"><b style="font-size:13.5px">' + _cmEsc(f.name) + ' 지점장</b><span class="cm-tag ' + (bk === 'al' ? 'cm-al' : 'cm-br') + '">' + (bk === 'al' ? '알파' : '브라보') + ' · 팀원 ' + M.n + '명</span></div>'
+       + '<div style="font-size:19px;font-weight:800;color:var(--gold2);margin-top:4px">' + _cmMan(s.g36*R) + ' <span style="font-size:11px;color:var(--text3);font-weight:600">36개월</span></div>'
+       + '<div class="cm-mini" style="color:var(--text2);margin-top:2px">익월 ' + _cmMan(s.g1*R) + ' · 1차년 유지 ' + _cmMan(s.gy1*R) + ' · 2차년 ' + _cmMan(s.g2*R) + ' · 3차년 ' + _cmMan(s.g3*R) + '</div>'
+       + (tp ? _cmTodayPill(tp) : '')
+       + '<div class="cm-mini" style="margin-top:' + (tp ? '6' : '2') + 'px">+ 본인 계약 수수료 ' + _cmMan(own) + ' (별도) · ' + (open ? '접기 ▴' : '탭하면 팀원별 · 비밀번호 초기화 ▾') + '</div>';
+    if(open) h += '<div onclick="event.stopPropagation()" style="margin-top:8px">' + _cmMgrRows(M) + '<div class="cm-pin-rst"><span>🔑 지점장 수수료 비밀번호<br><span class="cm-mini">잊어버렸다고 할 때만</span></span><b onclick="_cmPinReset(\'' + _cmEsc(f.id) + '\')">1111로 초기화</b></div></div>';
+    h += '</div>';
+  }
+  if(!shown) return '<div class="cm-card" style="text-align:center;color:var(--text3);font-size:12px;padding:18px">알파·브라보 지점장 계정이 없습니다</div>';
+  h += '<div class="cm-card" style="background:#FAF7F0;padding:11px 12px"><div class="cm-row"><b style="font-size:13px">지점장 수수료 합계</b><span class="cm-tag">알파+브라보</span></div><div style="font-size:19px;font-weight:800;color:var(--gold2);margin-top:4px">' + _cmMan(tot.g36*R) + '</div><div class="cm-mini" style="color:var(--text2)">익월 ' + _cmMan(tot.g1*R) + ' · 2차년 ' + _cmMan(tot.g2*R) + '</div>' + (isCur ? '<div class="cm-tdp' + (tot.tdT > 0 ? '' : ' z') + '"><span>☀️ 오늘 합계 · 팀원 ' + tot.tdN + '건</span><b>' + (tot.tdT > 0 ? '+' + _cmMan(tot.tdT) : '0') + '</b></div>' : '') + '</div>';
+  h += '<div class="cm-mini" style="margin-top:6px">지점장 수수료 = 팀원 계약 원장 기준(시책 제외) · 지점장 본인 계약은 FP와 같은 방식으로 따로 계산 · 각 지점장은 자기 것만 보입니다</div>';
   h += '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음</div>';
   return h;
 }
@@ -30908,7 +31448,7 @@ function _cmRankHtml(){
          + _cmRowTxt('익월', _cmMan(t2.m1), t2.sc1 ? _cmMan(t2.sc1) : '', '', _cmMan(m1))
          + (t2.y1 ? _cmRowTxt('1차년 유지', _cmMan(t2.y1), '', '', _cmMan(t2.y1)) : '')
          + _cmRowTxt('2차년', _cmMan(t2.y2), t2.sc2 ? _cmMan(t2.sc2) : '', '', _cmMan(y2))
-         + _cmRowTxt('3차년~', _cmMan(t2.y3), t2.sc3 ? _cmMan(t2.sc3) : '', '', _cmMan(y3))
+         + _cmRowTxt('3차년', _cmMan(t2.y3), t2.sc3 ? _cmMan(t2.sc3) : '', '', _cmMan(y3))
          + '<tr><td class="cm-lb">합계</td><td></td><td></td><td class="cm-n cm-tot" style="color:var(--gold2)">' + _cmMan(t2.total) + '</td></tr></table>'
          + (x.scSrc && x.scSrc.length ? '<div class="cm-mini" style="margin-top:6px">시책 내역: ' + x.scSrc.join(' · ') + '</div>' : '')
          + '<div class="cm-row" style="margin-top:6px"><span class="cm-mini">' + t2.cnt + '건 중 ' + t2.calc + '건 계산' + (t2.noProd ? ' · 미입력 ' + t2.noProd + '건' : '') + '</span><span onclick="_cmShowFp(\'' + _cmEsc(x.id) + '\')" style="font-size:12px;font-weight:700;color:var(--gold2);cursor:pointer">계약별 상세 ›</span></div></div>';
