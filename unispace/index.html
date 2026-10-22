@@ -26525,7 +26525,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 176;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 177;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29244,9 +29244,10 @@ body:not(.theme-light) .cm-td-miss b { color:#F0B060; }
 .cm-acc-b, .cm-acc-body.cm-acc-b { border-left-color:#2563EB; } .cm-acc.cm-acc-b { background:rgba(37,99,235,.08); }
 .cm-acc-body .cm-card, .cm-acc-body .cm-ct { margin-bottom:10px; }
 .cm-ct { border:1.5px solid var(--bdr2); border-radius:14px; margin-bottom:12px; overflow:hidden; background:var(--bg2); }
-.cm-ct-h { display:flex; align-items:center; gap:7px; padding:9px 12px; background:var(--bg3); border-bottom:1px solid var(--bdr); }
+.cm-ct-h { display:flex; align-items:center; flex-wrap:wrap; gap:3px 7px; padding:9px 12px; background:var(--bg3); border-bottom:1px solid var(--bdr); }
 .cm-ct-no { width:20px; height:20px; border-radius:50%; background:var(--gold); color:#fff; font-size:11px; font-weight:800; display:inline-flex; align-items:center; justify-content:center; flex:none; }
 .cm-ct-amt { margin-left:auto; font-weight:800; color:var(--gold2); font-size:14px; white-space:nowrap; }
+.cm-ct-mo { font-size:11px; font-weight:700; color:var(--text3); margin-right:6px; }
 .cm-ct-b { padding:9px 12px 11px; }
 .cm-bf { display:flex; gap:5px; margin-bottom:10px; }
 .cm-bf span { padding:5px 12px; border-radius:7px; font-size:11px; font-weight:700; border:1px solid var(--bdr2); background:var(--surface); color:var(--text2); cursor:pointer; }
@@ -29751,7 +29752,7 @@ function _cmPickRule(p, dateStr){
 function _cmRuleLabel(r){
   var d = r.data || {};
   var s = r.title || d.label || '시책';
-  if(d.pay && d.pay.length) s += ' ' + d.pay.join('·') + '년납';
+  if(d.pay && d.pay.length && s.indexOf('년납') < 0) s += ' ' + d.pay.join('·') + '년납';
   return s;
 }
 function _cmRuleRateTxt(r){
@@ -30973,6 +30974,35 @@ function _commRender(){
     missN++;
     missC += '<div class="cm-card" style="opacity:.75">' + evHead(zv, '<span class="cm-tag">집계 0</span>') + '<div class="cm-mini" style="margin-top:4px">' + zwhy + '</div></div>';
   }
+  // contract-level % rewards of this month: one card per rule (how many contracts, next month / 13th month parts)
+  var rg = {}, rgOrd = [], rateC = '';
+  function rgAdd(r, co, m1, y2, when2, p1, p2){
+    if(!(m1 > 0) && !(y2 > 0)) return;
+    var key = r.id || ((r.title || '') + '|' + co);
+    if(!rg[key]){ rg[key] = { r:r, co:(r.insurer || co), n:0, m1:0, y2:0, when2:(when2 || '13차월'), p1:p1, p2:p2 }; rgOrd.push(key); }
+    rg[key].n++; rg[key].m1 += m1; rg[key].y2 += y2;
+  }
+  for(var ri=0;ri<B.items.length;ri++){
+    var rit = B.items[ri];
+    if(!rit.sc) continue;
+    if(rit.rule){ var rdd = rit.rule.data || {}; rgAdd(rit.rule, rit.co, rit.amount * (parseFloat(rdd.pct1)||0) / 100 * COMM_SC_RATE, rit.amount * (parseFloat(rdd.pct2)||0) / 100 * COMM_SC_RATE, rdd.when2, parseFloat(rdd.pct1)||0, parseFloat(rdd.pct2)||0); }
+    for(var rp=0;rp<(rit.parts||[]).length;rp++){
+      var rpt = rit.parts[rp];
+      if(!rpt.applied) continue;
+      var rpd = rpt.r.data || {}, rbase = (rpd.base === 'part' && rpt.core) ? rpt.core : rit.amount;
+      rgAdd(rpt.r, rit.co, rbase * (parseFloat(rpd.pct1)||0) / 100 * COMM_SC_RATE, rbase * (parseFloat(rpd.pct2)||0) / 100 * COMM_SC_RATE, rpd.when2, parseFloat(rpd.pct1)||0, parseFloat(rpd.pct2)||0);
+    }
+  }
+  rgOrd.sort(function(a,b){ return (rg[b].m1 + rg[b].y2) - (rg[a].m1 + rg[a].y2); });
+  for(var rk=0;rk<rgOrd.length;rk++){
+    var G = rg[rgOrd[rk]], gsum = G.m1 + G.y2, gl = [G.n + '건'];
+    if(G.m1 > 0) gl.push('익월 ' + _cmPct(G.p1) + ' ' + _cmMan(G.m1));
+    if(G.y2 > 0) gl.push(_cmEsc(G.when2) + ' ' + _cmPct(G.p2) + ' ' + _cmMan(G.y2));
+    resN++; resSum += gsum;
+    rateC += '<div class="cm-card"><div class="cm-row"><b style="font-size:12px">' + _cmEsc(G.co) + ' ' + _cmEsc(_cmRuleLabel(G.r)) + '</b><span class="cm-tag" style="background:rgba(201,168,76,.16);color:var(--gold2)">건별 %</span></div>'
+           + '<div class="cm-row" style="margin-top:4px"><span class="cm-mini">' + gl.join(' · ') + '</span><b style="font-size:14px;color:#6D4FB8;white-space:nowrap">' + _cmMan(gsum) + '</b></div></div>';
+  }
+  resC = rateC + resC;
   if(resC) h += _cmAccHtml('res', '✅ 시책 결과', resN + '개' + (resSum ? ' · ' + _cmMan(resSum) : '') + (resGift ? ' · 🎁 ' + resGift : ''), resC, 'g');
   if(nudC) h += _cmAccHtml('nud', '🎯 시책 한 걸음 더', nudN + '개 · 더 하면 받는 것', nudC, 'p');
   if(missC) h += _cmAccHtml('miss', 'ℹ️ 해당 안 된 시책', missN + '개 · 이유', missC, 'n');
@@ -30981,7 +31011,9 @@ function _commRender(){
   if(!B.items.length) ct += '<div class="cm-card" style="text-align:center;color:var(--text3);font-size:12px;padding:18px">이 달 입력된 계약이 없습니다</div>';
   for(var k=0;k<B.items.length;k++){
     var it = B.items[k];
-    ct += '<div class="cm-ct"><div class="cm-ct-h"><span class="cm-ct-no">' + (k+1) + '</span><span class="cm-mini">' + it.date.substr(5).replace('-','/') + '</span><b style="font-size:12.5px">' + _cmEsc(it.co) + '</b>' + (it.cat ? '<span class="cm-tag">' + _cmEsc(it.cat) + '</span>' : '') + (it.lump ? '<span class="cm-tag">일시납</span>' : '') + '<span class="cm-ct-amt">월초 ' + _cmMan(it.amount) + '</span></div><div class="cm-ct-b">'
+    // this contract's total over 36 months (fee + its rewards); the 4-10th year part stays apart like the totals above
+    var cal0 = it.alloc || { m1:0, y2:0, y3:0 }, ctot = (it.calc ? it.fee.m1 + it.fee.y1 + it.fee.y2 + it.fee.y3 : 0) + (it.sc ? it.sc.m1 + it.sc.y2 : 0) + cal0.m1 + cal0.y2 + cal0.y3;
+    ct += '<div class="cm-ct"><div class="cm-ct-h"><span class="cm-ct-no">' + (k+1) + '</span><span class="cm-mini">' + it.date.substr(5).replace('-','/') + '</span><b style="font-size:12.5px">' + _cmEsc(it.co) + '</b>' + (it.cat ? '<span class="cm-tag">' + _cmEsc(it.cat) + '</span>' : '') + (it.lump ? '<span class="cm-tag">일시납</span>' : '') + '<span class="cm-ct-amt"><span class="cm-ct-mo">월초 ' + _cmMan(it.amount) + '</span>' + (ctot > 0 ? '총 ' + _cmMan(ctot) : '') + '</span></div><div class="cm-ct-b">'
        + (it.prod ? '<div class="cm-prod">' + _cmEsc(it.prod) + '</div>' : '');
     if(it.calc){
       var f = it.fee, sc = it.sc;
@@ -31025,6 +31057,7 @@ function _commRender(){
         else ct += '<div class="cm-mini" style="margin-top:3px">＋ ' + _cmEsc(ptx.r.title || pd.label || '') + ' ' + pctTxt + ' — 핵심담보 ' + _cmMan(ptx.core) + ' < ' + _cmMan(ptx.min) + ' 이라 미해당</div>';
       }
       if(!it.gross.nl && _cmNorm(it.co).indexOf('한화생명') >= 0) ct += '<div class="cm-mini" style="margin-top:3px">2차년은 보너스 포함 · 변동 가능</div>';
+      if(f.y4) ct += '<div class="cm-mini" style="margin-top:3px">위 총액은 3차년까지 · 4~10차년 유지분은 따로</div>';
     } else if(it.lumpSkip){
       ct += '<div class="cm-warn">일시납 건 — 월납 요율로는 계산하지 않습니다 (요율표의 일시납 상품을 고르면 계산)</div>';
     } else if(it.noRate){
