@@ -26607,7 +26607,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 196;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 198;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29961,10 +29961,12 @@ function _cmAllScope(d){
 function _cmScopeOk(d, p, needProd){
   d = d || {};
   var np = _cmNorm(p.prod), i;
-  if(d.cats && d.cats.length){ if(d.cats.indexOf(p.cat||'') < 0) return false; }
-  var linked = !!(d.prods && d.prods.length);
+  var linked = !!(d.prods && d.prods.length), hit = linked && !!np && _cmInSet(d, 'prods', np);
+  // a product the rule links by name is that rule's product whatever category the FP picked (the category is a guess
+  // from the product name; the reading took the rule's category from the sheet's heading): checked only without a link
+  if(d.cats && d.cats.length && !hit){ if(d.cats.indexOf(p.cat||'') < 0) return false; }
   if(linked){
-    if(!np || !_cmInSet(d, 'prods', np)) return false;
+    if(!hit) return false;
   } else if(d.keywords && d.keywords.length){
     if(!np) return false;
     if(!_cmKwAny(np, d.keywords, !needProd)) return false;
@@ -30248,6 +30250,25 @@ function _perfProdSearch(i){
   list.innerHTML = h;
   list.style.display = '';
 }
+// the one category the reward rules give a product they link by name (a whole-life product whose name does not say so):
+// '' when no linked rule names a category, or when they name different ones
+function _cmCatHint(co, prod){
+  var list = (co && prod && _rules) ? _cmRulesOf(co) : [], np = _cmNorm(prod), seen = {}, one = '', n = 0;
+  for(var i=0;i<list.length;i++){
+    var d = list[i].data || {};
+    if(!d.prods || !d.prods.length || !d.cats || d.cats.length !== 1 || PERF_CATS.indexOf(d.cats[0]) < 0) continue;
+    if(!_cmInSet(d, 'prods', np)) continue;
+    if(!seen[d.cats[0]]){ seen[d.cats[0]] = 1; one = d.cats[0]; n++; }
+  }
+  return n === 1 ? one : '';
+}
+// a category guessed from the product name
+function _cmCatGuess(prod){
+  var n = _cmNorm(prod);
+  if(n.indexOf('종신') >= 0) return '종신';
+  if(n.indexOf('연금') >= 0 || n.indexOf('저축') >= 0 || n.indexOf('변액') >= 0) return '저축';
+  return '건강상해';
+}
 function _perfProdPick(i, idx){
   _perfSyncProds();
   var p = _perfProducts[i]; if(!p) return;
@@ -30255,12 +30276,11 @@ function _perfProdPick(i, idx){
   var r = (_rates.byIns[ins] || [])[idx];
   if(!r) return;
   p.prod = r[2]; p.pk = r[0]; p.rule = '';
-  if(!p.cat){
-    var n = _cmNorm(r[2]);
-    if(n.indexOf('종신') >= 0) p.cat = '종신';
-    else if(n.indexOf('연금') >= 0 || n.indexOf('저축') >= 0 || n.indexOf('변액') >= 0) p.cat = '저축';
-    else p.cat = '건강상해';
-  }
+  // the category a linked rule gives the product wins (an earlier pick is replaced; the chips still change it); else the
+  // name decides when none is picked yet
+  var hint = _cmCatHint(p.co, r[2]);
+  if(hint) p.cat = hint;
+  else if(!p.cat) p.cat = _cmCatGuess(r[2]);
   renderPerfProds();
 }
 function _perfProdClear(i){
@@ -32632,8 +32652,7 @@ function _cmSimPick(idx){
   var c = _cmSimC(), r = _rates ? (_rates.byIns[_cmRateInsurer(c.co)] || [])[idx] : null;
   if(!r) return;
   _cmSimReset(c); c.prod = r[2]; c.pk = r[0];
-  var n = _cmNorm(r[2]);
-  c.cat = n.indexOf('종신') >= 0 ? '종신' : ((n.indexOf('연금') >= 0 || n.indexOf('저축') >= 0 || n.indexOf('변액') >= 0) ? '저축' : '건강상해');
+  c.cat = _cmCatHint(c.co, r[2]) || _cmCatGuess(r[2]);
   _cmSimRedraw();
   if(!c.man){ var a = document.getElementById('cmSimAmt'); if(a) a.focus(); }
 }
