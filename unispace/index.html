@@ -9968,7 +9968,8 @@ function confirmPerfInput() {
     if(!amt){ showToast('⚠️ 상품 '+(i+1)+'의 금액을 입력해 주세요'); return; }
     var prod={co:co, cat:p.cat, amount:amt};
     if(_perfIsLump(p)) prod.lump=true;
-    if(p.prod){ prod.prod=p.prod; if(p.pk) prod.pk=p.pk; if(p.rule) prod.rule=p.rule; if(p.core) prod.core=p.core; if(p.fpChk && p.fpChk.length) prod.fpChk=p.fpChk.slice(); }
+    if(p.prod){ prod.prod=p.prod; if(p.pk) prod.pk=p.pk; if(p.rule) prod.rule=p.rule; if(p.core) prod.core=p.core; if(p.fpChk && p.fpChk.length) prod.fpChk=p.fpChk.slice();
+      var ask = (typeof _perfFpAsk === 'function') ? _perfFpAsk(p, date) : []; if(ask.length) prod.fpAsk = ask; }
     products.push(prod);
   }
   if(!products.length){ showToast('⚠️ 상품 내역을 입력해 주세요'); return; }
@@ -10119,7 +10120,7 @@ function _perfLockSubmit(on){
   else if(b._busy){ b._busy = false; b.textContent = _editingPerfId ? '수정 완료' : '입력 완료'; }
   if(on){
     if(b._unlockT) clearTimeout(b._unlockT);
-    b._unlockT = setTimeout(function(){ _perfLockSubmit(false); }, 4000);
+    b._unlockT = setTimeout(function(){ _perfLockSubmit(false); }, 15000);
   } else if(b._unlockT){ clearTimeout(b._unlockT); b._unlockT = null; }
 }
 function _perfSubmitToGas(rec, attempt, onDone){
@@ -25148,9 +25149,13 @@ function doCheckin() { doSmartCheckin(); }
     <div class="perf-form">
       <div class="perf-form-group">
         <label class="perf-label">FP 선택 <span style="color:var(--red);font-size:11px">*</span></label>
-        <div style="position:relative">
-          <input type="text" class="perf-input" id="perfFpSearch" placeholder="🔍 이름 검색" autocomplete="off" oninput="onPerfFpSearch()" onfocus="onPerfFpSearch()" onblur="setTimeout(function(){var r=document.getElementById('perfFpResults');if(r)r.style.display='none';},180)">
+        <div style="display:flex;align-items:center;gap:8px">
+        <div style="position:relative;flex:1;min-width:0">
+          <input type="text" class="perf-input" id="perfFpSearch" placeholder="🔍 이름 검색" autocomplete="off" oninput="onPerfFpSearch()" onfocus="onPerfFpSearch()" onblur="setTimeout(function(){var r=document.getElementById('perfFpResults');if(r)r.style.display='none';},180)" style="width:100%;box-sizing:border-box">
           <div id="perfFpResults" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;max-height:220px;overflow-y:auto;background:var(--bg2);border:1px solid var(--bdr2);border-radius:11px;box-shadow:0 8px 24px rgba(0,0,0,.25)"></div>
+        </div>
+        <!-- 💰 수수료 예상 바로가기 (수수료 화면을 쓰는 계정만 보임) -->
+        <button type="button" id="perfCommBtn" class="pf-comm-btn" onclick="_perfOpenComm()" style="display:none">💰 수수료 예상</button>
         </div>
         <div id="perfFpChosen" style="display:none;margin-top:7px;font-size:12px;font-weight:700;color:var(--gold2);background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);border-radius:9px;padding:7px 11px"></div>
         <input type="hidden" id="perfFpSelect">
@@ -26607,7 +26612,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 198;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 200;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29423,6 +29428,8 @@ body:not(.theme-light) .cm-sim-r { background:rgba(255,255,255,.04); border-colo
 .cm-pin-rst b { flex:none; font-size:11px; font-weight:800; color:#D64545; border:1px solid rgba(214,69,69,.45); background:rgba(214,69,69,.06); border-radius:9px; padding:6px 10px; white-space:nowrap; cursor:pointer; }
 .pf-spin { display:inline-block; width:14px; height:14px; flex:none; vertical-align:-2px; margin-right:7px; border-radius:50%; border:2px solid rgba(201,168,76,.3); border-top-color:var(--gold); animation:cmspin .8s linear infinite; }
 .pf-spin.w { border-color:rgba(255,255,255,.35); border-top-color:#fff; }
+.pf-comm-btn { flex:none; padding:11px 13px; border-radius:var(--r-md); border:1px solid var(--gold); background:rgba(201,168,76,.10); color:var(--gold2); font-size:12.5px; font-weight:800; white-space:nowrap; cursor:pointer; font-family:'Noto Sans KR',sans-serif; }
+body.theme-light .pf-comm-btn { background:#FAEEDA; border-color:#B8860B; color:#854F0B; }
 .pf-load { display:flex; align-items:center; padding:9px 11px; border:1px dashed var(--bdr2); border-radius:9px; background:var(--bg3); font-size:12px; color:var(--text2); }
 .pf-load.fail { display:block; color:#B45309; line-height:1.55; }
 .pf-load.fail u { cursor:pointer; font-weight:700; }
@@ -29441,6 +29448,7 @@ body:not(.theme-light) .cm-sim-r { background:rgba(255,255,255,.04); border-colo
 .pf-core-g { font-size:11.5px; color:var(--text3); margin-top:6px; line-height:1.5; }
 .cm-nudge { margin-top:6px; padding:8px 10px; border-radius:10px; background:rgba(239,159,39,.10); border:1px dashed rgba(239,159,39,.6); font-size:11px; color:var(--text2); line-height:1.55; }
 .cm-nudge b { color:#B45309; }
+.cm-fpno { margin-top:3px; color:var(--text3); }
 body:not(.theme-light) .cm-nudge b { color:#F0B060; }
 .pf-fp-tg { margin-left:6px; font-size:9.5px; font-weight:800; padding:1px 7px; border-radius:99px; vertical-align:2px; background:rgba(31,146,104,.14); color:#1F9268; white-space:nowrap; }
 .pf-fp-tg.ex { background:rgba(154,59,31,.10); color:#9A3B1F; }
@@ -30419,6 +30427,14 @@ function _cmFpEffect(G, p){
   }
   return parts.join(' · ');
 }
+// the FP-only questions the entry box shows for a product row: each FP-check item, and 'core' for the core-cover tick
+function _perfFpAsk(p, dateStr){
+  var out = [], fg = _cmFpGroups(p, dateStr), pc = _perfCoreRules(p, dateStr), k;
+  for(k=0;k<fg.length;k++) out.push(fg[k].k);
+  for(k=0;k<pc.length;k++){ if(((pc[k].r.data || {}).base) !== 'part'){ out.push('core'); break; } }
+  return out;
+}
+function _cmFpAsked(it, k){ return (it.fpAsk || []).indexOf(k) >= 0; }
 function _perfFpTick(i, gi){
   _perfSyncProds();
   var p = _perfProducts[i];
@@ -31381,6 +31397,7 @@ function _cmProdItem(rec, p){
   var lumpRow = !!(row && /일시납/.test(String(row[2]||'')));
   it.lumpRow = lumpRow;
   it.fpChk = (p.fpChk || []).slice();
+  it.fpAsk = (p.fpAsk || []).slice();
   if(it.lump && row && !lumpRow){ it.lumpSkip = true; row = null; }
   if(row){
     if(row[3] === null){ it.noRate = true; }
@@ -31914,7 +31931,7 @@ function _cmRefresh(btn){
       .catch(function(){ _ratesRefresh(function(){ done(); }); });
   } else { _ratesRefresh(function(){ done(); }); }
 }
-function closeCommission(){ _cmPinLock(); document.getElementById('commOverlay').classList.remove('open'); if(typeof _scrollToSubmenu === 'function') _scrollToSubmenu(); }
+function closeCommission(){ _cmPinLock(); var ov = document.getElementById('commOverlay'); ov.classList.remove('open'); ov.style.zIndex = ''; if(typeof _scrollToSubmenu === 'function') _scrollToSubmenu(); }
 function _cmMove(n){ _cmYm = _cmYmAdd(_cmYm, n); _commRender(); }
 function _cmPickFp(v){ _cmFp = v; _cmTab = 'mine'; _cmFromRank = false; _commRender(); }
 function _cmSetTab(t){ _cmTab = t; _cmFromRank = false; if(t !== 'mine' && t !== 'team') _cmFp = currentUser.id; _commRender(); }
@@ -32167,7 +32184,8 @@ function _commRender(){
           else if(it.amount > 0 && !(ptx.fp && !ptx.fp.ok)) ct += '<div class="cm-mini" style="margin-top:3px">＋ ' + pT + ' ' + pctTxt + ' · ' + (it.amount < ptx.min ? '월초 ' + _cmMan(it.amount) + ' < ' + _cmMan(ptx.min) : '월초 ' + _cmMan(_numWonC(pd.amtMax)) + ' 초과') + ' 미해당</div>';
         }
         else if(ptx.applied) ct += '<div class="cm-mini" style="margin-top:3px">🟢 ' + _cmEsc(plab) + (pIsPart ? ' ' + _cmMan(ptx.core) : (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '')) + ' ✓ → ' + pT + '</div>';
-        else if(ptx.need) ct += '<div class="cm-nudge">🟢 <b>' + _cmEsc(plab) + (pIsPart ? ' 입력 → ' + pctTxt : (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '') + ' → +' + _cmMan(pGain)) + '</b> · 업적 수정에서 ' + (pIsPart ? '입력' : '체크') + '</div>';
+        else if(ptx.need && !pIsPart && _cmFpAsked(it, 'core')) ct += '<div class="cm-mini cm-fpno">☐ ' + _cmEsc(plab) + (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '') + ' · 체크 안 함 → +' + _cmMan(pGain) + ' 미포함</div>';
+        else if(ptx.need) ct += '<div class="cm-nudge">🟢 <b>' + _cmEsc(plab) + (pIsPart ? '</b> 입력하면 → ' + pctTxt + ' · 업적 수정에서 입력' : (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '') + '이면 → +' + _cmMan(pGain) + '</b> · 해당되면 업적 수정에서 체크') + '</div>';
         else if(!(ptx.core > 0 && ptx.core >= ptx.min)) ct += '<div class="cm-mini" style="margin-top:3px">＋ ' + pT + ' ' + pctTxt + ' · 핵심담보 ' + _cmMan(ptx.core) + ' < ' + _cmMan(ptx.min) + ' 미해당</div>';
       }
       if(!it.gross.nl && _cmNorm(it.co).indexOf('한화생명') >= 0) ct += '<div class="cm-mini" style="margin-top:3px">2차년은 보너스 포함 · 변동 가능</div>';
@@ -32189,7 +32207,8 @@ function _commRender(){
       var CG = cfg[cf], con = _cmFpHas(it, CG.k), cef = _cmFpEffect(CG, it);
       if(CG.ex){ if(con) ct += '<div class="cm-mini cm-fpx">➖ ' + _cmEsc(CG.t) + ' ✓ → ' + _cmEsc(cef) + ' 제외</div>'; }
       else if(con) ct += '<div class="cm-mini" style="margin-top:3px">🟢 ' + _cmEsc(CG.t) + ' ✓ → ' + _cmEsc(cef) + '</div>';
-      else ct += '<div class="cm-nudge">🟢 <b>' + _cmEsc(CG.t) + ' → ' + _cmEsc(cef) + '</b> · 업적 수정에서 체크</div>';
+      else if(_cmFpAsked(it, CG.k)) ct += '<div class="cm-mini cm-fpno">☐ ' + _cmEsc(CG.t) + ' · 체크 안 함 → ' + _cmEsc(cef) + ' 미포함</div>';
+      else ct += '<div class="cm-nudge">🟢 <b>' + _cmEsc(CG.t) + '이면 → ' + _cmEsc(cef) + '</b> · 해당되면 업적 수정에서 체크</div>';
     }
     ct += '</div></div>';
   }
@@ -32814,11 +32833,26 @@ function _cmMgrAdminHtml(){
 }
 // called when the perf input modal opens: warm up rates / rules, re-render once rates arrive
 var _perfRatesState = '';
+// the commission screen from the perf entry: it opens above the entry (closing it comes back to what was typed), on the FP picked
+// there when this account may see that FP
+function _perfOpenComm(){
+  var v = (document.getElementById('perfFpSelect') || {}).value || '', fid = v ? v.split('|')[0] : '';
+  openCommission();
+  var ov = document.getElementById('commOverlay');
+  if(!ov || !ov.classList.contains('open')) return;
+  ov.style.zIndex = '600';
+  var mine = !!(currentUser && fid === currentUser.id);
+  var other = !!(fid && !mine && (_cmIsAdmin(currentUser) || _cmFpList.some(function(x){ return x.id === fid; })));
+  if(mine || other){ _cmFp = fid; _cmTab = 'mine'; _cmFromRank = false; if(_rates && COMM_FP_RATE) _commRender(); }
+}
+function _perfCommBtnSync(){ var b = document.getElementById('perfCommBtn'); if(b) b.style.display = _commCanUse() ? '' : 'none'; }
 function _perfCommPrep(){
+  _perfCommBtnSync();
   var need = !_rates;
   if(need){ _perfRatesState = 'loading'; _perfProdBlkRefresh(); }
   _ratesEnsure(function(){
     _perfRatesState = _rates ? 'ok' : 'fail';
+    _perfCommBtnSync();
     if(!need) return;
     var ov = document.getElementById('perfModalOverlay');
     if(ov && ov.classList.contains('open')) _perfProdBlkRefresh();
