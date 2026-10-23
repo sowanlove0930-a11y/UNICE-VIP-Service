@@ -26620,7 +26620,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 203;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 204;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29488,6 +29488,15 @@ body:not(.theme-light) .cm-ps { border-color:rgba(255,255,255,.24); }
 .cm-ubar.cm-ubar-s { padding:5px 8px; font-size:10.5px; border-radius:9px; margin-bottom:8px; }
 .cm-ubar.cm-ubar-s .cm-ubar-b { padding:3px 7px; font-size:10.5px; }
 .cm-ubar-b { flex:none; font-weight:800; color:var(--gold2); border:1px solid rgba(201,168,76,.6); border-radius:8px; padding:4px 8px; background:var(--bg2); white-space:nowrap; cursor:pointer; }
+.cm-mgr-as { display:flex; align-items:center; flex-wrap:wrap; gap:4px 9px; margin:0 0 10px; padding:9px 12px; border-radius:12px; background:var(--bg3); border:1px solid var(--bdr2); }
+.cm-mgr-as .bk { font-size:12px; font-weight:800; color:var(--gold2); cursor:pointer; white-space:nowrap; -webkit-tap-highlight-color:transparent; }
+.cm-mgr-as .who { display:flex; align-items:center; gap:6px; }
+.cm-mgr-as .who b { font-size:14px; font-weight:900; color:var(--text); }
+.cm-mgr-as .cm-mini { flex-basis:100%; }
+.cm-mgr-go { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.cm-mgr-go b { flex:none; font-size:11px; font-weight:800; color:var(--gold2); white-space:nowrap; }
+.cm-pin-card { margin-top:12px; padding:10px 12px; }
+.cm-pin-card .cm-pin-rst { margin-top:0; border-top:none; padding-top:0; }
 .cm-pin-rst { margin-top:10px; display:flex; justify-content:space-between; align-items:center; gap:8px; border-top:1px dashed var(--bdr2); padding-top:9px; font-size:10.5px; color:var(--text2); }
 .cm-pin-rst b { flex:none; font-size:11px; font-weight:800; color:#D64545; border:1px solid rgba(214,69,69,.45); background:rgba(214,69,69,.06); border-radius:9px; padding:6px 10px; white-space:nowrap; cursor:pointer; }
 .pf-spin { display:inline-block; width:14px; height:14px; flex:none; vertical-align:-2px; margin-right:7px; border-radius:50%; border:2px solid rgba(201,168,76,.3); border-top-color:var(--gold); animation:cmspin .8s linear infinite; }
@@ -31946,7 +31955,7 @@ function openCommission(){
   _cmTab = _cmCanRank() ? 'rank' : 'mine';
   _cmBr = _cmIsAdmin(currentUser) ? 'all' : _pvBranchKey(currentUser.branch||'');
   _cmOpen = ''; _cmFromRank = false;
-  _cmShowSched = false; _cmMoMore = false;
+  _cmShowSched = false; _cmMoMore = false; _cmMgrOpen = '';
   // the first screen: every section folded (the simulation keeps the contracts typed in, folded too)
   _cmAcc = { res:false, nud:false, miss:false, ct:false };
   _cmSim.open = { me:false, mgr:false };
@@ -32001,7 +32010,7 @@ function _cmRefresh(btn){
 function closeCommission(){ _cmPinLock(); var ov = document.getElementById('commOverlay'); ov.classList.remove('open'); ov.style.zIndex = ''; if(typeof _scrollToSubmenu === 'function') _scrollToSubmenu(); }
 function _cmMove(n){ _cmYm = _cmYmAdd(_cmYm, n); _commRender(); }
 function _cmPickFp(v){ _cmFp = v; _cmTab = 'mine'; _cmFromRank = false; _commRender(); }
-function _cmSetTab(t){ _cmTab = t; _cmFromRank = false; if(t !== 'mine' && t !== 'team') _cmFp = currentUser.id; _commRender(); }
+function _cmSetTab(t){ _cmTab = t; _cmFromRank = false; _cmMgrOpen = ''; if(t !== 'mine' && t !== 'team') _cmFp = currentUser.id; _commRender(); }
 function _cmSetBr(b){ _cmBr = b; _cmOpen = ''; _commRender(); }
 function _cmToggleOpen(id){ _cmOpen = (_cmOpen === id) ? '' : id; _commRender(); }
 function _cmShowFp(id){ _cmFp = id; _cmTab = 'mine'; _cmFromRank = true; _commRender(); var ov = document.getElementById('commOverlay'); var bx = ov ? ov.querySelector('.mgmt-box') : null; if(bx) bx.scrollTop = 0; }
@@ -32334,15 +32343,18 @@ function _cmMgrHero(ym, m1, y2, other, t36, head, sub, foot, small){
     + '<div><span class="k">합계</span><b>' + _cmMan(t36) + '</b><em></em></div></div>'
     + (foot || other >= 1000 ? '<div class="cm-mh-f">' + (foot || '') + (other >= 1000 ? (foot ? ' · ' : '') + '1차년·3차년 유지 ' + _cmMan(other) : '') + '</div>' : '') + '</div>';
 }
-function _cmTeamHtml(team, mgrId){
+// the manager's own contracts: "mine" on the manager's phone, "the manager's own" while the head looks at that screen
+function _cmMeTxt(){ return _cmMgrOpen ? '본인' : '내'; }
+function _cmMeName(){ return _cmMgrOpen ? '지점장' : '나'; }
+function _cmTeamHtml(team, mgrId, tail){
   var M = _cmMgrCalc(team, mgrId), s = M.s, R = COMM_MGR_RATE, ot = _cmBuild(mgrId, _cmYm).t, mo = parseInt(_cmYm.substr(5,2),10);
   var tm1 = s.g1*R, om1 = ot.m1 + ot.sc1, other = (s.gy1 + s.g3)*R + ot.y1 + ot.y3 + ot.sc3;
-  var h = _cmMgrHero(_cmYm, tm1 + om1, s.g2*R + ot.y2 + ot.sc2, other, s.g36*R + ot.total, '🏢 ' + mo + '월 누계', '팀원 ' + M.n + '명 · 계약 ' + M.all + '건', '팀원 계약 ' + _cmMan(tm1) + ' · 내 계약 ' + _cmMan(om1));
+  var h = _cmMgrHero(_cmYm, tm1 + om1, s.g2*R + ot.y2 + ot.sc2, other, s.g36*R + ot.total, '🏢 ' + mo + '월 누계', '팀원 ' + M.n + '명 · 계약 ' + M.all + '건', '팀원 계약 ' + _cmMan(tm1) + ' · ' + _cmMeTxt() + ' 계약 ' + _cmMan(om1));
   if(_cmYm === _cmTodayStr().substr(0,7)) h += _cmTodayHtml(team, mgrId) + _cmSimHtml('mgr', mgrId);
   h += '<div class="cm-lbl" style="display:flex;justify-content:space-between"><span>👥 팀원별 · ' + M.n + '명</span><span style="font-weight:400;color:var(--text3)">익월 큰 순</span></div>';
   h += _cmMgrRows(M);
   h += '<div class="cm-mini" style="margin-top:8px">– 는 상품명 없는 계약 (업적 수정에서 상품을 고르면 계산)' + (team.fallback ? ' · 매니저 매칭이 없어 같은 지점 전원 기준' : '') + ' · 원장 기준(시책 제외) · 비활성 FP 제외' + (s.gy4 ? ' · 4~10차년 유지 ' + _cmMan(s.gy4*R) + ' 별도' : '') + '</div>';
-  h += '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음</div>';
+  h += (tail || '') + '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음</div>';
   return h;
 }
 // ── access PIN of the manager tab: checked by the server (salted hash), 1111 until the manager makes one, 5 misses lock 10 minutes ──
@@ -32562,13 +32574,13 @@ function _cmTodayHtml(team, mgrId){
     h += '<div class="cm-td3"><div class="m1">' + _cmWhen('m1') + '<b>' + pl(m1) + '</b><em>' + nxM + '월에 받는 돈</em></div>'
        + '<div>' + _cmWhen('y2') + '<b>' + pl(y2T) + '</b><em>13회차 유지 시</em></div>'
        + '<div><span class="k">합계</span><b>' + pl(tot) + '</b><em></em></div></div>';
-    h += '<div class="cm-mini" style="color:var(--text2)">' + (list.length ? '팀원 ' + nT + '건' + (nO ? ' · 🏢 팀원 +' + _cmMan(teamM1) + ' · ✍️ 내 계약 ' + nO + '건 +' + _cmMan(ownT.m1) : '') : '오늘 계약 ' + rows.length + '건 · 계산된 건 없음') + '</div>';
+    h += '<div class="cm-mini" style="color:var(--text2)">' + (list.length ? '팀원 ' + nT + '건' + (nO ? ' · 🏢 팀원 +' + _cmMan(teamM1) + ' · ✍️ ' + _cmMeTxt() + ' 계약 ' + nO + '건 +' + _cmMan(ownT.m1) : '') : '오늘 계약 ' + rows.length + '건 · 계산된 건 없음') + '</div>';
     if(list.length){
       h += '<div class="cm-row" style="margin:10px 1px 3px"><b style="font-size:11.5px;color:var(--text)">오늘 들어온 계약</b><span class="cm-mini">최근 입력 순 · 익월 기준</span></div><div>';
       var lim = _cmTodayAll ? list.length : Math.min(list.length, 5);
       for(i=0;i<lim;i++){
         var L = list[i], it2 = L.w.it, tm = _cmHm(L.w.rec.createdAt, today);
-        h += '<div class="cm-td-r"><span class="cm-td-tm">' + tm + '</span><span class="cm-td-nm">' + (L.w.mine ? '나<span class="cm-td-me">내 계약</span>' : _cmEsc(L.w.name)) + '</span>'
+        h += '<div class="cm-td-r"><span class="cm-td-tm">' + tm + '</span><span class="cm-td-nm">' + (L.w.mine ? _cmMeName() + '<span class="cm-td-me">' + _cmMeTxt() + ' 계약</span>' : _cmEsc(L.w.name)) + '</span>'
            + '<span class="cm-td-pd">' + _cmEsc(it2.co + (it2.cat ? ' · ' + it2.cat : '')) + ' ' + _cmMan(it2.amount) + '</span>'
            + '<span class="cm-td-am">' + (L.ok ? '<span class="cm-td-k">익월</span>' + (L.a1 > 0 ? '+' + _cmMan(L.a1) : '0') : '<span class="cm-mini">계산 불가</span>') + '</span>'
            + (L.ok && L.a36 > L.a1 + 500 ? '<span class="cm-td-sub">' + (L.a2 >= 500 ? '2차년 ' + _cmMan(L.a2) + ' · ' : '') + '합계 ' + _cmMan(L.a36) + '</span>' : '') + '</div>';
@@ -32576,11 +32588,11 @@ function _cmTodayHtml(team, mgrId){
       h += '</div>';
       if(list.length > 5) h += '<div class="cm-td-more" onclick="_cmTodayToggle()">' + (_cmTodayAll ? '접기 ▴' : '＋ ' + (list.length - 5) + '건 더 보기 ▾') + '</div>';
       var rem = ownT.m1 - ownRows;
-      if(rem >= 1000) h += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">🎁 내 계약 시책 달성분 +' + _cmMan(rem) + ' (구간·건수 시상)</div>';
+      if(rem >= 1000) h += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">🎁 ' + _cmMeTxt() + ' 계약 시책 달성분 +' + _cmMan(rem) + ' (구간·건수 시상)</div>';
     }
     if(miss.length){
       var mm = [];
-      for(i=0;i<miss.length && i<4;i++){ var mw = miss[i]; mm.push('<span style="white-space:nowrap">' + (mw.mine ? '나' : _cmEsc(mw.name)) + ' (' + _cmEsc(mw.it.co) + ' ' + _cmMan(mw.it.amount) + ')</span>'); }
+      for(i=0;i<miss.length && i<4;i++){ var mw = miss[i]; mm.push('<span style="white-space:nowrap">' + (mw.mine ? _cmMeName() : _cmEsc(mw.name)) + ' (' + _cmEsc(mw.it.co) + ' ' + _cmMan(mw.it.amount) + ')</span>'); }
       h += '<div class="cm-td-miss">🔎 <b>상품 미입력 ' + miss.length + '건</b> · ' + mm.join(' · ') + (miss.length > 4 ? ' 외 ' + (miss.length - 4) + '건' : '') + '<br>업적 수정에서 상품을 고르면 바로 더해져요</div>';
     }
   }
@@ -32600,8 +32612,17 @@ function _cmTodayHtml(team, mgrId){
   return h;
 }
 // head of branch view: both branch managers' commission (education manager excluded), tap a card for its members
-var _cmMgrOpen = '';
-function _cmMgrToggle(id){ _cmMgrOpen = (_cmMgrOpen === id) ? '' : id; _commRender(); }
+var _cmMgrOpen = '';     // the branch manager whose screen the head has opened ('' = the list)
+function _cmMgrTop(){ var ov = document.getElementById('commOverlay'), bx = ov ? ov.querySelector('.mgmt-box') : null; if(bx) bx.scrollTop = 0; }
+function _cmMgrToggle(id){ _cmMgrOpen = (_cmMgrOpen === id) ? '' : id; _commRender(); _cmMgrTop(); }
+function _cmMgrBack(){ _cmMgrOpen = ''; _commRender(); _cmMgrTop(); }
+// that manager's own manager-tab screen, with the way back and the PIN reset only the head has
+function _cmMgrAsHtml(f, team){
+  var bk = _pvBranchKey(f.branch || '');
+  var top = '<div class="cm-mgr-as"><span class="bk" onclick="_cmMgrBack()">‹ 지점장 목록</span><span class="who"><b>' + _cmEsc(f.name) + ' 지점장</b><span class="cm-tag ' + (bk === 'al' ? 'cm-al' : 'cm-br') + '">' + (bk === 'al' ? '알파' : '브라보') + '</span></span><span class="cm-mini">지점장이 보는 화면 그대로</span></div>';
+  var tail = '<div class="cm-card cm-pin-card"><div class="cm-pin-rst"><span>🔑 ' + _cmEsc(f.name) + ' 지점장 수수료 비밀번호<br><span class="cm-mini">잊어버렸다고 할 때만</span></span><b onclick="_cmPinReset(\'' + _cmEsc(f.id) + '\')">1111로 초기화</b></div></div>';
+  return top + _cmTeamHtml(team, f.id, tail);
+}
 function _cmMgrList(){
   var all = _cmActiveFps(), out = [];
   for(var i=0;i<all.length;i++){ var f = all[i], bk = _pvBranchKey(f.branch||''); if((bk === 'al' || bk === 'br') && (f.role === '지점장' || String(f.title||'').indexOf('지점장') >= 0) && !_cmIsEduFp(f)) out.push(f); }
@@ -32919,6 +32940,10 @@ function _cmSimSum(mode, fpId, V){
 }
 function _cmMgrAdminHtml(){
   var R = COMM_MGR_RATE, list = _cmMgrList(), h = '', tot = { g36:0, g1:0, g2:0, tdT:0, tdM:0, tdN:0 }, shown = 0, isCur = (_cmYm === _cmTodayStr().substr(0,7));
+  if(_cmMgrOpen){
+    for(var o=0;o<list.length;o++){ if(list[o].id === _cmMgrOpen){ var oTeam = _cmTeamOfManager(list[o].id); if(oTeam) return _cmMgrAsHtml(list[o], oTeam); } }
+    _cmMgrOpen = '';
+  }
   for(var i=0;i<list.length;i++){
     var f = list[i], team = _cmTeamOfManager(f.id);
     if(!team) continue;
@@ -32931,8 +32956,7 @@ function _cmMgrAdminHtml(){
        + '<div style="font-size:22px;font-weight:900;color:var(--gold2);margin-top:4px;white-space:nowrap">' + _cmMan(s.g1*R) + ' <span style="font-size:11px;color:var(--text3);font-weight:700">' + parseInt(_cmYmAdd(_cmYm, 1).substr(5,2),10) + '월에 받는 돈</span></div>'
        + '<div class="cm-wrow" style="margin-top:4px;flex-wrap:wrap">' + _cmWhen('y2') + '<b style="font-size:12px">+' + _cmMan(s.g2*R) + '</b><span class="cm-mini">13회차 유지 시 · 합계 ' + _cmMan(s.g36*R) + ((s.gy1 + s.g3) * R >= 1000 ? ' · 1차년·3차년 유지 ' + _cmMan((s.gy1 + s.g3)*R) : '') + '</span></div>'
        + (tp ? _cmTodayPill(tp) : '')
-       + '<div class="cm-mini" style="margin-top:' + (tp ? '6' : '2') + 'px">+ 본인 계약 수수료 ' + _cmMan(own) + ' (별도) · ' + (open ? '접기 ▴' : '탭하면 팀원별 · 비밀번호 초기화 ▾') + '</div>';
-    if(open) h += '<div onclick="event.stopPropagation()" style="margin-top:8px">' + _cmMgrRows(M) + '<div class="cm-pin-rst"><span>🔑 지점장 수수료 비밀번호<br><span class="cm-mini">잊어버렸다고 할 때만</span></span><b onclick="_cmPinReset(\'' + _cmEsc(f.id) + '\')">1111로 초기화</b></div></div>';
+       + '<div class="cm-mini cm-mgr-go" style="margin-top:' + (tp ? '6' : '2') + 'px"><span>+ 본인 계약 수수료 ' + _cmMan(own) + ' (별도)</span><b>탭하면 지점장 화면 ›</b></div>';
     h += '</div>';
   }
   if(!shown) return '<div class="cm-card" style="text-align:center;color:var(--text3);font-size:12px;padding:18px">알파·브라보 지점장 계정이 없습니다</div>';
