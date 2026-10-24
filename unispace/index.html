@@ -26640,7 +26640,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 210;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 211;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29262,6 +29262,16 @@ body:not(.theme-light) .cm-sum .cm-s em.sc { color:#A78BFA; }
 .cm-sum:not(.two) .cm-k .cm-when { font-size:10.5px; padding:1px 7px; }
 .cm-sum:not(.two) .cm-v { font-size:18px; letter-spacing:-.5px; }
 .cm-sum:not(.two) .cm-s em { font-size:11px; }
+/* small phones (320px class): smaller figures, three cells keep only the month next to the badge */
+@media (max-width: 345px) {
+  .cm-sum { gap:5px; }
+  .cm-sum.two .cm-kpi { padding:9px 9px; }
+  .cm-sum.two .cm-v { font-size:20px; }
+  .cm-sum:not(.two) .cm-kpi { padding:8px 6px; }
+  .cm-sum:not(.two) .cm-v { font-size:15px; }
+  .cm-sum:not(.two) .cm-k .sx { display:none; }
+  .cm-sum:not(.two) .cm-s em { font-size:10.5px; }
+}
 .cm-sum-x { font-size:11.5px; font-weight:700; color:var(--text2); margin:-2px 0 8px 2px; line-height:1.5; }
 .cm-lbl { font-size:12px; font-weight:700; color:var(--text2); margin:14px 0 6px; }
 .cm-card { background:var(--bg2); border:1px solid var(--bdr); border-radius:12px; padding:11px 12px; margin-bottom:9px; }
@@ -29512,7 +29522,16 @@ body:not(.theme-light) .cm-ps { border-color:rgba(255,255,255,.24); }
 .cm-ps-r .t .cm-sim-no { width:17px; height:17px; font-size:10px; }
 .cm-ps-r .nm { flex:1; min-width:0; font-size:12px; font-weight:800; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .cm-ps-r .v { display:flex; gap:6px; margin-top:4px; padding-left:23px; }
-.cm-ps-r .v > span { flex:1; min-width:0; white-space:nowrap; }
+.cm-ps-r .v > span { flex:1; min-width:0; line-height:1.3; }
+/* a narrow cell: the figure goes under its label instead of into the next cell */
+.cm-ps-r .v i, .cm-ps-r .v b { display:inline-block; white-space:nowrap; }
+@media (max-width: 345px) { .cm-ps-r .v { padding-left:0; } }
+/* small phones (320px class): three figure cells in a row become two, with the third (the total) on a line of its own */
+@media (max-width: 345px) {
+  .cm-pc-3, .cm-td3, .cm-mh3 { flex-wrap:wrap; }
+  .cm-pc-3 > div, .cm-td3 > div, .cm-mh3 > div, .cm-mh3 > div.m1 { flex:1 1 40%; }
+  .cm-pc-3 > div:nth-child(3), .cm-td3 > div:nth-child(3), .cm-mh3 > div:nth-child(3) { flex-basis:100%; }
+}
 .cm-ps-r .v i { font-style:normal; font-size:10px; font-weight:800; margin-right:4px; }
 .cm-ps-r .v > span:nth-child(1) i { color:#E07A2E; }
 .cm-ps-r .v > span:nth-child(2) i { color:#6D4FB8; }
@@ -29743,6 +29762,10 @@ body:not(.theme-light) .cm-card.cm-gift { background:rgba(199,125,20,.08); }
 .cm-t td.cm-lb { width:66px; }
 .cm-t td.cm-lb .cm-when { font-size:11.5px; padding:3px 9px; }
 .cm-gift-get { font-size:12.5px; font-weight:800; color:#C77D14; text-align:right; }
+/* figures on the left, the reward on the right: when both do not fit on one line (a small phone, a long reward) the reward goes to a line of its own, right aligned, instead of running into the figures */
+.cm-row.cm-row-w { flex-wrap:wrap; row-gap:3px; }
+.cm-row.cm-row-w > :last-child { margin-left:auto; text-align:right; word-break:keep-all; }
+.cm-row.cm-row-w .cm-mini { word-break:keep-all; }
 </style>
 
 <!-- 시책률 편집 모달 (기존 시책 카드 ⋯ → 💰 시책률) -->
@@ -32076,6 +32099,7 @@ function _cmTeamOfManager(fpId){
 function openCommission(){
   if(!currentUser){ showToast('로그인이 필요합니다'); return; }
   if(!_commCanUse()){ showToast('아직 공개되지 않은 기능입니다'); return; }
+  _cmFitWatch();
   _cmPinLock();
   _cmYm = _cmYmOf(new Date());
   _cmFp = _cmIsAdmin(currentUser) ? '' : currentUser.id;
@@ -32146,6 +32170,40 @@ function _cmToggleSched(){ _cmShowSched = !_cmShowSched; _commRender(); }
 function _cmKpi(label, val, sub, color){
   return '<div class="cm-kpi"><div class="cm-k">' + label + '</div><div class="cm-v" style="color:' + color + '">' + val + '</div>' + (sub ? '<div class="cm-s">' + sub + '</div>' : '') + '</div>';
 }
+// a figure wider than its cell (a small phone, a large amount): the figures of that row step down together until they fit (nothing changes when they fit)
+var CM_FIT_SEL = '.cm-pc-3 b, .cm-td3 b, .cm-mh3 b, .cm-kpi .cm-v, .cm-ps-r .v b, .cm-total b, .cm-vs .v, .cm-mr .v b';
+var _cmFitObs = null, _cmFitT = 0;
+function _cmFitFigs(){
+  var root = document.getElementById('cmBody');
+  if(!root) return;
+  var els = root.querySelectorAll(CM_FIT_SEL), i, rows = [], need = [];
+  for(i=0;i<els.length;i++){ if(els[i].getAttribute('data-fit')){ els[i].style.fontSize = ''; els[i].removeAttribute('data-fit'); } }
+  for(i=0;i<els.length;i++){
+    var e = els[i], c = e.parentElement, cr = c ? c.getBoundingClientRect() : null;
+    if(!cr || cr.width < 1) continue;
+    var cs = getComputedStyle(c), right = cr.right - (parseFloat(cs.paddingRight) || 0) - (parseFloat(cs.borderRightWidth) || 0);
+    var rg = document.createRange(); rg.selectNodeContents(e);
+    var tr = rg.getBoundingClientRect(), avail = right - tr.left, row = c.parentElement, k = rows.indexOf(row);
+    if(k < 0){ rows.push(row); need.push({ r:1, els:[] }); k = rows.length - 1; }
+    need[k].els.push([e, parseFloat(getComputedStyle(e).fontSize) || 14]);
+    // 1.5px of slack: the text box of a figure with negative letter spacing is a little wider than its element
+    if(tr.width > avail + 1.5 && avail > 10) need[k].r = Math.min(need[k].r, avail / tr.width);
+  }
+  for(i=0;i<need.length;i++){
+    if(need[i].r >= 1) continue;
+    for(var j=0;j<need[i].els.length;j++){ var x = need[i].els[j]; x[0].style.fontSize = Math.max(11, Math.floor(x[1] * need[i].r * 2) / 2) + 'px'; x[0].setAttribute('data-fit', '1'); }
+  }
+}
+// every redraw of the commission screen (and a turned phone) fits the figures again
+function _cmFitWatch(){
+  if(_cmFitObs || typeof MutationObserver === 'undefined') return;
+  var root = document.getElementById('cmBody');
+  if(!root) return;
+  var later = window.requestAnimationFrame || function(f){ return setTimeout(f, 16); };
+  _cmFitObs = new MutationObserver(function(){ if(_cmFitT) return; _cmFitT = 1; later(function(){ _cmFitT = 0; _cmFitFigs(); }); });
+  _cmFitObs.observe(root, { childList:true, subtree:true });
+  window.addEventListener('resize', function(){ var ov = document.getElementById('commOverlay'); if(ov && ov.classList.contains('open')) _cmFitFigs(); });
+}
 // one cell of the FP summary: the payment badge (with the month for the next month), the amount, then the fee and the incentive lines
 function _cmSumKpi(bk, head, val, fee, sc){
   return '<div class="cm-kpi"><div class="cm-k">' + _cmWhen(bk) + (head ? '<span>' + head + '</span>' : '') + '</div><div class="cm-v">' + val + '</div>'
@@ -32200,7 +32258,7 @@ function _commRender(){
   var m1 = t.m1 + t.sc1, y2 = t.y2 + t.sc2, y3 = t.y3 + t.sc3, total = m1 + t.y1 + y2 + y3;
   var nextYm = _cmYmAdd(_cmYm, 1);
   h += '<div class="cm-kpis cm-sum' + (_cmHas(y3) ? '' : ' two') + '">'
-     + _cmSumKpi('m1', parseInt(nextYm.substr(5,2),10) + '월 수령', _cmMan(m1), t.m1, t.sc1)
+     + _cmSumKpi('m1', parseInt(nextYm.substr(5,2),10) + '월<span class="sx"> 수령</span>', _cmMan(m1), t.m1, t.sc1)
      + _cmSumKpi('y2', '', _cmMan(y2), t.y2, t.sc2)
      + (_cmHas(y3) ? _cmSumKpi('y3', '', _cmMan(y3), t.y3, t.sc3) : '')
      + '</div>';
@@ -32234,7 +32292,7 @@ function _commRender(){
         var gNote = _cmEsc(ev.period||'') + ((ev.rule.data||{}).note ? ' · ' + _cmEsc((ev.rule.data||{}).note) : '');
         nudC += '<div class="cm-card cm-gift">' + evHead(ev, '', gIcon)
               + (ev.min ? '<div class="cm-prog"><i class="cm-gift-bar" style="width:' + (ev.pct||0) + '%"></i></div>' : '<div style="height:6px"></div>')
-              + '<div class="cm-row" style="align-items:flex-start;gap:8px"><span class="cm-wrow">' + _cmWhen('gf') + '<span class="cm-mini" style="color:var(--text2);white-space:nowrap">' + gNow + (gDo ? ' · <b style="color:var(--text)">' + gDo + '</b>' : '') + '</span></span><span class="cm-gift-get">' + (gDo ? '→ ' : '') + _cmEsc(ev.item || ev.label) + '</span></div>'
+              + '<div class="cm-row cm-row-w" style="align-items:flex-start;gap:8px"><span class="cm-wrow">' + _cmWhen('gf') + '<span class="cm-mini" style="color:var(--text2)">' + gNow + (gDo ? ' · <b style="color:var(--text)">' + gDo + '</b>' : '') + '</span></span><span class="cm-gift-get">' + (gDo ? '→ ' : '') + _cmEsc(ev.item || ev.label) + '</span></div>'
               + (gNote ? '<div class="cm-mini" style="margin-top:3px">' + gNote + '</div>' : '') + '</div>';
       }
       continue;
@@ -32281,7 +32339,7 @@ function _commRender(){
     nudC += '<div class="cm-card cm-new">' + evHead(ev, '')
           + '<div class="cm-wrow" style="margin-top:5px">' + _cmWhen(ev.bucket === 'm1' ? 'm1' : (ev.bucket === 'y3' ? 'y3' : 'y2')) + '<span class="cm-mini">' + _cmEsc(ev.period||'') + (ev.when ? ' · ' + _cmEsc(ev.when) + ' 지급' : '') + '</span></div>'
           + '<div class="cm-prog"><i style="width:' + (ev.pct||0) + '%"></i></div>'
-          + '<div class="cm-row"><span class="cm-mini" style="color:var(--text2)">' + _cmEsc(nowTxt) + (ev.amt ? ' · 확보 ' + _cmMan(ev.amt) : '') + (needTxt ? ' · <b style="color:var(--text)">' + _cmEsc(needTxt) + '</b>' : '') + '</span><span style="font-size:12px;font-weight:800;color:#6D4FB8;white-space:nowrap">' + right + '</span></div></div>';
+          + '<div class="cm-row cm-row-w"><span class="cm-mini" style="color:var(--text2)">' + _cmEsc(nowTxt) + (ev.amt ? ' · 확보 ' + _cmMan(ev.amt) : '') + (needTxt ? ' · <b style="color:var(--text)">' + _cmEsc(needTxt) + '</b>' : '') + '</span><span style="font-size:12px;font-weight:800;color:#6D4FB8">' + right + '</span></div></div>';
   }
   // rules of this FP's insurers that counted nothing: the reason, so a wrong keyword or a missing 상품명 is visible
   var insSeen = {};
