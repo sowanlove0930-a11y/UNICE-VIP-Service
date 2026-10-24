@@ -392,7 +392,7 @@ body.theme-light .main-btn:hover .btn-arrow { background: rgba(26,39,68,0.08); }
   width: 100%;
 }
 .dropdown-panel.open {
-  max-height: 500px;
+  max-height: 2000px;
   opacity: 1;
   margin-top: 16px;
 }
@@ -543,6 +543,17 @@ body.theme-light .sub-item.theme-purple .sub-name { color: #6D4FB8; }
 body.theme-light .sub-item.theme-blue   .sub-name { color: #2563EB; }
 body.theme-light .sub-item-arrow { background: rgba(26,39,68,0.04); }
 body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.08); }
+/* touch screens keep the last touched card in :hover - no lift there (it stood out of line), the press still shrinks it */
+@media (hover: none) {
+  .sub-item:hover { transform: none; box-shadow: none; border-color: var(--border); }
+  body.theme-light .sub-item:hover { box-shadow: none; }
+  .sub-item:hover::before { opacity: 0; }
+  .sub-item:hover .sub-item-arrow { transform: none; }
+  .sub-item:active { transform: scale(0.97); }
+}
+@media (hover: none) and (max-width: 768px) {
+  .sub-item:hover .sub-item-arrow { transform: scale(.85); }
+}
 
 /* 활성 버튼 하이라이트 */
 .main-btn.active-btn { box-shadow: 0 0 0 2px var(--border2); }
@@ -4289,7 +4300,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th style="width:34px;text-align:right">No.</th><th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적유지</th><th>🎖️ 스탠다드</th><th>📝 활동계획</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>홈케어핏</th><th>제니스</th><th>🧞 알라딘</th><th>비번초기화</th><th>삭제</th>
+          <th style="width:34px;text-align:right">No.</th><th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적유지</th><th>🎖️ 스탠다드</th><th>📝 활동계획</th><th>💰 수수료</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>홈케어핏</th><th>제니스</th><th>🧞 알라딘</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -5296,7 +5307,8 @@ function _adaptGasUser(g) {
     carefit2: (g.carefit2 !== undefined) ? (g.carefit2 !== false) : undefined,
     homefit: (g.homefit !== undefined) ? (g.homefit !== false) : undefined,
     jenius: (g.jenius !== undefined) ? (g.jenius !== false) : undefined,
-    actplan: (g.actplan !== undefined) ? (g.actplan !== false) : undefined
+    actplan: (g.actplan !== undefined) ? (g.actplan !== false) : undefined,
+    comm: (g.comm === true || g.comm === false) ? g.comm : undefined
   };
   // 지점장 사번 안전망: GAS level 매핑이 어긋나도 강제 보정
   var _MGR = { 'H2502969':'알파지점', 'H2502965':'브라보지점' };
@@ -5376,7 +5388,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', email:f.email||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, homefit:f.homefit!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true, attend:f.attend!==false, std:f.std!==false, actplan:f.actplan!==false };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', email:f.email||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, homefit:f.homefit!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true, attend:f.attend!==false, std:f.std!==false, actplan:f.actplan!==false, comm:(f.comm === true || f.comm === false) ? f.comm : null };
     });
   } else {
     baseList = FP_LIST;
@@ -5400,6 +5412,7 @@ function getMergedFpList() {
       perfKeep: ov.perfKeep !== undefined ? ov.perfKeep : fp.perfKeep,
       std: ov.std !== undefined ? ov.std : fp.std,
       actplan: ov.actplan !== undefined ? ov.actplan : fp.actplan,
+      comm: ov.comm !== undefined ? ov.comm : fp.comm,
     });
   });
   // 활동계획수립 등 다른 페이지에서 쓰도록 명단 저장 (pw 제외)
@@ -6584,6 +6597,8 @@ function showDashboard() {
   document.getElementById('userRole').textContent = _ur;
   if (typeof _refreshPushMenu === 'function') _refreshPushMenu();
   if (typeof _syncPushToken === 'function') setTimeout(_syncPushToken, 2500);
+  // the commission screen opened to everyone on the server: a plain FP's menu shows it without opening the perf entry first
+  if (typeof _commOpenCheck === 'function') setTimeout(_commOpenCheck, 3500);
   var _pdMenu = document.getElementById('pushDiagMenu');
   if (_pdMenu) _pdMenu.style.display = (currentUser.id === 'ktk01' || currentUser.role === '대표') ? '' : 'none';
   var _wk = document.getElementById('wkspBtn');
@@ -7216,6 +7231,8 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.actplan!==false?'on':'off') + '" onclick="toggleFpActPlan(\'' + fp.id + '\')">' +
         (fp.actplan!==false ? '📝 대상' : '🚫 제외') +
       '</button></td>' +
+      '<td>' + (_commMgrOf(fp) ? '<span style="color:var(--text3);font-weight:800" title="대표·지점장은 항상 사용">—</span>' : ('<button class="fp-active-toggle ' + (_commEffOf(fp)?'on':'off') + '" onclick="toggleFpComm(\'' + fp.id + '\')">' +
+        (_commEffOf(fp) ? '💰 사용' : '🚫 차단') + '</button>')) + '</td>' +
       '<td><button class="fp-active-toggle ' + (fp.carefit!==false?'on':'off') + '" onclick="toggleFpCarefit(\'' + fp.id + '\')">' +
         (fp.carefit!==false ? '🌿 사용' : '🚫 차단') +
       '</button></td>' +
@@ -7311,7 +7328,9 @@ var _FP_TOGGLE_DEFS = {
   team:     { action:'setTeamFlag',       resKey:'team',     icon:'\uD83E\uDDDE', label:'\uC54C\uB77C\uB518', adminOnly:true, defFalse:true, by:true },
   perfKeep: { action:'setPerfKeep',       resKey:'perfKeep', icon:'\uD83D\uDCCA', label:'\uC5C5\uC801\uC720\uC9C0', adminOnly:true, defFalse:true, by:true },
   std:      { action:'setStdAccess',      resKey:'std',      icon:'\uD83C\uDF96\uFE0F', label:'\uC2A4\uD0E0\uB2E4\uB4DCFP \uC9D1\uACC4', adminOnly:true, by:true },
-  actplan:  { action:'setActPlanAccess',  resKey:'actplan',  icon:'\uD83D\uDCDD', label:'\uD65C\uB3D9\uACC4\uD68D', adminOnly:true, by:true }
+  actplan:  { action:'setActPlanAccess',  resKey:'actplan',  icon:'\uD83D\uDCDD', label:'\uD65C\uB3D9\uACC4\uD68D', adminOnly:true, by:true },
+  // shown as it works today (a blank cell follows the full opening), saved as an explicit on / off
+  comm:     { action:'setCommAccess',     resKey:'comm',     icon:'💰', label:'수수료 예상', adminOnly:true, by:true, cur:function(f){ return _commEffOf(f); } }
 };
 function _fpDoToggle(id, key) {
   var cfg = _FP_TOGGLE_DEFS[key];
@@ -7323,7 +7342,7 @@ function _fpDoToggle(id, key) {
   if (!fp) return;
   if (key === 'active' && fp.role === '대표') { showToast('⚠️ 대표 계정은 비활성화할 수 없습니다'); return; }
   // current value: tools default to true (!== false), team/perfKeep default to false (=== true)
-  var cur = cfg.defFalse ? (fp[key] === true) : (fp[key] !== false);
+  var cur = cfg.cur ? cfg.cur(fp) : (cfg.defFalse ? (fp[key] === true) : (fp[key] !== false));
   var nextOn = !cur;
   _fpTogglePending[pkey] = { on: nextOn };
   // optimistic: flip the button right away
@@ -7370,6 +7389,7 @@ function toggleFpTeam(id)     { _fpDoToggle(id, 'team'); }
 function toggleFpPerfKeep(id) { _fpDoToggle(id, 'perfKeep'); }
 function toggleFpStd(id)      { _fpDoToggle(id, 'std'); if (typeof _awlData !== 'undefined') _awlData = null; }
 function toggleFpActPlan(id)  { _fpDoToggle(id, 'actplan'); }
+function toggleFpComm(id)     { _fpDoToggle(id, 'comm'); }
 function resetFpPw(id, name) {
   showConfirm({
     icon: '🔑', iconCls: 'confirm-icon-gold',
@@ -26620,7 +26640,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 204;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 208;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29305,6 +29325,31 @@ body:not(.theme-light) .cm-td-miss b { color:#F0B060; }
 .cm-wk-d { display:flex; padding-top:3px; }
 .cm-wk-d span { flex:1; text-align:center; font-size:10px; color:var(--text3); }
 .cm-wk-d span.td { color:#1E5BC6; font-weight:800; }
+.cm-wk-h { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.cm-wk-nav { display:flex; align-items:center; gap:6px; }
+.cm-wk-nav i { font-style:normal; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; font-weight:800; color:#1E5BC6; background:rgba(37,99,235,.12); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.cm-wk-nav i.off { color:var(--text3); background:transparent; opacity:.4; cursor:default; }
+.cm-wk-nav b { font-size:12px; font-weight:800; color:var(--text); min-width:50px; text-align:center; white-space:nowrap; }
+.cm-wk-s { font-size:12px; font-weight:800; color:var(--text); white-space:nowrap; }
+.cm-wk-s em { font-style:normal; font-size:10.5px; font-weight:600; color:var(--text2); }
+.cm-wk-c { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.cm-wk-c.fu { cursor:default; }
+.cm-wk-c.on b { background:linear-gradient(180deg,#E8C97A,#B8860B); box-shadow:0 0 0 3px rgba(201,168,76,.28); border:none; }
+.cm-wk-c.on i { color:var(--gold2); font-weight:900; }
+.cm-wk-d span em { display:block; font-style:normal; font-size:9px; margin-top:-1px; }
+.cm-wk-d span.on { color:var(--gold2); font-weight:900; }
+.cm-wk-ft { text-align:center; font-size:10px; color:var(--text3); margin-top:5px; }
+.cm-wk-day { margin-top:8px; padding:8px 10px 4px; border-radius:10px; background:var(--bg2); border:1px solid rgba(201,168,76,.45); }
+.cm-wk-dh { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:11px; color:var(--text2); margin-bottom:2px; }
+.cm-wk-dh > b { font-size:12px; color:var(--text); }
+.cm-wk-dh span b { color:#1E5BC6; }
+.cm-wk-none { font-size:11px; color:var(--text3); padding:6px 0 5px; }
+.cm-wk-np { font-size:10.5px; font-weight:800; color:#B45309; }
+.cm-idle { margin-top:10px; padding:9px 11px; border-radius:11px; background:var(--bg3); border:1px dashed var(--bdr2); }
+.cm-idle .t { font-size:11.5px; font-weight:800; color:var(--text2); }
+.cm-idle .t b { color:var(--text); }
+.cm-idle .n { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+.cm-idle .n span { font-size:11px; font-weight:700; color:var(--text2); background:var(--bg2); border:1px solid var(--bdr); border-radius:99px; padding:2px 9px; }
 .cm-tdp { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:7px; padding:7px 10px; border-radius:10px; background:rgba(37,99,235,.07); border:1px solid rgba(37,99,235,.25); font-size:11px; color:var(--text2); }
 .cm-tdp b { font-size:14px; color:#1E5BC6; white-space:nowrap; }
 body:not(.theme-light) .cm-td-big:not(.z), body:not(.theme-light) .cm-td-am, body:not(.theme-light) .cm-td-more, body:not(.theme-light) .cm-wk-c.td i, body:not(.theme-light) .cm-wk-d span.td, body:not(.theme-light) .cm-tdp:not(.z) b { color:#8AB8FF; }
@@ -29496,6 +29541,10 @@ body:not(.theme-light) .cm-ps { border-color:rgba(255,255,255,.24); }
 .cm-mgr-go { display:flex; justify-content:space-between; align-items:center; gap:8px; }
 .cm-mgr-go b { flex:none; font-size:11px; font-weight:800; color:var(--gold2); white-space:nowrap; }
 .cm-pin-card { margin-top:12px; padding:10px 12px; }
+.cm-mgr-as { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.cm-mgr-as .bk { font-size:21px; line-height:1; margin-top:-2px; }
+.cm-pin-one { margin-top:14px; text-align:center; }
+.cm-pin-one span { display:inline-block; font-size:12px; font-weight:800; color:#D64545; border:1px solid rgba(214,69,69,.40); background:rgba(214,69,69,.05); border-radius:10px; padding:8px 18px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .cm-pin-card .cm-pin-rst { margin-top:0; border-top:none; padding-top:0; }
 .cm-pin-rst { margin-top:10px; display:flex; justify-content:space-between; align-items:center; gap:8px; border-top:1px dashed var(--bdr2); padding-top:9px; font-size:10.5px; color:var(--text2); }
 .cm-pin-rst b { flex:none; font-size:11px; font-weight:800; color:#D64545; border:1px solid rgba(214,69,69,.45); background:rgba(214,69,69,.06); border-radius:9px; padding:6px 10px; white-space:nowrap; cursor:pointer; }
@@ -29613,6 +29662,18 @@ body:not(.theme-light) .re-fp { color:#7FD8B0; }
 .cm-ct-amt { margin-left:auto; font-weight:800; color:var(--gold2); font-size:14px; white-space:nowrap; }
 .cm-ct-mo { font-size:11px; font-weight:700; color:var(--text3); margin-right:6px; }
 .cm-ct-b { padding:9px 12px 11px; }
+.cm-ct-b .cm-pc-3 { margin-top:4px; }
+.cm-ct-b .cm-warn + .cm-pc-3 { margin-top:7px; }
+.cm-ct-b .cm-pc-3 > div { padding:7px 8px 6px; }
+.cm-ct-b .cm-pc-3 .cm-when { font-size:10.5px; }
+.cm-ct-b .cm-pc-3 .k { font-size:11.5px; }
+.cm-ct-b .cm-pc-3 b { font-size:17.5px; }
+.cm-ct-b .cm-pc-3 em { font-size:11px; margin-top:2px; }
+.cm-ct-b .cm-pc-3 em.sc { margin-top:1px; }
+.cm-ct-mt { display:flex; justify-content:flex-end; margin-top:7px; }
+.cm-ct-mt span { font-size:11px; font-weight:800; color:var(--text3); padding:3px 10px; border-radius:99px; background:var(--bg3); border:1px solid var(--bdr); cursor:pointer; -webkit-tap-highlight-color:transparent; white-space:nowrap; }
+.cm-ct-mt.nd span { color:#B45309; background:rgba(239,159,39,.12); border:1px dashed rgba(239,159,39,.7); }
+.cm-ct-more { margin-top:6px; padding-top:6px; border-top:1px dashed var(--bdr2); }
 .cm-bf { display:flex; gap:5px; margin-bottom:10px; }
 .cm-bf span { padding:5px 12px; border-radius:7px; font-size:11px; font-weight:700; border:1px solid var(--bdr2); background:var(--surface); color:var(--text2); cursor:pointer; }
 .cm-bf span.on { background:rgba(201,168,76,.14); border-color:var(--gold); color:var(--gold2); }
@@ -29638,7 +29699,17 @@ body:not(.theme-light) .cm-rk-bar { background:rgba(255,255,255,.1); }
 .cm-rk-amt { font-size:13px; font-weight:900; color:var(--gold2); white-space:nowrap; min-width:52px; text-align:right; }
 .cm-rk-sub { font-size:10px; color:var(--text3); white-space:nowrap; }
 .cm-rk-ar { color:var(--text3); font-size:11px; flex-shrink:0; }
-.cm-rk-detail { padding:0 12px 10px 40px; cursor:default; }
+.cm-rk-detail { padding:0 10px 10px; cursor:default; }
+.cm-rk-detail .cm-pc-3 { margin-top:2px; }
+.cm-rk-detail .cm-pc-3 > div { padding:7px 8px 6px; }
+.cm-rk-detail .cm-pc-3 .cm-when { font-size:10.5px; }
+.cm-rk-detail .cm-pc-3 .k { font-size:11.5px; }
+.cm-rk-detail .cm-pc-3 b { font-size:16.5px; }
+.cm-rk-detail .cm-pc-3 em { font-size:10.5px; margin-top:2px; }
+.cm-rk-detail .cm-pc-3 em.sc { margin-top:1px; }
+.cm-rk-ft { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:8px; }
+.cm-rk-ft .go { font-size:12px; font-weight:800; color:var(--gold2); cursor:pointer; white-space:nowrap; }
+.cm-rk-ft .mt { font-size:11px; font-weight:800; color:var(--text3); padding:3px 10px; border-radius:99px; background:var(--bg3); border:1px solid var(--bdr); cursor:pointer; white-space:nowrap; -webkit-tap-highlight-color:transparent; }
 .cm-tag.cm-al { background:rgba(46,158,107,.12); color:#1F9268; }
 .cm-tag.cm-br { background:rgba(123,82,208,.12); color:#6D4FB8; }
 .cm-tag.cm-or { background:#FAEEDA; color:#854F0B; }
@@ -29739,10 +29810,33 @@ var COMM_CATS = ['건강상해','종신','저축','기타'];
 // who can see the commission feature: 대표 · 지점장 · 교육지점장 (server flag COMM_OPEN_ALL opens it to every FP)
 function _commCanUse(){
   if(!currentUser) return false;
+  if(_commMgrOf(currentUser)) return true;
+  // the account's own switch in account management comes first: off even after the full opening, on even before it
+  if(currentUser.comm === false) return false;
+  if(currentUser.comm === true) return true;
   if(COMM_OPEN_ALL) return true;
-  var r = currentUser.role||'', tt = currentUser.title||'', id = currentUser.id||'', br = currentUser.branch||'';
+  return _commRoleUse();
+}
+// the head, the branch managers and the education manager always have it (the switch does not apply to them)
+function _commMgrOf(u){
+  if(!u) return false;
+  var r = u.role||'', tt = u.title||'', id = u.id||'';
+  return r === '대표' || r === '지점장' || r === '교육지점장' || tt === '지점장' || tt === '교육지점장' || id === 'ktk01' || id === 'H2503162' || u.level === 'admin' || u.level === 'manager';
+}
+// the accounts that have the screen without the server flag
+function _commRoleUse(){ return _commRoleOf(currentUser); }
+function _commRoleOf(u){
+  if(!u) return false;
+  var r = u.role||'', tt = u.title||'', id = u.id||'', br = u.branch||'';
   // trial before the full opening: accounts with the manager title see their own commission (the server checks the same)
-  return r === '대표' || r === '지점장' || r === '교육지점장' || tt === '지점장' || tt === '교육지점장' || id === 'ktk01' || id === 'H2503162' || br.indexOf('교육') >= 0 || currentUser.level === 'admin' || String(tt).indexOf('매니저') >= 0;
+  return r === '대표' || r === '지점장' || r === '교육지점장' || tt === '지점장' || tt === '교육지점장' || id === 'ktk01' || id === 'H2503162' || br.indexOf('교육') >= 0 || u.level === 'admin' || String(tt).indexOf('매니저') >= 0;
+}
+// what account management shows for one account: its own switch, else the full opening (or the trial)
+function _commEffOf(fp){
+  if(_commMgrOf(fp)) return true;
+  if(fp.comm === false) return false;
+  if(fp.comm === true) return true;
+  return COMM_OPEN_ALL || _commRoleOf(fp);
 }
 function _cmApplyRates(o){
   if(!o) return;
@@ -29789,6 +29883,12 @@ function _ratesIndex(o){
   }
   return o;
 }
+// an account whose screen hangs on the server flag (a plain FP) asks once after start: opened -> the menu shows it,
+// closed again -> it goes (a short "same" answer when nothing changed)
+function _commOpenCheck(){
+  if(!currentUser || !currentUser.id || _commMgrOf(currentUser)) return;
+  if(_rates) _ratesRefresh(null); else _ratesEnsure(null);
+}
 function _ratesEnsure(cb){
   // a names-only list (perf entry of an FP) is not enough once the commission screen is open to this account
   if(_rates && !(_rates.namesOnly && _commCanUse())){ if(cb) cb(_rates); return; }
@@ -29807,6 +29907,8 @@ function _ratesRefresh(cb){
     _ratesLoading = false;
     var cbs = _ratesCbs; _ratesCbs = [];
     for(var i=0;i<cbs.length;i++){ try{ cbs[i](_rates); }catch(e){} }
+    // the perf entry's commission button follows a flag that may have just changed
+    if(typeof _perfCommBtnSync === 'function') _perfCommBtnSync();
   }
   fetch(url, { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(res){
     if(res && res.ok && !res.same && res.rows && res.rows.length){
@@ -29824,6 +29926,10 @@ function _ratesRefresh(cb){
       _rates = null; _ratesDenied = true;
       // closed again on the server: drop the remembered open flag
       if(COMM_OPEN_ALL){ COMM_OPEN_ALL = false; try { localStorage.setItem('unispace_comm_open', '0'); } catch(eCo) {} }
+    }
+    if(res && res.ok && res.comm !== undefined && currentUser){
+      currentUser.comm = (res.comm === true || res.comm === false) ? res.comm : null;
+      try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch(eCu) {}
     }
     fin();
   }).catch(function(){ fin(); });
@@ -31896,6 +32002,8 @@ function _cmGoYm(ym){ _cmYm = ym; _commRender(); var ov = document.getElementByI
 // ── 수수료 예상 모달 ────────────────────────────────
 var _cmZeroOpen = false;
 var _cmAcc = { res:false, nud:false, miss:false, ct:false };
+var _cmCtOpen = {};     // contract cards whose fine print is open, by fp|month|index
+function _cmCtMore(key){ _cmCtOpen[key] = !_cmCtOpen[key]; _commRender(); }
 function _cmAccToggle(k){ _cmAcc[k] = !_cmAcc[k]; _commRender(); }
 function _cmAccHtml(k, title, sum, body, tone){
   var open = !!_cmAcc[k];
@@ -31955,7 +32063,7 @@ function openCommission(){
   _cmTab = _cmCanRank() ? 'rank' : 'mine';
   _cmBr = _cmIsAdmin(currentUser) ? 'all' : _pvBranchKey(currentUser.branch||'');
   _cmOpen = ''; _cmFromRank = false;
-  _cmShowSched = false; _cmMoMore = false; _cmMgrOpen = '';
+  _cmShowSched = false; _cmMoMore = false; _cmMgrOpen = ''; _cmCtOpen = {}; _cmWkOff = 0; _cmWkSel = '';
   // the first screen: every section folded (the simulation keeps the contracts typed in, folded too)
   _cmAcc = { res:false, nud:false, miss:false, ct:false };
   _cmSim.open = { me:false, mgr:false };
@@ -32010,7 +32118,7 @@ function _cmRefresh(btn){
 function closeCommission(){ _cmPinLock(); var ov = document.getElementById('commOverlay'); ov.classList.remove('open'); ov.style.zIndex = ''; if(typeof _scrollToSubmenu === 'function') _scrollToSubmenu(); }
 function _cmMove(n){ _cmYm = _cmYmAdd(_cmYm, n); _commRender(); }
 function _cmPickFp(v){ _cmFp = v; _cmTab = 'mine'; _cmFromRank = false; _commRender(); }
-function _cmSetTab(t){ _cmTab = t; _cmFromRank = false; _cmMgrOpen = ''; if(t !== 'mine' && t !== 'team') _cmFp = currentUser.id; _commRender(); }
+function _cmSetTab(t){ _cmTab = t; _cmFromRank = false; _cmMgrOpen = ''; _cmWkOff = 0; _cmWkSel = ''; if(t !== 'mine' && t !== 'team') _cmFp = currentUser.id; _commRender(); }
 function _cmSetBr(b){ _cmBr = b; _cmOpen = ''; _commRender(); }
 function _cmToggleOpen(id){ _cmOpen = (_cmOpen === id) ? '' : id; _commRender(); }
 function _cmShowFp(id){ _cmFp = id; _cmTab = 'mine'; _cmFromRank = true; _commRender(); var ov = document.getElementById('commOverlay'); var bx = ov ? ov.querySelector('.mgmt-box') : null; if(bx) bx.scrollTop = 0; }
@@ -32211,43 +32319,25 @@ function _commRender(){
     var it = B.items[k];
     // this contract's total over 36 months (fee + its rewards); the 4-10th year part stays apart like the totals above
     var cal0 = it.alloc || { m1:0, y2:0, y3:0 }, ctot = (it.calc ? it.fee.m1 + it.fee.y1 + it.fee.y2 + it.fee.y3 : 0) + (it.sc ? it.sc.m1 + it.sc.y2 : 0) + cal0.m1 + cal0.y2 + cal0.y3;
-    ct += '<div class="cm-ct"><div class="cm-ct-h"><span class="cm-ct-no">' + (k+1) + '</span><span class="cm-mini">' + it.date.substr(5).replace('-','/') + '</span><b style="font-size:12.5px">' + _cmEsc(it.co) + '</b>' + (it.cat ? '<span class="cm-tag">' + _cmEsc(it.cat) + '</span>' : '') + (it.lump ? '<span class="cm-tag">일시납</span>' : '') + '<span class="cm-ct-amt"><span class="cm-ct-mo">월초 ' + _cmMan(it.amount) + (_cmMan(it.scAmt) !== _cmMan(it.amount) ? '→' + _cmMan(it.scAmt) : '') + '</span>' + (ctot > 0 ? '총 ' + _cmMan(ctot) : '') + '</span></div><div class="cm-ct-b">'
+    ct += '<div class="cm-ct"><div class="cm-ct-h"><span class="cm-ct-no">' + (k+1) + '</span><span class="cm-mini">' + it.date.substr(5).replace('-','/') + '</span><b style="font-size:12.5px">' + _cmEsc(it.co) + '</b>' + (it.cat ? '<span class="cm-tag">' + _cmEsc(it.cat) + '</span>' : '') + (it.lump ? '<span class="cm-tag">일시납</span>' : '') + '<span class="cm-ct-amt"><span class="cm-ct-mo">월초 ' + _cmMan(it.amount) + (_cmMan(it.scAmt) !== _cmMan(it.amount) ? '→' + _cmMan(it.scAmt) : '') + '</span></span></div><div class="cm-ct-b">'
        + (it.prod ? '<div class="cm-prod">' + _cmEsc(it.prod) + '</div>' : '');
+    // the contract in three cells (next month, year 2, total; fee and reward inside), the fine print folded under a toggle
+    var f = it.fee, sc = it.sc, al = it.alloc || { m1:0, y2:0, y3:0, labels:[] }, det = '', nudN = 0;
+    var s1t = (sc ? sc.m1 : 0) + al.m1, s2t = (sc ? sc.y2 : 0) + al.y2, s3t = al.y3, fc = it.calc ? f : { m1:0, y1:0, y2:0, y3:0 };
+    // no fee line when the fee could not be figured (the reward alone is shown, under the notice)
+    var cells = (it.calc || s1t >= 1 || s2t >= 1 || s3t >= 1) ? _cmSimCells(false, { m1:fc.m1 + s1t, f1:fc.m1, s1:s1t, y1:fc.y1, y2:fc.y2 + s2t, f2:fc.y2, s2:s2t, y3:fc.y3 + s3t, tot:ctot, nf:!it.calc }, 0) : '';
     if(it.calc){
-      var f = it.fee, sc = it.sc;
-      ct += '<table class="cm-t"><tr><th></th><th>수수료</th><th>시책</th><th>합계</th></tr>';
-      var al = it.alloc || { m1:0, y2:0, y3:0, labels:[] };
-      var s1t = (sc ? sc.m1 : 0) + al.m1, s2t = (sc ? sc.y2 : 0) + al.y2, s3t = al.y3;
-      var n1 = s1t ? (sc && sc.m1 ? '(' + _cmPctSum(sc.pct1, sc.pct1Extra) + (al.m1 ? '+합산' : '') + ')' : '(합산)') : '';
-      var n2 = s2t ? (sc && sc.y2 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPctSum(sc.pct2, sc.pct2Extra) + (al.y2 ? '+합산' : '') + ')' : '(합산)') : '';
-      ct += _cmRowTxt('익월', _cmMan(f.m1), s1t ? _cmMan(s1t) : '', n1, _cmMan(f.m1 + s1t));
-      if(it.gross.nl){
-        // non-life: a reward paid at month 15 sits on the 15th-premium row
-        var sc15 = (sc && sc.y2 && String(sc.when2||'').indexOf('15') >= 0) ? sc.y2 : 0, sc13 = (sc && sc.y2 && !sc15) ? sc.y2 : 0;
-        var al15 = al.y2at15 || 0, al13 = al.y2 - al15;
-        var s13 = Math.round(s2t - sc15 - al15), s15 = Math.round(s3t + sc15 + al15);
-        var n13 = s13 ? (sc13 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPctSum(sc.pct2, sc.pct2Extra) + (al13 >= 1 ? '+합산' : '') + ')' : '(합산)') : '';
-        var n15 = s15 ? (sc15 ? '(' + _cmEsc(sc.when2) + ' ' + _cmPctSum(sc.pct2, sc.pct2Extra) + ((al15 >= 1 || s3t >= 1) ? '+합산' : '') + ')' : '(합산)') : '';
-        if(f.y1) ct += _cmRowTxt('7~12회', _cmMan(f.y1), '', '', _cmMan(f.y1));
-        ct += _cmRowTxt('13·14회', _cmMan(f.p13), s13 ? _cmMan(s13) : '', n13, _cmMan(f.p13 + s13));
-        ct += _cmRowTxt('15회', _cmMan(f.p15), s15 ? _cmMan(s15) : '', n15, _cmMan(f.p15 + s15));
-      } else {
-        if(f.y1) ct += _cmRowTxt('2~12회', _cmMan(f.y1), '', '', _cmMan(f.y1));
-        ct += _cmRowTxt('2차년', _cmMan(f.y2), s2t ? _cmMan(s2t) : '', n2, _cmMan(f.y2 + s2t));
-        if(_cmHas(f.y3 + s3t)) ct += _cmRowTxt('3차년', _cmMan(f.y3), s3t ? _cmMan(s3t) : '', s3t ? '(합산)' : '', _cmMan(f.y3 + s3t));
-        if(f.y4) ct += _cmRowTxt('4~10차년', _cmMan(f.y4), '', '', _cmMan(f.y4));
-      }
-      ct += '</table>';
+      ct += cells;
       // breakdown of the 시책 figures: 건별 % → 핵심담보 → FP-level 시상 (this contract's share)
       var brk = [];
       if(_cmMan(it.scAmt) !== _cmMan(it.amount)) brk.push('건당 ' + _cmMan(it.scAmt) + '까지 인정 (수수료·시책)');
       if(sc && sc.pct1) brk.push('익월 ' + _cmPct(sc.pct1) + ' ' + _cmMan(it.scAmt * sc.pct1 / 100 * COMM_SC_RATE));
       if(sc && sc.pct2) brk.push(_cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ' ' + _cmMan(it.scAmt * sc.pct2 / 100 * COMM_SC_RATE));
-      for(var pb=0;pb<(it.parts||[]).length;pb++){ if(it.parts[pb].applied){ var pbd = it.parts[pb].r.data || {}; var pbase = (pbd.base === 'part' && it.parts[pb].core) ? it.parts[pb].core : it.scAmt; if(pbd.pct1) brk.push(_cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct1)) + ' ' + _cmMan(pbase * pbd.pct1 / 100 * COMM_SC_RATE)); if(pbd.pct2) brk.push(_cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct2)) + ' ' + _cmMan(pbase * pbd.pct2 / 100 * COMM_SC_RATE)); } }
+      for(var pb=0;pb<(it.parts||[]).length;pb++){ if(it.parts[pb].applied){ var pbd = it.parts[pb].r.data || {}; var pbase = (pbd.base === 'part' && it.parts[pb].core) ? it.parts[pb].core : it.scAmt; if(pbd.pct1) brk.push('익월 ' + _cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct1)) + ' ' + _cmMan(pbase * pbd.pct1 / 100 * COMM_SC_RATE)); if(pbd.pct2) brk.push(_cmEsc(pbd.when2 || '13차월') + ' ' + _cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct2)) + ' ' + _cmMan(pbase * pbd.pct2 / 100 * COMM_SC_RATE)); } }
       for(var pl=0;pl<al.labels.length;pl++) brk.push(_cmEsc(al.labels[pl]));
-      if(brk.length) ct += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책 내역: ' + brk.join(' · ') + '</div>';
-      if(sc){ ct += '<div class="cm-mini" style="margin-top:4px">🎁 ' + _cmEsc(sc.label) + '</div>'; }
-      else { var why0 = (it.rule === null && it.ruleOff) ? '시책 적용 안 함(업적 입력에서 선택)' : ((it.lump || it.lumpRow) ? '일시납 — 일시납 전용 시책만 적용' : _cmNoRuleWhy({ co:it.co, cat:it.cat, prod:it.prod, amount:it.amount, fpChk:it.fpChk }, it.date)); if(why0) ct += '<div class="cm-mini" style="margin-top:4px;color:#854F0B">시책 미적용 · ' + why0 + '</div>'; }
+      if(brk.length) det += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책 내역: ' + brk.join(' · ') + '</div>';
+      if(sc){ det += '<div class="cm-mini" style="margin-top:4px">🎁 ' + _cmEsc(sc.label) + '</div>'; }
+      else { var why0 = (it.rule === null && it.ruleOff) ? '시책 적용 안 함(업적 입력에서 선택)' : ((it.lump || it.lumpRow) ? '일시납 — 일시납 전용 시책만 적용' : _cmNoRuleWhy({ co:it.co, cat:it.cat, prod:it.prod, amount:it.amount, fpChk:it.fpChk }, it.date)); if(why0) det += '<div class="cm-mini" style="margin-top:4px;color:#854F0B">시책 미적용 · ' + why0 + '</div>'; }
       for(var pr=0;pr<(it.parts||[]).length;pr++){
         var ptx = it.parts[pr], pd = ptx.r.data || {};
         // a rule decided by FP-check items alone is shown with those items below
@@ -32257,16 +32347,16 @@ function _commRender(){
         var pGain = it.scAmt * ((parseFloat(pd.pct1)||0) + (parseFloat(pd.pct2)||0)) / 100 * COMM_SC_RATE;
         var pT = _cmEsc(ptx.r.title || pd.label || '');
         if(ptx.auto){
-          if(ptx.applied) ct += '<div class="cm-mini" style="margin-top:3px">🟢 ' + (ptx.min ? '월초 ' + _cmMan(ptx.min) + '↑ → ' : '') + pT + ' 자동' + (pd.base === 'part' ? ' · 보장P = 월초' : '') + '</div>';
-          else if(it.amount > 0 && !(ptx.fp && !ptx.fp.ok)) ct += '<div class="cm-mini" style="margin-top:3px">＋ ' + pT + ' ' + pctTxt + ' · ' + (it.amount < ptx.min ? '월초 ' + _cmMan(it.amount) + ' < ' + _cmMan(ptx.min) : '월초 ' + _cmMan(_numWonC(pd.amtMax)) + ' 초과') + ' 미해당</div>';
+          if(ptx.applied) det += '<div class="cm-mini" style="margin-top:3px">🟢 ' + (ptx.min ? '월초 ' + _cmMan(ptx.min) + '↑ → ' : '') + pT + ' 자동' + (pd.base === 'part' ? ' · 보장P = 월초' : '') + '</div>';
+          else if(it.amount > 0 && !(ptx.fp && !ptx.fp.ok)) det += '<div class="cm-mini" style="margin-top:3px">＋ ' + pT + ' ' + pctTxt + ' · ' + (it.amount < ptx.min ? '월초 ' + _cmMan(it.amount) + ' < ' + _cmMan(ptx.min) : '월초 ' + _cmMan(_numWonC(pd.amtMax)) + ' 초과') + ' 미해당</div>';
         }
-        else if(ptx.applied) ct += '<div class="cm-mini" style="margin-top:3px">🟢 ' + _cmEsc(plab) + (pIsPart ? ' ' + _cmMan(ptx.core) : (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '')) + ' ✓ → ' + pT + '</div>';
-        else if(ptx.need && !pIsPart && _cmFpAsked(it, 'core')) ct += '<div class="cm-mini cm-fpno">☐ ' + _cmEsc(plab) + (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '') + ' · 체크 안 함 → +' + _cmMan(pGain) + ' 미포함</div>';
-        else if(ptx.need) ct += '<div class="cm-nudge">🟢 <b>' + _cmEsc(plab) + (pIsPart ? '</b> 입력하면 → ' + pctTxt + ' · 업적 수정에서 입력' : (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '') + '이면 → +' + _cmMan(pGain) + '</b> · 해당되면 업적 수정에서 체크') + '</div>';
-        else if(!(ptx.core > 0 && ptx.core >= ptx.min)) ct += '<div class="cm-mini" style="margin-top:3px">＋ ' + pT + ' ' + pctTxt + ' · 핵심담보 ' + _cmMan(ptx.core) + ' < ' + _cmMan(ptx.min) + ' 미해당</div>';
+        else if(ptx.applied) det += '<div class="cm-mini" style="margin-top:3px">🟢 ' + _cmEsc(plab) + (pIsPart ? ' ' + _cmMan(ptx.core) : (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '')) + ' ✓ → ' + pT + '</div>';
+        else if(ptx.need && !pIsPart && _cmFpAsked(it, 'core')) det += '<div class="cm-mini cm-fpno">☐ ' + _cmEsc(plab) + (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '') + ' · 체크 안 함 → +' + _cmMan(pGain) + ' 미포함</div>';
+        else if(ptx.need){ nudN++; det += '<div class="cm-nudge">🟢 <b>' + _cmEsc(plab) + (pIsPart ? '</b> 입력하면 → ' + pctTxt + ' · 업적 수정에서 입력' : (ptx.min ? ' ' + _cmMan(ptx.min) + '↑' : '') + '이면 → +' + _cmMan(pGain) + '</b> · 해당되면 업적 수정에서 체크') + '</div>'; }
+        else if(!(ptx.core > 0 && ptx.core >= ptx.min)) det += '<div class="cm-mini" style="margin-top:3px">＋ ' + pT + ' ' + pctTxt + ' · 핵심담보 ' + _cmMan(ptx.core) + ' < ' + _cmMan(ptx.min) + ' 미해당</div>';
       }
-      if(!it.gross.nl && _cmNorm(it.co).indexOf('한화생명') >= 0) ct += '<div class="cm-mini" style="margin-top:3px">2차년은 보너스 포함 · 변동 가능</div>';
-      if(f.y4) ct += '<div class="cm-mini" style="margin-top:3px">위 총액은 3차년까지 · 4~10차년 유지분은 따로</div>';
+      if(!it.gross.nl && _cmNorm(it.co).indexOf('한화생명') >= 0) det += '<div class="cm-mini" style="margin-top:3px">2차년은 보너스 포함 · 변동 가능</div>';
+      if(f.y4) det += '<div class="cm-mini" style="margin-top:3px">합계는 3차년까지 · 4~10차년 유지분 ' + _cmMan(f.y4) + '은 따로</div>';
     } else if(it.lumpSkip){
       ct += '<div class="cm-warn">일시납 건 — 월납 요율로는 계산하지 않습니다 (요율표의 일시납 상품을 고르면 계산)</div>';
     } else if(it.noRate){
@@ -32276,16 +32366,23 @@ function _commRender(){
     } else {
       ct += '<div class="cm-warn">상품 미입력 — 업적 수정에서 상품을 고르면 계산됩니다</div>';
     }
-    if(!it.calc && it.sc && (it.sc.m1 || it.sc.y2)) ct += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책: 익월 ' + _cmMan(it.sc.m1) + (it.sc.y2 ? ' · ' + _cmEsc(it.sc.when2) + ' ' + _cmMan(it.sc.y2) : '') + ' · 🎁 ' + _cmEsc(it.sc.label) + '</div>';
-    if(!it.calc && it.alloc) ct += '<table class="cm-t"><tr><th></th><th>수수료</th><th>시책</th><th>합계</th></tr>' + (it.alloc.m1 ? _cmRowTxt('익월', '', _cmMan(it.alloc.m1), '', _cmMan(it.alloc.m1)) : '') + (it.alloc.y2 ? _cmRowTxt('2차년', '', _cmMan(it.alloc.y2), '', _cmMan(it.alloc.y2)) : '') + (it.alloc.y3 ? _cmRowTxt('3차년', '', _cmMan(it.alloc.y3), '', _cmMan(it.alloc.y3)) : '') + '</table><div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책 내역: ' + _cmEsc(it.alloc.labels.join(' · ')) + '</div>';
+    if(!it.calc) ct += cells;
+    if(!it.calc && it.sc && (it.sc.m1 || it.sc.y2)) det += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책: 익월 ' + _cmMan(it.sc.m1) + (it.sc.y2 ? ' · ' + _cmEsc(it.sc.when2) + ' ' + _cmMan(it.sc.y2) : '') + ' · 🎁 ' + _cmEsc(it.sc.label) + '</div>';
+    if(!it.calc && it.alloc && it.alloc.labels.length) det += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책 내역: ' + _cmEsc(it.alloc.labels.join(' · ')) + '</div>';
     // FP-check items of this contract: an unticked inclusion asks for the tick, a ticked exclusion says what it left out
     var cfg = it.prod ? _cmFpGroups({ co:it.co, cat:it.cat, prod:it.prod, amount:it.amount, fpChk:it.fpChk }, it.date) : [];
     for(var cf=0;cf<cfg.length;cf++){
       var CG = cfg[cf], con = _cmFpHas(it, CG.k), cef = _cmFpEffect(CG, it);
-      if(CG.ex){ if(con) ct += '<div class="cm-mini cm-fpx">➖ ' + _cmEsc(CG.t) + ' ✓ → ' + _cmEsc(cef) + ' 제외</div>'; }
-      else if(con) ct += '<div class="cm-mini" style="margin-top:3px">🟢 ' + _cmEsc(CG.t) + ' ✓ → ' + _cmEsc(cef) + '</div>';
-      else if(_cmFpAsked(it, CG.k)) ct += '<div class="cm-mini cm-fpno">☐ ' + _cmEsc(CG.t) + ' · 체크 안 함 → ' + _cmEsc(cef) + ' 미포함</div>';
-      else ct += '<div class="cm-nudge">🟢 <b>' + _cmEsc(CG.t) + '이면 → ' + _cmEsc(cef) + '</b> · 해당되면 업적 수정에서 체크</div>';
+      if(CG.ex){ if(con) det += '<div class="cm-mini cm-fpx">➖ ' + _cmEsc(CG.t) + ' ✓ → ' + _cmEsc(cef) + ' 제외</div>'; }
+      else if(con) det += '<div class="cm-mini" style="margin-top:3px">🟢 ' + _cmEsc(CG.t) + ' ✓ → ' + _cmEsc(cef) + '</div>';
+      else if(_cmFpAsked(it, CG.k)) det += '<div class="cm-mini cm-fpno">☐ ' + _cmEsc(CG.t) + ' · 체크 안 함 → ' + _cmEsc(cef) + ' 미포함</div>';
+      else { nudN++; det += '<div class="cm-nudge">🟢 <b>' + _cmEsc(CG.t) + '이면 → ' + _cmEsc(cef) + '</b> · 해당되면 업적 수정에서 체크</div>'; }
+    }
+    // the fine print stays folded; a tick that would add money says so on the fold
+    if(det){
+      var ck = fpId + '|' + _cmYm + '|' + k, dOpen = !!_cmCtOpen[ck];
+      ct += '<div class="cm-ct-mt' + (nudN && !dOpen ? ' nd' : '') + '"><span onclick="_cmCtMore(\'' + _cmEsc(ck) + '\')">' + (dOpen ? '접기 ▴' : (nudN ? '체크할 것 ' + nudN + ' · ' : '') + '자세히 ▾') + '</span></div>';
+      if(dOpen) ct += '<div class="cm-ct-more">' + det + '</div>';
     }
     ct += '</div></div>';
   }
@@ -32330,9 +32427,18 @@ function _cmMgrRows(M){
        + '<td class="cm-n" style="font-weight:600">' + x.cnt + '</td>'
        + (x.calc ? '<td class="cm-n" style="color:var(--gold2)">' + _cmMan(x.g1*R) + '</td><td class="cm-n">' + _cmMan(x.g2*R) + '</td><td class="cm-n" style="font-weight:700">' + _cmMan(x.g36*R) + '</td>' : dash + dash + dash) + '</tr>';
   }
-  if(zero) h += '<tr><td colspan="5" style="text-align:center;color:var(--text3);font-size:11px;font-weight:500">이 달 업적 없는 팀원 ' + zero + '명</td></tr>';
+  if(zero && zero === M.rows.length) h += '<tr><td colspan="5" style="text-align:center;color:var(--text3);font-size:11px;font-weight:500">아직 업적이 없어요</td></tr>';
   if(!M.rows.length) h += '<tr><td colspan="5" style="text-align:center;color:var(--text3)">매니저 매칭에 팀원이 없습니다</td></tr>';
   return h + '</table>';
+}
+// members without a contract this month, by name (they are left out of the table above)
+function _cmIdleHtml(M, mo){
+  var nm = [], h = '';
+  for(var r=0;r<M.rows.length;r++){ if(!M.rows[r].g36 && !M.rows[r].cnt) nm.push(M.rows[r].name); }
+  if(!nm.length) return '';
+  nm.sort(function(a,b){ return String(a).localeCompare(String(b)); });
+  for(var k=0;k<nm.length;k++) h += '<span>' + _cmEsc(nm[k]) + '</span>';
+  return '<div class="cm-idle"><div class="t">💤 ' + mo + '월 미가동 FP <b>' + nm.length + '명</b></div><div class="n">' + h + '</div></div>';
 }
 // the month for a manager: next month's money, the 2nd-year part and the total in three named cells (like today's card)
 function _cmMgrHero(ym, m1, y2, other, t36, head, sub, foot, small){
@@ -32350,10 +32456,11 @@ function _cmTeamHtml(team, mgrId, tail){
   var M = _cmMgrCalc(team, mgrId), s = M.s, R = COMM_MGR_RATE, ot = _cmBuild(mgrId, _cmYm).t, mo = parseInt(_cmYm.substr(5,2),10);
   var tm1 = s.g1*R, om1 = ot.m1 + ot.sc1, other = (s.gy1 + s.g3)*R + ot.y1 + ot.y3 + ot.sc3;
   var h = _cmMgrHero(_cmYm, tm1 + om1, s.g2*R + ot.y2 + ot.sc2, other, s.g36*R + ot.total, '🏢 ' + mo + '월 누계', '팀원 ' + M.n + '명 · 계약 ' + M.all + '건', '팀원 계약 ' + _cmMan(tm1) + ' · ' + _cmMeTxt() + ' 계약 ' + _cmMan(om1));
-  if(_cmYm === _cmTodayStr().substr(0,7)) h += _cmTodayHtml(team, mgrId) + _cmSimHtml('mgr', mgrId);
-  h += '<div class="cm-lbl" style="display:flex;justify-content:space-between"><span>👥 팀원별 · ' + M.n + '명</span><span style="font-weight:400;color:var(--text3)">익월 큰 순</span></div>';
-  h += _cmMgrRows(M);
-  h += '<div class="cm-mini" style="margin-top:8px">– 는 상품명 없는 계약 (업적 수정에서 상품을 고르면 계산)' + (team.fallback ? ' · 매니저 매칭이 없어 같은 지점 전원 기준' : '') + ' · 원장 기준(시책 제외) · 비활성 FP 제외' + (s.gy4 ? ' · 4~10차년 유지 ' + _cmMan(s.gy4*R) + ' 별도' : '') + '</div>';
+  var isCur = (_cmYm === _cmTodayStr().substr(0,7));
+  if(isCur) h += _cmTodayHtml(team, mgrId);
+  h += '<div class="cm-lbl" style="display:flex;justify-content:space-between"><span>👥 ' + mo + '월 FP별 지점장 수수료 현황</span><span style="font-weight:400;color:var(--text3)">익월 큰 순</span></div>';
+  h += _cmMgrRows(M) + _cmIdleHtml(M, mo);
+  if(isCur) h += _cmSimHtml('mgr', mgrId);
   h += (tail || '') + '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음</div>';
   return h;
 }
@@ -32498,6 +32605,38 @@ try {
 // ── today's earnings: top card of the manager tab, a line on the head's manager cards ──
 var _cmTodayAll = false;
 function _cmTodayToggle(){ _cmTodayAll = !_cmTodayAll; _commRender(); }
+// the week shown under today's card (0 = this week, -1 = last week ...) and the day tapped there ('' = none)
+var _cmWkOff = 0, _cmWkSel = '', _cmWkX = null, CM_WK_BACK = 12;
+function _cmWkMove(d){ var n = Math.max(-CM_WK_BACK, Math.min(0, _cmWkOff + d)); if(n === _cmWkOff) return; _cmWkOff = n; _cmWkSel = ''; _commRender(); }
+function _cmWkPick(ymd){ _cmWkSel = (_cmWkSel === ymd) ? '' : ymd; _commRender(); }
+// a sideways swipe on the bars: to the right = the week before, to the left = the week after
+function _cmWkTs(e){ var t = e.touches && e.touches[0]; _cmWkX = t ? t.clientX : null; }
+function _cmWkTe(e){ var t = e.changedTouches && e.changedTouches[0], x0 = _cmWkX; _cmWkX = null; if(x0 === null || !t) return; var dx = t.clientX - x0; if(Math.abs(dx) >= 45) _cmWkMove(dx > 0 ? -1 : 1); }
+function _cmDayMd(ymd){ return parseInt(ymd.substr(5,2),10) + '/' + parseInt(ymd.substr(8,2),10); }
+// next month's money of each day of an earlier week: the members' rate-table part at the manager rate + the manager's own
+function _cmWkVals(team, mgrId, from, to){
+  var D = _cmMgrDays(team, mgrId, from, to), out = {}, d = from;
+  for(var i=0;i<7 && d <= to;i++){ var od = D.od[d] ? _cmOwnDay(mgrId, d) : { m1:0 }; out[d] = (D.dm1[d] || 0) * COMM_MGR_RATE + od.m1; d = _cmDayAdd(d, 1); }
+  return out;
+}
+// the day tapped under the bars: who signed what, and next month's money of each contract
+function _cmWkDayHtml(team, mgrId, ymd, v){
+  var R = COMM_MGR_RATE, D = _cmMgrDays(team, mgrId, ymd, ymd), wdn = ['일','월','화','수','목','금','토'], own = 0, i;
+  var dt = new Date(parseInt(ymd.substr(0,4),10), parseInt(ymd.substr(5,2),10) - 1, parseInt(ymd.substr(8,2),10));
+  var rows = D.rows.slice().sort(function(a,b){ var x = String(a.rec.createdAt||''), y = String(b.rec.createdAt||''); return x < y ? 1 : (x > y ? -1 : 0); });
+  var h = '<div class="cm-wk-day"><div class="cm-wk-dh"><b>' + _cmDayMd(ymd) + ' (' + wdn[dt.getDay()] + ')</b><span>' + (rows.length ? '계약 ' + rows.length + '건 · ' : '') + '익월 <b>' + (v > 0 ? '+' + _cmMan(v) : '0') + '</b></span></div>';
+  if(!rows.length) return h + '<div class="cm-wk-none">이날 들어온 계약이 없어요</div></div>';
+  for(i=0;i<rows.length;i++){
+    var w = rows[i], it = w.it, a1 = 0, ok = false;
+    if(w.mine){ a1 = (it.calc ? it.fee.m1 : 0) + (it.sc ? it.sc.m1 : 0); ok = it.calc || !!it.sc; own += a1; }
+    else if(it.calc){ a1 = it.gross.m1 * R; ok = true; }
+    h += '<div class="cm-td-r"><span class="cm-td-tm">' + _cmHm(w.rec.createdAt, ymd) + '</span><span class="cm-td-nm">' + (w.mine ? _cmMeName() + '<span class="cm-td-me">' + _cmMeTxt() + ' 계약</span>' : _cmEsc(w.name)) + '</span>'
+       + '<span class="cm-td-pd">' + _cmEsc(it.co + (it.cat ? ' · ' + it.cat : '')) + ' ' + _cmMan(it.amount) + '</span>'
+       + '<span class="cm-td-am">' + (!it.prod ? '<span class="cm-wk-np">상품 미입력</span>' : (ok ? '<span class="cm-td-k">익월</span>' + (a1 > 0 ? '+' + _cmMan(a1) : '0') : '<span class="cm-mini">계산 불가</span>')) + '</span></div>';
+  }
+  if(D.od[ymd]){ var rem = _cmOwnDay(mgrId, ymd).m1 - own; if(rem >= 1000) h += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">🎁 ' + _cmMeTxt() + ' 계약 시책 달성분 +' + _cmMan(rem) + ' (구간·건수 시상)</div>'; }
+  return h + '</div>';
+}
 function _cmYmd(d){ var m = d.getMonth() + 1, dd = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (dd < 10 ? '0' : '') + dd; }
 function _cmDayAdd(ymd, n){ return _cmYmd(new Date(parseInt(ymd.substr(0,4),10), parseInt(ymd.substr(5,2),10) - 1, parseInt(ymd.substr(8,2),10) + n)); }
 // own commission gained on one day: month total with that day in, minus the total without it (a reward step reached that day counts too)
@@ -32596,31 +32735,39 @@ function _cmTodayHtml(team, mgrId){
       h += '<div class="cm-td-miss">🔎 <b>상품 미입력 ' + miss.length + '건</b> · ' + mm.join(' · ') + (miss.length > 4 ? ' 외 ' + (miss.length - 4) + '건' : '') + '<br>업적 수정에서 상품을 고르면 바로 더해져요</div>';
     }
   }
-  // this week by day, Monday first; bar height = share of the week's best day
-  var mx = 0, ws = 0, lab = '', dn = ['월','화','수','목','금','토','일'];
-  for(i=0;i<7;i++){ if(wk[i] <= today){ mx = Math.max(mx, val[wk[i]] || 0); ws += val[wk[i]] || 0; } }
-  h += '<div class="cm-wk"><div class="cm-row" style="font-size:10.5px;color:var(--text2)"><span>요일별 · 익월 기준</span><span>이번 주 <b style="color:var(--text)">' + (ws > 0 ? '+' + _cmMan(ws) : '0') + '</b> · 어제 ' + ((val[yd] || 0) > 0 ? '+' + _cmMan(val[yd]) : '0') + '</span></div><div class="cm-wk-bars">';
+  // the week by day, Monday first (arrows or a sideways swipe go back to earlier weeks); bar height = share of the week's best day
+  var off = Math.max(-CM_WK_BACK, Math.min(0, _cmWkOff)), w0 = _cmDayAdd(today, 7 * off - wd), wks = [], wv = val, mx = 0, ws = 0, lab = '', dn = ['월','화','수','목','금','토','일'];
+  for(i=0;i<7;i++) wks.push(_cmDayAdd(w0, i));
+  if(off < 0) wv = _cmWkVals(team, mgrId, wks[0], wks[6]);
+  for(i=0;i<7;i++){ if(wks[i] <= today){ mx = Math.max(mx, wv[wks[i]] || 0); ws += wv[wks[i]] || 0; } }
+  var wl = (off === 0) ? '이번 주' : (off === -1 ? '지난주' : _cmDayMd(wks[0]) + '~' + _cmDayMd(wks[6]));
+  h += '<div class="cm-wk"><div class="cm-wk-h"><span class="cm-wk-nav"><i class="' + (off <= -CM_WK_BACK ? 'off' : '') + '" onclick="_cmWkMove(-1)">‹</i><b>' + wl + '</b><i class="' + (off >= 0 ? 'off' : '') + '" onclick="_cmWkMove(1)">›</i></span>'
+     + '<span class="cm-wk-s">' + (ws > 0 ? '+' + _cmMan(ws) : '0') + (off === 0 ? '<em> · 어제 ' + ((val[yd] || 0) > 0 ? '+' + _cmMan(val[yd]) : '0') + '</em>' : '') + '</span></div>'
+     + '<div class="cm-wk-bars" ontouchstart="_cmWkTs(event)" ontouchend="_cmWkTe(event)">';
   for(i=0;i<7;i++){
-    var dv = wk[i], v = val[dv] || 0, cls = '', lb = '', hp = 0;
+    var dv = wks[i], v = wv[dv] || 0, cls = '', lb = '', hp = 0, on = (_cmWkSel === dv);
     if(dv > today) cls = ' fu';
     else if(dv === today && !(v > 0)){ cls = ' td wt'; lb = '?'; }
     else { if(dv === today) cls = ' td'; lb = v > 0 ? _pvManKw(v) : ''; hp = (mx > 0 && v > 0) ? Math.max(6, Math.round(v / mx * 78)) : 4; }
-    h += '<div class="cm-wk-c' + cls + '"><i>' + lb + '</i><b' + (hp ? ' style="height:' + hp + '%"' : '') + '></b></div>';
-    lab += '<span' + (dv === today ? ' class="td"' : '') + '>' + dn[i] + '</span>';
+    if(on) cls += ' on';
+    h += '<div class="cm-wk-c' + cls + '"' + (dv <= today ? ' onclick="_cmWkPick(\'' + dv + '\')"' : '') + '><i>' + lb + '</i><b' + (hp ? ' style="height:' + hp + '%"' : '') + '></b></div>';
+    lab += '<span class="' + (dv === today ? 'td' : '') + (on ? ' on' : '') + '">' + dn[i] + '<em>' + parseInt(dv.substr(8,2),10) + '</em></span>';
   }
-  h += '</div><div class="cm-wk-d">' + lab + '</div></div></div>';
+  h += '</div><div class="cm-wk-d">' + lab + '</div>';
+  h += (_cmWkSel && _cmWkSel >= wks[0] && _cmWkSel <= wks[6] && _cmWkSel <= today) ? _cmWkDayHtml(team, mgrId, _cmWkSel, wv[_cmWkSel] || 0) : '<div class="cm-wk-ft">익월 기준 · 막대를 누르면 그날 계약</div>';
+  h += '</div></div>';
   return h;
 }
 // head of branch view: both branch managers' commission (education manager excluded), tap a card for its members
 var _cmMgrOpen = '';     // the branch manager whose screen the head has opened ('' = the list)
 function _cmMgrTop(){ var ov = document.getElementById('commOverlay'), bx = ov ? ov.querySelector('.mgmt-box') : null; if(bx) bx.scrollTop = 0; }
-function _cmMgrToggle(id){ _cmMgrOpen = (_cmMgrOpen === id) ? '' : id; _commRender(); _cmMgrTop(); }
-function _cmMgrBack(){ _cmMgrOpen = ''; _commRender(); _cmMgrTop(); }
+function _cmMgrToggle(id){ _cmMgrOpen = (_cmMgrOpen === id) ? '' : id; _cmWkOff = 0; _cmWkSel = ''; _commRender(); _cmMgrTop(); }
+function _cmMgrBack(){ _cmMgrOpen = ''; _cmWkOff = 0; _cmWkSel = ''; _commRender(); _cmMgrTop(); }
 // that manager's own manager-tab screen, with the way back and the PIN reset only the head has
 function _cmMgrAsHtml(f, team){
   var bk = _pvBranchKey(f.branch || '');
-  var top = '<div class="cm-mgr-as"><span class="bk" onclick="_cmMgrBack()">‹ 지점장 목록</span><span class="who"><b>' + _cmEsc(f.name) + ' 지점장</b><span class="cm-tag ' + (bk === 'al' ? 'cm-al' : 'cm-br') + '">' + (bk === 'al' ? '알파' : '브라보') + '</span></span><span class="cm-mini">지점장이 보는 화면 그대로</span></div>';
-  var tail = '<div class="cm-card cm-pin-card"><div class="cm-pin-rst"><span>🔑 ' + _cmEsc(f.name) + ' 지점장 수수료 비밀번호<br><span class="cm-mini">잊어버렸다고 할 때만</span></span><b onclick="_cmPinReset(\'' + _cmEsc(f.id) + '\')">1111로 초기화</b></div></div>';
+  var top = '<div class="cm-mgr-as" onclick="_cmMgrBack()"><span class="bk">‹</span><span class="who"><b>' + _cmEsc(f.name) + ' 지점장</b><span class="cm-tag ' + (bk === 'al' ? 'cm-al' : 'cm-br') + '">' + (bk === 'al' ? '알파' : '브라보') + '</span></span></div>';
+  var tail = '<div class="cm-pin-one"><span onclick="_cmPinReset(\'' + _cmEsc(f.id) + '\')">🔑 비밀번호 초기화</span></div>';
   return top + _cmTeamHtml(team, f.id, tail);
 }
 function _cmMgrList(){
@@ -32853,7 +33000,7 @@ function _cmSimNext(A, key, top){ var at = -1; for(var k=0;k<A.length;k++){ if(k
 function _cmSimNo(o){ return '<span class="cm-sim-no">' + (o.i + 1) + '</span>'; }
 // next month, year 2 and the total side by side (fee and reward under each; years 1 and 3 under the total)
 function _cmSimCells(mgr, o, nx){
-  function sub(f, sc){ return '<em>수수료 ' + _cmMan(f) + '</em>' + (_cmHas(sc) ? '<em class="sc">시책 ' + _cmMan(sc) + '</em>' : ''); }
+  function sub(f, sc){ return (o.nf ? '' : '<em>수수료 ' + _cmMan(f) + '</em>') + (_cmHas(sc) ? '<em class="sc">시책 ' + _cmMan(sc) + '</em>' : ''); }
   var e3 = [];
   if(_cmHas(o.y1)) e3.push('1차년 ' + _cmMan(o.y1));
   if(_cmHas(o.y3)) e3.push('3차년 ' + _cmMan(o.y3));
@@ -33059,14 +33206,13 @@ function _cmRankHtml(){
        + '<div class="cm-row" style="gap:8px;margin-top:4px"><span class="cm-rk-bar"><i style="width:' + Math.round(t2.total / mx * 100) + '%"></i></span><span class="cm-rk-sub">' + (t2.calc ? '익월 ' + _cmMan(m1) + ' · 2차년 ' + _cmMan(y2) + (_cmHas(y3) ? ' · 3차년 ' + _cmMan(y3) : '') : (t2.total ? '시책만 · 수수료는 상품 입력 후' : '계산된 건 없음')) + '</span></div></div>'
        + '<span class="cm-rk-ar">' + (open ? '▴' : '▾') + '</span></div>';
     if(open){
-      h += '<div class="cm-rk-detail" onclick="event.stopPropagation()"><table class="cm-t"><tr><th></th><th>수수료</th><th>시책</th><th>합계</th></tr>'
-         + _cmRowTxt('익월', _cmMan(t2.m1), t2.sc1 ? _cmMan(t2.sc1) : '', '', _cmMan(m1))
-         + (t2.y1 ? _cmRowTxt('1차년 유지', _cmMan(t2.y1), '', '', _cmMan(t2.y1)) : '')
-         + _cmRowTxt('2차년', _cmMan(t2.y2), t2.sc2 ? _cmMan(t2.sc2) : '', '', _cmMan(y2))
-         + (_cmHas(y3) ? _cmRowTxt('3차년', _cmMan(t2.y3), t2.sc3 ? _cmMan(t2.sc3) : '', '', _cmMan(y3)) : '')
-         + '<tr><td class="cm-lb">합계</td><td></td><td></td><td class="cm-n cm-tot" style="color:var(--gold2)">' + _cmMan(t2.total) + '</td></tr></table>'
-         + (x.scSrc && x.scSrc.length ? '<div class="cm-mini" style="margin-top:6px">시책 내역: ' + x.scSrc.join(' · ') + '</div>' : '')
-         + '<div class="cm-row" style="margin-top:6px"><span class="cm-mini">' + t2.cnt + '건 중 ' + t2.calc + '건 계산' + (t2.noProd ? ' · 미입력 ' + t2.noProd + '건' : '') + '</span><span onclick="_cmShowFp(\'' + _cmEsc(x.id) + '\')" style="font-size:12px;font-weight:700;color:var(--gold2);cursor:pointer">계약별 상세 ›</span></div></div>';
+      // the FP's month in three cells (like a contract card); what makes up the reward and the count stay folded
+      var rkk = 'rk|' + x.id + '|' + _cmYm, rkO = !!_cmCtOpen[rkk];
+      h += '<div class="cm-rk-detail" onclick="event.stopPropagation()">' + _cmSimCells(false, { m1:m1, f1:t2.m1, s1:t2.sc1, y1:t2.y1, y2:y2, f2:t2.y2, s2:t2.sc2, y3:y3, tot:t2.total, nf:!t2.calc }, 0)
+         + '<div class="cm-rk-ft"><span class="go" onclick="_cmShowFp(\'' + _cmEsc(x.id) + '\')">계약별 상세 ›</span><span class="mt" onclick="_cmCtMore(\'' + _cmEsc(rkk) + '\')">' + (rkO ? '접기 ▴' : '자세히 ▾') + '</span></div>';
+      if(rkO) h += '<div class="cm-ct-more">' + (x.scSrc && x.scSrc.length ? '<div class="cm-mini" style="color:#6D4FB8">시책 내역: ' + x.scSrc.join(' · ') + '</div>' : '')
+         + '<div class="cm-mini" style="margin-top:4px">' + t2.cnt + '건 중 ' + t2.calc + '건 계산' + (t2.noProd ? ' · 미입력 ' + t2.noProd + '건' : '') + '</div></div>';
+      h += '</div>';
     }
     h += '</div>';
   }
