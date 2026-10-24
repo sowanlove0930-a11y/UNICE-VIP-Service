@@ -26640,7 +26640,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 209;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 210;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29245,8 +29245,24 @@ body:not(.theme-light) .re-card { background:rgba(201,168,76,.06); }
 .cm-k { font-size:10px; color:var(--text2); font-weight:700; white-space:nowrap; }
 .cm-v { font-size:16px; font-weight:900; margin-top:2px; white-space:nowrap; }
 .cm-s { font-size:9.5px; color:var(--text3); margin-top:2px; line-height:1.3; }
-.cm-total { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; border-radius:10px; background:rgba(201,168,76,.1); border:1px solid rgba(201,168,76,.35); font-size:12.5px; font-weight:800; color:var(--gold2); }
-.cm-total b { font-size:17px; font-weight:900; }
+.cm-total { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px 14px; border-radius:12px; background:rgba(201,168,76,.12); border:1.5px solid rgba(201,168,76,.5); font-size:14.5px; font-weight:900; color:var(--text); }
+.cm-total b { font-size:23px; font-weight:900; color:var(--gold2); letter-spacing:-.4px; white-space:nowrap; }
+/* the summary on top of the FP screen: white cells like the cards below, the payment badge, a larger figure, fee and incentive on lines of their own */
+.cm-sum { gap:7px; margin:10px 0 9px; }
+.cm-sum .cm-kpi { text-align:left; padding:10px 11px; background:var(--bg2); border-radius:12px; box-shadow:0 1px 5px rgba(26,39,68,.06); }
+.cm-sum .cm-k { display:flex; align-items:center; gap:5px; font-size:12px; font-weight:800; color:var(--text2); }
+.cm-sum .cm-k .cm-when { font-size:11px; padding:2px 8px; }
+.cm-sum .cm-v { font-size:23px; color:var(--text); margin-top:6px; letter-spacing:-.4px; line-height:1.2; }
+.cm-sum .cm-s { margin-top:4px; }
+.cm-sum .cm-s em { display:block; font-style:normal; font-size:12px; font-weight:700; color:var(--text2); line-height:1.5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cm-sum .cm-s em.sc { color:#6D4FB8; font-weight:800; }
+body:not(.theme-light) .cm-sum .cm-s em.sc { color:#A78BFA; }
+.cm-sum:not(.two) .cm-kpi { padding:9px 8px; }
+.cm-sum:not(.two) .cm-k { font-size:11px; gap:4px; }
+.cm-sum:not(.two) .cm-k .cm-when { font-size:10.5px; padding:1px 7px; }
+.cm-sum:not(.two) .cm-v { font-size:18px; letter-spacing:-.5px; }
+.cm-sum:not(.two) .cm-s em { font-size:11px; }
+.cm-sum-x { font-size:11.5px; font-weight:700; color:var(--text2); margin:-2px 0 8px 2px; line-height:1.5; }
 .cm-lbl { font-size:12px; font-weight:700; color:var(--text2); margin:14px 0 6px; }
 .cm-card { background:var(--bg2); border:1px solid var(--bdr); border-radius:12px; padding:11px 12px; margin-bottom:9px; }
 .cm-card.cm-new { border:1.5px solid var(--gold); background:#FFFCF4; }
@@ -32130,6 +32146,11 @@ function _cmToggleSched(){ _cmShowSched = !_cmShowSched; _commRender(); }
 function _cmKpi(label, val, sub, color){
   return '<div class="cm-kpi"><div class="cm-k">' + label + '</div><div class="cm-v" style="color:' + color + '">' + val + '</div>' + (sub ? '<div class="cm-s">' + sub + '</div>' : '') + '</div>';
 }
+// one cell of the FP summary: the payment badge (with the month for the next month), the amount, then the fee and the incentive lines
+function _cmSumKpi(bk, head, val, fee, sc){
+  return '<div class="cm-kpi"><div class="cm-k">' + _cmWhen(bk) + (head ? '<span>' + head + '</span>' : '') + '</div><div class="cm-v">' + val + '</div>'
+    + '<div class="cm-s"><em>수수료 ' + _cmMan(fee) + '</em>' + (_cmHas(sc) ? '<em class="sc">시책 ' + _cmMan(sc) + '</em>' : '') + '</div></div>';
+}
 // payment-time badge: next month / 2nd year / 3rd year / gift
 function _cmWhen(bk, txt){ var t = txt || ({ m1:'익월', y1:'1차년', y2:'2차년', y3:'3차년', gf:'물품' })[bk] || ''; return '<span class="cm-when ' + bk + '">' + t + '</span>'; }
 function _cmRowBk(lab){ lab = String(lab || ''); if(lab === '익월') return 'm1'; if(lab === '2차년' || lab.indexOf('13') === 0 || lab === '15회') return 'y2'; if(lab === '3차년') return 'y3'; return 'y1'; }
@@ -32178,14 +32199,14 @@ function _commRender(){
   var B = _cmBuild(fpId, _cmYm), t = B.t;
   var m1 = t.m1 + t.sc1, y2 = t.y2 + t.sc2, y3 = t.y3 + t.sc3, total = m1 + t.y1 + y2 + y3;
   var nextYm = _cmYmAdd(_cmYm, 1);
-  h += '<div class="cm-kpis' + (_cmHas(y3) ? '' : ' two') + '">'
-     + _cmKpi('익월 수령 (' + parseInt(nextYm.substr(5,2),10) + '월)', _cmMan(m1), '수수료 ' + _pvManKw(t.m1) + ' + 시책 ' + _pvManKw(t.sc1), 'var(--gold2)')
-     + _cmKpi('2차년', _cmMan(y2), '수수료 ' + _pvManKw(t.y2) + ' + 시책 ' + _pvManKw(t.sc2), '#2563EB')
-     + (_cmHas(y3) ? _cmKpi('3차년', _cmMan(y3), (t.sc3 ? '시책 ' + _pvManKw(t.sc3) + ' 포함 · ' : '') + '유지 시', '#6D4FB8') : '')
+  h += '<div class="cm-kpis cm-sum' + (_cmHas(y3) ? '' : ' two') + '">'
+     + _cmSumKpi('m1', parseInt(nextYm.substr(5,2),10) + '월 수령', _cmMan(m1), t.m1, t.sc1)
+     + _cmSumKpi('y2', '', _cmMan(y2), t.y2, t.sc2)
+     + (_cmHas(y3) ? _cmSumKpi('y3', '', _cmMan(y3), t.y3, t.sc3) : '')
      + '</div>';
-  if(t.y1) h += '<div class="cm-mini" style="margin:-4px 0 8px 2px">+ 1차년 유지(2~12회·7~12회 분할) ' + _cmMan(t.y1) + '</div>';
-  if(t.y4) h += '<div class="cm-mini" style="margin:-4px 0 8px 2px">+ 4~10차년 유지 ' + _cmMan(t.y4) + ' (36개월 총액에는 미포함)</div>';
-  h += '<div class="cm-total"><span>💎 총 예상 (36개월 유지)</span><b>' + _cmMan(total) + '</b></div>';
+  if(t.y1) h += '<div class="cm-sum-x">+ 1차년 유지(2~12회·7~12회 분할) ' + _cmMan(t.y1) + '</div>';
+  if(t.y4) h += '<div class="cm-sum-x">+ 4~10차년 유지 ' + _cmMan(t.y4) + ' (총 예상에는 미포함)</div>';
+  h += '<div class="cm-total"><span>💎 총 예상</span><b>' + _cmMan(total) + '</b></div>';
   if(_cmYm === _cmTodayStr().substr(0,7)) h += _cmSimHtml('me', fpId);
   // ── 시책 결과(달성) / 한 걸음 더(더 하면 받는 것) / 해당 안 됨 — three accordions ──
   var resC = '', resN = 0, resSum = 0, resGift = 0, nudC = '', nudN = 0, missC = '', missN = 0;
@@ -33190,7 +33211,7 @@ function _cmRankHtml(){
        + '<div class="br"><div class="t">브라보 · ' + brTot.br.n + '명</div><div class="v">' + _cmMan(brTot.br.t) + '</div><div class="s">총 예상 · 익월 ' + _cmMan(brTot.br.m1) + '</div></div></div>';
   } else {
     h += '<div class="cm-kpis">'
-       + _cmKpi('지점 총 예상', _cmMan(sumT), '36개월 유지 시', 'var(--gold2)')
+       + _cmKpi('지점 총 예상', _cmMan(sumT), '', 'var(--gold2)')
        + _cmKpi('익월 합계', _cmMan(sumM1), '수수료 + 시책', '#2563EB')
        + _cmKpi('상품 입력', calc + '<span style="font-size:11px;color:var(--text3)">/' + cnt + '건</span>', (noProd ? '미입력 ' + noProd + '건' : '전부 입력'), 'var(--text)')
        + '</div>';
