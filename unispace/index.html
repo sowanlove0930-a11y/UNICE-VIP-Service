@@ -18108,7 +18108,7 @@ function rc2LoadAllFromGas(cb){
         var _ym = it.ym || curYm;
         if(!byYm[_ym]) byYm[_ym] = [];
         byYm[_ym].push({
-          id:it.id, branch:it.branch, name:it.name, ref:it.ref||'',
+          id:it.id, branch:it.branch, name:it.name, ref:it.ref||'', age:String(it.age||''),
           ym:_ym, events:_ev,
           panelState:it.panelState||'', panelDt:it.panelDt||'',
           itvState:it.itvState||'', itvDt:it.itvDt||'',
@@ -18156,7 +18156,7 @@ function rc2LoadFromGas(ym, cb) {
         if(!Array.isArray(_ev)) _ev = [];
         if(!_ev.length) _ev = rc2NormEvents(it); // 구버전 데이터 마이그레이션
         d.list.push({
-          id:it.id, branch:it.branch, name:it.name, ref:it.ref||'',
+          id:it.id, branch:it.branch, name:it.name, ref:it.ref||'', age:String(it.age||''),
           ym: it.ym || ym,
           events:_ev,
           panelState:it.panelState||'', panelDt:it.panelDt||'',
@@ -18195,6 +18195,7 @@ function rc2SaveToGas(rec, ym, sendEvents) {
     + (sendEvents===true ? ('&events=' + encodeURIComponent(JSON.stringify(rec.events||[]))) : '')
     + '&note=' + encodeURIComponent(rec.note||'')
     + '&phoenix=' + encodeURIComponent(rec.phoenix===true ? 'Y' : 'N')
+    + ((rec.age!==undefined && rec.age!==null) ? ('&age=' + encodeURIComponent(rec.age)) : '') // only when the card has it
     + '&phone=' + encodeURIComponent(rec.phone||'')
     + '&callItv=' + encodeURIComponent(rec.callItv===true ? 'Y' : 'N')
     + '&callFrom=' + encodeURIComponent(rec.callFrom||'')
@@ -21593,19 +21594,40 @@ function _rc2RenderCalNow() {
 // ── 카톡 붙여넣기용 일정 텍스트 생성 (오늘~월말 잔여 일정) ──
 function rc2BuildKakaoText(){
   var evByDay = rc2._evByDayCache || {};
-  // 시간 포맷: '11:00' -> '11시', '17:30' -> '5시30', '14:00' -> '2시'
-  function _fmtTime(t){
-    if(!t) return '';
-    var pt = String(t).split(':');
-    var h = parseInt(pt[0],10); if(isNaN(h)) return t;
+  // 24-hour time: '9:00' -> '09:00', '14:00' -> '14:00'
+  function _kkTime(t){
+    var pt = String(t||'').split(':');
+    var h = parseInt(pt[0],10); if(isNaN(h)) return '';
     var mi = parseInt(pt[1],10)||0;
-    var hh = h % 12; if(hh===0) hh = 12;  // 0시·12시 모두 12로 표기
-    return String(hh) + (mi>0 ? (':' + (mi<10?('0'+mi):String(mi))) : '');
+    return (h<10?'0':'')+h+':'+(mi<10?'0':'')+mi;
   }
-  // 유형 키 -> 카톡 약칭
-  function _kakaoShort(key){
-    for(var i=0;i<RC2_TYPES.length;i++){ if(RC2_TYPES[i].key===key) return RC2_TYPES[i].kakao || RC2_TYPES[i].short || key; }
-    return key;
+  // one word per schedule: 전화 / 내방 / 내방미확 (orange on the calendar) / 라디 / 파트너스 / 콜
+  function _kkKind(E){
+    if(_rcPhoneEv(E)) return '전화';
+    var t = (E.types && E.types.length) ? E.types : (E.type?[E.type]:[]);
+    if(t.indexOf('지점장인터뷰')>=0) return (E.visitConfirm===false && !E.done) ? '내방미확' : '내방';
+    if(t.indexOf('전화인터뷰')>=0) return '전화';
+    if(t.indexOf('라이프디자인')>=0) return '라디';
+    if(t.indexOf('파트너스')>=0 || t.indexOf('서포터즈')>=0) return '파트너스';
+    if(t.indexOf('잡사이트')>=0) return '콜';
+    return t.length ? (rc2TypeMeta(t[0]).short || t[0]) : '';
+  }
+  // 결과 현황 stage: 입과확정 (status 입과확보), or the step picked at the latest result (라이프디자인 -> 라디, 파트너스).
+  // 관리 (입과보류 · 입과거절) and 등록 cards stay out.
+  function _kkStage(c){
+    if(c.status==='입과확보') return '입과확정';
+    if(c.status==='관리' || c.status==='등록') return '';
+    var es = rc2NormEvents(c), last = null, lastK = '';
+    for(var i=0;i<es.length;i++){
+      var x = es[i];
+      if(!x || !x.done || x.cancelled || !x.next) continue;
+      var k = rc2DtKey(x.dt) + ' ' + _kkTime(String(x.dt||'').split(' ')[1]);
+      if(!last || k >= lastK){ last = x; lastK = k; }
+    }
+    if(!last) return '';
+    if(last.next==='라이프디자인') return '라디';
+    if(last.next==='파트너스') return '파트너스';
+    return '';
   }
   function _brShort(b){ var s=String(b||''); return (s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0) ? '브' : '알'; }
   function _brFull(b){ var s=String(b||''); return (s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0) ? '브라보' : '알파'; }
@@ -21647,16 +21669,15 @@ function rc2BuildKakaoText(){
     if(dt < now) continue; // 지난 날짜 제외 (오늘부터)
     var evs = (evByDay[dk]||[]).filter(function(E){ return !E.cancelled; });
     if(!evs.length) continue;
-    evs.sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
+    evs.sort(function(a,b){ return _kkTime(a.time).localeCompare(_kkTime(b.time)); });
     var mNum = parseInt(parts[1],10), dNum = parseInt(parts[2],10);
     out += '\n●' + mNum + '/' + dNum + '(' + WD[dt.getDay()] + ')\n';
     anyDay = true;
     for(var ei=0; ei<evs.length; ei++){
       var E = evs[ei];
-      var tys = (E.types && E.types.length) ? E.types : (E.type?[E.type]:[]);
-      var tyTxt = tys.map(function(k){ return _kakaoShort(k); }).filter(Boolean).join('/');
-      var line = _fmtTime(E.time) + ' ' + (E.name||'');
-      if(E.age) line += '/' + E.age;
+      var tyTxt = _kkKind(E);
+      var _tm = _kkTime(E.time);
+      var line = (_tm ? (_tm + ' ') : '') + (E.name||'') + (E.age||'');
       line += '/' + (E.ref||'');
       if(tyTxt) line += '/' + tyTxt;
       var _seq = _seqMap[dk+'|'+(E.time||'')+'|'+(E.evid||ei)];
@@ -21667,18 +21688,20 @@ function rc2BuildKakaoText(){
     }
   }
   if(!anyDay) return '';
-  // ── 입과확보 현황 블록 ──
-  var dCur = rc2GetMonthData(getCurrentYM());
-  var okList = [];
+  // 결과 현황 block: every month's cards, grouped 입과확정 · 라디 · 파트너스
+  var dCur = rc2GetAllCandData();
+  var _byStg = { '입과확정':[], '라디':[], '파트너스':[] };
   for(var li=0; li<dCur.list.length; li++){
     var c = dCur.list[li];
-    if(c && c.status==='입과확보') okList.push(c);
+    var _sg = c ? _kkStage(c) : '';
+    if(_sg) _byStg[_sg].push(c);
   }
+  var okList = _byStg['입과확정'].concat(_byStg['라디'], _byStg['파트너스']);
   if(okList.length){
     var nA=0, nB=0;
     okList.forEach(function(c){ if(_brShort(c.branch)==='브') nB++; else nA++; });
-    out += '\n----------------------------------------\n';
-    out += '✔️입과확보 현황\n';
+    out += '\n----------------------------------------\n\n';
+    out += '✔️결과 현황\n';
     out += '●알파 : ' + nA + ' / 브라보 : ' + nB + '\n';
     for(var oi=0; oi<okList.length; oi++){
       var c2 = okList[oi];
@@ -21688,9 +21711,8 @@ function rc2BuildKakaoText(){
         var _ce = rc2NormEvents(c2);
         for(var _k=0;_k<_ce.length;_k++){ if(_ce[_k].dt && !_ce[_k].cancelled) _cnt++; }
       } catch(e) { _cnt = 0; }
-      var jl = (c2.name||'');
-      if(c2.age) jl += '/' + c2.age;
-      jl += '/' + (c2.ref||'') + '/' + (c2.join||'미정');
+      var jl = (c2.name||'') + (c2.age||'');
+      jl += '/' + (c2.ref||'') + '/' + _kkStage(c2);
       if(_cnt>=2) jl += '/' + _cnt;
       jl += '/' + _brShort(c2.branch);
       if(c2.phoenix===true) jl += '*';
@@ -26837,7 +26859,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 220;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 221;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
