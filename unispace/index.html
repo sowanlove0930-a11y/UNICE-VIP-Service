@@ -10296,7 +10296,7 @@ function openPerfView(){
     loadPerfFromGas(function(){ renderPerfView(); }, true);
   }
 }
-function closePerfView(){ document.getElementById('perfViewOverlay').classList.remove('open'); _scrollToSubmenu(); }
+function closePerfView(){ var ov = document.getElementById('perfViewOverlay'); ov.classList.remove('open'); ov.style.zIndex = ''; _scrollToSubmenu(); }
 function setPerfRange(r, el){
   _pvRange = r;
   document.querySelectorAll('.pv-seg').forEach(function(b){ b.classList.remove('on'); });
@@ -26702,7 +26702,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 217;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 219;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29392,6 +29392,10 @@ body:not(.theme-light) .cm-prog { background:rgba(255,255,255,.1); }
 .cm-td-ch b { display:block; font-size:14px; color:var(--text); margin-top:1px; }
 .cm-td-r { display:flex; align-items:center; gap:7px; padding:6px 1px; border-top:1px solid var(--bdr); font-size:11.5px; }
 .cm-td-r:first-child { border-top:none; }
+.cm-td-r.go { cursor:pointer; -webkit-tap-highlight-color:transparent; border-radius:6px; }
+.cm-td-r.go:active { background:rgba(201,168,76,.12); }
+.cm-go-perf { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.cm-go-perf:active { filter:brightness(.97); }
 .cm-td-tm { width:31px; flex:none; font-size:10px; color:var(--text3); }
 .cm-td-nm { flex:none; font-weight:800; color:var(--text); }
 .cm-td-pd { flex:1; min-width:0; font-size:10.5px; color:var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -29805,7 +29809,10 @@ body:not(.theme-light) .cm-rk-bar { background:rgba(255,255,255,.1); }
 .cm-rk-detail .cm-pc-3 em { font-size:10.5px; margin-top:2px; }
 .cm-rk-detail .cm-pc-3 em.sc { margin-top:1px; }
 .cm-rk-ft { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:8px; }
-.cm-rk-ft .go { font-size:12px; font-weight:800; color:var(--gold2); cursor:pointer; white-space:nowrap; }
+.cm-rk-ft .go { font-size:12px; font-weight:800; color:#fff; background:var(--gold2); padding:6px 13px; border-radius:99px; cursor:pointer; white-space:nowrap; -webkit-tap-highlight-color:transparent; }
+.cm-q { display:flex; align-items:center; gap:6px; background:var(--surface); border:1.5px solid var(--gold); border-radius:11px; padding:0 10px; margin:0 0 8px; }
+.cm-q input { flex:1; min-width:0; border:0; outline:0; background:transparent; padding:9px 0; font-size:14px; color:var(--text); font-family:inherit; }
+.cm-q .x { font-size:14px; color:var(--text3); padding:6px 4px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .cm-rk-ft .mt { font-size:11px; font-weight:800; color:var(--text3); padding:3px 10px; border-radius:99px; background:var(--bg3); border:1px solid var(--bdr); cursor:pointer; white-space:nowrap; -webkit-tap-highlight-color:transparent; }
 .cm-tag.cm-al { background:rgba(46,158,107,.12); color:#1F9268; }
 .cm-tag.cm-br { background:rgba(123,82,208,.12); color:#6D4FB8; }
@@ -29874,6 +29881,8 @@ body:not(.theme-light) .cm-card.cm-gift { background:rgba(199,125,20,.08); }
       </div>
     </div>
     <div style="margin-bottom:10px;display:none">
+      <div class="cm-bf" id="cmFpBf" style="display:none"><span data-b="all" onclick="_cmFpSetBr('all')">전체</span><span data-b="al" onclick="_cmFpSetBr('al')">알파</span><span data-b="br" onclick="_cmFpSetBr('br')">브라보</span></div>
+      <div class="cm-q"><span>🔍</span><input type="text" id="cmFpQ" placeholder="FP 이름 검색" oninput="_cmFpSearch(this.value)" autocomplete="off"><span class="x" id="cmFpX" style="display:none" onclick="_cmFpClear()">✕</span></div>
       <select id="cmFpSel" onchange="_cmPickFp(this.value)" style="width:100%;padding:9px 12px;border:1px solid var(--bdr2);border-radius:10px;background:var(--bg2);color:var(--text);font-size:13px;font-weight:700;font-family:'Noto Sans KR',sans-serif"></select>
     </div>
     <div id="cmBody"></div>
@@ -32162,6 +32171,54 @@ function _cmAccBar(act, title, sum, open, tc){
 var _cmYm = '', _cmFp = '', _cmTab = 'mine', _cmFpList = [], _cmShowSched = false;   // _cmShowSched: the monthly section open
 var _cmBr = 'all';      // ranking branch filter: all | al | br
 var _cmOpen = '';       // expanded fp in the ranking
+var _cmRkQ = '';        // ranking name search
+var _cmFpQ = '', _cmFpBr = 'all';   // FP picker: name search and branch chip
+// name search: spaces ignored, any part of the name
+function _cmNameHit(name, q){ q = String(q || '').replace(/\s+/g, ''); return !q || String(name || '').replace(/\s+/g, '').indexOf(q) >= 0; }
+// filters the ranking rows in place so the search box keeps focus while typing
+function _cmRkFilter(v){
+  _cmRkQ = String(v || '');
+  var rows = document.querySelectorAll('#cmBody .cm-rk'), n = 0;
+  for(var i=0;i<rows.length;i++){ var hit = _cmNameHit(rows[i].getAttribute('data-nm'), _cmRkQ); rows[i].style.display = hit ? '' : 'none'; if(hit) n++; }
+  var c = document.getElementById('cmRkN'); if(c) c.textContent = _cmRkQ ? ' · 검색 ' + n + '명' : '';
+  var x = document.getElementById('cmRkX'); if(x) x.style.display = _cmRkQ ? '' : 'none';
+  var e = document.getElementById('cmRkNone'); if(e) e.style.display = (_cmRkQ && !n) ? '' : 'none';
+}
+function _cmRkClear(){ var q = document.getElementById('cmRkQ'); if(q){ q.value = ''; } _cmRkFilter(''); }
+// FP picker options from the chip and the search; one match opens that FP
+function _cmFpFill(jump){
+  var sel = document.getElementById('cmFpSel');
+  if(!sel) return;
+  var isAdmin = _cmIsAdmin(currentUser), hasAl = false, hasBr = false, i;
+  for(i=0;i<_cmFpList.length;i++){ var bk = _pvBranchKey(_cmFpList[i].branch || ''); if(bk === 'al') hasAl = true; else if(bk === 'br') hasBr = true; }
+  var both = hasAl && hasBr;
+  if(!both) _cmFpBr = 'all';
+  var bf = document.getElementById('cmFpBf');
+  if(bf){
+    bf.style.display = both ? '' : 'none';
+    var ch = bf.children; for(i=0;i<ch.length;i++) ch[i].className = (ch[i].getAttribute('data-b') === _cmFpBr) ? 'on' : '';
+  }
+  var qx = document.getElementById('cmFpX'); if(qx) qx.style.display = _cmFpQ ? '' : 'none';
+  var hits = [];
+  for(i=0;i<_cmFpList.length;i++){
+    var fp = _cmFpList[i];
+    if(_cmFpBr !== 'all' && _pvBranchKey(fp.branch || '') !== _cmFpBr) continue;
+    if(!_cmNameHit(fp.name, _cmFpQ)) continue;
+    hits.push(fp);
+  }
+  var filtered = !!_cmFpQ || _cmFpBr !== 'all';
+  var h = (isAdmin || filtered) ? '<option value="">' + (filtered ? (hits.length ? '검색 ' + hits.length + '명 · 고르세요' : '검색된 FP가 없습니다') : 'FP를 선택하세요') + '</option>' : '';
+  for(i=0;i<hits.length;i++){ var f = hits[i]; h += '<option value="' + _cmEsc(f.id) + '"' + (f.id === _cmFp ? ' selected' : '') + '>' + _cmEsc(f.name) + (f.branch ? ' · ' + _cmEsc(String(f.branch).replace('지점','')) : '') + '</option>'; }
+  if(!isAdmin && !filtered && _cmFpList.length && !_cmFpList.some(function(x){ return x.id === currentUser.id; })) h = '<option value="' + _cmEsc(currentUser.id) + '" selected>' + _cmEsc(currentUser.name||'') + '</option>' + h;
+  sel.innerHTML = h;
+  var cur = _cmFp || (isAdmin ? '' : currentUser.id), inList = false;
+  for(i=0;i<hits.length;i++){ if(hits[i].id === cur) inList = true; }
+  try { sel.value = (inList || (!filtered && !isAdmin)) ? cur : ''; } catch(eV) {}
+  if(jump && hits.length === 1 && hits[0].id !== _cmFp) _cmPickFp(hits[0].id);
+}
+function _cmFpSearch(v){ _cmFpQ = String(v || ''); _cmFpFill(true); }
+function _cmFpClear(){ var q = document.getElementById('cmFpQ'); if(q) q.value = ''; _cmFpQ = ''; _cmFpFill(false); }
+function _cmFpSetBr(b){ _cmFpBr = b; _cmFpFill(true); }
 var _cmFromRank = false; // detail opened from the ranking -> show back button
 // ranking dashboard: 대표 + 알파/브라보 지점장 (교육지점장 제외)
 function _cmCanRank(){
@@ -32225,12 +32282,9 @@ function openCommission(){
   }
   var sel = document.getElementById('cmFpSel');
   if(sel){
-    var h = isAdmin ? '<option value="">FP를 선택하세요</option>' : '';
-    if(_cmFpList.length){
-      for(var f=0;f<_cmFpList.length;f++){ var fp = _cmFpList[f]; h += '<option value="' + _cmEsc(fp.id) + '"' + (fp.id === _cmFp ? ' selected' : '') + '>' + _cmEsc(fp.name) + (fp.branch ? ' · ' + _cmEsc(String(fp.branch).replace('지점','')) : '') + '</option>'; }
-      if(!isAdmin && (_cmFpList.length === 0 || !_cmFpList.some(function(x){ return x.id === currentUser.id; }))) h = '<option value="' + _cmEsc(currentUser.id) + '" selected>' + _cmEsc(currentUser.name||'') + '</option>' + h;
-    }
-    sel.innerHTML = h;
+    _cmFpQ = ''; _cmFpBr = 'all'; _cmRkQ = '';
+    var fq = document.getElementById('cmFpQ'); if(fq) fq.value = '';
+    _cmFpFill(false);
     sel.parentNode.style.display = 'none';
   }
   var rb = document.getElementById('cmRebuildBtn'); if(rb) rb.style.display = '';
@@ -32261,6 +32315,22 @@ function _cmRefresh(btn){
 }
 function closeCommission(){ _cmPinLock(); var ov = document.getElementById('commOverlay'); ov.classList.remove('open'); ov.style.zIndex = ''; if(typeof _scrollToSubmenu === 'function') _scrollToSubmenu(); }
 function _cmMove(n){ _cmYm = _cmYmAdd(_cmYm, n); _commRender(); }
+function _cmGoPerf(fid, ymd, ym){
+  if(typeof openPerfView !== 'function') return;
+  openPerfView();
+  var ov = document.getElementById('perfViewOverlay'); if(ov) ov.style.zIndex = '700';
+  var src = ymd || ((ym || _cmYm) + '-01');
+  var y = parseInt(src.substr(0,4),10), m = parseInt(src.substr(5,2),10) - 1, d = parseInt(src.substr(8,2),10);
+  if(ymd){ _pvDay = new Date(y, m, d); _pvDay.setHours(0,0,0,0); }
+  else { _pvMonth = new Date(y, m, 1); _pvMonth.setHours(0,0,0,0); }
+  if(fid){
+    _pvFp = fid;
+    var nm = fid, all = getMergedFpList();
+    for(var i=0;i<all.length;i++){ if(all[i].id === fid){ nm = all[i].name || fid; break; } }
+    var lbl = document.getElementById('pvFpDdLabel'); if(lbl) lbl.textContent = 'FP별 보기 — ' + nm;
+  }
+  setPerfRange(ymd ? 'today' : 'month', document.getElementById(ymd ? 'pvSegToday' : 'pvSegMonth'));
+}
 function _cmPickFp(v){ _cmFp = v; _cmTab = 'mine'; _cmFromRank = false; _commRender(); }
 function _cmSetTab(t){ _cmTab = t; _cmFromRank = false; _cmMgrOpen = ''; _cmWkOff = 0; _cmWkSel = ''; if(t !== 'mine' && t !== 'team') _cmFp = currentUser.id; _commRender(); }
 function _cmSetBr(b){ _cmBr = b; _cmOpen = ''; _commRender(); }
@@ -32360,7 +32430,7 @@ function _commRender(){
   if(showMgr) tabs += '<span class="' + (_cmTab==='mgr'?'on':'') + '" onclick="_cmSetTab(\'mgr\')">지점장 수수료</span>';
   if(tabs) h += '<div class="cm-seg">' + tabs + '</div>';
   var selWrap = document.getElementById('cmFpSel');
-  if(selWrap && selWrap.parentNode){ selWrap.parentNode.style.display = (_cmTab === 'mine' && _cmFpList.length > 1) ? '' : 'none'; try { selWrap.value = fpId || ''; } catch(eSel) {} }
+  if(selWrap && selWrap.parentNode){ selWrap.parentNode.style.display = (_cmTab === 'mine' && _cmFpList.length > 1) ? '' : 'none'; _cmFpFill(false); }
   if((!_rates || !COMM_FP_RATE) && _ratesLoading){ body.innerHTML = h + _cmLoadingHtml(); return; }
   if(!_rates || !COMM_FP_RATE){
     h += '<div class="cm-warn">계산 기준을 아직 불러오지 못했습니다. 잠시 후 다시 열어주세요' + (_cmIsAdmin(currentUser) ? ' · 요율표 시트와 스크립트 속성 COMM_FP_RATE 확인 후 "새로고침"을 눌러주세요' : '') + '</div>';
@@ -32829,7 +32899,7 @@ function _cmWkDayHtml(team, mgrId, ymd, v){
     var w = rows[i], it = w.it, a1 = 0, ok = false;
     if(w.mine){ a1 = (it.calc ? it.fee.m1 : 0) + (it.sc ? it.sc.m1 : 0); ok = it.calc || !!it.sc; own += a1; }
     else if(it.calc){ a1 = it.gross.m1 * R; ok = true; }
-    h += '<div class="cm-td-r"><span class="cm-td-tm">' + _cmHm(w.rec.createdAt, ymd) + '</span><span class="cm-td-nm">' + (w.mine ? _cmMeName() + '<span class="cm-td-me">' + _cmMeTxt() + ' 계약</span>' : _cmEsc(w.name)) + '</span>'
+    h += '<div class="cm-td-r go" onclick="_cmGoPerf(\'' + _cmEsc(w.rec.fpId) + '\', \'' + ymd + '\')"><span class="cm-td-tm">' + _cmHm(w.rec.createdAt, ymd) + '</span><span class="cm-td-nm">' + (w.mine ? _cmMeName() + '<span class="cm-td-me">' + _cmMeTxt() + ' 계약</span>' : _cmEsc(w.name)) + '</span>'
        + '<span class="cm-td-pd">' + _cmEsc(it.co + (it.cat ? ' · ' + it.cat : '')) + ' ' + _cmMan(it.amount) + '</span>'
        + '<span class="cm-td-am">' + (!it.prod ? '<span class="cm-wk-np">상품 미입력</span>' : (ok ? '<span class="cm-td-k">익월</span>' + (a1 > 0 ? '+' + _cmMan(a1) : '0') : '<span class="cm-mini">계산 불가</span>')) + '</span></div>';
   }
@@ -32918,7 +32988,7 @@ function _cmTodayHtml(team, mgrId){
       var lim = _cmTodayAll ? list.length : Math.min(list.length, 5);
       for(i=0;i<lim;i++){
         var L = list[i], it2 = L.w.it, tm = _cmHm(L.w.rec.createdAt, today);
-        h += '<div class="cm-td-r"><span class="cm-td-tm">' + tm + '</span><span class="cm-td-nm">' + (L.w.mine ? _cmMeName() + '<span class="cm-td-me">' + _cmMeTxt() + ' 계약</span>' : _cmEsc(L.w.name)) + '</span>'
+        h += '<div class="cm-td-r go" onclick="_cmGoPerf(\'' + _cmEsc(L.w.rec.fpId) + '\', \'' + today + '\')"><span class="cm-td-tm">' + tm + '</span><span class="cm-td-nm">' + (L.w.mine ? _cmMeName() + '<span class="cm-td-me">' + _cmMeTxt() + ' 계약</span>' : _cmEsc(L.w.name)) + '</span>'
            + '<span class="cm-td-pd">' + _cmEsc(it2.co + (it2.cat ? ' · ' + it2.cat : '')) + ' ' + _cmMan(it2.amount) + '</span>'
            + '<span class="cm-td-am">' + (L.ok ? '<span class="cm-td-k">익월</span>' + (L.a1 > 0 ? '+' + _cmMan(L.a1) : '0') : '<span class="cm-mini">계산 불가</span>') + '</span>'
            + (L.ok && L.a36 > L.a1 + 500 ? '<span class="cm-td-sub">' + (L.a2 >= 500 ? '2차년 ' + _cmMan(L.a2) + ' · ' : '') + '합계 ' + _cmMan(L.a36) + '</span>' : '') + '</div>';
@@ -33391,15 +33461,18 @@ function _cmRankHtml(){
        + _cmKpi('상품 입력', calc + '<span style="font-size:11px;color:var(--text3)">/' + cnt + '건</span>', (noProd ? '미입력 ' + noProd + '건' : '전부 입력'), 'var(--text)')
        + '</div>';
   }
-  h += '<div class="cm-lbl" style="display:flex;justify-content:space-between"><span>🏆 FP별 총 예상</span><span style="font-weight:400;color:var(--text3)">높은 순 · 탭하면 펼침</span></div>';
+  var rkHit = 0; for(var qk=0;qk<list.length;qk++){ if(_cmNameHit(list[qk].name, _cmRkQ)) rkHit++; }
+  if(list.length) h += '<div class="cm-q"><span>🔍</span><input type="text" id="cmRkQ" placeholder="FP 이름 검색" value="' + _cmEsc(_cmRkQ) + '" oninput="_cmRkFilter(this.value)" autocomplete="off"><span class="x" id="cmRkX" style="' + (_cmRkQ ? '' : 'display:none') + '" onclick="_cmRkClear()">✕</span></div>';
+  h += '<div class="cm-lbl" style="display:flex;justify-content:space-between"><span>🏆 FP별 총 예상<span id="cmRkN">' + (_cmRkQ ? ' · 검색 ' + rkHit + '명' : '') + '</span></span><span style="font-weight:400;color:var(--text3)">높은 순 · 탭하면 펼침</span></div>';
   if(!list.length) h += '<div class="cm-card" style="text-align:center;color:var(--text3);font-size:12px;padding:18px">이 달 입력된 계약이 없습니다</div>';
-  var miss = [];
+  else h += '<div class="cm-card" id="cmRkNone" style="text-align:center;color:var(--text3);font-size:12px;padding:18px;' + (_cmRkQ && !rkHit ? '' : 'display:none') + '">검색된 FP가 없습니다</div>';
+  var miss = [], missIds = [];
   for(var k=0;k<list.length;k++){
     var x = list[k], t2 = x.t, open = (_cmOpen === x.id);
     var m1 = t2.m1 + t2.sc1, y2 = t2.y2 + t2.sc2, y3 = t2.y3 + t2.sc3;
-    if(t2.noProd) miss.push(x.name + ' ' + t2.noProd);
+    if(t2.noProd){ miss.push(x.name + ' ' + t2.noProd); missIds.push(x.id); }
     var cls = k === 0 ? ' g' : (k === 1 ? ' s' : (k === 2 ? ' b' : ''));
-    h += '<div class="cm-rk' + (open ? ' open' : '') + '" onclick="_cmToggleOpen(\'' + _cmEsc(x.id) + '\')">'
+    h += '<div class="cm-rk' + (open ? ' open' : '') + '" data-nm="' + _cmEsc(x.name) + '"' + (_cmNameHit(x.name, _cmRkQ) ? '' : ' style="display:none"') + ' onclick="_cmToggleOpen(\'' + _cmEsc(x.id) + '\')">'
        + '<div class="cm-rk-row"><span class="cm-rk-no' + cls + '">' + (k+1) + '</span>'
        + '<div style="flex:1;min-width:0"><div class="cm-row"><span class="cm-rk-nm">' + _cmEsc(x.name) + (isAdmin && _cmBr === 'all' ? ' <span class="cm-tag ' + (x.bk === 'al' ? 'cm-al' : 'cm-br') + '">' + (x.bk === 'al' ? '알파' : '브라보') + '</span>' : '') + (t2.noProd ? ' <span class="cm-tag cm-or">미입력 ' + t2.noProd + '</span>' : '') + '</span><span class="cm-rk-amt">' + (t2.total ? _cmMan(t2.total) : '–') + '</span></div>'
        + '<div class="cm-row" style="gap:8px;margin-top:4px"><span class="cm-rk-bar"><i style="width:' + Math.round(t2.total / mx * 100) + '%"></i></span><span class="cm-rk-sub">' + (t2.calc ? '익월 ' + _cmMan(m1) + ' · 2차년 ' + _cmMan(y2) + (_cmHas(y3) ? ' · 3차년 ' + _cmMan(y3) : '') : (t2.total ? '시책만 · 수수료는 상품 입력 후' : '계산된 건 없음')) + '</span></div></div>'
@@ -33408,7 +33481,7 @@ function _cmRankHtml(){
       // the FP's month in three cells (like a contract card); what makes up the reward and the count stay folded
       var rkk = 'rk|' + x.id + '|' + _cmYm, rkO = !!_cmCtOpen[rkk];
       h += '<div class="cm-rk-detail" onclick="event.stopPropagation()">' + _cmSimCells(false, { m1:m1, f1:t2.m1, s1:t2.sc1, y1:t2.y1, y2:y2, f2:t2.y2, s2:t2.sc2, y3:y3, tot:t2.total, nf:!t2.calc }, 0)
-         + '<div class="cm-rk-ft"><span class="go" onclick="_cmShowFp(\'' + _cmEsc(x.id) + '\')">계약별 상세 ›</span><span class="mt" onclick="_cmCtMore(\'' + _cmEsc(rkk) + '\')">' + (rkO ? '접기 ▴' : '자세히 ▾') + '</span></div>';
+         + '<div class="cm-rk-ft"><span class="mt" onclick="_cmCtMore(\'' + _cmEsc(rkk) + '\')">' + (rkO ? '접기 ▴' : '자세히 ▾') + '</span><span class="go" onclick="_cmShowFp(\'' + _cmEsc(x.id) + '\')">계약별 상세 ›</span></div>';
       if(rkO) h += '<div class="cm-ct-more">' + (x.scSrc && x.scSrc.length ? '<div class="cm-mini" style="color:#6D4FB8">시책 내역: ' + x.scSrc.join(' · ') + '</div>' : '')
          + '<div class="cm-mini" style="margin-top:4px">' + t2.cnt + '건 중 ' + t2.calc + '건 계산' + (t2.noProd ? ' · 미입력 ' + t2.noProd + '건' : '') + '</div></div>';
       h += '</div>';
@@ -33417,7 +33490,7 @@ function _cmRankHtml(){
   }
   if(idle) h += '<div class="cm-mini" style="text-align:center;margin:4px 0 8px">이 달 업적 없는 FP ' + idle + '명</div>';
   if(miss.length){
-    h += '<div class="cm-card" style="border-color:rgba(199,125,20,.35);background:#FFFBF2"><div class="cm-row"><b style="font-size:12px;color:#854F0B">✏️ 상품 미입력 ' + noProd + '건</b><span class="cm-tag cm-or">입력하면 순위 반영</span></div><div class="cm-mini" style="margin-top:4px">' + _cmEsc(miss.join(' · ')) + ' — 업적 수정에서 상품만 고르면 됩니다</div></div>';
+    h += '<div class="cm-card cm-go-perf" onclick="_cmGoPerf(\'' + (missIds.length === 1 ? _cmEsc(missIds[0]) : '') + '\', \'\', _cmYm)" style="border-color:rgba(199,125,20,.35);background:#FFFBF2"><div class="cm-row"><b style="font-size:12px;color:#854F0B">✏️ 상품 미입력 ' + noProd + '건</b><span class="cm-tag cm-or">입력하면 순위 반영</span></div><div class="cm-mini" style="margin-top:4px">' + _cmEsc(miss.join(' · ')) + ' — 업적 수정에서 상품만 고르면 됩니다</div><div class="cm-mini" style="margin-top:5px;text-align:right;font-weight:800;color:#854F0B">업적 조회로 가기 ›</div></div>';
   }
   h += '<div class="cm-disc">참고용 · 실제 지급과 다를 수 있음 · 시책은 등록된 것만 반영</div>';
   return h;
