@@ -2974,6 +2974,8 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .ral-tl.ed { cursor:pointer; background:var(--bg2); border-color:var(--c); border-width:1.5px; -webkit-tap-highlight-color:transparent; }
 .ral-tl.ed:active { transform:scale(.97); background:var(--bg3); }
 .ral-tl .pl { position:absolute; right:8px; top:8px; width:24px; height:24px; border-radius:50%; background:var(--c); color:#fff; font-weight:900; font-size:14px; display:flex; align-items:center; justify-content:center; }
+.ral-tl .mi { position:absolute; right:40px; top:8px; width:24px; height:24px; box-sizing:border-box; border-radius:50%; background:var(--bg2); border:1.5px solid var(--c); color:var(--c); font-weight:900; font-size:14px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.ral-tl .mi::before { content:''; position:absolute; top:-6px; right:-6px; bottom:-6px; left:-6px; }
 .ral-foot { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; min-height:28px; }
 .ral-hint { font-size:11px; color:var(--text3); }
 .ral-ntc { font-size:11px; color:#9A6A10; background:#FFF6E0; border-radius:7px; padding:4px 8px; }
@@ -3062,6 +3064,8 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .ral-shs { font-size:11.5px; color:var(--text3); margin-bottom:10px; }
 .ral-fl { font-size:11px; font-weight:800; color:#A6791A; margin:9px 0 4px; } .ral-fl small { color:var(--text3); font-weight:600; }
 .ral-in { width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:9px; padding:10px; background:#FCFBF8; font-size:15px; color:var(--text); font-family:inherit; }
+.ral-2c { display:flex; gap:6px; } .ral-2c .c1 { flex:2.2; min-width:0; } .ral-2c .c2 { flex:1; min-width:0; }
+.ral-age { font-size:12px; font-weight:700; color:var(--text2); }
 .ral-warn { margin-top:9px; font-size:12px; background:#FFF4DE; color:#9A6A10; border-radius:9px; padding:8px 10px; line-height:1.55; }
 .ral-btns { display:flex; gap:7px; margin-top:12px; }
 .ral-bt { flex:2; font-family:inherit; font-size:13.5px; font-weight:900; border:none; border-radius:11px; padding:12px; color:#fff; cursor:pointer; }
@@ -18555,7 +18559,7 @@ function rcAlRender(){
     +'<div class="ral-vs2">'+side('alpha',A)+'<div class="ral-mid">'+(war.judged?'판정':'현재')+'<b>'+leadTx+'</b></div>'+side('bravo',B)+'</div>'
     +'<div class="ral-strip">'+strip+'</div>'
     +'<div class="ral-rule2"><span>📞 전화인터뷰 완료 <b>2점</b></span><span>🏠 내방 완료 <b>4점</b></span>'
-    +(trial?('<span>공식 시작 <b>'+(+AL_START.substr(5,2))+'/'+(+AL_START.substr(8,2))+'(월)</b></span>'):'<span>목 18:00 판정</span>')+'</div>'
+    +(trial?('<span>공식 시작 <b>'+(+AL_START.substr(5,2))+'/'+(+AL_START.substr(8,2))+'(월)</b></span>'):'<span>목 밤 12시 마감</span>')+'</div>'
     +'</div>';
 
   // ===== 2. today panel =====
@@ -18583,6 +18587,7 @@ function rcAlRender(){
     return '<div class="ral-tl'+(wide==='ww'?' ww':(wide?' w':''))+(edit?' ed':'')+'" style="--c:'+col+'"'+(edit?(' onclick="rcAlTap(\''+key+'\')"'):(' onclick="rcAlDetail(\''+key+'\')"'))+'>'
       +'<div class="n">'+n+'</div><div class="k">'+lbl+'</div>'+(sub?('<div class="s">'+sub+'</div>'):'')
       +(edit?'<span class="pl">＋</span>':'')
+      +((edit && key==='reject' && n>0)?'<span class="mi" onclick="event.stopPropagation();rcAlUndo(\'reject\')">－</span>':'')
       +'<span class="ral-dt" onclick="event.stopPropagation();rcAlDetail(\''+key+'\')">보기</span></div>';
   }
   var notice='';
@@ -18719,15 +18724,17 @@ function _alDropTap(id){
   for(var i=0;i<rcAl.myTaps.length;i++) if(rcAl.myTaps[i].id===id) rcAl.myTaps[i].undone=true;
   if(rc2.view==='al') rcAlRender();
 }
-function rcAlUndo(){
+// kind: undo only that outcome (the minus on the 거절 tile); none = my latest tap
+function rcAlUndo(kind){
   if(!rcAl.data) return;
   var me=_alMe(), today=_alTodayStr(), best=null, bi=-1;
   for(var i=0;i<rcAl.data.taps.length;i++){
     var t=rcAl.data.taps[i];
     if(String(t.fp).toLowerCase()!==me || t.date!==today) continue;
+    if(kind && t.o!==kind) continue;
     if(!best || String(t.ts||'9')>=String(best.ts||'9') || !t.ts){ best=t; bi=i; }
   }
-  if(!best){ showToast('취소할 기록이 없어요 (전화인터뷰·내방 예정은 후보자 수정에서 삭제)'); return; }
+  if(!best){ showToast(kind?'취소할 거절 기록이 없어요':'취소할 기록이 없어요 (전화인터뷰·내방 예정은 후보자 수정에서 삭제)'); return; }
   rcAl.data.taps.splice(bi,1);
   for(var j=0;j<rcAl.myTaps.length;j++) if(rcAl.myTaps[j].id===best.id) rcAl.myTaps[j].undone=true;
   rcAlRender();
@@ -19019,6 +19026,9 @@ function rcAlSaveCallDone(){
 function _alPhKey(s){ return String(s||'').replace(/[^0-9]/g,''); }
 function _alPhFmt(s){ var d=_alPhKey(s); if(d.length===11) return d.substr(0,3)+'-'+d.substr(3,4)+'-'+d.substr(7); if(d.length===10) return d.substr(0,3)+'-'+d.substr(3,3)+'-'+d.substr(6); return d; }
 function _alPhMask(s){ var f=_alPhFmt(s); return f.length>=9 ? (f.substr(0,4)+'****-****') : f; }
+// age: digits only from an input; ' 42세' after a name
+function _alAgeIn(el){ return el ? String(el.value||'').replace(/[^0-9]/g,'').substr(0,3) : ''; }
+function _alAgeTx(o){ return (o && o.age) ? (' <span class="ral-age">'+rc2Esc(o.age)+'세</span>') : ''; }
 function _alIsMgrView(){ return (typeof _canSeeRecruitList==='function') && _canSeeRecruitList(); }
 function _alHist(o){ try{ var h=JSON.parse(o.hist||'[]'); return Array.isArray(h)?h:[]; }catch(e){ return []; } }
 var AL_O_KO={ absent:'부재', dead:'결번', reject:'거절', recall:'재통화', hold:'재통화', lead:'후보 등록', call:'전화인터뷰', visit:'내방인터뷰' };
@@ -19065,9 +19075,10 @@ function rcAlAskPhone(kind){
   var h='<div class="ral-shh">'+(isAb?'📵 부재 기록':'🔁 재통화 기록')+'</div>'
     +'<div class="ral-shs">'+(isAb?(_alBrKo(_alMyBranch())+' 부재 DB에 올라가 지점 알라딘이 함께 봐요'):'나만 보는 재통화 목록에 저장돼요')+'</div>'
     +'<div class="ral-fl">전화번호 *</div><input type="tel" inputmode="numeric" id="ralPhIn" class="ral-in" placeholder="010-0000-0000" oninput="rcAlPhCheck(\''+kind+'\')">'
-    +'<div class="ral-fl">이름 <small>(모르면 비워두기)</small></div><input type="text" id="ralNmIn" class="ral-in" placeholder="예: 김○○">'
+    +'<div class="ral-2c"><div class="c1"><div class="ral-fl">이름 <small>(모르면 비워두기)</small></div><input type="text" id="ralNmIn" class="ral-in" placeholder="예: 김○○"></div>'
+    +'<div class="c2"><div class="ral-fl">나이</div><input type="number" inputmode="numeric" id="ralAgeIn" class="ral-in" placeholder="예: 42"></div></div>'
     +(isAb?'':_alDueInputs('ralRc'))
-    +'<div class="ral-fl">메모 <small>(선택)</small></div><input type="text" id="ralMemoIn" class="ral-in" placeholder="'+(isAb?'예: 잡코리아 · 40대':'예: 아이 하원 후 3시에 다시')+'">'
+    +'<div class="ral-fl">메모 <small>(선택)</small></div><input type="text" id="ralMemoIn" class="ral-in" placeholder="'+(isAb?'예: 잡코리아':'예: 아이 하원 후 3시에 다시')+'">'
     +'<div id="ralPhWarn"></div>'
     +'<div class="ral-btns"><button type="button" class="ral-bt g" onclick="_alSheetClose()">취소</button>'
     +'<button type="button" class="ral-bt" id="ralPhSave" style="background:'+(isAb?'#4A5568':'#C9881C')+'" onclick="rcAlSavePhone(\''+kind+'\')">'+(isAb?'부재 저장 (+1)':'재통화 저장 (+1)')+'</button></div>';
@@ -19087,6 +19098,7 @@ function rcAlPhCheck(kind){
         +(kind==='absent'?('<br>저장하면 <b>부재 '+((parseInt(db[i].miss,10)||0)+1)+'회</b>'):'<br>재통화로 저장하면 부재 DB에서 빠져요')
         +(_alFriNum(db[i])?'<br>🏆 금요일 기록 번호 — 후보로 이어져도 점수 제외':'')+'</div>';
       var nm=document.getElementById('ralNmIn'); if(nm && !nm.value && db[i].name) nm.value=db[i].name;
+      var ag=document.getElementById('ralAgeIn'); if(ag && !ag.value && db[i].age) ag.value=db[i].age;
       return;
     }
   }
@@ -19096,9 +19108,9 @@ function rcAlPhCheck(kind){
   }
 }
 function rcAlSavePhone(kind){
-  var ph=document.getElementById('ralPhIn'), nm=document.getElementById('ralNmIn'), mm=document.getElementById('ralMemoIn');
+  var ph=document.getElementById('ralPhIn'), nm=document.getElementById('ralNmIn'), mm=document.getElementById('ralMemoIn'), ag=document.getElementById('ralAgeIn');
   if(!ph || _alPhKey(ph.value).length<10){ showToast('📞 전화번호를 확인해 주세요'); return; }
-  var body={ action:(kind==='absent'?'aladdinAbsent':'aladdinRecall'), fp:currentUser.id, phone:_alPhFmt(ph.value), name:(nm?nm.value.trim():''), memo:(mm?mm.value.trim():'') };
+  var body={ action:(kind==='absent'?'aladdinAbsent':'aladdinRecall'), fp:currentUser.id, phone:_alPhFmt(ph.value), name:(nm?nm.value.trim():''), age:_alAgeIn(ag), memo:(mm?mm.value.trim():'') };
   if(kind!=='absent') body.due=_alReadDue('ralRc');
   var t=_alAddTapLocal(kind==='absent'?'absent':'hold'); if(t) body.id=t.id;
   _alSheetClose(); rcAlRender();
@@ -19145,7 +19157,7 @@ function rcAlRenderDB(){
     if(pool.length) list+='<div class="ral-quick"><button type="button" onclick="rcAlDbQuick(5)">＋ 앞에서 5개</button><button type="button" onclick="rcAlDbQuick(10)">＋ 10개</button><button type="button" onclick="rcAlDbQuick(0)">선택 해제</button></div>';
     for(var a=0;a<pool.length;a++){
       var p=pool[a], on=!!rcAlDB.sel[p.id];
-      list+='<div class="ral-row'+(on?' sel':'')+'" onclick="rcAlDbToggle(\''+p.id+'\')"><span class="ck">'+(on?'✓':'')+'</span><div class="m"><div class="nm">'+(p.name?rc2Esc(p.name):'(이름 없음)')+' '+cnt(p.miss, p)+'</div><div class="tel">'+rc2Esc(_alPhFmt(p.phone))+'</div><div class="h">'+lastTx(p)+'</div></div>'
+      list+='<div class="ral-row'+(on?' sel':'')+'" onclick="rcAlDbToggle(\''+p.id+'\')"><span class="ck">'+(on?'✓':'')+'</span><div class="m"><div class="nm">'+(p.name?rc2Esc(p.name):'(이름 없음)')+_alAgeTx(p)+' '+cnt(p.miss, p)+'</div><div class="tel">'+rc2Esc(_alPhFmt(p.phone))+'</div><div class="h">'+lastTx(p)+'</div></div>'
         +'<div class="ral-acts2"><button type="button" class="ral-mini" onclick="event.stopPropagation();rcAlNumEdit(\'db\',\''+p.id+'\')">✏️ 수정</button>'
         +(mgr?('<button type="button" class="ral-mini r" onclick="event.stopPropagation();rcAlDbDelete(\''+p.id+'\')">삭제</button>'):'')+'</div></div>';
     }
@@ -19155,14 +19167,14 @@ function rcAlRenderDB(){
     var all=mine.concat(taken);
     for(var b=0;b<all.length;b++){
       var t=all[b], isMe=String(t.owner).toLowerCase()===me;
-      list+='<div class="ral-row taken"><span class="ck"></span><div class="m"><div class="nm">'+(t.name?rc2Esc(t.name):'(이름 없음)')+' <span class="ral-own'+(isMe?' me':'')+'">🔒 '+rc2Esc(t.ownerName||'')+'</span></div><div class="tel">'+rc2Esc((isMe||mgr)?_alPhFmt(t.phone):_alPhMask(t.phone))+'</div></div>'
+      list+='<div class="ral-row taken"><span class="ck"></span><div class="m"><div class="nm">'+(t.name?rc2Esc(t.name):'(이름 없음)')+_alAgeTx(t)+' <span class="ral-own'+(isMe?' me':'')+'">🔒 '+rc2Esc(t.ownerName||'')+'</span></div><div class="tel">'+rc2Esc((isMe||mgr)?_alPhFmt(t.phone):_alPhMask(t.phone))+'</div></div>'
         +((mgr||isMe)?('<button type="button" class="ral-mini" onclick="rcAlDbRelease(\''+t.id+'\')">반납</button>'):'')+'</div>';
     }
     if(!all.length) list+='<div class="ral-none2">가져간 번호가 없어요</div>';
   } else {
     for(var c=0;c<mine.length;c++){
       var m2=mine[c];
-      list+='<div class="ral-row"><div class="m"><div class="nm">'+(m2.name?rc2Esc(m2.name):'(이름 없음)')+' '+cnt(m2.miss, m2)+'</div><div class="tel">'+rc2Esc(_alPhFmt(m2.phone))+'</div><div class="h">'+lastTx(m2)+'</div></div>'
+      list+='<div class="ral-row"><div class="m"><div class="nm">'+(m2.name?rc2Esc(m2.name):'(이름 없음)')+_alAgeTx(m2)+' '+cnt(m2.miss, m2)+'</div><div class="tel">'+rc2Esc(_alPhFmt(m2.phone))+'</div><div class="h">'+lastTx(m2)+'</div></div>'
         +'<div class="ral-acts2"><button type="button" class="ral-call" onclick="rcAlNumCall(\'db\',\''+m2.id+'\')">📞 걸기</button><button type="button" class="ral-mini" onclick="rcAlNumEdit(\'db\',\''+m2.id+'\')">✏️ 수정</button><button type="button" class="ral-mini" onclick="rcAlDbRelease(\''+m2.id+'\')">돌려놓기</button></div></div>';
     }
     if(!mine.length) list+='<div class="ral-none2">"남은 것"에서 골라 가져가세요</div>';
@@ -19222,7 +19234,7 @@ function rcAlRenderRecall(){
     var r=list[i], hs=_alHist(r), last=hs.length?hs[hs.length-1]:null;
     var dueTx=r.due ? ((r.due.substr(0,10)===today?'오늘 ':_alFmtDt(r.due.substr(0,10))+' ')+r.due.substr(11,5)) : '시간 미정';
     var late=(r.status==='open' && r.due && r.due.substr(0,16) < (_alTodayStr()+' '+_alP2(new Date().getHours())+':'+_alP2(new Date().getMinutes())));
-    h+='<div class="ral-row'+(late?' late':'')+'"><div class="m"><div class="nm">'+(r.name?rc2Esc(r.name):'(이름 없음)')+' <span class="ral-cnt rc">⏰ '+rc2Esc(dueTx)+'</span>'+(_alFriNum(r)?(' '+AL_FRI_TAG):'')+'</div><div class="tel">'+rc2Esc(_alPhFmt(r.phone))+'</div>'
+    h+='<div class="ral-row'+(late?' late':'')+'"><div class="m"><div class="nm">'+(r.name?rc2Esc(r.name):'(이름 없음)')+_alAgeTx(r)+' <span class="ral-cnt rc">⏰ '+rc2Esc(dueTx)+'</span>'+(_alFriNum(r)?(' '+AL_FRI_TAG):'')+'</div><div class="tel">'+rc2Esc(_alPhFmt(r.phone))+'</div>'
       +'<div class="h">'+(r.memo?('"'+rc2Esc(r.memo)+'" · '):'')+'재통화 '+hs.filter(function(x){ return x.o==='recall'||x.o==='hold'; }).length+'회'+(r.status!=='open'&&last?(' · 결과 '+(AL_O_KO[last.o]||last.o)):'')+'</div></div>'
       +(r.status==='open'?('<div class="ral-acts2"><button type="button" class="ral-call rc" onclick="rcAlNumCall(\'rc\',\''+r.id+'\')">📞 걸기</button><button type="button" class="ral-mini" onclick="rcAlNumEdit(\'rc\',\''+r.id+'\')">✏️ 수정</button></div>'):'')+'</div>';
   }
@@ -19245,7 +19257,7 @@ function rcAlNumCall(src, id){
   for(var i=0;i<hs.length;i++) tl+='<div style="--d:'+(AL_O_COL[hs[i].o]||'#8A93A3')+'">'+rc2Esc(String(hs[i].at||'').substr(5))+' · '+rc2Esc(hs[i].by||'')+' · '+(AL_O_KO[hs[i].o]||hs[i].o)+'</div>';
   tl+='<div style="--d:#1A6FB5"><b>지금 · '+rc2Esc(currentUser.name||'')+'</b></div>';
   var tel=_alPhKey(o.phone);
-  var h='<div class="ral-shh">'+(o.name?rc2Esc(o.name):'(이름 없음)')+(_alFriNum(o)?(' '+AL_FRI_TAG):'')+'</div>'
+  var h='<div class="ral-shh">'+(o.name?rc2Esc(o.name):'(이름 없음)')+_alAgeTx(o)+(_alFriNum(o)?(' '+AL_FRI_TAG):'')+'</div>'
     +(_alFriNum(o)?'<div class="ral-shs">금요일에 처음 기록된 번호예요 — 전화인터뷰·내방으로 이어져도 쟁탈전 점수에는 들어가지 않아요</div>':'')
     +'<a class="ral-telbtn" href="tel:'+tel+'">📞 '+rc2Esc(_alPhFmt(o.phone))+' 전화 걸기</a>'
     +'<div class="ral-tline">'+tl+'</div>'
@@ -19288,6 +19300,7 @@ function rcAlNumLead(type){
   rcAlNewLead(type);
   var nm=document.getElementById('rc2fName'); if(nm && o.name) nm.value=o.name;
   var ph=document.getElementById('rc2fPhone'); if(ph){ ph.value=_alPhFmt(o.phone); }
+  var ag=document.getElementById('rc2fAge'); if(ag && o.age) ag.value=o.age;
   rcAl.numSrc={ src:rcAlNC.src, id:rcAlNC.id };
 }
 // 'yyyy-MM-dd HH:mm:ss' -> 'HH:mm'; also copes with a Date string the sheet may hand back
@@ -19355,20 +19368,21 @@ function rcAlNumEdit(src, id){
   rcAlED={ src:src, id:id };
   var h='<div class="ral-shh">✏️ '+(src==='db'?'부재 번호 수정':'재통화 번호 수정')+'</div><div class="ral-shs">오타를 고쳐 주세요 · 부재 횟수와 기록은 그대로예요</div>'
     +'<div class="ral-fl">전화번호 *</div><input type="tel" inputmode="numeric" id="ralEdPh" class="ral-in" value="'+rc2Esc(_alPhFmt(o.phone))+'">'
-    +'<div class="ral-fl">이름</div><input type="text" id="ralEdNm" class="ral-in" value="'+rc2Esc(o.name||'')+'" placeholder="예: 김○○">'
+    +'<div class="ral-2c"><div class="c1"><div class="ral-fl">이름</div><input type="text" id="ralEdNm" class="ral-in" value="'+rc2Esc(o.name||'')+'" placeholder="예: 김○○"></div>'
+    +'<div class="c2"><div class="ral-fl">나이</div><input type="number" inputmode="numeric" id="ralEdAge" class="ral-in" value="'+rc2Esc(o.age||'')+'" placeholder="예: 42"></div></div>'
     +'<div class="ral-fl">메모</div><input type="text" id="ralEdMemo" class="ral-in" value="'+rc2Esc(o.memo||'')+'">'
     +'<div class="ral-btns"><button type="button" class="ral-bt g" onclick="'+(src==='db'?'rcAlRenderDB()':'rcAlRenderRecall()')+'">취소</button>'
     +'<button type="button" class="ral-bt" id="ralEdSave" style="background:#1A2744" onclick="rcAlNumEditSave()">저장</button></div>';
   _alSheetOpen(h);
 }
 function rcAlNumEditSave(){
-  var ph=document.getElementById('ralEdPh'), nm=document.getElementById('ralEdNm'), mm=document.getElementById('ralEdMemo');
+  var ph=document.getElementById('ralEdPh'), nm=document.getElementById('ralEdNm'), mm=document.getElementById('ralEdMemo'), ag=document.getElementById('ralEdAge');
   if(!ph || _alPhKey(ph.value).length<10){ showToast('📞 전화번호를 확인해 주세요'); return; }
   var btn=document.getElementById('ralEdSave'); if(btn){ btn.disabled=true; btn.textContent='저장 중…'; }
   var S=rcAlED;
-  _alPost({ action:'aladdinNumEdit', fp:currentUser.id, src:S.src, id:S.id, phone:_alPhFmt(ph.value), name:nm?nm.value.trim():'', memo:mm?mm.value.trim():'' }).then(function(res){
+  _alPost({ action:'aladdinNumEdit', fp:currentUser.id, src:S.src, id:S.id, phone:_alPhFmt(ph.value), name:nm?nm.value.trim():'', age:_alAgeIn(ag), memo:mm?mm.value.trim():'' }).then(function(res){
     if(!res || !res.ok){ if(btn){ btn.disabled=false; btn.textContent='저장'; } showToast('⚠️ '+((res&&res.msg)||'저장 실패')); return; }
-    var o=_alFindNum(S.src, S.id); if(o){ o.phone=res.row.phone; o.name=res.row.name; o.memo=res.row.memo; }
+    var o=_alFindNum(S.src, S.id); if(o){ o.phone=res.row.phone; o.name=res.row.name; o.memo=res.row.memo; o.age=res.row.age||''; }
     showToast('✅ 고쳤어요');
     if(S.src==='db') rcAlRenderDB(); else rcAlRenderRecall();
     rcAlLoad();
@@ -26688,7 +26702,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 214;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 216;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
