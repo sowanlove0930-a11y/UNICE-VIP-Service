@@ -21629,6 +21629,21 @@ function rc2BuildKakaoText(){
     if(last.next==='파트너스') return '파트너스';
     return '';
   }
+  // the day that result happened (YYYY-MM-DD), so 결과 현황 keeps this month only
+  function _kkStageDay(c, sg){
+    var es = rc2NormEvents(c), best = '';
+    for(var i=0;i<es.length;i++){
+      var x = es[i];
+      if(!x || !x.done || x.cancelled || !x.next) continue;
+      var want = sg==='입과확정' ? '입과확정' : (sg==='라디' ? '라이프디자인' : '파트너스');
+      if(x.next!==want) continue;
+      var d = rc2DtKey(x.dt);
+      if(d && d > best) best = d;
+    }
+    if(sg==='입과확정' && c.joinConfirmDate) return rc2DtKey(c.joinConfirmDate);
+    if(best) return best;
+    return rc2DtKey(c.updatedAt);
+  }
   function _brShort(b){ var s=String(b||''); return (s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0) ? '브' : '알'; }
   function _brFull(b){ var s=String(b||''); return (s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0) ? '브라보' : '알파'; }
   var WD = ['일','월','화','수','목','금','토'];
@@ -21688,13 +21703,14 @@ function rc2BuildKakaoText(){
     }
   }
   if(!anyDay) return '';
-  // 결과 현황 block: every month's cards, grouped 입과확정 · 라디 · 파트너스
+  // 결과 현황 block: results dated this month (1st ~ last day), grouped 입과확정 · 라디 · 파트너스
   var dCur = rc2GetAllCandData();
   var _byStg = { '입과확정':[], '라디':[], '파트너스':[] };
+  var _ymNow = now.getFullYear() + '-' + ((now.getMonth()+1<10)?'0':'') + (now.getMonth()+1);
   for(var li=0; li<dCur.list.length; li++){
     var c = dCur.list[li];
     var _sg = c ? _kkStage(c) : '';
-    if(_sg) _byStg[_sg].push(c);
+    if(_sg && _kkStageDay(c, _sg).slice(0,7)===_ymNow) _byStg[_sg].push(c);
   }
   var okList = _byStg['입과확정'].concat(_byStg['라디'], _byStg['파트너스']);
   if(okList.length){
@@ -26859,7 +26875,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 221;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 222;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
