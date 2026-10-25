@@ -645,6 +645,23 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 .perf-blk-sub { font-size: 10px; font-weight: 400; color: var(--text3); margin: 0 0 12px 0; line-height: 1.3; text-align: right; }
 #topListTitle { justify-content: center; }
 #topListTitle::before { display: none; }
+/* perf dashboard 3 cards (226): one-line headers, boxes stretch so the three cards end on one line */
+.perf-rank-grid .perf-blk-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-lst { flex:1; display:flex; flex-direction:column; justify-content:space-between; background:var(--bg2); border-radius:11px; padding:5px 12px; }
+.dash-top-row { display:flex; align-items:center; gap:8px; min-height:27px; font-size:13px; border-bottom:1px solid var(--border); }
+.dash-top-row:last-child { border-bottom:none; }
+.dash-top-row .rk { width:20px; text-align:center; flex-shrink:0; }
+.dash-top-row .nm { flex:1; min-width:0; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dash-top-row .amt { font-weight:700; color:var(--gold2); white-space:nowrap; }
+.dash-bxs { flex:1; display:flex; flex-direction:column; gap:9px; }
+.dash-bx { flex:1; display:flex; flex-direction:column; justify-content:space-between; background:var(--bg2); border-radius:11px; padding:10px 12px; }
+.dash-glh { display:flex; align-items:baseline; gap:6px; }
+.dash-glh .lb { width:54px; flex-shrink:0; font-size:12px; color:var(--text2); white-space:nowrap; }
+.dash-glh b { flex:1; min-width:0; font-size:17px; font-weight:900; color:var(--text); white-space:nowrap; }
+.dash-glh b small { font-size:12px; font-weight:700; color:var(--text2); }
+.dash-glh strong { font-size:15px; font-weight:900; min-width:40px; text-align:right; white-space:nowrap; }
+.dash-rcg { font-size:11.5px; color:var(--text2); display:grid; grid-template-columns:auto 1fr; gap:5px 8px; align-items:center; }
+.dash-rcg b { color:var(--text); }
 .card-top  .dash-card-title::before { background: var(--purple); }
 
 /* 목표 달성률 */
@@ -3322,6 +3339,13 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 .rc2-step.on { background:var(--sbg); border-color:var(--sbg); color:#fff; box-shadow:0 0 0 2px rgba(0,0,0,.08); }
 .rc2-step-note { font-size:11.5px; color:var(--text2); margin-top:10px; padding:8px 10px; background:var(--bg2); border-radius:8px; line-height:1.5; }
 #rc2ResMovePk, #rc2ResStepPk { margin-top:10px; background:var(--bg2); }
+.rc2-res-tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+.rc2-res-tab { min-width:0; border:1.5px solid var(--bdr2); border-radius:10px; padding:8px 10px; background:var(--bg2); cursor:pointer; -webkit-tap-highlight-color:transparent; user-select:none; }
+.rc2-res-tab .k { font-size:11.5px; font-weight:700; color:var(--text2); white-space:nowrap; }
+.rc2-res-tab .v { font-size:13px; font-weight:800; color:var(--text); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rc2-res-tab .v.none { color:var(--text3); }
+.rc2-res-tab.on { border-color:#7B52D0; background:#F0EAFA; box-shadow:0 0 0 2px rgba(123,82,208,.15); }
+.rc2-res-tab.on .k, .rc2-res-tab.on .v { color:#5A2FA0; }
 .rc2-ivchip.v.other.w { grid-column:span 4; }
 
 /* 통합 달력 */
@@ -4014,7 +4038,7 @@ window.UNISPACE_FCM = {
     </div>
 
     <div class="rc2-group" id="rc2ResStepGroup" style="display:none">
-      <div class="rc2-group-title">다음 과정 <span class="rc2-hint" style="color:var(--text3);font-weight:500;letter-spacing:0">· 정해진 게 있으면 하나</span></div>
+      <div class="rc2-group-title">다음 과정 <span class="rc2-hint" style="color:var(--text3);font-weight:500;letter-spacing:0">· 라디·파트너스는 같이 골라도 돼요</span></div>
       <div class="rc2-steps" id="rc2ResSteps"></div>
       <div class="rc2-fld" id="rc2ResJoinWrap" style="display:none;margin-top:10px;margin-bottom:0">
         <label class="rc2-fld-lbl">입과 예정월</label>
@@ -4027,7 +4051,9 @@ window.UNISPACE_FCM = {
         </select>
       </div>
       <div class="rc2-step-note" id="rc2ResStepNote" style="display:none"></div>
+      <div class="rc2-res-tabs" id="rc2ResTabs" style="display:none"></div>
       <div class="rc2-picker" id="rc2ResStepPk"></div>
+      <div class="rc2-step-note" id="rc2ResMultiNote" style="display:none">입과확정·보류·거절을 누르면 라디·파트너스 선택은 풀려요</div>
     </div>
 
     <div class="mgmt-btns">
@@ -4611,24 +4637,23 @@ window.UNISPACE_FCM = {
           <button type="button" onclick="perfGoCurrentMonth()" style="background:var(--gold);border:none;color:#1A1200;font-size:11px;font-weight:800;padding:4px 12px;border-radius:7px;cursor:pointer">이번달로 →</button>
         </div>
         <div class="perf-rank-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:0 12px 16px">
-          <!-- 보장월초 TOP 5 -->
+          <!-- 보장월초 TOP 10 -->
           <div style="background:var(--bg3);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column">
-            <div class="dash-card-title perf-blk-title" id="topListTitle">🏆 보장월초 TOP 5</div>
-            <div class="perf-blk-sub">&nbsp;</div>
-            <div id="topList" style="display:flex;flex-direction:column;flex:1;justify-content:space-between"></div>
+            <div class="dash-card-title perf-blk-title" id="topListTitle">🏆 보장월초 TOP 10</div>
+            <div class="perf-blk-sub" id="topListSub">&nbsp;</div>
+            <div id="topList" class="dash-lst"></div>
           </div>
-          <!-- 리크루팅 활동 TOP 5 -->
+          <!-- branch perf: month goal, this week, active FPs -->
           <div style="background:var(--bg3);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column">
-            <div class="dash-card-title perf-blk-title">🤝 리크루팅 활동 TOP 5</div>
-            <div class="perf-blk-sub">일정 1점 · 입과확보 +4점</div>
-            <div id="recruitCycleTabs" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
-            <div id="recruitTopList" style="display:flex;flex-direction:column;gap:0"></div>
+            <div class="dash-card-title perf-blk-title">📊 지점별 업적 현황</div>
+            <div class="perf-blk-sub" id="brPerfSub">&nbsp;</div>
+            <div id="brPerfBox" class="dash-bxs"></div>
           </div>
-          <!-- 업적활동 TOP 5 -->
-          <div style="background:var(--bg3);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column">
-            <div class="dash-card-title perf-blk-title">🏃 업적활동 TOP 5</div>
-            <div class="perf-blk-sub">파트너 1 · 소개 1 · 청약 3 · 10만당 +1</div>
-            <div id="actTopList" style="display:flex;flex-direction:column;gap:0"></div>
+          <!-- recruiting by branch (tap: 추진일정) -->
+          <div onclick="if(typeof openRecruitModal==='function') openRecruitModal()" title="눌러서 추진일정 보기" style="background:var(--bg3);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;cursor:pointer">
+            <div class="dash-card-title perf-blk-title">🤝 지점별 리크루팅 현황</div>
+            <div class="perf-blk-sub" id="rcBrSub">&nbsp;</div>
+            <div id="rcBrBox" class="dash-bxs"></div>
           </div>
         </div>
         <div style="padding:0 12px 16px">
@@ -6788,6 +6813,7 @@ function showDashboard() {
     if(typeof loadGoalAdjFromGas === 'function'){
       loadGoalAdjFromGas(function(){
         if(typeof renderBojangCard==='function') renderBojangCard();
+        if(typeof _dashBrPaint==='function') _dashBrPaint();
       });
     }
 
@@ -7715,11 +7741,10 @@ function perfReloadForMonth(){
   fetch(burl).then(function(r){return r.json();}).then(function(res){
     if(res && res.ok){
       if(res.bojangTop) _renderPastBojang(res.bojangTop);
-      if(res.actTop) _renderPastAct(res.actTop);
     }
   }).catch(function(){});
-  // 리크루팅: 주기 목록 + 선택 주기 TOP
-  perfLoadRecruitCycles(ym);
+  if(typeof renderActTop4==='function') renderActTop4();
+  if(typeof renderRecruitTop4==='function') renderRecruitTop4();
   if(typeof loadUnicornClub==='function') loadUnicornClub(ym);
   if(typeof loadAwardStatus==='function') loadAwardStatus();
 }
@@ -7727,14 +7752,8 @@ function perfReloadForMonth(){
 // 지난달 보장월초 렌더 (topList)
 function _renderPastBojang(rows){
   var el=document.getElementById('topList'); if(!el) return;
-  var medals=['🥇','🥈','🥉'];
-  if(!rows || !rows.length){ el.innerHTML='<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">기록 없음</div>'; return; }
-  el.innerHTML=rows.map(function(fp,i){
-    var isAlpha=fp.branch==='알파지점'||fp.branch==='알파';
-    var badge='<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;'+(isAlpha?'background:var(--alpha-soft);color:var(--alpha-deep)':'background:var(--bravo-soft);color:var(--bravo-deep)')+'">'+(isAlpha?'알파':'브라보')+'</span>';
-    var rankEl=i<3?'<span style="width:20px;text-align:center;font-size:13px">'+medals[i]+'</span>':'<span style="width:20px;text-align:center;font-size:11px;color:var(--text3)">'+(i+1)+'</span>';
-    return '<div style="display:flex;align-items:center;gap:8px;padding:0;border-bottom:1px solid rgba(255,255,255,.04)">'+rankEl+'<span style="font-size:13px;font-weight:600;flex:1">'+fp.name+' FP</span>'+badge+'<span style="font-size:13px;font-weight:700;color:var(--gold2)">'+(parseInt(fp.amt)||0).toLocaleString()+'원</span></div>';
-  }).join('');
+  var full=(typeof _dashTopRows==='function') ? _dashTopRows() : null;
+  el.innerHTML=_dashTopHtml(full || rows, '기록 없음');
 }
 // 지난달 업적활동 렌더 (actTopList)
 function _renderPastAct(rows){
@@ -7769,6 +7788,7 @@ var _perfCycleSel = null; // 선택 주기 인덱스 (null=현재주기)
 var _perfCyclesCache = null;
 function perfLoadRecruitCycles(ym){
   if(typeof UNISPACE_GAS_URL==='undefined'){ return; }
+  if(!document.getElementById('recruitCycleTabs')) return;
   var url=UNISPACE_GAS_URL+'?action=getRecruitCycles&ym='+encodeURIComponent(ym)+'&_='+Date.now();
   fetch(url).then(function(r){return r.json();}).then(function(res){
     if(!res || !res.ok || !res.cycles){ return; }
@@ -8706,52 +8726,21 @@ function renderTop10() {
   var _mn = parseInt(_selYm.substr(5,2),10);
   var _past = (typeof _perfIsPast==='function') && _perfIsPast();
   var st = document.getElementById('perfSecTitle'); if(st) st.textContent='🏆 '+_mn+'월 유니스 업적 현황';
-  var tt = document.getElementById('topListTitle'); if(tt) tt.textContent='🏆 보장월초 TOP 5';
+  var tt = document.getElementById('topListTitle'); if(tt) tt.textContent='🏆 보장월초 TOP 10';
+  var ts = document.getElementById('topListSub'); if(ts) ts.textContent=_mn+'월 누계 · 일시납 제외';
   if(_past){ return; } // 지난달 조회 중엔 _renderPastBojang 이 담당 (덮어쓰기 방지)
-  var realData = Object.entries(perfData).map(function(e) {
-    return { name: e[0], branch: e[1].branch, amt: e[1].amt };
-  });
-  var combined = realData.sort(function(a,b){ return b.amt - a.amt; }).slice(0,5);
-
-  var medals = ['🥇','🥈','🥉'];
-  function _renderBojangRows(rowsArr){
-    el.innerHTML = (!rowsArr || rowsArr.length === 0)
-      ? '<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">실적 입력 시 자동 집계됩니다</div>'
-      : rowsArr.map(function(fp, i) {
-          var isAlpha = fp.branch === '알파지점' || fp.branch === '알파';
-          var badge = '<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;'+
-            (isAlpha ? 'background:var(--alpha-soft);color:var(--alpha-deep)' : 'background:var(--bravo-soft);color:var(--bravo-deep)')+
-            '">'+( isAlpha?'알파':'브라보')+'</span>';
-          var rankEl = i < 3 ? '<span style="width:20px;text-align:center;font-size:13px">'+medals[i]+'</span>'
-            : '<span style="width:20px;text-align:center;font-size:11px;color:var(--text3);">'+(i+1)+'</span>';
-          return '<div style="display:flex;align-items:center;gap:8px;padding:0;border-bottom:1px solid rgba(255,255,255,.04)">'+
-            rankEl+
-            '<span style="font-size:13px;font-weight:600;flex:1">'+fp.name+'</span>'+
-            badge+
-            '<span style="font-size:13px;font-weight:700;color:var(--gold2)">'+(parseInt(fp.amt)||0).toLocaleString()+'원</span>'+
-          '</div>';
-        }).join('');
-  }
-  // 1) bundle data if available (single GAS call for all TOPs)
-  if(_dashBundle && _dashBundle.bojangTop){
-    _renderBojangRows(_dashBundle.bojangTop);
-  } else {
-    var _seeAllBoj = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장' || currentUser.level==='admin');
-    if(_seeAllBoj){
-      // 대표/지점장은 로컬에 전체가 있으므로 바로 표시
-      _renderBojangRows(combined);
-    } else {
-      // 매니저/FP는 로컬이 지점-only라 깜빡임 방지: 묶음 올 때까지 로딩
-      el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">전체 집계를 불러오는 중...</div>';
+  // first paint: the month's full list (fetched by renderActTop4 for all FPs), else the bundle's top 5,
+  // else the local log for users who hold everyone; others wait for the server list
+  if(el){
+    var _full = _dashTopRows();
+    if(_full) el.innerHTML = _dashTopHtml(_full, '실적 입력 시 자동 집계됩니다');
+    else if(_dashBundle && _dashBundle.bojangTop) el.innerHTML = _dashTopHtml(_dashBundle.bojangTop, '실적 입력 시 자동 집계됩니다');
+    else if(currentUser && (currentUser.role==='대표' || currentUser.role==='지점장' || currentUser.level==='admin')){
+      var _loc = Object.entries(perfData).map(function(e){ return { name:e[0], branch:e[1].branch, amt:e[1].amt }; });
+      _loc.sort(function(a,b){ return b.amt - a.amt; });
+      el.innerHTML = _dashTopHtml(_loc.slice(0,10), '실적 입력 시 자동 집계됩니다');
     }
-    if (typeof UNISPACE_GAS_URL !== 'undefined' && currentUser && currentUser.id) {
-      var _btYm = getCurrentYM();
-      var _btUrl = UNISPACE_GAS_URL + '?action=getBojangTop&ym=' + encodeURIComponent(_btYm) + '&limit=5';
-      fetch(_btUrl).then(function(r){return r.json();}).then(function(res){
-        if(_dashBundle && _dashBundle.bojangTop) return; // 묶음이 우선, 늦은 개별응답 무시
-        if(res && res.ok && res.rows){ _renderBojangRows(res.rows); }
-      }).catch(function(){});
-    }
+    else el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">전체 집계를 불러오는 중...</div>';
   }
 
   renderActTop4();
@@ -8761,142 +8750,272 @@ function renderTop10() {
   if(typeof renderStdFp==='function') renderStdFp();
 }
 
-function renderActTop4() {
-  var el = document.getElementById('actTopList');
-  if(!el) return;
-  if((typeof _perfIsPast==='function') && _perfIsPast()){ return; } // 지난달은 _renderPastAct 담당
-  function _renderActRows(ranked){
-    if(!ranked || !ranked.length){
-      el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">활동 입력 시 자동 집계됩니다</div>';
-      return;
-    }
-    var medals = ['🥇','🥈','🥉','',''];
-    var maxScore = ranked[0].score || 1;
-    el.innerHTML = ranked.map(function(fp, i) {
-      var _fb=String(fp.branch||''); var isAlpha = _fb==='알파지점'||_fb==='알파'||_fb==='alpha'||_fb.indexOf('알파')>=0;
-      var pct = Math.round(fp.score/maxScore*100);
-      var badge = '<span style="font-size:10px;padding:2px 5px;border-radius:4px;font-weight:700;'+
-        (isAlpha?'background:var(--alpha-soft);color:var(--alpha-deep)':'background:var(--bravo-soft);color:var(--bravo-deep)')+
-        '">'+(isAlpha?'알파':'브라보')+'</span>';
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+
-        '<span style="width:20px;text-align:center;font-size:'+(i<3?'13px':'11px')+';">'+(i<3?medals[i]:(i+1))+'</span>'+
-        '<span style="font-size:12px;font-weight:600;flex:1">'+fp.name+'</span>'+
-        badge+
-        '<div style="width:60px;height:4px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin:0 6px">'+
-          '<div style="height:100%;width:'+pct+'%;background:#378ADD;border-radius:4px"></div>'+
-        '</div>'+
-        '<span style="font-size:12px;color:var(--text2);min-width:28px;text-align:right">'+fp.score+'점</span>'+
-      '</div>';
-    }).join('');
-  }
-  // 1) local first (avoid blank) — may be branch-only for FP/manager
-  var db = {};
-  try { db = JSON.parse(_bigGet('unispace_activities')||'{}'); } catch(e) {}
-  var scoreMap = {};
-  // 이번 달 활동만 합산 — 로컬 저장소엔 전 기간이 있어 필터 없이는 지난달과 합산돼 보임
-  var _actYm=(new Date()).getFullYear()+'-'+('0'+((new Date()).getMonth()+1)).slice(-2);
-  Object.values(db).forEach(function(a) {
-    if(String(a.date||'').indexOf(_actYm)!==0) return;
-    if(!scoreMap[a.fpId]) scoreMap[a.fpId] = {name:a.fpName, branch:a.branch, score:0};
-    scoreMap[a.fpId].score += (a.status==='완료' ? 2 : 1);
-  });
-  var localRanked = Object.values(scoreMap).sort(function(a,b){ return b.score-a.score; }).slice(0,5);
-  // 전체 권한자가 아니면 지점-only 로컬 대신 로딩 표시 (브라보만 깜빡임 방지)
-  // 묶음/GAS 우선. 매니저/FP는 로컬 활동이 지점-only일 수 있어 묶음 전 로딩 표시.
-  if(_dashBundle && _dashBundle.actTop){ _renderActRows(_dashBundle.actTop); return; }
-  var _actAdmin = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01');
-  if(_actAdmin){ _renderActRows(localRanked); }
-  else { el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">전체 집계를 불러오는 중...</div>'; }
-  if (typeof UNISPACE_GAS_URL !== 'undefined' && currentUser && currentUser.id) {
-    var _ym = (typeof getCurrentYM==='function') ? getCurrentYM() : '';
-    var _u = UNISPACE_GAS_URL + '?action=getActTop&ym=' + encodeURIComponent(_ym) + '&limit=5';
-    fetch(_u).then(function(r){return r.json();}).then(function(res){
-      if(_dashBundle && _dashBundle.actTop) return;
-      if(res && res.ok && res.rows){ _renderActRows(res.rows); }
-    }).catch(function(){});
-  }
+// ---- dashboard 226: bojang TOP 10 · branch perf (month goal, this week, active FPs) · branch recruiting ----
+var _dashRcLoadAt = 0, _dashRcLast = null, _dashActvCache = {}, _dashBrCache = {}, _dashBrLast = null, _dashBojBusy = {}, _dashBrBusy = {};
+function _dashYm(){ return (typeof _perfSelYm==='function') ? _perfSelYm() : getCurrentYM(); }
+function _dashTodayKey(){ var n=new Date(); var m=n.getMonth()+1, d=n.getDate(); return n.getFullYear()+'-'+(m<10?'0':'')+m+'-'+(d<10?'0':'')+d; }
+function _dashIsBravo(b){ var s=String(b||''); return s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0; }
+function _dashIsAlpha(b){ var s=String(b||''); return s.indexOf('alpha')>=0 || s.indexOf('알파')>=0; }
+function _dashBadge(isB){
+  return '<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;flex-shrink:0;'+(isB?'background:var(--bravo-soft);color:var(--bravo-deep)':'background:var(--alpha-soft);color:var(--alpha-deep)')+'">'+(isB?'브라보':'알파')+'</span>';
 }
-
+function _dashBar(pct, isB){
+  if(pct>100) pct=100; if(pct<0) pct=0;
+  return '<div style="height:7px;background:var(--sur2);border-radius:5px;overflow:hidden;margin:6px 0"><div style="height:100%;width:'+pct+'%;background:'+(isB?'var(--bravo)':'var(--alpha)')+';border-radius:5px"></div></div>';
+}
+// the refresh button: keep what is on screen, but ask the server again
+function _dashCacheReset(){
+  for(var k in _dashActvCache){ if(_dashActvCache.hasOwnProperty(k)) _dashActvCache[k].at = 0; }
+  for(var k2 in _dashBrCache){ if(_dashBrCache.hasOwnProperty(k2)) _dashBrCache[k2].at = 0; }
+  _dashRcLoadAt = 0;
+}
+// bojang TOP 10: from the month's full list (getBojangTop limit=999, every FP); null until it is in
+function _dashTopRows(){
+  var hit = _dashActvCache[_dashYm()];
+  if(!hit || !hit.rows) return null;
+  var a = [];
+  for(var i=0;i<hit.rows.length;i++){ var r = hit.rows[i]; if(r && r.name && (parseInt(r.amt,10)||0) > 0) a.push(r); }
+  a.sort(function(x,y){ return (parseInt(y.amt,10)||0) - (parseInt(x.amt,10)||0); });
+  return a.slice(0, 10);
+}
+function _dashTopHtml(rows, empty){
+  if(!rows || !rows.length) return '<div style="text-align:center;padding:24px;color:var(--text2);font-size:13px">'+empty+'</div>';
+  var medals = ['🥇','🥈','🥉'], h = '';
+  for(var i=0;i<rows.length && i<10;i++){
+    var fp = rows[i], isB = _dashIsBravo(fp.branch), isA = !isB && _dashIsAlpha(fp.branch);
+    h += '<div class="dash-top-row">'+
+      (i<3 ? '<span class="rk" style="font-size:13px">'+medals[i]+'</span>' : '<span class="rk" style="font-size:11px;color:var(--text3)">'+(i+1)+'</span>')+
+      '<span class="nm">'+rc2Esc(fp.name)+'</span>'+((isA || isB) ? _dashBadge(isB) : '')+
+      '<span class="amt">'+(parseInt(fp.amt,10)||0).toLocaleString()+'원</span></div>';
+  }
+  return h;
+}
+function _dashTopPaint(){
+  var el = document.getElementById('topList'), rows = _dashTopRows();
+  if(el && rows) el.innerHTML = _dashTopHtml(rows, (typeof _perfIsPast==='function' && _perfIsPast()) ? '기록 없음' : '실적 입력 시 자동 집계됩니다');
+}
+// recruiting by branch: join / life design / partners counted like the kakao result block (rc2ResultStages, cut by
+// the month of that result); phone and visit interviews as the recruit calendar shows them (planned = from today)
+function _dashRcCounts(ym){
+  var z = function(){ return { join:0, radi:0, part:0, visit:0, plan:0, call:0, callPlan:0 }; };
+  var res = { a:z(), b:z(), goal:{ alpha:0, bravo:0 }, any:false };
+  if(typeof rc2GetAllCandData!=='function') return res;
+  var d = rc2GetAllCandData();
+  res.goal = d.goal || res.goal;
+  var today = _dashTodayKey();
+  for(var i=0;i<d.list.length;i++){
+    var c = d.list[i]; if(!c) continue;
+    res.any = true;
+    var k = _dashIsBravo(c.branch) ? 'b' : 'a';
+    var sgs = rc2ResultStages(c);
+    for(var s0=0;s0<sgs.length;s0++){
+      if(rc2ResultStageDay(c, sgs[s0]).slice(0,7)!==ym) continue;
+      if(sgs[s0]==='입과확정') res[k].join++; else if(sgs[s0]==='라디') res[k].radi++; else res[k].part++;
+    }
+    // the aladdin call request once, an older same-day phone event skipped
+    var es = rc2NormEvents(c);
+    var acOn = ((c.callItv===true || c.alType==='call') && c.callDate && c.callRes!=='no' && c.status!=='관리');
+    var acDay = acOn ? rc2DtKey(c.callDate) : '';
+    var items = [];
+    for(var j=0;j<es.length;j++){
+      var x = es[j];
+      if(!x || !x.dt || x.cancelled) continue;
+      var ph = _rcPhoneEv(x);
+      if(acDay && ph && rc2DtKey(x.dt)===acDay) continue;
+      var ty = (x.types && x.types.length) ? x.types : (x.type?[x.type]:[]);
+      var kd = ph ? 'call' : (ty.indexOf('지점장인터뷰')>=0 ? 'visit' : '');
+      if(kd) items.push({ kd:kd, dk:rc2DtKey(x.dt), done:!!x.done });
+    }
+    if(acOn) items.push({ kd:'call', dk:acDay, done:_alCallClosed(c) });
+    var planKey = { call:'callPlan', visit:'plan' };
+    for(var m2=0;m2<items.length;m2++){
+      var it2 = items[m2];
+      if(!it2.dk || it2.dk.slice(0,7)!==ym) continue;
+      if(it2.done) res[k][it2.kd]++;
+      else if(it2.dk>=today) res[k][planKey[it2.kd]]++;
+    }
+  }
+  return res;
+}
+function _dashRcPaint(){
+  var el = document.getElementById('rcBrBox'); if(!el) return;
+  var ym = _dashYm(), cur = !(typeof _perfIsPast==='function' && _perfIsPast());
+  var r = _dashRcCounts(ym);
+  _dashRcLast = { ym:ym, r:r, cur:cur };
+  var sub = document.getElementById('rcBrSub');
+  if(sub){ var mo = parseInt(ym.slice(5,7),10); sub.textContent = mo+'/1~'+mo+'/'+(new Date(parseInt(ym.slice(0,4),10), mo, 0)).getDate()+' 기준'+(cur ? ' · 예정은 오늘부터' : ''); }
+  if(!r.any){ el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">불러오는 중...</div>'; return; }
+  var h = '';
+  for(var q=0;q<2;q++){
+    var isB = (q===1), o = isB ? r.b : r.a;
+    var g = cur ? (parseInt(isB ? r.goal.bravo : r.goal.alpha,10)||0) : 0;
+    h += '<div class="dash-bx">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+_dashBadge(isB)+
+        '<span style="flex:1;font-size:12px;color:var(--text2)">입과확정</span>'+
+        '<span style="font-size:22px;font-weight:900;line-height:1;color:'+(isB?'var(--bravo-deep)':'var(--alpha-deep)')+'">'+o.join+'</span>'+
+        (g ? '<span style="font-size:12px;color:var(--text3)">/ 목표 '+g+'</span>' : '')+
+      '</div>'+
+      (g ? _dashBar(Math.round(o.join/g*100), isB) : '<div style="height:8px"></div>')+
+      '<div class="dash-rcg">'+
+        '<span>📞 전화인터뷰</span><span>'+(cur ? '예정 <b>'+o.callPlan+'</b> · ' : '')+'완료 <b>'+o.call+'</b></span>'+
+        '<span>🏠 내방인터뷰</span><span>'+(cur ? '예정 <b>'+o.plan+'</b> · ' : '')+'완료 <b>'+o.visit+'</b></span>'+
+        '<span>🌱 라이프디자인</span><span>입과 <b>'+o.radi+'</b>명</span>'+
+        '<span>🤝 파트너스</span><span>등록 <b>'+o.part+'</b>명</span>'+
+      '</div></div>';
+  }
+  el.innerHTML = h;
+}
 function renderRecruitTop4() {
-  var el = document.getElementById('recruitTopList');
-  if(!el) return;
-  if((typeof _perfIsPast==='function') && _perfIsPast()){ return; } // 지난달은 주기 조회가 담당
-
-  var now = new Date();
-  var ym = now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
-  var d = (typeof rc2GetMonthData==='function') ? rc2GetMonthData(ym) : null;
-  var list = (d && d.list) ? d.list : [];
-
-  var roster = (typeof getMergedFpList==='function') ? getMergedFpList() : [];
-  var fpByName = {};
-  for(var r=0;r<roster.length;r++){
-    var nm = String(roster[r].name||'').trim();
-    if(nm) fpByName[nm] = roster[r];
+  if(!document.getElementById('rcBrBox')) return;
+  _dashRcPaint();
+  if(typeof rc2LoadAllFromGas!=='function') return;
+  var now = Date.now();
+  if(now - _dashRcLoadAt < 300000) return;
+  _dashRcLoadAt = now;
+  rc2LoadAllFromGas(function(ok){ if(ok) _dashRcPaint(); else _dashRcLoadAt = 0; });
+}
+// active FPs: roster = active branch FPs (no admin, manager, edu); on = this month's perf total above 0
+function _dashActvRoster(){
+  var L = (typeof getMergedFpList==='function') ? getMergedFpList() : [];
+  var out = [];
+  for(var i=0;i<L.length;i++){
+    var f = L[i]; if(!f || f.active===false) continue;
+    if(f.level==='admin' || f.level==='manager' || f.role==='대표' || f.role==='지점장') continue;
+    if(f.id==='H2503162' || f.id==='ktk01') continue;
+    var b = String(f.branch||'');
+    if(b.indexOf('알파')<0 && b.indexOf('브라보')<0) continue;
+    out.push(f);
   }
-
-  var scoreMap = {};
-  for(var i=0;i<list.length;i++){
-    var it = list[i];
-    var refName = String(it.ref||'').trim();
-    if(!refName) continue;
-    var fp = fpByName[refName];
-    if(!fp) continue;
-
-    var evs = (typeof rc2NormEvents==='function') ? rc2NormEvents(it) : (it.events||[]);
-    var sc = 0;
-    for(var e=0;e<evs.length;e++){
-      if(evs[e] && evs[e].cancelled===true) continue;
-      sc += 1;
+  return out;
+}
+function _dashActvCounts(rows){
+  var byCode = {}, byName = {};
+  for(var i=0;i<rows.length;i++){
+    var r = rows[i]; var a = parseInt(r.amt,10)||0;
+    if(r.code) byCode[String(r.code).toUpperCase()] = (byCode[String(r.code).toUpperCase()]||0) + a;
+    if(r.name) byName[String(r.name).trim()] = (byName[String(r.name).trim()]||0) + a;
+  }
+  var z = function(){ return { all:0, on:0, big:0, wait:[] }; };
+  var res = { a:z(), b:z() };
+  var R = _dashActvRoster();
+  for(var j=0;j<R.length;j++){
+    var f = R[j], k = _dashIsBravo(f.branch) ? 'b' : 'a';
+    var cd = String(f.id||'').toUpperCase();
+    var amt = byCode.hasOwnProperty(cd) ? byCode[cd] : (byName[String(f.name||'').trim()]||0);
+    res[k].all++;
+    if(amt>0){ res[k].on++; if(amt>=500000) res[k].big++; }
+    else res[k].wait.push(f.name);
+  }
+  return res;
+}
+// branch perf: the month and this week (Mon-Sun cut at the month end, as the perf view counts weeks), per branch
+function _dashBrWeek(ym){
+  if(ym!==getCurrentYM() || typeof _pvSegForDate!=='function') return null;
+  var n = new Date(); n.setHours(0,0,0,0);
+  return _pvSegForDate(n);
+}
+function _dashMd(d){ return (d.getMonth()+1)+'/'+d.getDate()+'('+['일','월','화','수','목','금','토'][d.getDay()]+')'; }
+function _dashMan(won){ return Math.round((parseInt(won,10)||0)/10000).toLocaleString()+'만'; }
+// branch goals in won from the goal-adjust DB: month = life + non-life, week = the weekly life + non-life
+function _dashBrGoals(ym){
+  var o = { a:{ m:0, w:0 }, b:{ m:0, w:0 } };
+  var pk = function(x){ return { m:(parseInt(x.life,10)||0)+(parseInt(x.non,10)||0), w:(parseInt(x.wLife,10)||0)+(parseInt(x.wNon,10)||0) }; };
+  try{
+    var db = getGoalAdjDB(), br = (db[ym] && db[ym].branch) || {};
+    if(br.al) o.a = pk(br.al);
+    if(br.br) o.b = pk(br.br);
+  }catch(e){}
+  if(!o.a.m && !o.b.m && ym===getCurrentYM() && typeof getBranchMonthGoals==='function'){
+    var g = getBranchMonthGoals(); o.a.m = (parseInt(g.alpha,10)||0)*10000; o.b.m = (parseInt(g.bravo,10)||0)*10000;
+  }
+  return o;
+}
+// amounts in won: the server totals (getBranchPerf, every row by the branch on it) when they are in; else the month
+// from the full bojang list and the week from the local perf log for users whose log holds everyone (null = unknown)
+function _dashBrAmts(ym, wk){
+  var g = _dashBrCache[ym+'|'+(wk ? wk.ms : '')];
+  if(g && g.a && g.b) return { a:{ m:parseInt(g.a.month,10)||0, w:wk ? (parseInt(g.a.week,10)||0) : null }, b:{ m:parseInt(g.b.month,10)||0, w:wk ? (parseInt(g.b.week,10)||0) : null } };
+  var res = { a:{ m:null, w:null }, b:{ m:null, w:null } };
+  var hit = _dashActvCache[ym];
+  if(hit && hit.rows){
+    res.a.m = 0; res.b.m = 0;
+    for(var i=0;i<hit.rows.length;i++){
+      var r = hit.rows[i], amt = parseInt(r.amt,10)||0;
+      if(_dashIsBravo(r.branch)) res.b.m += amt; else if(_dashIsAlpha(r.branch)) res.a.m += amt;
     }
-    if(it.status==='입과확보') sc += 4;
-    if(sc<=0) continue;
-
-    if(!scoreMap[fp.name]) scoreMap[fp.name] = { name:fp.name, branch:fp.branch, score:0 };
-    scoreMap[fp.name].score += sc;
   }
-
-  var localRanked = Object.keys(scoreMap).map(function(k){ return scoreMap[k]; })
-    .sort(function(a,b){ return b.score-a.score; }).slice(0,5);
-
-  function _renderRecRows(ranked){
-    if(!ranked || !ranked.length){
-      el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">리크루팅 진행 시 자동 집계됩니다</div>';
-      return;
+  if(wk && typeof _bojangShowsTotal==='function' && _bojangShowsTotal(currentUser) && typeof getPerfLog==='function'){
+    var log = getPerfLog(); res.a.w = 0; res.b.w = 0;
+    for(var j=0;j<log.length;j++){
+      var p = log[j]; if(!p) continue;
+      var d = String(p.date||'').slice(0,10);
+      if(d < wk.ms || d > wk.ss) continue;
+      var t = parseInt(p.total,10)||0;
+      if(_dashIsBravo(p.branch)) res.b.w += t; else if(_dashIsAlpha(p.branch)) res.a.w += t;
     }
-    var medals = ['🥇','🥈','🥉','',''];
-    var maxScore = ranked[0].score || 1;
-    el.innerHTML = ranked.map(function(fp, i) {
-      var _fb=String(fp.branch||''); var isAlpha = _fb==='알파지점'||_fb==='알파'||_fb==='alpha'||_fb.indexOf('알파')>=0;
-      var pct = Math.round(fp.score/maxScore*100);
-      var badge = '<span style="font-size:10px;padding:2px 5px;border-radius:4px;font-weight:700;'+
-        (isAlpha?'background:var(--alpha-soft);color:var(--alpha-deep)':'background:var(--bravo-soft);color:var(--bravo-deep)')+
-        '">'+(isAlpha?'알파':'브라보')+'</span>';
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+
-        '<span style="width:20px;text-align:center;font-size:'+(i<3?'13px':'11px')+';">'+(i<3?medals[i]:(i+1))+'</span>'+
-        '<span style="font-size:12px;font-weight:600;flex:1">'+fp.name+'</span>'+
-        badge+
-        '<div style="width:60px;height:4px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin:0 6px">'+
-          '<div style="height:100%;width:'+pct+'%;background:#6D4FB8;border-radius:4px"></div>'+
-        '</div>'+
-        '<span style="font-size:12px;color:var(--text2);min-width:28px;text-align:right">'+fp.score+'점</span>'+
-      '</div>';
-    }).join('');
   }
-
-  // 묶음이 있으면 그것만 사용 (로컬 리크루팅 데이터는 지점정보가 부정확하므로 신뢰 안 함)
-  if(_dashBundle && _dashBundle.recruitTop){ _renderRecRows(_dashBundle.recruitTop); return; }
-  // 묶음 전: 대표만 로컬 허용, 나머지는 로딩 표시 (틀린 로컬로 깜빡임 방지)
-  var _recAdmin = currentUser && (currentUser.role==='대표' || currentUser.level==='admin' || currentUser.id==='ktk01');
-  if(_recAdmin){ _renderRecRows(localRanked); }
-  else { el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">전체 집계를 불러오는 중...</div>'; }
-
-  if (typeof UNISPACE_GAS_URL !== 'undefined' && currentUser && currentUser.id) {
-    var _u = UNISPACE_GAS_URL + '?action=getRecruitTop&ym=' + encodeURIComponent(ym) + '&limit=5';
-    fetch(_u).then(function(r){return r.json();}).then(function(res){
-      if(_dashBundle && _dashBundle.recruitTop) return;
-      if(res && res.ok && res.rows){ _renderRecRows(res.rows); }
-    }).catch(function(){});
+  return res;
+}
+// one line: label · amount / goal (one set) · percent in the branch color, then a bar
+function _dashGl(lb, v, goal, unit, isB){
+  var fmt = function(x){ return unit==='명' ? (x+'명') : _dashMan(x); };
+  var vs = (v===null || v===undefined) ? '—' : fmt(v);
+  var gs = goal>0 ? (' / '+fmt(goal)) : (unit==='명' ? '' : ' / 목표 미설정');
+  var pct = (goal>0 && v!==null && v!==undefined) ? Math.round(v/goal*100) : null;
+  return '<div class="dash-gl"><div class="dash-glh"><span class="lb">'+lb+'</span><b>'+vs+'<small>'+gs+'</small></b>'+
+    '<strong style="color:'+(isB?'var(--bravo-deep)':'var(--alpha-deep)')+'">'+(pct===null ? '' : pct+'%')+'</strong></div>'+_dashBar(pct===null ? 0 : pct, isB)+'</div>';
+}
+function _dashBrPaint(){
+  var el = document.getElementById('brPerfBox'); if(!el) return;
+  var ym = _dashYm(), cur = !(typeof _perfIsPast==='function' && _perfIsPast());
+  var wk = cur ? _dashBrWeek(ym) : null;
+  var sub = document.getElementById('brPerfSub');
+  if(sub) sub.textContent = wk ? (wk.no+'주차 = '+_dashMd(wk.mon)+'~'+_dashMd(wk.sun)) : (parseInt(ym.slice(5,7),10)+'월 누계');
+  var am = _dashBrAmts(ym, wk), gl = _dashBrGoals(ym), hit = _dashActvCache[ym];
+  var av = (hit && hit.rows) ? _dashActvCounts(hit.rows) : null;
+  if(am.a.m===null && !av){ el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">불러오는 중...</div>'; return; }
+  _dashBrLast = { ym:ym, wk:wk, am:am, gl:gl, av:av };
+  var h = '';
+  for(var q=0;q<2;q++){
+    var isB = (q===1), k = isB ? 'b' : 'a';
+    h += '<div class="dash-bx"><div>'+_dashBadge(isB)+'</div>'+
+      _dashGl('월 목표', am[k].m, gl[k].m, '만', isB)+
+      (wk ? _dashGl(wk.no+'주차', am[k].w, gl[k].w, '만', isB) : '')+
+      _dashGl('가동', av ? av[k].on : null, av ? av[k].all : 0, '명', isB)+
+    '</div>';
   }
+  el.innerHTML = h;
+}
+function _dashBrLoad(ym){
+  var wk = _dashBrWeek(ym), key = ym+'|'+(wk ? wk.ms : '');
+  var hit = _dashBrCache[key];
+  if((hit && Date.now() - hit.at < 180000) || _dashBrBusy[key] || typeof UNISPACE_GAS_URL==='undefined') return;
+  _dashBrBusy[key] = true;
+  var u = UNISPACE_GAS_URL + '?action=getBranchPerf&ym=' + encodeURIComponent(ym) + (wk ? ('&ws=' + wk.ms + '&we=' + wk.ss) : '');
+  fetch(u).then(function(r){ return r.json(); }).then(function(res){
+    _dashBrBusy[key] = false;
+    // a GAS without getBranchPerf answers ok:false: the card keeps the local totals and asks again later
+    if(res && res.ok && res.alpha && res.bravo) _dashBrCache[key] = { a:res.alpha, b:res.bravo, at:Date.now() };
+    else if(hit && hit.a) hit.at = Date.now();
+    else _dashBrCache[key] = { at:Date.now() };
+    if(_dashYm()===ym) _dashBrPaint();
+  }).catch(function(){ _dashBrBusy[key] = false; });
+}
+// the month's full bojang list (TOP 10, active FPs, the branch fallback) and the branch totals; 3 minutes each
+function renderActTop4() {
+  if(!document.getElementById('brPerfBox') && !document.getElementById('topList')) return;
+  var ym = _dashYm();
+  _dashTopPaint();
+  _dashBrPaint();
+  _dashBrLoad(ym);
+  var hit = _dashActvCache[ym];
+  if((hit && Date.now() - hit.at < 180000) || _dashBojBusy[ym] || typeof UNISPACE_GAS_URL==='undefined') return;
+  _dashBojBusy[ym] = true;
+  var u = UNISPACE_GAS_URL + '?action=getBojangTop&ym=' + encodeURIComponent(ym) + '&limit=999';
+  fetch(u).then(function(r){ return r.json(); }).then(function(res){
+    _dashBojBusy[ym] = false;
+    if(res && res.ok && res.rows){ _dashActvCache[ym] = { rows:res.rows, at:Date.now() }; if(_dashYm()===ym){ _dashTopPaint(); _dashBrPaint(); } }
+  }).catch(function(){ _dashBojBusy[ym] = false; });
 }
 function _legacyRenderPanelTop4_unused() {
   var el = document.getElementById('_unusedPanelTop');
@@ -13665,6 +13784,7 @@ function saveGoalAdj(){
   saveFpGoalDB(goalDb);
   if(typeof gasSaveGoalAdj==='function') gasSaveGoalAdj(db);
   if(typeof renderFpPerf==='function') renderFpPerf();
+  if(typeof _dashBrPaint==='function') _dashBrPaint();
   // keep modal open; refresh inputs so saved values are reflected
   if(typeof _gaRenderBranchGoal==='function') _gaRenderBranchGoal();
   if(typeof _gaRenderFpList==='function') _gaRenderFpList();
@@ -15010,15 +15130,23 @@ function _perfBranchGoalBlock(){
     { nm:'브라보', amt:Math.round((amts.bravo||0)/10000), goal:parseInt(goals.bravo)||0 }
   ];
   var body = '';
+  // the branch perf card adds this week and the active FPs under each branch
+  var L = (typeof _dashBrLast!=='undefined' && _dashBrLast && _dashBrLast.ym===getCurrentYM()) ? _dashBrLast : null;
   for (var i=0;i<rows.length;i++){
-    var r = rows[i];
-    if (!r.amt && !r.goal) continue;
+    var r = rows[i], k = i ? 'b' : 'a';
+    if (!r.amt && !r.goal && !L) continue;
     var tail = '';
     if (r.goal > 0){
       var rem = r.goal - r.amt;
       tail = (rem > 0) ? ('(잔여 ' + rem.toLocaleString() + '만)') : '(목표달성)';
     }
     body += r.nm + ' ' + r.amt.toLocaleString() + '만' + tail + '\n';
+    if (L){
+      var ex = [];
+      if (L.wk && L.am[k].w !== null) ex.push(L.wk.no + '주차 ' + _dashMan(L.am[k].w) + (L.gl[k].w > 0 ? ('/' + _dashMan(L.gl[k].w)) : ''));
+      if (L.av) ex.push('가동 ' + L.av[k].on + '/' + L.av[k].all + '명');
+      if (ex.length) body += '  ' + ex.join(' · ') + '\n';
+    }
   }
   if (!body) return '';
   return '\n[지점별 목표달성 현황]\n' + body;
@@ -15032,33 +15160,24 @@ function _perfShareText(){
   // 지점별 목표달성 현황
   out += _perfBranchGoalBlock();
 
-  // 보장월초 TOP5
-  var boj = (_dashBundle && _dashBundle.bojangTop) ? _dashBundle.bojangTop
-    : Object.entries(perfData).map(function(e){ return { name:e[0], branch:e[1].branch, amt:e[1].amt }; }).sort(function(a,b){ return b.amt-a.amt; }).slice(0,5);
+  // bojang TOP 10 as on the card (the bundle's top 5 until the month's full list is in)
+  var _top10 = (typeof _dashTopRows==='function' && _dashYm()===getCurrentYM()) ? _dashTopRows() : null;
+  var boj = _top10 ? _top10 : ((_dashBundle && _dashBundle.bojangTop) ? _dashBundle.bojangTop
+    : Object.entries(perfData).map(function(e){ return { name:e[0], branch:e[1].branch, amt:e[1].amt }; }).sort(function(a,b){ return b.amt-a.amt; }).slice(0,5));
   if (boj && boj.length){
-    out += '\n[보장월초 TOP 5]\n';
+    out += '\n[보장월초 TOP ' + (_top10 ? 10 : 5) + ']\n';
     for (var i=0;i<boj.length;i++){
       var b0 = boj[i];
       out += (i+1) + '. ' + b0.name + ' ' + (parseInt(b0.amt)||0).toLocaleString() + '원(' + _perfBrAbbr(b0.branch) + ')\n';
     }
   }
 
-  // 리크루팅 TOP5
-  if (_dashBundle && _dashBundle.recruitTop && _dashBundle.recruitTop.length){
-    out += '\n[리크루팅 활동 TOP 5]\n';
-    var rc = _dashBundle.recruitTop;
-    for (var r=0;r<rc.length;r++){
-      out += (r+1) + '. ' + rc[r].name + ' ' + (rc[r].score||0) + '점(' + _perfBrAbbr(rc[r].branch) + ')\n';
-    }
-  }
-
-  // 업적활동 TOP5
-  if (_dashBundle && _dashBundle.actTop && _dashBundle.actTop.length){
-    out += '\n[업적 활동 TOP 5]\n';
-    var ac = _dashBundle.actTop;
-    for (var a=0;a<ac.length;a++){
-      out += (a+1) + '. ' + ac[a].name + ' ' + (ac[a].score||0) + '점(' + _perfBrAbbr(ac[a].branch) + ')\n';
-    }
+  // recruiting by branch (this month, as on the card)
+  if (_dashRcLast && _dashRcLast.r && _dashRcLast.r.any && _dashRcLast.ym===getCurrentYM()){
+    var rcR = _dashRcLast.r;
+    out += '\n[지점별 리크루팅 현황]\n';
+    var rcRow = function(nm, o, g){ return nm + ' 입과확정 ' + o.join + ((parseInt(g,10)||0) ? ('/' + g) : '') + '\n  전화 완료 ' + o.call + '/예정 ' + o.callPlan + ' · 내방 완료 ' + o.visit + '/예정 ' + o.plan + '\n  라디 입과 ' + o.radi + ' · 파트너스 등록 ' + o.part + '\n'; };
+    out += rcRow('알파', rcR.a, rcR.goal.alpha) + rcRow('브라보', rcR.b, rcR.goal.bravo);
   }
 
   // 유니콘즈 클럽 / 워킹홀리데이
@@ -17619,6 +17738,7 @@ function doTransfer() {
 // TODO_GAS_ATT_2: GAS GET으로 전체 FP 실데이터 교체
 function refreshPerf() {
   if (typeof window._gasShareClear === 'function') window._gasShareClear();
+  if (typeof _dashCacheReset === 'function') _dashCacheReset();
   var btn=document.getElementById('perfRefreshBtn');
   var icon=document.getElementById('perfRefreshIcon');
   var txt=document.getElementById('perfRefreshTxt');
@@ -19866,7 +19986,7 @@ function rc2CardHtml(it, num) {
     var _tm = rc2TypeMeta((_ev.types&&_ev.types[0])||'');
     var _dt = rc2DtShort(_ev.dt);
     var _dn = _ev.done ? '✓' : '';
-    meta.push('<span style="display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;background:'+_tm.soft+';color:'+_tm.deep+';border:1px solid '+_tm.bd+'">'+_dn+_tnames+(_dt?(' '+_dt):'')+((_ev.done && _ev.next)?(' → '+rc2Esc(_ev.next)):'')+'</span>');
+    meta.push('<span style="display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;background:'+_tm.soft+';color:'+_tm.deep+';border:1px solid '+_tm.bd+'">'+_dn+_tnames+(_dt?(' '+_dt):'')+((_ev.done && _ev.next)?(' → '+rc2Esc(_ev.next)+(_ev.next2?(' · '+rc2Esc(_ev.next2)):'')):'')+'</span>');
   }
   if(it.join) meta.push(rc2Esc(it.join) + ' 입과');
   var note = it.note ? ('<div style="font-size:11px;color:var(--text3);margin-top:2px">비고: ' + rc2Esc(it.note) + '</div>') : '';
@@ -21025,13 +21145,16 @@ function _notifyScheduleAdded(rec, prevEvtIds, phoneNew){
 var RC2_RES_STEPS = [
   { key:'지점장인터뷰', icon:'🏠', nm:'내방인터뷰', sched:true, phone:true, bg:'#6D3FB0', soft:'#F0EAFA', deep:'#5A2FA0', bd:'#D6C2EF' },
   { key:'입과확정', icon:'🎓', nm:'입과확정', bg:'#C9881C', soft:'#FDF4DC', deep:'#A6741A', bd:'#E8CF8A' },
-  { key:'라이프디자인', icon:'📋', nm:'라이프디자인', sched:true, bg:'#1E7A50', soft:'#E5F5EB', deep:'#15663F', bd:'#AEDFC2' },
-  { key:'파트너스', icon:'🙌', nm:'파트너스', sched:true, bg:'#C2691A', soft:'#FCEEDD', deep:'#9A4F0F', bd:'#F0CDA3' },
+  { key:'라이프디자인', icon:'📋', nm:'라이프디자인', sched:true, multi:true, bg:'#1E7A50', soft:'#E5F5EB', deep:'#15663F', bd:'#AEDFC2' },
+  { key:'파트너스', icon:'🙌', nm:'파트너스', sched:true, multi:true, bg:'#C2691A', soft:'#FCEEDD', deep:'#9A4F0F', bd:'#F0CDA3' },
   { key:'입과보류', icon:'⏳', nm:'입과보류', bg:'#6B7488', soft:'#EEF0F4', deep:'#4A5366', bd:'#C9CFDA' },
   { key:'입과거절', icon:'🚫', nm:'입과거절', bg:'#C0392B', soft:'#FCEBEB', deep:'#A32D2D', bd:'#F0B4B4' }
 ];
 function _rc2ResStep(key){ for(var i=0;i<RC2_RES_STEPS.length;i++){ if(RC2_RES_STEPS[i].key===key) return RC2_RES_STEPS[i]; } return null; }
 function _rc2ResSched(key){ var s=_rc2ResStep(key); return !!(s && s.sched); }
+// life design and partners can be picked together (the other steps stay one at a time)
+function _rc2ResMulti(key){ var s=_rc2ResStep(key); return !!(s && s.multi); }
+function _rc2ResOrder(a){ var o=[]; for(var i=0;i<RC2_RES_STEPS.length;i++){ if(a.indexOf(RC2_RES_STEPS[i].key)>=0) o.push(RC2_RES_STEPS[i].key); } return o; }
 var rc2res = { candId:null, evtId:null, outcome:'', step:'', pickDt:'', _pk:null };
 var rc2res_ym = null; // rc2OpenRes 에서 찾은 후보자의 저장 월키 (결과 저장/삭제 시 사용)
 function rc2OpenRes(candId, evtId) {
@@ -21054,6 +21177,17 @@ function rc2OpenRes(candId, evtId) {
     evDt:_rc2NormDt(ev.dt||''), nextDt:((nx && !nx.done && !nx.cancelled) ? _rc2NormDt(nx.dt||'') : ''),
     base:((ev.setSt!==undefined && ev.setSt===_curSt && ev.prevSt!==undefined) ? (ev.prevSt||'추진중') : _curSt), undo:false };
   if(_rc2ResSched(_st0)) rc2res.pickDt = rc2res.nextDt;
+  // picked steps (next, and next2 when life design and partners are both picked), each with its own follow-up (nextId / nextId2) and date;
+  // act = the step whose date the picker edits
+  var nx2=null; if(ev.nextId2){ for(var _n2=0;_n2<evs.length;_n2++){ if(evs[_n2] && evs[_n2].id===ev.nextId2){ nx2=evs[_n2]; break; } } }
+  var _st1=(_st0 && ev.done && ev.next2 && ev.next2!==_st0 && _rc2ResMulti(_st0) && _rc2ResMulti(ev.next2)) ? String(ev.next2) : '';
+  rc2res.steps = _st0 ? (_st1 ? [_st0, _st1] : [_st0]) : [];
+  rc2res.steps0 = rc2res.steps.slice();
+  rc2res.pd0 = {};
+  if(_rc2ResSched(_st0)) rc2res.pd0[_st0] = rc2res.nextDt;
+  if(_st1) rc2res.pd0[_st1] = (nx2 && !nx2.done && !nx2.cancelled) ? _rc2NormDt(nx2.dt||'') : '';
+  rc2res.pd = {}; for(var _pq in rc2res.pd0){ if(rc2res.pd0.hasOwnProperty(_pq)) rc2res.pd[_pq] = rc2res.pd0[_pq]; }
+  rc2res.act = _rc2ResSched(_st0) ? _st0 : '';
   var dl = ev.dt ? rc2DtLabel(ev.dt) : '';
   document.getElementById('rc2ResSub').textContent = it.name + ' · ' + (ev.types||[]).join('·') + (dl?(' · '+dl):'');
   // 결과가 이미 입력된 경우만 '결과입력 취소' 버튼 노출
@@ -21073,27 +21207,89 @@ function rc2CloseRes(){ document.getElementById('rc2ResOverlay').classList.remov
 function rc2SetResOutcome(o){
   if(o==='예정'){
     // '결과입력 취소' → 즉시 예정으로 되돌리고 저장
-    rc2res.outcome=''; rc2res.step=''; rc2res.undo=true;
+    rc2res.outcome=''; rc2res.step=''; rc2res.steps=[]; rc2res.undo=true;
     rc2SaveRes();
     return;
   }
   rc2res.outcome = (rc2res.outcome===o)?'':o;
   rc2res.pickDt = (rc2res.outcome==='완료' && _rc2ResSched(rc2res.step) && rc2res.step===rc2res.step0) ? rc2res.nextDt : '';
+  _rc2ResPdReset();
   rc2res._pk = null;
   rc2ResRefresh();
 }
+// dates of the picked schedule steps go back to their saved follow-ups (or none)
+function _rc2ResPdReset(){
+  var s = rc2res.steps || [], s0 = rc2res.steps0 || [], p0 = rc2res.pd0 || {}, pd = {};
+  for(var i=0;i<s.length;i++){ if(_rc2ResSched(s[i])) pd[s[i]] = (s0.indexOf(s[i])>=0 && p0.hasOwnProperty(s[i])) ? p0[s[i]] : ''; }
+  rc2res.pd = pd;
+  if(!pd.hasOwnProperty(rc2res.act)){ rc2res.act = ''; for(var j=0;j<s.length;j++){ if(_rc2ResSched(s[j])){ rc2res.act = s[j]; break; } } }
+  if(rc2res.outcome==='완료' && rc2res.act) rc2res.pickDt = pd[rc2res.act];
+}
 function rc2SetResStep(k){
+  var cur = (rc2res.steps || []).slice(), p0 = rc2res.pd0 || {}, s0 = rc2res.steps0 || [];
+  if(!rc2res.pd) rc2res.pd = {};
+  // life design / partners next to the other one: a tap adds it, or drops just it
+  if(_rc2ResMulti(k) && cur.length && _rc2ResMulti(cur[0]) && (cur.length>1 || cur[0]!==k)){
+    var at = cur.indexOf(k);
+    if(rc2res.act) rc2res.pd[rc2res.act] = rc2res.pickDt || '';
+    if(at>=0){
+      cur.splice(at, 1);
+      delete rc2res.pd[k];
+      if(rc2res.act===k || !rc2res.act) rc2res.act = cur[0];
+    } else {
+      cur = _rc2ResOrder(cur.concat([k]));
+      rc2res.pd[k] = (s0.indexOf(k)>=0 && p0.hasOwnProperty(k)) ? p0[k] : '';
+      rc2res.act = k;
+    }
+    rc2res.steps = cur; rc2res.step = cur[0];
+    rc2res.pickDt = rc2res.pd[rc2res.act] || '';
+    rc2res._pk = null;
+    rc2ResRefresh();
+    return;
+  }
   var was = rc2res.step;
   rc2res.step = (was===k) ? '' : k;
   if(!_rc2ResSched(rc2res.step)) rc2res.pickDt = '';
-  else if(!_rc2ResSched(was)) rc2res.pickDt = (rc2res.step===rc2res.step0) ? rc2res.nextDt : '';
+  else if(!_rc2ResSched(was)) rc2res.pickDt = (rc2res.step===rc2res.step0) ? rc2res.nextDt : ((s0.indexOf(rc2res.step)>=0 && p0.hasOwnProperty(rc2res.step)) ? p0[rc2res.step] : '');
   else {
     // between two schedule steps the picked day stays; a time taken for the new kind is dropped
     var p = rc2res.pickDt || '';
     if(p.split(' ')[1] && _rc2ResBlocked(p.split(' ')[0], p.split(' ')[1])) rc2res.pickDt = p.split(' ')[0];
   }
+  rc2res.steps = rc2res.step ? [rc2res.step] : [];
+  rc2res.act = _rc2ResSched(rc2res.step) ? rc2res.step : '';
+  rc2res.pd = {}; if(rc2res.act) rc2res.pd[rc2res.act] = rc2res.pickDt;
   rc2res._pk = null;
   rc2ResRefresh();
+}
+// tab of one of the two schedules: the picker now edits that one
+function rc2ResSetAct(k){
+  if(!rc2res.pd || !rc2res.pd.hasOwnProperty(k) || rc2res.act===k) return;
+  if(rc2res.act) rc2res.pd[rc2res.act] = rc2res.pickDt || '';
+  rc2res.act = k; rc2res.pickDt = rc2res.pd[k] || ''; rc2res._pk = null;
+  rc2ResRenderPicker();
+}
+function _rc2ResTabLbl(dt){
+  var k = dt ? rc2DtKey(dt) : ''; if(!k) return '날짜 미정';
+  var p = k.split('-'), d = new Date(+p[0], +p[1]-1, +p[2]), tm = String(dt).split(' ')[1] || '';
+  return (+p[1])+'/'+(+p[2])+'('+['일','월','화','수','목','금','토'][d.getDay()]+') '+(tm ? _ivKor(_ivToMin(tm)) : '· 시간 미정');
+}
+function _rc2ResTabsRender(){
+  var tb = document.getElementById('rc2ResTabs'), mn = document.getElementById('rc2ResMultiNote');
+  var multi = (rc2res.outcome==='완료' && (rc2res.steps||[]).length>1);
+  if(mn) mn.style.display = multi ? '' : 'none';
+  if(!tb) return;
+  var h = '';
+  if(multi){
+    for(var i=0;i<rc2res.steps.length;i++){
+      var sk = rc2res.steps[i], so = _rc2ResStep(sk), v = (sk===rc2res.act) ? (rc2res.pickDt||'') : ((rc2res.pd||{})[sk]||'');
+      h += '<div class="rc2-res-tab'+(sk===rc2res.act?' on':'')+'" data-ract="'+sk+'"><div class="k">'+so.icon+' '+so.nm+'</div><div class="v'+(v?'':' none')+'">'+_rc2ResTabLbl(v)+'</div></div>';
+    }
+  }
+  tb.innerHTML = h;
+  tb.style.display = multi ? '' : 'none';
+  var a = tb.querySelectorAll('[data-ract]');
+  for(var j=0;j<a.length;j++) a[j].addEventListener('click', function(){ rc2ResSetAct(this.getAttribute('data-ract')); });
 }
 // the status a result leaves: 입과확정 -> 입과확보, 보류/거절 -> 관리, a next schedule takes a 관리 candidate back to 추진중
 function _rc2ResNewSt(base, o, st){
@@ -21115,7 +21311,7 @@ function _rc2ResBlocked(day, hm){
   return _rc2Overlap(_ivToMin(hm), kind==='call'?30:60, _rc2DayOcc(day, rc2res.br, rc2res.candId).visits);
 }
 function rc2ResRefresh(){
-  var o=rc2res.outcome, st=(o==='완료') ? rc2res.step : '';
+  var o=rc2res.outcome, st=(o==='완료') ? rc2res.step : '', _onSt=(o==='완료') ? (rc2res.steps || (st ? [st] : [])) : [];
   var cards=[['완료','rc2ResDone','만나고 왔어요'],['불참','rc2ResCancel','못 만났어요'],['변경','rc2ResMove','날짜를 옮겨요']];
   for(var c=0;c<cards.length;c++){
     var el=document.getElementById(cards[c][1]); if(!el) continue;
@@ -21130,7 +21326,7 @@ function rc2ResRefresh(){
     for(var i=0;i<RC2_RES_STEPS.length;i++){
       var s=RC2_RES_STEPS[i];
       if(s.phone && !rc2res.phone) continue;
-      h+='<div class="rc2-step'+(st===s.key?' on':'')+'" data-rstep="'+s.key+'" style="--sbg:'+s.bg+';--ssoft:'+s.soft+';--sdeep:'+s.deep+';--sbd:'+s.bd+'"><div class="ic">'+s.icon+'</div><div class="nm">'+s.nm+'</div></div>';
+      h+='<div class="rc2-step'+(_onSt.indexOf(s.key)>=0?' on':'')+'" data-rstep="'+s.key+'" style="--sbg:'+s.bg+';--ssoft:'+s.soft+';--sdeep:'+s.deep+';--sbd:'+s.bd+'"><div class="ic">'+s.icon+'</div><div class="nm">'+s.nm+'</div></div>';
     }
     wrap.innerHTML=h;
     var a=wrap.querySelectorAll('[data-rstep]');
@@ -21147,6 +21343,8 @@ function rc2ResRefresh(){
 }
 // date + time for 일정변경 (under the outcome cards) or for the next step (under the steps), like the 214 form
 function rc2ResRenderPicker(){
+  if(rc2res.outcome==='완료' && rc2res.act && rc2res.pd) rc2res.pd[rc2res.act] = rc2res.pickDt || '';
+  _rc2ResTabsRender();
   var mv=(rc2res.outcome==='변경'), sc=(rc2res.outcome==='완료' && _rc2ResSched(rc2res.step));
   var a=document.getElementById('rc2ResMovePk'), b=document.getElementById('rc2ResStepPk');
   var pickEl = mv ? a : (sc ? b : null);
@@ -21160,7 +21358,8 @@ function rc2ResRenderPicker(){
   var pk=rc2res._pk;
   var first=new Date(pk.y,pk.m,1); var startDow=first.getDay(); var daysIn=new Date(pk.y,pk.m+1,0).getDate();
   var selDay=''; if(dt){ var sp=dt.split(' ')[0].split('-'); if(parseInt(sp[0],10)===pk.y && parseInt(sp[1],10)-1===pk.m) selDay=parseInt(sp[2],10); }
-  var html='<div class="rc2-pk-label">📅 날짜 선택 <span style="font-weight:400;font-size:10px;color:var(--text3);margin-left:6px"><span style="color:#1E7A50;font-weight:700">알</span>=알파 <span style="color:#5A3FB0;font-weight:700">브</span>=브라보 기존일정</span></div>';
+  var _actS=(sc && (rc2res.steps||[]).length>1) ? _rc2ResStep(rc2res.act) : null;
+  var html='<div class="rc2-pk-label">📅 '+(_actS ? ('<b>'+_actS.nm+'</b> ') : '')+'날짜 선택 <span style="font-weight:400;font-size:10px;color:var(--text3);margin-left:6px"><span style="color:#1E7A50;font-weight:700">알</span>=알파 <span style="color:#5A3FB0;font-weight:700">브</span>=브라보 기존일정</span></div>';
   html+='<div class="rc2-pk-head"><button type="button" class="rc2-pk-nav" data-rpkmove="-1">‹</button><span class="rc2-pk-mon">'+pk.y+'년 '+(pk.m+1)+'월</span><button type="button" class="rc2-pk-nav" data-rpkmove="1">›</button></div>';
   html+='<div class="rc2-pk-dow"><div style="color:#D85A30">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color:#378ADD">토</div></div>';
   html+='<div class="rc2-pk-grid">';
@@ -21230,7 +21429,7 @@ function _rc2ResTimeBox(dt, kind){
   chips += '<span class="rc2-ivchip other'+vc+((call||visit)?'':' w')+(otherOn?' on':'')+'" data-rother="1">🕐 '+(otherOn ? _ivKor(_ivToMin(cur)) : '다른 시간')+'</span>';
   h += '<div class="rc2-ivchips">'+chips+'</div>';
   if(cur){
-    var lb = _rc2IvLabel(dt), stp = _rc2ResStep(rc2res.step);
+    var lb = _rc2IvLabel(dt), stp = _rc2ResStep(rc2res.act || rc2res.step);
     h += '<div class="rc2-ivres '+(call?'call':'visit')+'">✓ '+(mv ? (lb+(lb.slice(-1)==='분'?'으로':'로')+' 옮겨요') : (lb+(stp?(' · '+stp.icon+' '+stp.nm):'')))+'</div>';
   }
   return h+'</div>';
@@ -21256,7 +21455,10 @@ function rc2ResPickTime(hm){
 function rc2SaveRes(){
   var undo=(rc2res.undo===true); rc2res.undo=false;
   var o=rc2res.outcome, st=(o==='완료') ? (rc2res.step||'') : '', sched=_rc2ResSched(st);
-  var pk=(o==='변경' || sched) ? (rc2res.pickDt||'') : '';
+  if(o==='완료' && rc2res.act && rc2res.pd) rc2res.pd[rc2res.act] = rc2res.pickDt || '';
+  var _pd=rc2res.pd || {}, st2=(o==='완료' && (rc2res.steps||[]).length>1) ? rc2res.steps[1] : '';
+  var pk=(o==='변경') ? (rc2res.pickDt||'') : (sched ? (_pd.hasOwnProperty(st) ? (_pd[st]||'') : (rc2res.pickDt||'')) : '');
+  var pk2=st2 ? (_pd[st2]||'') : '';
   var pkDay=pk ? pk.split(' ')[0] : '', pkTm=pk ? (pk.split(' ')[1]||'') : '';
   if(!o && !undo){ showToast('✅ 진행완료 / ❌ 불참·취소 / 📅 일정변경 중 하나를 골라 주세요'); return; }
   if(o==='변경'){
@@ -21264,7 +21466,8 @@ function rc2SaveRes(){
     if(!pkTm){ showToast('🕐 시간을 골라 주세요'); return; }
     if(pk===rc2res.evDt){ showToast('📅 지금 일정과 같은 날짜·시간이에요'); return; }
   }
-  if(sched && pkDay && !pkTm){ showToast('🕐 시간을 골라 주세요'); return; }
+  if(sched && pkDay && !pkTm){ if(st2) rc2ResSetAct(st); showToast('🕐 '+(st2 ? (_rc2ResStep(st).nm+' ') : '')+'시간을 골라 주세요'); return; }
+  if(st2 && pk2 && !pk2.split(' ')[1]){ rc2ResSetAct(st2); showToast('🕐 '+_rc2ResStep(st2).nm+' 시간을 골라 주세요'); return; }
   if(pkTm && _rc2ResBlocked(pkDay, pkTm)){ showToast('🏠 그 시간엔 '+(rc2res.br==='alpha'?'알파':'브라보')+' 내방이 있어요 · 다른 시간을 골라 주세요'); return; }
   var _rnEl=document.getElementById('rc2ResName');
   var _nm=_rnEl ? _rnEl.value.trim() : '';
@@ -21285,31 +21488,55 @@ function rc2SaveRes(){
   else { ev.done=false; ev.cancelled=false; }
   if(o==='변경') ev.dt=pk;
   if(st) ev.next=st; else delete ev.next;
-  // the one follow-up schedule of this result: made once, then moved or dropped by later edits
-  var lk=null; if(ev.nextId){ for(var l=0;l<evs.length;l++){ if(evs[l] && evs[l].id===ev.nextId){ lk=evs[l]; break; } } }
-  var lkOpen=!!(lk && !lk.done && !lk.cancelled);
+  if(st2) ev.next2=st2; else delete ev.next2;
+  // the follow-up schedules of this result (nextId, and nextId2 for the second of life design + partners): made once, then moved,
+  // retyped or dropped by later edits. A follow-up of the same step goes first; a closed one already took place and
+  // stays as it is; an open one of another step is retyped; open ones no step wants go away.
   var nowIso=new Date().toISOString();
-  if(sched){
-    if(lkOpen){
-      var lc=cp(lk);
-      if((lc.types||[])[0]!==st){ lc.types=[st]; delete lc.visitConfirm; }
-      lc.dt=pk;
-      if(pk && !lc.createdAt) lc.createdAt=nowIso;
-      if(st==='지점장인터뷰' && pk && lc.visitConfirm===undefined) lc.visitConfirm=false;
-      for(var l2=0;l2<evs.length;l2++){ if(evs[l2] && evs[l2].id===lc.id){ evs[l2]=lc; break; } }
-    } else if(!(lk && (lk.types||[])[0]===st)){
-      // (a closed follow-up of the same step already took place: it stays as it is)
-      var nv={ id:'e'+Date.now()+'_nx_'+Math.floor(Math.random()*1000), types:[st], dt:pk, done:false };
-      if(pk) nv.createdAt=nowIso;
-      if(st==='지점장인터뷰' && pk) nv.visitConfirm=false;
+  var want=[]; if(sched) want.push({ st:st, pk:pk }); if(st2) want.push({ st:st2, pk:pk2 });
+  var links=[], lids=[ev.nextId, ev.nextId2];
+  for(var li=0;li<lids.length;li++){
+    if(!lids[li]) continue;
+    for(var l=0;l<evs.length;l++){ if(evs[l] && evs[l].id===lids[li]){ links.push({ ev:evs[l], open:!evs[l].done && !evs[l].cancelled, used:false }); break; } }
+  }
+  for(var w1=0;w1<want.length;w1++){
+    for(var l1=0;l1<links.length;l1++){ if(!links[l1].used && (links[l1].ev.types||[])[0]===want[w1].st){ want[w1].lk=links[l1]; links[l1].used=true; break; } }
+  }
+  for(var w2=0;w2<want.length;w2++){
+    if(want[w2].lk) continue;
+    for(var l2=0;l2<links.length;l2++){ if(!links[l2].used && links[l2].open){ want[w2].lk=links[l2]; links[l2].used=true; break; } }
+  }
+  var ids=[];
+  for(var w3=0;w3<want.length;w3++){
+    var W=want[w3], L=W.lk;
+    if(L && L.open){
+      var lc=cp(L.ev);
+      if((lc.types||[])[0]!==W.st){ lc.types=[W.st]; delete lc.visitConfirm; }
+      lc.dt=W.pk;
+      if(W.pk && !lc.createdAt) lc.createdAt=nowIso;
+      if(W.st==='지점장인터뷰' && W.pk && lc.visitConfirm===undefined) lc.visitConfirm=false;
+      for(var l3=0;l3<evs.length;l3++){ if(evs[l3] && evs[l3].id===lc.id){ evs[l3]=lc; break; } }
+      ids.push(lc.id);
+    } else if(L){
+      ids.push(L.ev.id);
+    } else {
+      var nv={ id:'e'+Date.now()+'_nx_'+Math.floor(Math.random()*1000)+(w3?'b':''), types:[W.st], dt:W.pk, done:false };
+      if(W.pk) nv.createdAt=nowIso;
+      if(W.st==='지점장인터뷰' && W.pk) nv.visitConfirm=false;
       evs.push(nv);
-      ev.nextId=nv.id;
+      ids.push(nv.id);
     }
-  } else if(lkOpen){
-    var keep=[]; for(var l3=0;l3<evs.length;l3++){ if(!(evs[l3] && evs[l3].id===lk.id)) keep.push(evs[l3]); }
-    evs=keep;
-    delete ev.nextId;
-  } else if(!lk){ delete ev.nextId; }
+  }
+  var drop={}, keepId=false;
+  for(var l4=0;l4<links.length;l4++){
+    if(links[l4].used) continue;
+    if(links[l4].open) drop[links[l4].ev.id]=true;
+    else if(links[l4].ev.id===ev.nextId) keepId=true;
+  }
+  var keep=[]; for(var l5=0;l5<evs.length;l5++){ if(!(evs[l5] && drop[evs[l5].id])) keep.push(evs[l5]); }
+  evs=keep;
+  if(ids[0]) ev.nextId=ids[0]; else if(!keepId) delete ev.nextId;
+  if(ids[1]) ev.nextId2=ids[1]; else delete ev.nextId2;
   var ns=_rc2ResNewSt(base, o, st);
   if(ns!==base){ ev.prevSt=base; ev.setSt=ns; } else { delete ev.prevSt; delete ev.setSt; }
   for(var e2=0;e2<evs.length;e2++){ if(evs[e2] && evs[e2].id===ev.id){ evs[e2]=ev; break; } }
@@ -21470,7 +21697,7 @@ function _rc2RenderCalNow() {
       if(!_ev.dt) continue;
       if(_acDay && !_ev.cancelled && _rcPhoneEv(_ev) && rc2DtKey(_ev.dt)===_acDay) continue;
       var _t0 = (_ev.types&&_ev.types[0])||'';
-      pushEv(_ev.dt, it.name, it.ref, _t0, it.branch, it.id, _ev.types, _ev.done, _ev.id, _ev.cancelled, it.age, it.phoenix===true, _ev.createdAt, it.callItv===true, _ev.visitConfirm, _ev.next);
+      pushEv(_ev.dt, it.name, it.ref, _t0, it.branch, it.id, _ev.types, _ev.done, _ev.id, _ev.cancelled, it.age, it.phoenix===true, _ev.createdAt, it.callItv===true, _ev.visitConfirm, (_ev.next && _ev.next2) ? (_ev.next+' · '+_ev.next2) : _ev.next);
     }
     // aladdin phone interview: show at the call start time
     if(_acOn){
@@ -21607,6 +21834,48 @@ function _rc2RenderCalNow() {
 }
 
 // ── 카톡 붙여넣기용 일정 텍스트 생성 (오늘~월말 잔여 일정) ──
+// result stages of a candidate (kakao copy and the dashboard): join confirmed when the status is secured, else the steps
+// picked at the latest result (life design, partners; both when both were picked). managed and registered cards stay out.
+function _rc2HmKey(t){
+  var pt = String(t||'').split(':');
+  var h = parseInt(pt[0],10); if(isNaN(h)) return '';
+  var mi = parseInt(pt[1],10)||0;
+  return (h<10?'0':'')+h+':'+(mi<10?'0':'')+mi;
+}
+function rc2ResultStages(c){
+  if(!c) return [];
+  if(c.status==='입과확보') return ['입과확정'];
+  if(c.status==='관리' || c.status==='등록') return [];
+  var es = rc2NormEvents(c), last = null, lastK = '';
+  for(var i=0;i<es.length;i++){
+    var x = es[i];
+    if(!x || !x.done || x.cancelled || !x.next) continue;
+    var k = rc2DtKey(x.dt) + ' ' + _rc2HmKey(String(x.dt||'').split(' ')[1]);
+    if(!last || k >= lastK){ last = x; lastK = k; }
+  }
+  if(!last) return [];
+  var out = [], nx = [last.next, last.next2];
+  for(var j=0;j<nx.length;j++){
+    var sg = nx[j]==='라이프디자인' ? '라디' : (nx[j]==='파트너스' ? '파트너스' : '');
+    if(sg && out.indexOf(sg)<0) out.push(sg);
+  }
+  return out;
+}
+// the day that result happened (YYYY-MM-DD), so the result block keeps one month only
+function rc2ResultStageDay(c, sg){
+  var es = rc2NormEvents(c), best = '';
+  var want = sg==='입과확정' ? '입과확정' : (sg==='라디' ? '라이프디자인' : '파트너스');
+  for(var i=0;i<es.length;i++){
+    var x = es[i];
+    if(!x || !x.done || x.cancelled || !x.next) continue;
+    if(x.next!==want && x.next2!==want) continue;
+    var d = rc2DtKey(x.dt);
+    if(d && d > best) best = d;
+  }
+  if(sg==='입과확정' && c.joinConfirmDate) return rc2DtKey(c.joinConfirmDate);
+  if(best) return best;
+  return rc2DtKey(c.updatedAt);
+}
 function rc2BuildKakaoText(){
   var evByDay = rc2._evByDayCache || {};
   // 24-hour time: '9:00' -> '09:00', '14:00' -> '14:00'
@@ -21626,38 +21895,6 @@ function rc2BuildKakaoText(){
     if(t.indexOf('파트너스')>=0 || t.indexOf('서포터즈')>=0) return '파트너스';
     if(t.indexOf('잡사이트')>=0) return '콜';
     return t.length ? (rc2TypeMeta(t[0]).short || t[0]) : '';
-  }
-  // 결과 현황 stage: 입과확정 (status 입과확보), or the step picked at the latest result (라이프디자인 -> 라디, 파트너스).
-  // 관리 (입과보류 · 입과거절) and 등록 cards stay out.
-  function _kkStage(c){
-    if(c.status==='입과확보') return '입과확정';
-    if(c.status==='관리' || c.status==='등록') return '';
-    var es = rc2NormEvents(c), last = null, lastK = '';
-    for(var i=0;i<es.length;i++){
-      var x = es[i];
-      if(!x || !x.done || x.cancelled || !x.next) continue;
-      var k = rc2DtKey(x.dt) + ' ' + _kkTime(String(x.dt||'').split(' ')[1]);
-      if(!last || k >= lastK){ last = x; lastK = k; }
-    }
-    if(!last) return '';
-    if(last.next==='라이프디자인') return '라디';
-    if(last.next==='파트너스') return '파트너스';
-    return '';
-  }
-  // the day that result happened (YYYY-MM-DD), so 결과 현황 keeps this month only
-  function _kkStageDay(c, sg){
-    var es = rc2NormEvents(c), best = '';
-    for(var i=0;i<es.length;i++){
-      var x = es[i];
-      if(!x || !x.done || x.cancelled || !x.next) continue;
-      var want = sg==='입과확정' ? '입과확정' : (sg==='라디' ? '라이프디자인' : '파트너스');
-      if(x.next!==want) continue;
-      var d = rc2DtKey(x.dt);
-      if(d && d > best) best = d;
-    }
-    if(sg==='입과확정' && c.joinConfirmDate) return rc2DtKey(c.joinConfirmDate);
-    if(best) return best;
-    return rc2DtKey(c.updatedAt);
   }
   function _brShort(b){ var s=String(b||''); return (s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0) ? '브' : '알'; }
   function _brFull(b){ var s=String(b||''); return (s.indexOf('bravo')>=0 || s.indexOf('브라보')>=0) ? '브라보' : '알파'; }
@@ -21724,18 +21961,21 @@ function rc2BuildKakaoText(){
   var _ymNow = now.getFullYear() + '-' + ((now.getMonth()+1<10)?'0':'') + (now.getMonth()+1);
   for(var li=0; li<dCur.list.length; li++){
     var c = dCur.list[li];
-    var _sg = c ? _kkStage(c) : '';
-    if(_sg && _kkStageDay(c, _sg).slice(0,7)===_ymNow) _byStg[_sg].push(c);
+    var _sgs = c ? rc2ResultStages(c) : [];
+    // life design + partners picked together: one line each
+    for(var si=0; si<_sgs.length; si++){
+      if(rc2ResultStageDay(c, _sgs[si]).slice(0,7)===_ymNow) _byStg[_sgs[si]].push({ c:c, sg:_sgs[si] });
+    }
   }
   var okList = _byStg['입과확정'].concat(_byStg['라디'], _byStg['파트너스']);
   if(okList.length){
     var nA=0, nB=0;
-    okList.forEach(function(c){ if(_brShort(c.branch)==='브') nB++; else nA++; });
+    okList.forEach(function(x){ if(_brShort(x.c.branch)==='브') nB++; else nA++; });
     out += '\n----------------------------------------\n\n';
     out += '✔️결과 현황\n';
     out += '●알파 : ' + nA + ' / 브라보 : ' + nB + '\n';
     for(var oi=0; oi<okList.length; oi++){
-      var c2 = okList[oi];
+      var c2 = okList[oi].c;
       // 그 후보자의 (취소 제외, 날짜있는) 일정 개수 -> 2 이상이면 차수 표기
       var _cnt = 0;
       try {
@@ -21743,7 +21983,7 @@ function rc2BuildKakaoText(){
         for(var _k=0;_k<_ce.length;_k++){ if(_ce[_k].dt && !_ce[_k].cancelled) _cnt++; }
       } catch(e) { _cnt = 0; }
       var jl = (c2.name||'') + (c2.age||'');
-      jl += '/' + (c2.ref||'') + '/' + _kkStage(c2);
+      jl += '/' + (c2.ref||'') + '/' + okList[oi].sg;
       if(_cnt>=2) jl += '/' + _cnt;
       jl += '/' + _brShort(c2.branch);
       if(c2.phoenix===true) jl += '*';
@@ -26890,7 +27130,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 223;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 226;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
