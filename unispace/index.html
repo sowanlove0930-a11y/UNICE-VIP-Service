@@ -26702,7 +26702,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 216;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 217;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -31071,8 +31071,43 @@ function _reCheckBuild(checks, imgs, failed, secs){
   var m = _reCheckMake(_re.rules, _re.insurer, checks, imgs, failed, secs);
   _re.rules = m.rules; _re.check = m.check;
 }
+// Sheets of one card are read one at a time, so a sheet that names a product group (its rule label carries the group
+// word, tier sums shared by the group) cannot reach the tier tables printed on another sheet for part of that group.
+// When every linked rule of that other sheet lies inside the group, its non-rate rewards (tier/cond/per/gift) take the
+// whole group. Rate rules keep their own products (a per-contract % may differ inside the group).
+function _reFamilyWiden(rules){
+  var fam = null, q, i;
+  function key(x){ return _cmNorm(x); }
+  for(q=0;q<rules.length;q++){
+    var f = rules[q];
+    if(!f || f.img === undefined || f.img === null || !(f.prods && f.prods.length > 1)) continue;
+    if(String(f.label || f.title || '').indexOf('상품군') < 0) continue;
+    if(!fam || f.prods.length > fam.prods.length) fam = f;
+  }
+  if(!fam) return { n:0, from:0 };
+  var G = {}; for(i=0;i<fam.prods.length;i++) G[key(fam.prods[i])] = 1;
+  function inG(r){ for(var k=0;k<r.prods.length;k++){ if(!G[key(r.prods[k])]) return false; } return true; }
+  // sheets whose linked rules all lie inside the group
+  var bad = {};
+  for(q=0;q<rules.length;q++){
+    var r = rules[q];
+    if(!r || r.img === fam.img || !(r.prods && r.prods.length)) continue;
+    if(r.prodsAll || !inG(r)) bad[r.img] = 1;
+  }
+  var n = 0, from = 0;
+  for(q=0;q<rules.length;q++){
+    var w = rules[q];
+    if(!w || w.img === undefined || w.img === null || w.img === fam.img || bad[w.img]) continue;
+    if((w.type || 'rate') === 'rate' || !(w.prods && w.prods.length) || w.prods.length >= fam.prods.length) continue;
+    from = Math.max(from, w.prods.length);
+    w.prods = fam.prods.slice();
+    n++;
+  }
+  return { n:n, from:from, to:fam.prods.length, label:String(fam.label || fam.title || '') };
+}
 // one card's read: the same reward printed on several sheets kept once, and the per-sheet checks as one summary
 function _reCheckMake(rules, insurer, checks, imgs, failed, secs){
+  var wd = _reFamilyWiden(rules || []);
   var seen = {}, kept = [], dup = 0, q;
   for(q=0;q<rules.length;q++){
     var rq = rules[q], sg = _rulesSig({ insurer:insurer, type:rq.type, from:rq.from, to:rq.to, data:rq });
@@ -31088,9 +31123,10 @@ function _reCheckMake(rules, insurer, checks, imgs, failed, secs){
   }
   for(q=0;q<kept.length;q++){ if((kept[q].prods && kept[q].prods.length) || kept[q].prodsAll) ck.linked++; }
   if(dup) ck.fixes.unshift('장표 여러 장에 반복된 같은 시상 ' + dup + '개 → 1개로 합침');
+  if(wd.n) ck.fixes.unshift('"' + wd.label + '" 장표 기준으로 다른 장표의 구간·조건 시상 ' + wd.n + '개를 상품군 전체에 적용 (상품 ' + wd.from + '개 → ' + wd.to + '개, 합산)');
   if(failed) ck.errors.push('장표 ' + failed + '장 읽기 실패 — 🔄 다시 읽기');
   var any = false; for(q=0;q<checks.length;q++){ if(checks[q]) any = true; }
-  return { rules:kept, check:(any || dup || failed) ? ck : null };
+  return { rules:kept, check:(any || dup || failed || wd.n) ? ck : null };
 }
 function _reCheckHtml(){
   var c = _re.check; if(!c) return '';
