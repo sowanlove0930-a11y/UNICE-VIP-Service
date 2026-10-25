@@ -26640,7 +26640,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 211;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 212;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29764,6 +29764,9 @@ body:not(.theme-light) .cm-card.cm-gift { background:rgba(199,125,20,.08); }
 .cm-gift-get { font-size:12.5px; font-weight:800; color:#C77D14; text-align:right; }
 /* figures on the left, the reward on the right: when both do not fit on one line (a small phone, a long reward) the reward goes to a line of its own, right aligned, instead of running into the figures */
 .cm-row.cm-row-w { flex-wrap:wrap; row-gap:3px; }
+/* watermark: the viewer's name, ID and time over the whole commission screen (a capture shows who took it); taps and scrolling go through */
+#cmBody { position:relative; z-index:0; }
+#cmBody::after { content:''; position:absolute; left:0; top:0; right:0; bottom:0; pointer-events:none; z-index:50; background-image:var(--cm-wm, none), var(--cm-wm, none); background-position:0 0, 130px 85px; background-repeat:repeat; }
 .cm-row.cm-row-w > :last-child { margin-left:auto; text-align:right; word-break:keep-all; }
 .cm-row.cm-row-w .cm-mini { word-break:keep-all; }
 </style>
@@ -32200,7 +32203,7 @@ function _cmFitWatch(){
   var root = document.getElementById('cmBody');
   if(!root) return;
   var later = window.requestAnimationFrame || function(f){ return setTimeout(f, 16); };
-  _cmFitObs = new MutationObserver(function(){ if(_cmFitT) return; _cmFitT = 1; later(function(){ _cmFitT = 0; _cmFitFigs(); }); });
+  _cmFitObs = new MutationObserver(function(){ if(_cmFitT) return; _cmFitT = 1; later(function(){ _cmFitT = 0; _cmFitFigs(); _cmWmSet(); }); });
   _cmFitObs.observe(root, { childList:true, subtree:true });
   window.addEventListener('resize', function(){ var ov = document.getElementById('commOverlay'); if(ov && ov.classList.contains('open')) _cmFitFigs(); });
 }
@@ -32215,9 +32218,25 @@ function _cmRowBk(lab){ lab = String(lab || ''); if(lab === '익월') return 'm1
 function _cmRowTxt(lab, fee, sc, scTxt, tot){
   return '<tr><td class="cm-lb">' + _cmWhen(_cmRowBk(lab), lab) + '</td><td class="cm-n cm-fee">' + fee + '</td><td class="cm-n cm-sc">' + (sc ? sc + (scTxt ? ' <span class="cm-mini">' + scTxt + '</span>' : '') : '<span class="cm-mini">–</span>') + '</td><td class="cm-n cm-tot">' + tot + '</td></tr>';
 }
+// the watermark text: name · ID · month/day hour:minute (drawn again when the minute or the account changes); none on the head's screen
+var CM_WM_ALPHA = 0.16, _cmWmKey = '';
+function _cmWmSet(){
+  var body = document.getElementById('cmBody');
+  if(!body || !currentUser) return;
+  if(_cmIsAdmin(currentUser)){ if(_cmWmKey !== 'off'){ body.style.removeProperty('--cm-wm'); _cmWmKey = 'off'; } return; }
+  var d = new Date();
+  function p2(n){ return (n < 10 ? '0' : '') + n; }
+  var txt = String(currentUser.name || '') + ' · ' + String(currentUser.id || '') + ' · ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  if(txt === _cmWmKey) return;
+  _cmWmKey = txt;
+  var t = txt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="260" height="170"><text x="130" y="90" text-anchor="middle" transform="rotate(-24 130 85)" font-family="Apple SD Gothic Neo, Noto Sans KR, Malgun Gothic, sans-serif" font-size="13" font-weight="700" fill="rgb(122,131,148)" fill-opacity="' + CM_WM_ALPHA + '">' + t + '</text></svg>';
+  body.style.setProperty('--cm-wm', 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")');
+}
 function _commRender(){
   var body = document.getElementById('cmBody');
   if(!body) return;
+  _cmWmSet();
   var isAdm = _cmIsAdmin(currentUser);
   var fpId = _cmFp || (isAdm ? '' : currentUser.id);
   // only the head and the two branch managers open another FP's figures
