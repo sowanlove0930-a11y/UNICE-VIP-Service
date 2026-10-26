@@ -4373,7 +4373,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr>
-          <th style="width:34px;text-align:right">No.</th><th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적유지</th><th>🎖️ 스탠다드</th><th>📝 활동계획</th><th>💰 수수료</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>홈케어핏</th><th>제니스</th><th>🧞 알라딘</th><th>비번초기화</th><th>삭제</th>
+          <th style="width:34px;text-align:right">No.</th><th>이름</th><th>사번</th><th>지점</th><th>역할</th><th>유니스페이스</th><th>📋 출결</th><th>📊 업적집계</th><th>🎖️ 스탠다드</th><th>📝 활동계획</th><th>💰 수수료</th><th>케어핏</th><th>케어핏2.0</th><th>U고비</th><th>노후파이</th><th>노후파이2.0</th><th>홈케어핏</th><th>제니스</th><th>🧞 알라딘</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -5460,7 +5460,7 @@ function getMergedFpList() {
       var br = f.branch;
       if (br === '알파') br = '알파지점';
       else if (br === '브라보') br = '브라보지점';
-      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', email:f.email||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, homefit:f.homefit!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true, attend:f.attend!==false, std:f.std!==false, actplan:f.actplan!==false, comm:(f.comm === true || f.comm === false) ? f.comm : null };
+      return { id:f.id, name:f.name, role:role, branch:br, title:f.title||'', level:f.level||'fp', phone:f.phone||'', email:f.email||'', active:f.active!==false, carefit:f.carefit!==false, ugobi:f.ugobi!==false, nohupai:f.nohupai!==false, nohupai2:f.nohupai2!==false, carefit2:f.carefit2!==false, homefit:f.homefit!==false, jenius:f.jenius!==false, team:f.team===true, perfKeep:f.perfKeep===true, perfOff:f.perfOff===true, attend:f.attend!==false, std:f.std!==false, actplan:f.actplan!==false, comm:(f.comm === true || f.comm === false) ? f.comm : null };
     });
   } else {
     baseList = FP_LIST;
@@ -5866,13 +5866,13 @@ function exportFpRoster(){
       var wb=new ExcelJS.Workbook();
       var ws=wb.addWorksheet('FP명단');
       var on=function(v){ return v ? 'O' : ''; };
-      var head=['No.','이름','사번','지점','역할','연락처','이메일','계정','출결','업적유지','스탠다드','활동계획','케어핏','케어핏2.0','U고비','노후파이','노후파이2','홈케어핏','제니스','알라딘'];
+      var head=['No.','이름','사번','지점','역할','연락처','이메일','계정','출결','업적집계','스탠다드','활동계획','케어핏','케어핏2.0','U고비','노후파이','노후파이2','홈케어핏','제니스','알라딘'];
       ws.addRow(head);
       list.forEach(function(fp, i){
         var _tt=String(fp.title||''); var role;
         if(fp.role==='대표') role='대표'; else if(_tt==='교육지점장'||fp.id==='H2503162') role='교육지점장'; else if(fp.role==='지점장'||_tt==='지점장') role='지점장'; else if(_tt) role=_tt; else role='FP';
         ws.addRow([i+1, fp.name||'', fp.id||'', fp.branch||'', role, fp.phone||'', fp.email||'', fp.active?'활성':'비활성',
-          on(fp.attend!==false), on(fp.perfKeep===true), on(fp.std!==false), on(fp.actplan!==false), on(fp.carefit!==false), on(fp.carefit2!==false),
+          on(fp.attend!==false), on(fp.active ? fp.perfOff!==true : fp.perfKeep===true), on(fp.std!==false), on(fp.actplan!==false), on(fp.carefit!==false), on(fp.carefit2!==false),
           on(fp.ugobi!==false), on(fp.nohupai!==false), on(fp.nohupai2!==false), on(fp.homefit!==false), on(fp.jenius!==false), on(fp.team===true)]);
       });
       var widths=[5,10,11,10,9,15,26,8,6,8,8,8,7,9,7,8,8,8,7,7];
@@ -7295,8 +7295,8 @@ function renderFpMgmtTable() {
       '<td><button class="fp-active-toggle ' + (fp.attend!==false?'on':'off') + '" onclick="toggleFpAttend(\'' + fp.id + '\')"' + ((fp.attend!==false && !fp.active) ? ' style="opacity:.55" title="계정이 비활성이라 출결현황에는 나오지 않습니다"' : '') + '>' +
         (fp.attend!==false ? (fp.active ? '📋 대상' : '📋 대상<span style="display:block;font-size:9px;font-weight:700;color:#C0392B;margin-top:1px">계정 비활성</span>') : '🚫 제외') +
       '</button></td>' +
-      '<td><button class="fp-active-toggle ' + (fp.perfKeep===true?'on':'off') + '" onclick="toggleFpPerfKeep(\'' + fp.id + '\')">' +
-        (fp.perfKeep===true ? '📊 집계' : (fp.active ? '—' : '⛔ 제외')) +
+      '<td><button class="fp-active-toggle ' + (_fpPerfOn(fp)?'on':'off') + '" onclick="toggleFpPerfKeep(\'' + fp.id + '\')">' +
+        (_fpPerfOn(fp) ? '📊 집계' : '⛔ 제외') +
       '</button></td>' +
       '<td><button class="fp-active-toggle ' + (fp.std!==false?'on':'off') + '" onclick="toggleFpStd(\'' + fp.id + '\')">' +
         (fp.std!==false ? '🎖️ 집계' : '🚫 제외') +
@@ -7346,7 +7346,7 @@ function _fpHasPending() {
 function _fpToggleRequest(action, id, nextOn, extraQs, onDone) {
   var url = UNISPACE_GAS_URL + '?action=' + action
     + '&fp=' + encodeURIComponent(id)
-    + '&on=' + (nextOn ? 'Y' : 'N')
+    + '&on=' + (nextOn === 'X' ? 'X' : (nextOn ? 'Y' : 'N'))
     + (extraQs || '');
   function run(attempt) {
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
@@ -7399,7 +7399,7 @@ var _FP_TOGGLE_DEFS = {
   jenius:   { action:'setJeniusAccess',   resKey:'jenius',   icon:'\u26A1', label:'\uC81C\uB2C8\uC2A4' },
   attend:   { action:'setAttendAccess',   resKey:'attend',   icon:'\uD83D\uDCCB', label:'\uCD9C\uACB0 \uB300\uC0C1' },
   team:     { action:'setTeamFlag',       resKey:'team',     icon:'\uD83E\uDDDE', label:'\uC54C\uB77C\uB518', adminOnly:true, defFalse:true, by:true },
-  perfKeep: { action:'setPerfKeep',       resKey:'perfKeep', icon:'\uD83D\uDCCA', label:'\uC5C5\uC801\uC720\uC9C0', adminOnly:true, defFalse:true, by:true },
+  perfKeep: { action:'setPerfKeep',       resKey:'perfKeep', icon:'\uD83D\uDCCA', label:'업적집계', adminOnly:true, defFalse:true, by:true },
   std:      { action:'setStdAccess',      resKey:'std',      icon:'\uD83C\uDF96\uFE0F', label:'\uC2A4\uD0E0\uB2E4\uB4DCFP \uC9D1\uACC4', adminOnly:true, by:true },
   actplan:  { action:'setActPlanAccess',  resKey:'actplan',  icon:'\uD83D\uDCDD', label:'\uD65C\uB3D9\uACC4\uD68D', adminOnly:true, by:true },
   // shown as it works today (a blank cell follows the full opening), saved as an explicit on / off
@@ -7459,7 +7459,35 @@ function toggleFpHomefit(id)  { _fpDoToggle(id, 'homefit'); }
 function toggleFpJenius(id)   { _fpDoToggle(id, 'jenius'); }
 function toggleFpAttend(id)   { _fpDoToggle(id, 'attend'); }
 function toggleFpTeam(id)     { _fpDoToggle(id, 'team'); }
-function toggleFpPerfKeep(id) { _fpDoToggle(id, 'perfKeep'); }
+// 업적집계: an active FP is counted unless the head set ⛔ 제외 (perfOff); an inactive FP only when kept (perfKeep)
+function _fpPerfOn(fp){ return fp.active ? fp.perfOff !== true : fp.perfKeep === true; }
+function toggleFpPerfKeep(id) {
+  var fp = getMergedFpList().find(function (f) { return f.id === id; });
+  if (!fp) return;
+  if (!fp.active) { _fpDoToggle(id, 'perfKeep'); return; }
+  var pkey = id + '|perfOff';
+  if (_fpTogglePending[pkey]) { showToast('⏳ 처리 중입니다. 잠시만요...'); return; }
+  if (!currentUser || currentUser.role !== '대표') { showToast('⚠️ 대표만 변경할 수 있습니다'); return; }
+  var wasOff = fp.perfOff === true, nextOff = !wasOff, wasKeep = fp.perfKeep === true;
+  _fpTogglePending[pkey] = { on: nextOff };
+  _fpApplyServerVal(id, 'perfOff', nextOff);
+  renderFpMgmtTable();
+  showToast('📊 ' + fp.name + ' 업적집계 변경 중...');
+  _fpToggleRequest('setPerfKeep', id, nextOff ? 'X' : false, '&by=' + encodeURIComponent(currentUser.id), function (res) {
+    delete _fpTogglePending[pkey];
+    if (res && res.ok && res.perfOff !== undefined) {
+      _fpApplyServerVal(id, 'perfOff', res.perfOff === true);
+      _fpApplyServerVal(id, 'perfKeep', res.perfKeep === true);
+      renderFpMgmtTable();
+      showToast((res.perfOff ? '⛔ ' : '📊 ') + fp.name + ' 업적집계 ' + (res.perfOff ? '제외' : '집계'));
+    } else {
+      _fpApplyServerVal(id, 'perfOff', wasOff);
+      if (res && res.ok) _fpApplyServerVal(id, 'perfKeep', wasKeep);
+      renderFpMgmtTable();
+      showToast('⚠️ ' + (res && res.ok ? 'GAS를 25f로 배포한 뒤에 바꿀 수 있어요' : ((res && res.msg) || '서버 연결 실패')) + ' — 원래대로 되돌렸습니다');
+    }
+  });
+}
 function toggleFpStd(id)      { _fpDoToggle(id, 'std'); if (typeof _awlData !== 'undefined') _awlData = null; }
 function toggleFpActPlan(id)  { _fpDoToggle(id, 'actplan'); }
 function toggleFpComm(id)     { _fpDoToggle(id, 'comm'); }
@@ -27188,7 +27216,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 233;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 234;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -34122,7 +34150,7 @@ function _cmRankHtml(){
     var B = _cmBuild(f.id, _cmYm), t = B.t;
     if(brTot[bk]){ brTot[bk].t += t.total; brTot[bk].m1 += t.m1 + t.sc1; brTot[bk].y2 += t.y2 + t.sc2; }
     if(_cmBr !== 'all' && bk !== _cmBr) continue;
-    if(!t.cnt){ idle++; idleNm.push({ nm:f.name, bk:bk }); continue; }
+    if(!t.cnt){ if(f.perfOff !== true){ idle++; idleNm.push({ nm:f.name, bk:bk }); } continue; }
     var scSrc = [];
     for(var e2=0;e2<B.evals.length;e2++){ var ev2 = B.evals[e2]; if(ev2.amt) scSrc.push(_cmEsc(ev2.insurer) + ' ' + _cmEsc(ev2.label) + ' ' + _cmMan(ev2.amt)); }
     for(var it2=0;it2<B.items.length;it2++){ var sc2 = B.items[it2].sc; if(sc2 && (sc2.m1 || sc2.y2)) scSrc.push(_cmEsc(B.items[it2].co) + ' ' + _cmEsc(sc2.label) + ' ' + _cmMan(sc2.m1 + sc2.y2)); }
