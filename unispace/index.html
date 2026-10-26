@@ -27188,7 +27188,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 232;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 233;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29928,6 +29928,10 @@ body:not(.theme-light) .cm-td-miss b { color:#F0B060; }
 .cm-idle .t b { color:var(--text); }
 .cm-idle .n { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
 .cm-idle .n span { font-size:11px; font-weight:700; color:var(--text2); background:var(--bg2); border:1px solid var(--bdr); border-radius:99px; padding:2px 9px; }
+.cm-idle .g { font-size:11px; font-weight:800; margin-top:8px; }
+.cm-idle .g.al { color:#1F9268; }
+.cm-idle .g.br { color:#6D4FB8; }
+.cm-idle .g + .n { margin-top:5px; }
 .cm-tdp { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:7px; padding:7px 10px; border-radius:10px; background:rgba(37,99,235,.07); border:1px solid rgba(37,99,235,.25); font-size:11px; color:var(--text2); }
 .cm-tdp b { font-size:14px; color:#1E5BC6; white-space:nowrap; }
 body:not(.theme-light) .cm-td-big:not(.z), body:not(.theme-light) .cm-td-am, body:not(.theme-light) .cm-td-more, body:not(.theme-light) .cm-wk-c.td i, body:not(.theme-light) .cm-wk-d span.td, body:not(.theme-light) .cm-tdp:not(.z) b { color:#8AB8FF; }
@@ -33364,6 +33368,20 @@ function _cmMgrRows(M){
   if(!M.rows.length) h += '<tr><td colspan="5" style="text-align:center;color:var(--text3)">매니저 매칭에 팀원이 없습니다</td></tr>';
   return h + '</table>';
 }
+// the ranking: FPs with no perf this month, by name, 알파 then 브라보
+function _cmRkIdleHtml(L, mo){
+  var g = { al:[], br:[] }, h = '', i;
+  for(i=0;i<L.length;i++){ (g[L[i].bk] || (g[L[i].bk] = [])).push(L[i].nm); }
+  var ks = [['al', '알파'], ['br', '브라보']];
+  for(var gk in g){ if(g.hasOwnProperty(gk) && gk !== 'al' && gk !== 'br') ks.push([gk, '기타']); }
+  for(i=0;i<ks.length;i++){
+    var a = g[ks[i][0]]; if(!a || !a.length) continue;
+    a.sort(function(x, y){ return String(x).localeCompare(String(y)); });
+    var c = ''; for(var k=0;k<a.length;k++) c += '<span>' + _cmEsc(a[k]) + '</span>';
+    h += '<div class="g ' + ks[i][0] + '">' + ks[i][1] + ' ' + a.length + '명</div><div class="n">' + c + '</div>';
+  }
+  return '<div class="cm-idle" style="margin:4px 0 10px"><div class="t">💤 ' + mo + '월 업적 없는 FP <b>' + L.length + '명</b></div>' + h + '</div>';
+}
 // members without a contract this month, by name (they are left out of the table above)
 function _cmIdleHtml(M, mo){
   var nm = [], h = '';
@@ -34095,7 +34113,7 @@ function _cmRankHtml(){
   var isAdmin = _cmIsAdmin(currentUser);
   var fps = _cmActiveFps();
   var list = [];
-  var sumT = 0, sumM1 = 0, calc = 0, cnt = 0, noProd = 0, idle = 0;
+  var sumT = 0, sumM1 = 0, calc = 0, cnt = 0, noProd = 0, idle = 0, idleNm = [];
   var brTot = { al:{t:0,m1:0,n:0,y2:0}, br:{t:0,m1:0,n:0,y2:0} };
   for(var i=0;i<fps.length;i++){
     var f = fps[i], bk = _pvBranchKey(f.branch||'');
@@ -34104,7 +34122,7 @@ function _cmRankHtml(){
     var B = _cmBuild(f.id, _cmYm), t = B.t;
     if(brTot[bk]){ brTot[bk].t += t.total; brTot[bk].m1 += t.m1 + t.sc1; brTot[bk].y2 += t.y2 + t.sc2; }
     if(_cmBr !== 'all' && bk !== _cmBr) continue;
-    if(!t.cnt){ idle++; continue; }
+    if(!t.cnt){ idle++; idleNm.push({ nm:f.name, bk:bk }); continue; }
     var scSrc = [];
     for(var e2=0;e2<B.evals.length;e2++){ var ev2 = B.evals[e2]; if(ev2.amt) scSrc.push(_cmEsc(ev2.insurer) + ' ' + _cmEsc(ev2.label) + ' ' + _cmMan(ev2.amt)); }
     for(var it2=0;it2<B.items.length;it2++){ var sc2 = B.items[it2].sc; if(sc2 && (sc2.m1 || sc2.y2)) scSrc.push(_cmEsc(B.items[it2].co) + ' ' + _cmEsc(sc2.label) + ' ' + _cmMan(sc2.m1 + sc2.y2)); }
@@ -34152,7 +34170,7 @@ function _cmRankHtml(){
     }
     h += '</div>';
   }
-  if(idle) h += '<div class="cm-mini" style="text-align:center;margin:4px 0 8px">이 달 업적 없는 FP ' + idle + '명</div>';
+  if(idle) h += _cmRkIdleHtml(idleNm, parseInt(_cmYm.substr(5, 2), 10));
   if(miss.length){
     h += '<div class="cm-card cm-go-perf" onclick="_cmGoPerf(\'' + (missIds.length === 1 ? _cmEsc(missIds[0]) : '') + '\', \'\', _cmYm)" style="border-color:rgba(199,125,20,.35);background:#FFFBF2"><div class="cm-row"><b style="font-size:12px;color:#854F0B">✏️ 상품 미입력 ' + noProd + '건</b><span class="cm-tag cm-or">입력하면 순위 반영</span></div><div class="cm-mini" style="margin-top:4px">' + _cmEsc(miss.join(' · ')) + ' — 업적 수정에서 상품만 고르면 됩니다</div><div class="cm-mini" style="margin-top:5px;text-align:right;font-weight:800;color:#854F0B">업적 조회로 가기 ›</div></div>';
   }
