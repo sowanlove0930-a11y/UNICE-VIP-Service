@@ -999,6 +999,7 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 .ga-inp{ width:100%; box-sizing:border-box; padding:7px 9px; border:1px solid var(--bdr2); border-radius:7px; background:#FFFFFF; color:#222; font-size:13px; font-family:'Noto Sans KR',sans-serif; text-align:right; }
 .ga-inp::placeholder{ color:#B8B8B8; font-size:11px; }
 .ga-inp:focus{ outline:none; border-color:var(--gold); background:#FFFFFF; }
+.ga-act{ font-size:10.5px; color:var(--text2); text-align:right; margin-top:3px; }
 .uni-spinning { animation: uniSpin .7s linear infinite; }
 .att-today-card {
   grid-column: 1 / -1;
@@ -13681,20 +13682,57 @@ function _gaRenderTabs(){
   wrap.innerHTML=h;
 }
 function _gaYm(){ var n=new Date(); return n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2); }
+// current perf for the goal boxes: this month and the plan week (the same week as the dashboard card), from the
+// local perf log (managers hold everyone's), 일시납 left out, 생보/손보 by company like 업적 조회
+function _gaActuals(){
+  var ym=_gaYm(), wk=_planWeekInfo(), res={ fp:{}, br:{ al:{life:0,non:0,wLife:0,wNon:0}, br:{life:0,non:0,wLife:0,wNon:0} } };
+  var log=(typeof getPerfLog==='function') ? getPerfLog() : [];
+  for(var i=0;i<log.length;i++){
+    var r=log[i]; if(!r) continue;
+    var d=String(r.date||'').slice(0,10), inM=(d.slice(0,7)===ym), inW=(d>=wk.ms && d<=wk.ss);
+    if(!inM && !inW) continue;
+    var id=String(r.fpId||'').trim().toUpperCase(), bk=_pvBranchKey(r.branch);
+    if(id && !res.fp[id]) res.fp[id]={life:0,non:0,wLife:0,wNon:0};
+    var tg=[]; if(id) tg.push(res.fp[id]); if(res.br[bk]) tg.push(res.br[bk]);
+    var ps=r.products||[];
+    for(var j=0;j<ps.length;j++){
+      var p=ps[j]; if(!p || _perfIsLump(p)) continue;
+      var kind=_perfClassify(p.co), a=parseInt(p.amount)||0;
+      if(kind!=='life' && kind!=='non') continue;
+      for(var t=0;t<tg.length;t++){
+        if(inM) tg[t][kind]+=a;
+        if(inW) tg[t][kind==='life'?'wLife':'wNon']+=a;
+      }
+    }
+  }
+  return res;
+}
+function _gaActTxt(act, goal){
+  var pct=goal>0 ? Math.round(act/goal*100) : null;
+  return '현재 '+_gaComma(act)+(pct===null ? '' : ' · <b style="color:'+(pct>=100?'#1D8A4E':'var(--gold2)')+'">'+pct+'%</b>');
+}
+function _gaActLine(inpId, act, goal){
+  return '<div class="ga-act" id="'+inpId+'_act" data-act="'+(parseInt(act)||0)+'">'+_gaActTxt(parseInt(act)||0, parseInt(goal)||0)+'</div>';
+}
+function _gaActRefresh(el){
+  var d=document.getElementById(el.id+'_act'); if(!d) return;
+  d.innerHTML=_gaActTxt(parseInt(d.getAttribute('data-act'),10)||0, _gaNum(el.value));
+}
 function _gaRenderBranchGoal(){
   var box=document.getElementById('gaBranchGoalBox'); if(!box) return;
   var db=getGoalAdjDB(); var ym=_gaYm();
   var br=(db[ym]&&db[ym].branch)||{};
+  var ac=_gaActuals();
   function row(bk,label){
-    var v=br[bk]||{};
+    var v=br[bk]||{}, a=ac.br[bk];
     var wl=_gaWeekLabel();
     return '<div style="background:var(--surface);border:1px solid var(--bdr2);border-radius:10px;padding:12px;margin-bottom:8px">'+
       '<div style="font-size:13px;font-weight:700;margin-bottom:8px">'+label+' 지점 목표</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 생보 (원)</div><input type="text" id="gab_'+bk+'_life" value="'+_gaInpVal(v.life)+'" placeholder="원" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 손보 (원)</div><input type="text" id="gab_'+bk+'_non" value="'+_gaInpVal(v.non)+'" placeholder="원" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 생보 (원)</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaInpVal(v.wLife)+'" placeholder="원" class="ga-inp"></div>'+
-        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 손보 (원)</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaInpVal(v.wNon)+'" placeholder="원" class="ga-inp"></div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 생보 (원)</div><input type="text" id="gab_'+bk+'_life" value="'+_gaInpVal(v.life)+'" placeholder="원" oninput="_gaUpdateSum();_gaActRefresh(this)" class="ga-inp">'+_gaActLine('gab_'+bk+'_life', a.life, v.life)+'</div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">월 손보 (원)</div><input type="text" id="gab_'+bk+'_non" value="'+_gaInpVal(v.non)+'" placeholder="원" oninput="_gaUpdateSum();_gaActRefresh(this)" class="ga-inp">'+_gaActLine('gab_'+bk+'_non', a.non, v.non)+'</div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 생보 (원)</div><input type="text" id="gab_'+bk+'_wlife" value="'+_gaInpVal(v.wLife)+'" placeholder="원" oninput="_gaActRefresh(this)" class="ga-inp">'+_gaActLine('gab_'+bk+'_wlife', a.wLife, v.wLife)+'</div>'+
+        '<div><div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:3px">'+wl+' 손보 (원)</div><input type="text" id="gab_'+bk+'_wnon" value="'+_gaInpVal(v.wNon)+'" placeholder="원" oninput="_gaActRefresh(this)" class="ga-inp">'+_gaActLine('gab_'+bk+'_wnon', a.wNon, v.wNon)+'</div>'+
       '</div>'+
     '</div>';
   }
@@ -13725,8 +13763,10 @@ function _gaRenderFpList(){
   if(!list.length){ wrap.innerHTML='<div class="pv-empty" style="padding:16px">FP가 없습니다</div>'; return; }
   var wl=_gaWeekLabel();
   var _wk=_gaWeekKey();
+  var ac=_gaActuals();
   var h='';
   list.forEach(function(fp){
+    var a=ac.fp[String(fp.id||'').trim().toUpperCase()]||{life:0,non:0,wLife:0,wNon:0};
     var orig=_fpOrigGoal(fp.id);
     var wkGoal=_fpWeekGoal(fp.id, _wk); // only this week's submitted goal
     var sv=saved[fp.id]||{};
@@ -13752,10 +13792,10 @@ function _gaRenderFpList(){
         '<div style="font-size:10px;color:'+(hasOrig?'var(--gold2)':'var(--text3)')+'">'+origTxt+'</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 생보 (원)</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaInpVal(life)+'" placeholder="'+phM+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 손보 (원)</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaInpVal(non)+'" placeholder="'+phM+'" oninput="_gaUpdateSum()" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 생보 (원)</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaInpVal(wlife)+'" placeholder="'+phWk+'" class="ga-inp"></div>'+
-        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 손보 (원)</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaInpVal(wnon)+'" placeholder="'+phWk+'" class="ga-inp"></div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 생보 (원)</div><input type="text" id="gaf_'+fp.id+'_life" value="'+_gaInpVal(life)+'" placeholder="'+phM+'" oninput="_gaUpdateSum();_gaActRefresh(this)" class="ga-inp">'+_gaActLine('gaf_'+fp.id+'_life', a.life, life)+'</div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">월 손보 (원)</div><input type="text" id="gaf_'+fp.id+'_non" value="'+_gaInpVal(non)+'" placeholder="'+phM+'" oninput="_gaUpdateSum();_gaActRefresh(this)" class="ga-inp">'+_gaActLine('gaf_'+fp.id+'_non', a.non, non)+'</div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 생보 (원)</div><input type="text" id="gaf_'+fp.id+'_wlife" value="'+_gaInpVal(wlife)+'" placeholder="'+phWk+'" oninput="_gaActRefresh(this)" class="ga-inp">'+_gaActLine('gaf_'+fp.id+'_wlife', a.wLife, wlife)+'</div>'+
+        '<div><div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px">'+wl+' 손보 (원)</div><input type="text" id="gaf_'+fp.id+'_wnon" value="'+_gaInpVal(wnon)+'" placeholder="'+phWk+'" oninput="_gaActRefresh(this)" class="ga-inp">'+_gaActLine('gaf_'+fp.id+'_wnon', a.wNon, wnon)+'</div>'+
       '</div>'+
     '</div>';
   });
@@ -27148,7 +27188,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 228;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 230;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -30267,6 +30307,34 @@ body:not(.theme-light) .cm-rk-bar { background:rgba(255,255,255,.1); }
 body:not(.theme-light) .cm-card.cm-gift { background:rgba(199,125,20,.08); }
 .cm-gift-item { font-size:12.5px; font-weight:800; color:#C77D14; margin-top:3px; }
 .cm-prog i.cm-gift-bar { background:linear-gradient(90deg,#F4A326,#C77D14); }
+.cm-bj { border:1.5px solid var(--gold); border-radius:12px; padding:11px 13px 6px; margin:0 0 10px; background:var(--bg2); }
+.cm-bj-h { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; font-weight:900; color:var(--text); }
+.cm-bj-t { display:flex; justify-content:space-between; align-items:flex-end; gap:8px; margin:3px 0 6px; }
+.cm-bj-t b { font-size:24px; font-weight:900; color:var(--text); letter-spacing:-.4px; }
+.cm-bj-r { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 0; border-top:1px solid rgba(201,168,76,.22); font-size:12.5px; color:var(--text); }
+.cm-bj-r > span { min-width:0; word-break:keep-all; }
+.cm-bj-r > b { white-space:nowrap; font-size:13px; }
+.cm-bj-co { font-weight:800; margin-right:5px; }
+.cm-bj-p { color:var(--text2); }
+.cm-bj .cm-bj-more { display:none; }
+.cm-bj.all .cm-bj-more { display:flex; }
+.cm-bj-tg { text-align:center; font-size:11.5px; font-weight:800; color:var(--gold2); padding:7px 0 4px; border-top:1px solid rgba(201,168,76,.22); cursor:pointer; }
+.cm-bj-arw { text-align:center; font-size:11.5px; font-weight:800; color:var(--gold2); margin:-2px 0 8px; }
+.cm-nd-need { font-size:13px; font-weight:800; color:var(--text); }
+.cm-nd-red { color:#C0392B; }
+.cm-nd-sum { font-size:20px; font-weight:900; color:#6D4FB8; white-space:nowrap; }
+.cm-nd-nums { display:flex; gap:6px; margin:2px 0 2px; }
+.cm-nd-nb { flex:1; text-align:center; border:1px solid rgba(201,168,76,.35); background:rgba(201,168,76,.06); border-radius:8px; padding:4px 4px; }
+.cm-nd-nb span { display:block; font-size:10.5px; color:var(--text3); }
+.cm-nd-nb b { font-size:14px; color:var(--text); }
+.cm-nd-nb.l b { color:#C0392B; }
+.cm-nd-pill { display:inline-block; background:rgba(109,79,184,.12); color:#6D4FB8; font-size:10.5px; font-weight:800; border-radius:8px; padding:1px 6px; margin-left:4px; }
+.cm-nd-brk { border-top:1px dashed rgba(201,168,76,.45); margin-top:8px; padding-top:3px; }
+.cm-nd-ln { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; padding:6px 0; font-size:12px; color:var(--text); }
+.cm-nd-ln > span { min-width:0; word-break:keep-all; }
+.cm-nd-ln > b { color:#6D4FB8; white-space:nowrap; font-size:13px; }
+.cm-nd-sub { display:block; font-size:10.5px; color:var(--text3); margin-top:2px; line-height:1.5; }
+.cm-nd-fut { display:block; font-size:11px; font-weight:700; color:#6D4FB8; margin-top:2px; }
 .cm-when { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:800; color:#fff; white-space:nowrap; line-height:1.45; letter-spacing:-.2px; }
 .cm-when.m1 { background:#E07A2E; }
 .cm-when.y1 { background:#8E887C; }
@@ -32827,6 +32895,90 @@ function _cmSumKpi(bk, head, val, fee, sc){
     + '<div class="cm-s"><em>수수료 ' + _cmMan(fee) + '</em>' + (_cmHas(sc) ? '<em class="sc">시책 ' + _cmMan(sc) + '</em>' : '') + '</div></div>';
 }
 // payment-time badge: next month / 2nd year / 3rd year / gift
+// the month's 보장월초 (일시납 left out): the total, then 회사 · 상품 · 금액 rows, biggest first (5 shown, the rest folded)
+function _cmBojangHtml(items, ym){
+  var rows = [], tot = 0, lumpN = 0;
+  for(var i=0;i<(items||[]).length;i++){
+    var it = items[i];
+    if(it.lump){ lumpN++; continue; }
+    var a = parseInt(it.amount, 10) || 0;
+    if(!(a > 0)) continue;
+    rows.push(it); tot += a;
+  }
+  if(!rows.length) return '';
+  rows.sort(function(a, b){ return (parseInt(b.amount, 10) || 0) - (parseInt(a.amount, 10) || 0); });
+  var mo = parseInt(String(ym).substr(5, 2), 10);
+  var h = '<div class="cm-bj"><div class="cm-bj-h"><span>📊 ' + mo + '월 내 보장월초</span><span class="cm-mini">' + rows.length + '건</span></div>'
+        + '<div class="cm-bj-t"><b>' + _cmMan(tot) + '</b><span class="cm-mini">' + (lumpN ? '일시납 ' + lumpN + '건 제외' : '일시납 제외') + '</span></div>';
+  for(var k=0;k<rows.length;k++){
+    var r = rows[k];
+    h += '<div class="cm-bj-r' + (k >= 5 ? ' cm-bj-more' : '') + '"><span><span class="cm-bj-co">' + _cmEsc(r.co || '회사 미입력') + '</span>'
+       + (r.prod ? '<span class="cm-bj-p">' + _cmEsc(r.prod) + '</span>' : '<span class="cm-tag">상품명 미입력</span>') + '</span><b>' + _cmMan(parseInt(r.amount, 10) || 0) + '</b></div>';
+  }
+  if(rows.length > 5) h += '<div class="cm-bj-tg" onclick="var p=this.parentNode;p.classList.toggle(\'all\');this.textContent=p.classList.contains(\'all\')?\'접기 ▴\':\'전체 ' + rows.length + '건 보기 ▾\'">전체 ' + rows.length + '건 보기 ▾</div>';
+  return h + '</div><div class="cm-bj-arw">▼ 이만큼 해서 이만큼 나와요</div>';
+}
+// M/D of a yyyy-mm-dd day
+function _cmMdS(d){ var x = String(d||''); return (parseInt(x.substr(5, 2), 10) || 0) + '/' + (parseInt(x.substr(8, 2), 10) || 0); }
+// a window in words: a whole month reads "11월", otherwise "11.01~11.15"
+function _cmWinTxt(from, to){
+  var f = String(from||''), t = String(to||'');
+  if(f.substr(8, 2) === '01' && f.substr(0, 7) === t.substr(0, 7) && t === _cmMonthEnd(f.substr(0, 7))) return parseInt(f.substr(5, 2), 10) + '월';
+  return _cmMd(f) + '~' + _cmMd(t);
+}
+// the later windows of a linked rule still to sell: "11월 10만 · 12월 10만"
+function _cmFutTxt(ev){
+  if(ev.type !== 'cond' || !ev.conds || !ev.sums) return '';
+  var today = _cmTodayStr(), ps = [];
+  for(var c=0;c<ev.conds.length;c++){
+    var cd = ev.conds[c], f = cd.from || '', mn = cd.min || 0;
+    if(!f || f <= today || !(mn > 0) || ev.sums[c] >= mn) continue;
+    ps.push(_cmWinTxt(f, cd.to || _cmMonthEnd(f.substr(0, 7))) + ' ' + _cmMan(mn - ev.sums[c]));
+  }
+  return ps.join(' · ');
+}
+// 시책 한 걸음 더 (cash rewards): one card per insurer + deadline + premium still to sell
+function _cmNudHtml(L){
+  var grp = {}, ord = [];
+  for(var i=0;i<L.length;i++){
+    var x = L[i], key = x.need > 0 ? _cmNorm(x.ev.insurer) + '|' + x.dl + '|' + Math.round(x.need) : 'one|' + i;
+    if(!grp[key]){ grp[key] = []; ord.push(key); }
+    grp[key].push(x);
+  }
+  var h = '';
+  for(var g=0;g<ord.length;g++){
+    var G = grp[ord[g]], x0 = G[0], ev0 = x0.ev;
+    var nums = function(x){ return '지금 <b style="color:var(--text)">' + _cmMan(x.cur) + '</b> / 목표 <b style="color:var(--text)">' + _cmMan(x.min) + '</b>'; };
+    var futLn = function(x){ return x.fut ? '<span class="cm-nd-fut">→ ' + _cmEsc(x.fut) + (x.need > 0 ? '도' : '') + ' 체결하면 +' + _cmMan(x.gain) + '</span>' : ''; };
+    var extra = function(x){ var e = []; if(x.amt) e.push('확보 ' + _cmMan(x.amt) + ' → 받으면 ' + _cmMan(x.amt + x.gain)); if(x.ev.unitTxt) e.push(_cmEsc(x.ev.unitTxt)); if(x.ev.unkTxt) e.push(_cmEsc(x.ev.unkTxt)); return e.length ? '<span class="cm-nd-sub">' + e.join(' · ') + '</span>' : ''; };
+    if(G.length === 1){
+      h += '<div class="cm-card cm-new">' + x0.head
+         + '<div class="cm-wrow" style="margin-top:5px">' + _cmWhen(x0.bk) + '<span class="cm-mini">' + _cmEsc(ev0.period||'') + (ev0.when ? ' · ' + _cmEsc(ev0.when) + ' 지급' : '') + '</span></div>'
+         + '<div class="cm-prog"><i style="width:' + (ev0.pct||0) + '%"></i></div>'
+         + '<div class="cm-row cm-row-w"><span class="cm-mini" style="color:var(--text2)">'
+         + (x0.need > 0 ? nums(x0) + ' · <b class="cm-nd-red">' + _cmMan(x0.need) + ' 남음</b> (' + _cmMdS(x0.dl) + '까지)' : '지금 기간 달성 ✓')
+         + '</span><span style="font-size:13px;font-weight:800;color:#6D4FB8">+' + _cmMan(x0.gain) + '</span></div>'
+         + (x0.fut || x0.amt || ev0.unitTxt || ev0.unkTxt ? '<div style="margin-top:2px">' + futLn(x0) + extra(x0) + '</div>' : '')
+         + '</div>';
+      continue;
+    }
+    var sum = 0, sameN = true, sameB = true;
+    for(var j=0;j<G.length;j++){ sum += G[j].gain; if(G[j].cur !== x0.cur || G[j].min !== x0.min) sameN = false; if(G[j].bk !== x0.bk) sameB = false; }
+    h += '<div class="cm-card cm-new"><div class="cm-row"><b style="font-size:13px">' + _cmEsc(ev0.insurer) + '<span class="cm-nd-pill">시책 ' + G.length + '개</span></b>' + (sameB ? _cmWhen(x0.bk) : '') + '</div>'
+       + '<div class="cm-row" style="margin-top:7px;align-items:flex-end"><span class="cm-nd-need">' + _cmMdS(x0.dl) + '까지 <span class="cm-nd-red">' + _cmMan(x0.need) + '</span> 더 하면</span><span><span class="cm-mini">합계 </span><span class="cm-nd-sum">+' + _cmMan(sum) + '</span></span></div>';
+    if(sameN) h += '<div class="cm-prog"><i style="width:' + (ev0.pct||0) + '%"></i></div>'
+       + '<div class="cm-nd-nums"><div class="cm-nd-nb"><span>지금</span><b>' + _cmMan(x0.cur) + '</b></div><div class="cm-nd-nb"><span>목표</span><b>' + _cmMan(x0.min) + '</b></div><div class="cm-nd-nb l"><span>남은 금액</span><b>' + _cmMan(x0.need) + '</b></div></div>';
+    h += '<div class="cm-nd-brk">';
+    for(var k=0;k<G.length;k++){
+      var x = G[k], ev = x.ev;
+      h += '<div class="cm-nd-ln"><span>' + _cmEsc(ev.label) + (_cmFpInN(ev.rule.data || {}) ? '<span class="cm-tag cm-fpt">체크분만</span>' : '')
+         + '<span class="cm-nd-sub">' + (sameB ? '' : _cmWhen(x.bk) + ' ') + _cmEsc(ev.period||'') + (ev.when ? ' · ' + _cmEsc(ev.when) + ' 지급' : '') + (sameN ? '' : ' · ' + nums(x)) + '</span>'
+         + futLn(x) + extra(x) + '</span><b>+' + _cmMan(x.gain) + '</b></div>';
+    }
+    h += '</div></div>';
+  }
+  return h;
+}
 function _cmWhen(bk, txt){ var t = txt || ({ m1:'익월', y1:'1차년', y2:'2차년', y3:'3차년', gf:'물품' })[bk] || ''; return '<span class="cm-when ' + bk + '">' + t + '</span>'; }
 function _cmRowBk(lab){ lab = String(lab || ''); if(lab === '익월') return 'm1'; if(lab === '2차년' || lab.indexOf('13') === 0 || lab === '15회') return 'y2'; if(lab === '3차년') return 'y3'; return 'y1'; }
 function _cmRowTxt(lab, fee, sc, scTxt, tot){
@@ -32890,6 +33042,7 @@ function _commRender(){
   var B = _cmBuild(fpId, _cmYm), t = B.t;
   var m1 = t.m1 + t.sc1, y2 = t.y2 + t.sc2, y3 = t.y3 + t.sc3, total = m1 + t.y1 + y2 + y3;
   var nextYm = _cmYmAdd(_cmYm, 1);
+  h += _cmBojangHtml(B.items, _cmYm);
   h += '<div class="cm-kpis cm-sum' + (_cmHas(y3) ? '' : ' two') + '">'
      + _cmSumKpi('m1', parseInt(nextYm.substr(5,2),10) + '월<span class="sx"> 수령</span>', _cmMan(m1), t.m1, t.sc1)
      + _cmSumKpi('y2', '', _cmMan(y2), t.y2, t.sc2)
@@ -32900,7 +33053,7 @@ function _commRender(){
   h += '<div class="cm-total"><span>💎 총 예상</span><b>' + _cmMan(total) + '</b></div>';
   if(_cmYm === _cmTodayStr().substr(0,7)) h += _cmSimHtml('me', fpId);
   // ── 시책 결과(달성) / 한 걸음 더(더 하면 받는 것) / 해당 안 됨 — three accordions ──
-  var resC = '', resN = 0, resSum = 0, resGift = 0, nudC = '', nudN = 0, missC = '', missN = 0;
+  var resC = '', resN = 0, resSum = 0, resGift = 0, nudC = '', nudN = 0, missC = '', missN = 0, nudL = [];
   var bkName = { m1:'익월', y2:'2차년', y3:'3차년' };
   function evHead(ev, tag, icon){ return '<div class="cm-row"><b style="font-size:12px">' + (icon||'') + _cmEsc(ev.insurer) + ' ' + _cmEsc(ev.label) + '</b>' + (_cmFpInN(ev.rule.data || {}) ? '<span class="cm-tag cm-fpt">체크분만</span>' : '') + (tag||'') + '</div>'; }
   for(var e=0;e<B.evals.length;e++){
@@ -32951,15 +33104,15 @@ function _commRender(){
       resC += '<div class="cm-card">' + evHead(ev, '<span class="cm-mini" style="white-space:nowrap">' + (ev.type === 'cond' ? '조건 달성' : (ev.type === 'per' ? '건당 정액' : '누적 구간')) + '</span>')
             + '<div class="cm-row" style="margin-top:5px;align-items:flex-start;gap:8px"><span class="cm-wrow" style="align-items:flex-start">' + _cmWhen(ev.bucket === 'm1' ? 'm1' : (ev.bucket === 'y3' ? 'y3' : 'y2')) + '<span class="cm-mini" style="padding-top:2px">' + _cmEsc(nowTxt) + (ev.type === 'cond' ? '' : ' · ' + _cmEsc(ev.period||'')) + (ev.when ? ' · ' + _cmEsc(ev.when) + ' 지급' : '') + '</span></span><b style="font-size:14px;color:#6D4FB8;white-space:nowrap">' + _cmMan(ev.amt) + '</b></div></div>';
     }
-    // the reward it adds and the new total on the right; the premium still to sell goes after the figures on the left
-    var right = '', needTxt = '';
+    // the reward it adds: collected here, drawn after the loop (same insurer + deadline + premium to sell = one card)
+    var right = '', nx = null;
     if(ev.next && ev.need > 0){
       var gainN = (ev.nextAmt > (ev.amt||0)) ? ev.nextAmt - (ev.amt||0) : ev.nextAmt;
-      right = '추가 ' + _cmMan(gainN) + ((ev.amt && ev.nextAmt > ev.amt) ? ' 더해서 ' + _cmMan(ev.nextAmt) : '');
-      var nwC = (ev.type === 'cond' && ev.conds && ev.conds.length > 1 && ev.needIdx >= 0 && ev.conds[ev.needIdx]) ? (parseInt(String(ev.conds[ev.needIdx].from || '').substr(5, 2), 10) || 0) : 0;
-      needTxt = (nwC ? nwC + '월 ' : '') + _cmMan(ev.need) + ' 더 하면';
+      var dlN = (ev.type === 'cond' && ev.conds && ev.needIdx >= 0 && ev.conds[ev.needIdx]) ? (ev.conds[ev.needIdx].to || _cmMonthEnd(_cmYm)) : (ev.rule.to || (ev.rule.data||{}).to || _cmMonthEnd(_cmYm));
+      nx = { gain:gainN, need:ev.need, dl:dlN, min:ev.next.min || 0, cur:(ev.next.min || 0) - ev.need, amt:(ev.nextAmt > (ev.amt||0) ? (ev.amt||0) : 0) };
+      right = 'y';
     }
-    else if(ev.onTrack && ev.nextAmt) right = '유지 시 ' + _cmMan(ev.nextAmt);
+    else if(ev.onTrack && ev.nextAmt){ nx = { gain:ev.nextAmt, need:0, dl:'', min:0, cur:0, amt:0 }; right = 'y'; }
     if(!right){
       // the window closed below the first tier: listed under 'not applicable' (period over)
       if(ev.closed && !ev.amt){ missN++; missC += '<div class="cm-card" style="opacity:.75">' + evHead(ev, '<span class="cm-tag">기간 종료</span>') + '<div class="cm-mini" style="margin-top:4px">' + _cmEsc(nowTxt) + ' · ' + _cmEsc(ev.period||'') + ' → 미해당</div></div>'; }
@@ -32967,13 +33120,11 @@ function _commRender(){
     }
     // a Lina reward at one unit or more: more premium only starts the next unit, no nudge (branch rule)
     if(_cmUnitOf(ev.insurer) && (ev.sum || 0) >= _cmUnitOf(ev.insurer)) continue;
-    if(ev.futureN) right += ' <span style="font-weight:400;color:var(--text3)">(' + ev.futureN + '개월 더 유지)</span>';
     nudN++;
-    nudC += '<div class="cm-card cm-new">' + evHead(ev, '')
-          + '<div class="cm-wrow" style="margin-top:5px">' + _cmWhen(ev.bucket === 'm1' ? 'm1' : (ev.bucket === 'y3' ? 'y3' : 'y2')) + '<span class="cm-mini">' + _cmEsc(ev.period||'') + (ev.when ? ' · ' + _cmEsc(ev.when) + ' 지급' : '') + '</span></div>'
-          + '<div class="cm-prog"><i style="width:' + (ev.pct||0) + '%"></i></div>'
-          + '<div class="cm-row cm-row-w"><span class="cm-mini" style="color:var(--text2)">' + _cmEsc(nowTxt) + (ev.amt ? ' · 확보 ' + _cmMan(ev.amt) : '') + (needTxt ? ' · <b style="color:var(--text)">' + _cmEsc(needTxt) + '</b>' : '') + '</span><span style="font-size:12px;font-weight:800;color:#6D4FB8">' + right + '</span></div></div>';
+    nx.ev = ev; nx.head = evHead(ev, ''); nx.bk = (ev.bucket === 'm1' ? 'm1' : (ev.bucket === 'y3' ? 'y3' : 'y2')); nx.fut = _cmFutTxt(ev);
+    nudL.push(nx);
   }
+  if(nudL.length) nudC = _cmNudHtml(nudL) + nudC;
   // rules of this FP's insurers that counted nothing: the reason, so a wrong keyword or a missing 상품명 is visible
   var insSeen = {};
   for(var zi=0;zi<B.items.length;zi++){ if(B.items[zi].co) insSeen[_cmNorm(B.items[zi].co)] = B.items[zi].co; }
