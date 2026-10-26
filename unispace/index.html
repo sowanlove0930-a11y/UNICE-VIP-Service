@@ -8768,6 +8768,7 @@ function _dashCacheReset(){
   for(var k in _dashActvCache){ if(_dashActvCache.hasOwnProperty(k)) _dashActvCache[k].at = 0; }
   for(var k2 in _dashBrCache){ if(_dashBrCache.hasOwnProperty(k2)) _dashBrCache[k2].at = 0; }
   _dashRcLoadAt = 0;
+  _planPeriodAt = 0;
 }
 // bojang TOP 10: from the month's full list (getBojangTop limit=999, every FP); null until it is in
 function _dashTopRows(){
@@ -8908,12 +8909,13 @@ function _dashActvCounts(rows){
   }
   return res;
 }
-// branch perf: the month and this week (Mon-Sun cut at the month end, as the perf view counts weeks), per branch
+// branch perf: the month and the plan week (the week the goal-adjust screen and the activity plan show), per branch
 function _dashBrWeek(ym){
-  if(ym!==getCurrentYM() || typeof _pvSegForDate!=='function') return null;
-  var n = new Date(); n.setHours(0,0,0,0);
-  return _pvSegForDate(n);
+  if(ym!==getCurrentYM()) return null;
+  return _planWeekInfo();
 }
+// week name: its number, with the month in front when the week belongs to another month (11/1 falls in October week 4)
+function _dashWkName(wk, ym){ return (wk.month!==parseInt(String(ym).slice(5,7),10) ? wk.month+'월 ' : '')+wk.no+'주차'; }
 function _dashMd(d){ return (d.getMonth()+1)+'/'+d.getDate()+'('+['일','월','화','수','목','금','토'][d.getDay()]+')'; }
 function _dashMan(won){ return Math.round((parseInt(won,10)||0)/10000).toLocaleString()+'만'; }
 // branch goals in won from the goal-adjust DB: month = life + non-life, week = the weekly life + non-life
@@ -8970,7 +8972,7 @@ function _dashBrPaint(){
   var ym = _dashYm(), cur = !(typeof _perfIsPast==='function' && _perfIsPast());
   var wk = cur ? _dashBrWeek(ym) : null;
   var sub = document.getElementById('brPerfSub');
-  if(sub) sub.textContent = wk ? (wk.no+'주차 = '+_dashMd(wk.mon)+'~'+_dashMd(wk.sun)) : (parseInt(ym.slice(5,7),10)+'월 누계');
+  if(sub) sub.textContent = wk ? (_dashWkName(wk, ym)+' = '+_dashMd(wk.mon)+'~'+_dashMd(wk.sun)) : (parseInt(ym.slice(5,7),10)+'월 누계');
   var am = _dashBrAmts(ym, wk), gl = _dashBrGoals(ym), hit = _dashActvCache[ym];
   var av = (hit && hit.rows) ? _dashActvCounts(hit.rows) : null;
   if(am.a.m===null && !av){ el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text2);font-size:12px">불러오는 중...</div>'; return; }
@@ -9008,6 +9010,7 @@ function renderActTop4() {
   _dashTopPaint();
   _dashBrPaint();
   _dashBrLoad(ym);
+  _planPeriodSync(function(){ if(_dashYm()===getCurrentYM()){ _dashBrPaint(); _dashBrLoad(_dashYm()); } });
   var hit = _dashActvCache[ym];
   if((hit && Date.now() - hit.at < 180000) || _dashBojBusy[ym] || typeof UNISPACE_GAS_URL==='undefined') return;
   _dashBojBusy[ym] = true;
@@ -11467,27 +11470,50 @@ function _fpPlanGoalMan(fpId){
   var m=og.month||{};
   return _planValToMan(m.life) + _planValToMan(m.non);
 }
-// current submission week label from plan period setting, e.g. month + week
-function _gaWeekKey(){
-  try{
-    var s=localStorage.getItem('unispace_plan_period');
-    if(s){ var p=JSON.parse(s); if(p && p.week){
-      var n=new Date(); var ym=n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2);
-      return ym+'-W'+(parseInt(p.week)||1);
-    } }
-  }catch(e){}
-  var n2=new Date(); var ym2=n2.getFullYear()+'-'+('0'+(n2.getMonth()+1)).slice(-2);
-  return ym2+'-W'+Math.ceil(n2.getDate()/7);
+// the plan week, the same as activity-plan.html effectiveWeekInfo: the admin's period (unispace_plan_period) wins
+// while it lasts (through the day after its end); else the Mon-Sun week, still last week before Monday 12:00.
+// The key is made from the first day like the plan keys: its month + '-W' + ceil(day / 7).
+function _planWeekInfo(){
+  var ymd = function(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); };
+  var day = function(t){ var a = String(t).split('-'); return new Date(parseInt(a[0],10), parseInt(a[1],10)-1, parseInt(a[2],10)); };
+  var re = /^\d{4}-\d{2}-\d{2}$/, p = null, mon = null, sun = null;
+  try{ p = JSON.parse(localStorage.getItem('unispace_plan_period') || 'null'); }catch(e){ p = null; }
+  if(p && re.test(String(p.start || '')) && re.test(String(p.end || ''))){
+    mon = day(p.start); sun = day(p.end);
+    if(mon > sun){ var t0 = mon; mon = sun; sun = t0; }
+    var y = new Date(); y.setHours(0,0,0,0); y.setDate(y.getDate()-1);
+    if(sun < y){ p = null; mon = null; sun = null; }
+  } else p = null;
+  if(!mon){
+    var now = new Date(), d0 = new Date(now); d0.setHours(0,0,0,0);
+    var dow = d0.getDay();
+    mon = new Date(d0); mon.setDate(d0.getDate()-(dow===0 ? 6 : dow-1));
+    var noon = new Date(mon); noon.setHours(12,0,0,0);
+    if(now.getTime() < noon.getTime()) mon.setDate(mon.getDate()-7);
+    sun = new Date(mon); sun.setDate(mon.getDate()+6);
+  }
+  var n0 = Math.ceil(mon.getDate()/7);
+  return { month:(p && parseInt(p.month,10)) || (mon.getMonth()+1), no:(p && parseInt(p.week,10)) || n0,
+    mon:mon, sun:sun, ms:ymd(mon), ss:ymd(sun), key:ymd(mon).slice(0,7)+'-W'+n0, custom:!!p };
 }
-function _gaWeekLabel(){
-  try{
-    var s=localStorage.getItem('unispace_plan_period');
-    if(s){ var p=JSON.parse(s); if(p && p.month && p.week){ return p.month+'월 '+p.week+'주차'; } }
-  }catch(e){}
-  // fallback: compute from today (1st-based 7-day blocks)
-  var d=new Date(); var m=d.getMonth()+1; var wk=Math.ceil(d.getDate()/7);
-  return m+'월 '+wk+'주차';
+// the period lives on the server (activity-plan.html saves it there); keep this phone's copy fresh, every 10 min at most
+var _planPeriodAt = 0;
+function _planPeriodSync(cb){
+  if(Date.now() - _planPeriodAt < 600000 || typeof UNISPACE_GAS_URL==='undefined') return;
+  _planPeriodAt = Date.now();
+  fetch(UNISPACE_GAS_URL + '?action=getPlanPeriod&_=' + Date.now(), { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(res){
+    var before = null, after = null;
+    try{ before = localStorage.getItem('unispace_plan_period'); }catch(e){}
+    if(res && res.ok && res.period && res.period.start){ try{ localStorage.setItem('unispace_plan_period', JSON.stringify(res.period)); }catch(e){} }
+    else if(res && res.ok && res.cleared){ try{ localStorage.removeItem('unispace_plan_period'); }catch(e){} }
+    else { _planPeriodAt = Date.now() - 540000; return; }
+    try{ after = localStorage.getItem('unispace_plan_period'); }catch(e){}
+    if(after !== before && cb) cb();
+  }).catch(function(){ _planPeriodAt = Date.now() - 540000; });
 }
+// goal-adjust week: the plan week above, so the label, the FP week goals and the dashboard all name the same week
+function _gaWeekKey(){ return _planWeekInfo().key; }
+function _gaWeekLabel(){ var w = _planWeekInfo(); return w.month+'월 '+w.no+'주차'; }
 
 var _gaBranch='all'; // all|al|br
 var SCHED_KEY = 'unispace_schedules';
@@ -15130,23 +15156,15 @@ function _perfBranchGoalBlock(){
     { nm:'브라보', amt:Math.round((amts.bravo||0)/10000), goal:parseInt(goals.bravo)||0 }
   ];
   var body = '';
-  // the branch perf card adds this week and the active FPs under each branch
-  var L = (typeof _dashBrLast!=='undefined' && _dashBrLast && _dashBrLast.ym===getCurrentYM()) ? _dashBrLast : null;
   for (var i=0;i<rows.length;i++){
-    var r = rows[i], k = i ? 'b' : 'a';
-    if (!r.amt && !r.goal && !L) continue;
+    var r = rows[i];
+    if (!r.amt && !r.goal) continue;
     var tail = '';
     if (r.goal > 0){
       var rem = r.goal - r.amt;
       tail = (rem > 0) ? ('(잔여 ' + rem.toLocaleString() + '만)') : '(목표달성)';
     }
-    body += r.nm + ' ' + r.amt.toLocaleString() + '만' + tail + '\n';
-    if (L){
-      var ex = [];
-      if (L.wk && L.am[k].w !== null) ex.push(L.wk.no + '주차 ' + _dashMan(L.am[k].w) + (L.gl[k].w > 0 ? ('/' + _dashMan(L.gl[k].w)) : ''));
-      if (L.av) ex.push('가동 ' + L.av[k].on + '/' + L.av[k].all + '명');
-      if (ex.length) body += '  ' + ex.join(' · ') + '\n';
-    }
+    body += '-' + r.nm + ' ' + r.amt.toLocaleString() + '만' + tail + '\n';
   }
   if (!body) return '';
   return '\n[지점별 목표달성 현황]\n' + body;
@@ -15176,8 +15194,8 @@ function _perfShareText(){
   if (_dashRcLast && _dashRcLast.r && _dashRcLast.r.any && _dashRcLast.ym===getCurrentYM()){
     var rcR = _dashRcLast.r;
     out += '\n[지점별 리크루팅 현황]\n';
-    var rcRow = function(nm, o, g){ return nm + ' 입과확정 ' + o.join + ((parseInt(g,10)||0) ? ('/' + g) : '') + '\n  전화 완료 ' + o.call + '/예정 ' + o.callPlan + ' · 내방 완료 ' + o.visit + '/예정 ' + o.plan + '\n  라디 입과 ' + o.radi + ' · 파트너스 등록 ' + o.part + '\n'; };
-    out += rcRow('알파', rcR.a, rcR.goal.alpha) + rcRow('브라보', rcR.b, rcR.goal.bravo);
+    var rcRow = function(nm, o, g){ return '-' + nm + '\n입과확정 ' + o.join + ((parseInt(g,10)||0) ? ('/' + g) : '') + '\n 전화 완료 ' + o.call + '/예정 ' + o.callPlan + ' · 내방 완료 ' + o.visit + '/예정 ' + o.plan + '\n 라디 입과 ' + o.radi + ' · 파트너스 등록 ' + o.part + '\n'; };
+    out += rcRow('알파', rcR.a, rcR.goal.alpha) + '\n' + rcRow('브라보', rcR.b, rcR.goal.bravo);
   }
 
   // 유니콘즈 클럽 / 워킹홀리데이
@@ -15191,13 +15209,13 @@ function _perfShareText(){
   ucU.sort(function(x,y){ return (parseInt(y.amt)||0) - (parseInt(x.amt)||0); });
   ucW.sort(function(x,y){ return (parseInt(y.amt)||0) - (parseInt(x.amt)||0); });
   if (ucU.length){
-    out += '\n[유니콘즈 클럽] 100만↑\n';
+    out += '\n[유니콘즈 클럽]\n';
     for (var u1=0;u1<ucU.length;u1++){
       out += (u1+1) + '. ' + ucU[u1].name + ' ' + (parseInt(ucU[u1].amt)||0).toLocaleString() + '원(' + _perfBrAbbr(ucU[u1].branch) + ')\n';
     }
   }
   if (ucW.length){
-    out += '\n[워킹홀리데이] 70만↑' + (ucU.length ? ' (유니콘즈 '+ucU.length+'명 포함)' : '') + '\n';
+    out += '\n[워킹홀리데이]\n';
     for (var w1=0;w1<ucW.length;w1++){
       out += (w1+1) + '. ' + ucW[w1].name + ' ' + (parseInt(ucW[w1].amt)||0).toLocaleString() + '원(' + _perfBrAbbr(ucW[w1].branch) + ')\n';
     }
@@ -27130,7 +27148,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 226;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 228;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
