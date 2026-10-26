@@ -27188,7 +27188,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 231;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 232;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -30285,6 +30285,9 @@ body:not(.theme-light) .cm-rk-bar { background:rgba(255,255,255,.1); }
 .cm-rk-bar i { display:block; height:100%; background:linear-gradient(90deg,#C9A84C,#A87B1E); border-radius:4px; }
 .cm-rk-amt { font-size:13px; font-weight:900; color:var(--gold2); white-space:nowrap; min-width:52px; text-align:right; }
 .cm-rk-sub { font-size:10px; color:var(--text3); white-space:nowrap; }
+.cm-rk-bj { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:6px; padding-top:5px; border-top:1px dashed rgba(201,168,76,.35); font-size:11px; color:var(--text2); }
+.cm-rk-bj > b { font-size:12px; color:var(--text); margin-right:3px; }
+.cm-rk-bj > span { border-radius:7px; padding:1px 7px; font-weight:700; background:rgba(201,168,76,.1); white-space:nowrap; }
 .cm-rk-ar { color:var(--text3); font-size:11px; flex-shrink:0; }
 .cm-rk-detail { padding:0 10px 10px; cursor:default; }
 .cm-rk-detail .cm-pc-3 { margin-top:2px; }
@@ -32955,6 +32958,22 @@ function _cmBojangHtml(items, ym){
   if(rows.length > 5) h += '<div class="cm-bj-tg" onclick="var p=this.parentNode;p.classList.toggle(\'all\');this.textContent=p.classList.contains(\'all\')?\'접기 ▴\':\'전체 ' + rows.length + '건 보기 ▾\'">전체 ' + rows.length + '건 보기 ▾</div>';
   return h + '</div><div class="cm-bj-arw">▼ 이만큼 해서 이만큼 나와요</div>';
 }
+// the ranking line: the month's 보장월초 (일시납 left out) and its split by 분류; '' when there is none
+function _cmBjLine(items){
+  var tot = 0, by = {}, i;
+  for(i=0;i<(items||[]).length;i++){
+    var it = items[i];
+    if(it.lump) continue;
+    var a = parseInt(it.amount, 10) || 0;
+    if(!(a > 0)) continue;
+    var c = COMM_CATS.indexOf(it.cat) >= 0 ? it.cat : '기타';
+    by[c] = (by[c] || 0) + a; tot += a;
+  }
+  if(!tot) return '';
+  var h = '<div class="cm-rk-bj"><b>보장월초 ' + _cmMan(tot) + '</b>';
+  for(i=0;i<COMM_CATS.length;i++){ var k = COMM_CATS[i]; if(by[k]) h += '<span>' + (k === '건강상해' ? '건강' : k) + ' ' + _cmMan(by[k]) + '</span>'; }
+  return h + '</div>';
+}
 // M/D of a yyyy-mm-dd day
 function _cmMdS(d){ var x = String(d||''); return (parseInt(x.substr(5, 2), 10) || 0) + '/' + (parseInt(x.substr(8, 2), 10) || 0); }
 // a window in words: a whole month reads "11월", otherwise "11.01~11.15"
@@ -34089,7 +34108,7 @@ function _cmRankHtml(){
     var scSrc = [];
     for(var e2=0;e2<B.evals.length;e2++){ var ev2 = B.evals[e2]; if(ev2.amt) scSrc.push(_cmEsc(ev2.insurer) + ' ' + _cmEsc(ev2.label) + ' ' + _cmMan(ev2.amt)); }
     for(var it2=0;it2<B.items.length;it2++){ var sc2 = B.items[it2].sc; if(sc2 && (sc2.m1 || sc2.y2)) scSrc.push(_cmEsc(B.items[it2].co) + ' ' + _cmEsc(sc2.label) + ' ' + _cmMan(sc2.m1 + sc2.y2)); }
-    list.push({ id:f.id, name:f.name, bk:bk, t:t, scSrc:scSrc });
+    list.push({ id:f.id, name:f.name, bk:bk, t:t, scSrc:scSrc, bj:_cmBjLine(B.items) });
     sumT += t.total; sumM1 += t.m1 + t.sc1; calc += t.calc; cnt += t.cnt; noProd += t.noProd;
   }
   list.sort(function(a,b){ return b.t.total - a.t.total; });
@@ -34120,7 +34139,7 @@ function _cmRankHtml(){
     h += '<div class="cm-rk' + (open ? ' open' : '') + '" data-nm="' + _cmEsc(x.name) + '"' + (_cmNameHit(x.name, _cmRkQ) ? '' : ' style="display:none"') + ' onclick="_cmToggleOpen(\'' + _cmEsc(x.id) + '\')">'
        + '<div class="cm-rk-row"><span class="cm-rk-no' + cls + '">' + (k+1) + '</span>'
        + '<div style="flex:1;min-width:0"><div class="cm-row"><span class="cm-rk-nm">' + _cmEsc(x.name) + (isAdmin && _cmBr === 'all' ? ' <span class="cm-tag ' + (x.bk === 'al' ? 'cm-al' : 'cm-br') + '">' + (x.bk === 'al' ? '알파' : '브라보') + '</span>' : '') + (t2.noProd ? ' <span class="cm-tag cm-or">미입력 ' + t2.noProd + '</span>' : '') + '</span><span class="cm-rk-amt">' + (t2.total ? _cmMan(t2.total) : '–') + '</span></div>'
-       + '<div class="cm-row" style="gap:8px;margin-top:4px"><span class="cm-rk-bar"><i style="width:' + Math.round(t2.total / mx * 100) + '%"></i></span><span class="cm-rk-sub">' + (t2.calc ? '익월 ' + _cmMan(m1) + ' · 2차년 ' + _cmMan(y2) + (_cmHas(y3) ? ' · 3차년 ' + _cmMan(y3) : '') : (t2.total ? '시책만 · 수수료는 상품 입력 후' : '계산된 건 없음')) + '</span></div></div>'
+       + '<div class="cm-row" style="gap:8px;margin-top:4px"><span class="cm-rk-bar"><i style="width:' + Math.round(t2.total / mx * 100) + '%"></i></span><span class="cm-rk-sub">' + (t2.calc ? '익월 ' + _cmMan(m1) + ' · 2차년 ' + _cmMan(y2) + (_cmHas(y3) ? ' · 3차년 ' + _cmMan(y3) : '') : (t2.total ? '시책만 · 수수료는 상품 입력 후' : '계산된 건 없음')) + '</span></div>' + (x.bj || '') + '</div>'
        + '<span class="cm-rk-ar">' + (open ? '▴' : '▾') + '</span></div>';
     if(open){
       // the FP's month in three cells (like a contract card); what makes up the reward and the count stay folded
