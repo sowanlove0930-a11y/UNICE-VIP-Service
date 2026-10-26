@@ -3402,8 +3402,10 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 .rc2-cal-cell { min-height:120px; padding:6px 5px; border-radius:7px; background:var(--bg3); border:1px solid var(--border); font-size:13px; color:var(--text); overflow:hidden; cursor:pointer; }
 .rc2-cal-cell.empty { background:transparent; border-color:transparent; cursor:default; }
 .rc2-cal-cell.sel { border-color:var(--purple); }
-.rc2-cal-cell.today { border:2px solid #E8820E; background:rgba(232,130,14,.06); }
-.rc2-cal-cell.today .dn { color:#E8820E; font-weight:800; }
+.rc2-cal-cell.today { border:2px solid var(--text); }
+.rc2-cal-cell.today .dn { font-weight:800; }
+.rc2-today-n { display:inline-block; min-width:1.75em; box-sizing:border-box; padding:0 4px; text-align:center; border-radius:10px; background:var(--text); color:var(--bg3) !important; line-height:1.55; }
+.rc2-today-tag { font-size:10px; font-weight:800; color:var(--text); margin-left:4px; vertical-align:middle; }
 .rc2-cal-cell .dn { font-weight:600; }
 .rc2-cal-ev { display:block; width:100%; box-sizing:border-box; margin-top:2px; font-size:11.5px; line-height:1.4; border-radius:4px; padding:2px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rc2-cnt-al { font-size:11px; font-weight:700; color:#0F6E56; background:rgba(29,158,117,.16); border-radius:5px; padding:1px 6px; }
@@ -3439,6 +3441,7 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
   .rc2-sum-card { padding:8px 10px; }
   .rc2-sum-val { font-size:17px; }
   .rc2-cal-cell { min-height:66px; padding:4px; font-size:10.5px; }
+  .rc2-today-tag { display:none; }
   .rc2-cnt-al, .rc2-cnt-br { background:none !important; padding:0 !important; font-size:10px !important; }
   .rc2-cal-cnt { margin-left:3px !important; gap:2px !important; }
   .rc2-cal-ev { font-size:9.5px; padding:2px 4px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; gap:3px !important; }
@@ -22049,7 +22052,13 @@ function _rc2RenderCalNow() {
       _cntHtml+='</span>';
     }
     var cellStyle = hasJoinEvt ? 'background:rgba(232,130,14,.10)' : '';
-    html += '<div class="'+cellCls+'" style="'+cellStyle+'" data-calday="'+dayKey+'"><div class="dn" style="'+dnColor+'">'+dn+_cntHtml+'</div>'+holHtml+evHtml+joinHtml+'</div>';
+    // today: a filled circle behind the number (red on Sunday / holidays, blue on Saturday), not an orange number
+    var _dnHtml = String(dn);
+    if(dayKey===_todayKey){
+      var _tdBg = rc2IsHoliday(dayKey) ? '#E24B4A' : (dow===0 ? '#D85A30' : (dow===6 ? '#378ADD' : ''));
+      _dnHtml = '<span class="rc2-today-n"'+(_tdBg?(' style="background:'+_tdBg+';color:#fff !important"'):'')+'>'+dn+'</span><span class="rc2-today-tag">오늘</span>';
+    }
+    html += '<div class="'+cellCls+'" style="'+cellStyle+'" data-calday="'+dayKey+'"><div class="dn" style="'+dnColor+'">'+_dnHtml+_cntHtml+'</div>'+holHtml+evHtml+joinHtml+'</div>';
   }
   document.getElementById('rc2CalGrid').innerHTML = html;
   rc2._evByDayCache = evByDay; // 상세 팝업 렌더용 캐시
@@ -22099,8 +22108,8 @@ function _rc2RenderCalNow() {
 }
 
 // ── 카톡 붙여넣기용 일정 텍스트 생성 (오늘~월말 잔여 일정) ──
-// result stages of a candidate (kakao copy and the dashboard): join confirmed when the status is secured, else the steps
-// picked at the latest result (life design, partners; both when both were picked). managed and registered cards stay out.
+// result stages of a candidate (kakao copy and the dashboard): join confirmed when the status is secured, plus the life design /
+// partners steps picked at the latest result (all of them when several were picked). managed and registered cards stay out.
 function _rc2HmKey(t){
   var pt = String(t||'').split(':');
   var h = parseInt(pt[0],10); if(isNaN(h)) return '';
@@ -22109,8 +22118,8 @@ function _rc2HmKey(t){
 }
 function rc2ResultStages(c){
   if(!c) return [];
-  if(c.status==='입과확보') return ['입과확정'];
   if(c.status==='관리' || c.status==='등록') return [];
+  var out = (c.status==='입과확보') ? ['입과확정'] : [];
   var es = rc2NormEvents(c), last = null, lastK = '';
   for(var i=0;i<es.length;i++){
     var x = es[i];
@@ -22118,8 +22127,8 @@ function rc2ResultStages(c){
     var k = rc2DtKey(x.dt) + ' ' + _rc2HmKey(String(x.dt||'').split(' ')[1]);
     if(!last || k >= lastK){ last = x; lastK = k; }
   }
-  if(!last) return [];
-  var out = [], nx = _rc2EvNexts(last);
+  if(!last) return out;
+  var nx = _rc2EvNexts(last);
   for(var j=0;j<nx.length;j++){
     var sg = nx[j]==='라이프디자인' ? '라디' : (nx[j]==='파트너스' ? '파트너스' : '');
     if(sg && out.indexOf(sg)<0) out.push(sg);
@@ -27452,7 +27461,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 238;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 239;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
