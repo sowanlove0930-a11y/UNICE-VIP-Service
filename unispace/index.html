@@ -10678,7 +10678,7 @@ function movePerfWeek(delta){
 // 주 구간 -> "N월 N주차" 라벨
 function _pvWeekLabel(mon){
   var seg=_pvSegForDate(mon);
-  return (seg.mon.getMonth()+1)+'월 '+seg.no+'주차';
+  return seg.month+'월 '+seg.no+'주차';
 }
 function onPvRangeChange(){
   var s=document.getElementById('pvRangeStart'), e=document.getElementById('pvRangeEnd');
@@ -10693,30 +10693,18 @@ function onPvRangeChange(){
   renderPerfView();
 }
 function _pvYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
-// 한 달을 월요일 시작 + 월말 자름 방식으로 주 구간들로 분할. [{no, mon, sun, ms, ss}]
+// the Monday-to-Sunday weeks whose Monday is in month m (0-based), like the goal adjust tab. [{no, month, mon, sun, ms, ss}]
 function _pvMonthWeekSegs(y, m){
-  var first=new Date(y,m,1); first.setHours(0,0,0,0);
-  var last=new Date(y,m+1,0); last.setHours(0,0,0,0);
-  var segs=[];
-  var cur=new Date(first);
-  var no=1;
-  while(cur<=last){
-    // 이 구간 시작: cur. 끝: 같은 주 일요일 또는 월말 중 빠른 것
-    var dow=cur.getDay();
-    var thisSun=new Date(cur); thisSun.setDate(cur.getDate()+(dow===0?0:7-dow)); // 이번 주 일요일
-    var segEnd=(thisSun>last)?new Date(last):new Date(thisSun);
-    segs.push({ no:no, mon:new Date(cur), sun:new Date(segEnd), ms:_pvYmd(cur), ss:_pvYmd(segEnd) });
-    var nx=new Date(segEnd); nx.setDate(nx.getDate()+1);
-    cur=nx; no++;
-  }
+  var first=new Date(y,m,1), last=new Date(y,m+1,0).getDate(), segs=[];
+  for(var day=1+((8-first.getDay())%7); day<=last; day+=7) segs.push(_pvSegForDate(new Date(y,m,day)));
   return segs;
 }
-// 특정 날짜(주 시작 기준)가 속한 월-클램프 주 구간 반환
+// the Monday-to-Sunday week holding d (not cut at the month end), named like the goal adjust tab (_planWeekNameOf)
 function _pvSegForDate(d){
-  var segs=_pvMonthWeekSegs(d.getFullYear(), d.getMonth());
-  var ds=_pvYmd(d);
-  for(var i=0;i<segs.length;i++){ if(ds>=segs[i].ms && ds<=segs[i].ss) return segs[i]; }
-  return segs[0];
+  var mon=new Date(d.getFullYear(), d.getMonth(), d.getDate()-((d.getDay()+6)%7));
+  var sun=new Date(mon.getFullYear(), mon.getMonth(), mon.getDate()+6);
+  var n=_planWeekNameOf(mon) || { month:mon.getMonth()+1, no:Math.ceil(mon.getDate()/7) };
+  return { no:n.no, month:n.month, mon:mon, sun:sun, ms:_pvYmd(mon), ss:_pvYmd(sun) };
 }
 // 선택된 주 구간. _pvWeekStart 있으면 그 날이 속한 구간, 없으면 오늘이 속한 구간.
 function _pvWeekRange(){
@@ -11200,7 +11188,7 @@ function renderPerfTrend(log, now){
     }
     labelText='('+y+'년 · 월별)';
   } else if(_pvRange==='week'){
-    // 주별: 표시 달의 주 구간(월요일 시작 + 월말 자름). 막대 클릭 시 해당 주로 이동.
+    // weekly: the Monday-to-Sunday weeks whose Monday is in the shown month, named like the goal adjust tab; a bar opens that week
     var _wr0=_pvWeekRange();
     var baseMon=_wr0.mon;
     var wy=baseMon.getFullYear(), wm=baseMon.getMonth();
@@ -11223,7 +11211,8 @@ function renderPerfTrend(log, now){
       var vw=sums[idx];
       var hw=vw>0?Math.max(4,Math.round(vw/maxW*70)):0;
       var isSel=(sg.ms===selMs);
-      html+='<div class="pv-bar" onclick="perfJumpToWeek(\''+sg.ms+'\')" title="'+sg.no+'주차 '+Math.round(vw/10000).toLocaleString()+'만 (클릭하여 보기)"><div class="pv-barfill" style="height:'+hw+'px"></div><div class="pv-barday'+(isSel?' on':'')+'">'+sg.no+'주</div></div>';
+      var swm=(sg.month!==wm+1) ? sg.month+'월 ' : '';
+      html+='<div class="pv-bar" onclick="perfJumpToWeek(\''+sg.ms+'\')" title="'+swm+sg.no+'주차 '+Math.round(vw/10000).toLocaleString()+'만 (클릭하여 보기)"><div class="pv-barfill" style="height:'+hw+'px"></div><div class="pv-barday'+(isSel?' on':'')+'">'+swm+sg.no+'주</div></div>';
     });
     labelText='('+(wm+1)+'월 · 주별)';
   } else {
@@ -11691,6 +11680,21 @@ function _planPeriodSync(cb){
 // goal-adjust week: the plan week above, so the label, the FP week goals and the dashboard all name the same week
 function _gaWeekKey(){ return _planWeekInfo().key; }
 function _gaWeekLabel(){ var w = _planWeekInfo(); return w.month+'월 '+w.no+'주차'; }
+// name of the Monday-to-Sunday week that starts on mon (a Date or yyyy-mm-dd), the way the goal adjust tab names weeks:
+// the week that holds the start of the plan week takes its label (the admin's period included), any other week the
+// Monday's month and ceil(Monday date / 7), so Monday 10/26 is week 4 of October. {month, no} or null
+function _planWeekNameOf(mon){
+  var d = null, a = null;
+  if(mon && typeof mon.getFullYear === 'function') d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate());
+  else { a = String(mon || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if(a) d = new Date(+a[1], +a[2]-1, +a[3]); }
+  if(!d || isNaN(d.getTime())) return null;
+  var end = new Date(d.getFullYear(), d.getMonth(), d.getDate()+6);
+  try{
+    var w = _planWeekInfo(), ps = new Date(w.mon.getFullYear(), w.mon.getMonth(), w.mon.getDate());
+    if(ps >= d && ps <= end) return { month: w.month, no: w.no };
+  }catch(e){}
+  return { month: d.getMonth()+1, no: Math.ceil(d.getDate()/7) };
+}
 
 var _gaBranch='all'; // all|al|br
 var SCHED_KEY = 'unispace_schedules';
@@ -18770,11 +18774,8 @@ function _alAddDays(dayStr, n){ var d=_alDay(dayStr); d.setDate(d.getDate()+n); 
 function _alCallBr(dayStr){ var d=_alDay(dayStr); if(!d) return ''; var w=d.getDay(); if(w===1||w===3) return 'alpha'; if(w===2||w===4) return 'bravo'; return ''; }
 function _alBrKo(b){ return b==='alpha' ? '알파' : (b==='bravo' ? '브라보' : ''); }
 function _alBrIcon(b){ return b==='alpha' ? '⚡' : '🌊'; }
-function _alWeekLabel(mon){
-  var d=_alDay(mon); var f=new Date(d.getFullYear(), d.getMonth(), 1, 12);
-  var off=(f.getDay()+6)%7;
-  return (d.getMonth()+1)+'월 '+Math.ceil((d.getDate()+off)/7)+'주차';
-}
+// week name like the goal adjust tab (_planWeekNameOf)
+function _alWeekLabel(mon){ var n=_planWeekNameOf(mon); return n ? n.month+'월 '+n.no+'주차' : ''; }
 function _alMe(){ return (currentUser && currentUser.id) ? String(currentUser.id).toLowerCase() : ''; }
 function _alMemberOf(id){
   var ms=(rcAl.data && rcAl.data.members) || [];
@@ -22232,14 +22233,17 @@ function rc2BuildKakaoText(){
   // 결과 현황 block: results dated this month (1st ~ last day), grouped 입과확정 · 라디 · 파트너스
   var dCur = rc2GetAllCandData();
   var _byStg = { '입과확정':[], '라디':[], '파트너스':[] };
+  // one line per candidate: life design when picked, else partners, else the plain join confirmation
+  var _stgRank = { '입과확정':1, '파트너스':2, '라디':3 };
   var _ymNow = now.getFullYear() + '-' + ((now.getMonth()+1<10)?'0':'') + (now.getMonth()+1);
   for(var li=0; li<dCur.list.length; li++){
     var c = dCur.list[li];
-    var _sgs = c ? rc2ResultStages(c) : [];
-    // life design + partners picked together: one line each
+    var _sgs = c ? rc2ResultStages(c) : [], _pick = '';
     for(var si=0; si<_sgs.length; si++){
-      if(rc2ResultStageDay(c, _sgs[si]).slice(0,7)===_ymNow) _byStg[_sgs[si]].push({ c:c, sg:_sgs[si] });
+      if(rc2ResultStageDay(c, _sgs[si]).slice(0,7)!==_ymNow) continue;
+      if(!_pick || _stgRank[_sgs[si]] > _stgRank[_pick]) _pick = _sgs[si];
     }
+    if(_pick) _byStg[_pick].push({ c:c, sg:_pick });
   }
   var okList = _byStg['입과확정'].concat(_byStg['라디'], _byStg['파트너스']);
   if(okList.length){
@@ -22250,21 +22254,16 @@ function rc2BuildKakaoText(){
     out += '●알파 : ' + nA + ' / 브라보 : ' + nB + '\n';
     for(var oi=0; oi<okList.length; oi++){
       var c2 = okList[oi].c;
-      // 그 후보자의 (취소 제외, 날짜있는) 일정 개수 -> 2 이상이면 차수 표기
-      var _cnt = 0;
-      try {
-        var _ce = rc2NormEvents(c2);
-        for(var _k=0;_k<_ce.length;_k++){ if(_ce[_k].dt && !_ce[_k].cancelled) _cnt++; }
-      } catch(e) { _cnt = 0; }
+      // result lines carry no schedule count (asked 2026-10-27); schedule lines above keep theirs
       var jl = (c2.name||'') + (c2.age||'');
       jl += '/' + (c2.ref||'') + '/' + okList[oi].sg;
-      if(_cnt>=2) jl += '/' + _cnt;
       jl += '/' + _brShort(c2.branch);
       if(c2.phoenix===true) jl += '*';
       out += (oi+1) + '. ' + jl + '\n';
     }
   }
-  return out;
+  // no blank line at the very end of the copied text
+  return out.replace(/\n+$/, '');
 }
 function rc2CopyKakao(){
   var txt = rc2BuildKakaoText();
@@ -27461,7 +27460,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 239;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 243;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -30635,6 +30634,9 @@ body:not(.theme-light) .cm-card.cm-gift { background:rgba(199,125,20,.08); }
 .cm-nd-ln > b { color:#6D4FB8; white-space:nowrap; font-size:13px; }
 .cm-nd-sub { display:block; font-size:10.5px; color:var(--text3); margin-top:2px; line-height:1.5; }
 .cm-nd-fut { display:block; font-size:11px; font-weight:700; color:#6D4FB8; margin-top:2px; }
+.cm-card.cm-later { border-style:dashed; }
+.cm-later-a { font-size:14px; color:var(--text3); white-space:nowrap; }
+.cm-later-n { font-size:11px; font-weight:700; color:#6D4FB8; margin-top:5px; line-height:1.5; }
 .cm-when { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:800; color:#fff; white-space:nowrap; line-height:1.45; letter-spacing:-.2px; }
 .cm-when.m1 { background:#E07A2E; }
 .cm-when.y1 { background:#8E887C; }
@@ -30963,9 +30965,195 @@ function _cmRuleAge(r){
   var t = Date.parse((r && (r.createdAt || r.updatedAt)) || '');
   return isNaN(t) ? 0 : t;
 }
+// ── the same reward on several cards ────────────────
+// A weekly card often reprints the month's rewards. The exact signature catches a reprint read the same way; these helpers
+// catch a reprint read a little differently, and a reprint whose period or figures the newer sheet changed.
+// the windows a reward counts: [[from, to, min]] (one entry for a single-period reward)
+function _rulesWins(r){
+  var d = r.data || {};
+  if((r.type === 'cond' || r.type === 'gift') && d.conds && d.conds.length){
+    return d.conds.map(function(x){ return [String(x.from || ''), String(x.to || ''), parseInt(x.min, 10) || 0]; });
+  }
+  return [[String(r.from || d.from || ''), String(r.to || d.to || ''), 0]];
+}
+// the reward's figures (money tables, a fixed amount, a gift's minimum and rank)
+function _rulesVals(r){
+  var d = r.data || {}, t = r.type || 'rate';
+  function pr(a){ return JSON.stringify((a || []).map(function(x){ return [parseInt(x.min, 10) || 0, parseInt(x.amt, 10) || 0]; })); }
+  if(t === 'tier') return pr(d.tiers);
+  if(t === 'cond') return pr(d.rewards) + '|' + (parseInt(d.amt, 10) || 0);
+  if(t === 'per') return String(parseInt(d.amt, 10) || 0);
+  if(t === 'gift') return (parseInt(d.min, 10) || 0) + '|' + (parseInt(d.rank, 10) || 0);
+  return '';
+}
+// a reward's name without dates, numbers, marks and the word for reward (an "Oct-Nov streak reward" becomes "streak"),
+// and the week numbers it names (a "week 3" reward gives '3')
+function _rulesLbl(r){
+  var d = r.data || {}, s = String(r.title || d.label || '').toLowerCase();
+  var wk = (s.match(/\d\s*주/g) || []).map(function(x){ return x.charAt(0); }).sort().join(',');
+  s = s.replace(/\d+(\.\d+)*\s*(월|일|주차|주|회차|차월|차|년|만|%)?/g, '').replace(/시상금|시상|시책/g, '').replace(/[\s\/()\[\]+.,:·|~'"\-_*★☆#&!]/g, '');
+  return { k:s, wk:wk };
+}
+// two short names for the same thing. strong: equal or nearly all two-letter pieces shared. Otherwise one inside the
+// other, or the shorter one's pieces almost all found in the longer one (a reading that left out a word), also counts
+function _rulesNear(a, b, strong){
+  if(a === b) return !!a;
+  if(!a || !b) return false;
+  if(!strong && a.length >= 2 && b.length >= 2 && (a.indexOf(b) >= 0 || b.indexOf(a) >= 0)) return true;
+  function bi(s){ var o = {}, n = 0; for(var i=0;i<s.length-1;i++){ var k = s.substr(i, 2); if(!o[k]){ o[k] = 1; n++; } } return { o:o, n:n }; }
+  var A = bi(a), B = bi(b), c = 0, mn = Math.min(A.n, B.n);
+  if(!mn) return false;
+  for(var k in A.o){ if(A.o.hasOwnProperty(k) && B.o[k]) c++; }
+  if(strong) return 2 * c / (A.n + B.n) >= 0.8;
+  return 2 * c / (A.n + B.n) >= 0.7 || (mn >= 3 && c / mn >= 0.8);
+}
+function _rulesLblNear(x, y, strong){
+  if(x.wk !== y.wk) return false;
+  if(!x.k && !y.k) return x.wk !== '';
+  return _rulesNear(x.k, y.k, strong);
+}
+// how two rewards' products compare: 'match' (both the whole line-up, half or more of the linked products, or the same
+// words), 'conflict' (no product or word in common: different rewards), else 'unknown'
+function _rulesScope(a, b){
+  var x = a.data || {}, y = b.data || {}, i, j;
+  if(x.prodsAll && y.prodsAll) return 'match';
+  if(x.prodsAll || y.prodsAll) return 'unknown';
+  var px = x.prods || [], py = y.prods || [];
+  if(px.length && py.length){
+    var m = {}, c = 0;
+    for(i=0;i<px.length;i++) m[_cmNorm(px[i])] = 1;
+    for(i=0;i<py.length;i++){ if(m[_cmNorm(py[i])]) c++; }
+    return (c * 2 >= Math.min(px.length, py.length)) ? 'match' : (c ? 'unknown' : 'conflict');
+  }
+  if(px.length || py.length) return 'unknown';
+  var kx = (x.keywords || []).map(_cmNormKw).filter(function(s){ return s; }), ky = (y.keywords || []).map(_cmNormKw).filter(function(s){ return s; });
+  if(!kx.length && !ky.length) return 'match';
+  if(!kx.length || !ky.length) return 'unknown';
+  for(i=0;i<kx.length;i++){
+    for(j=0;j<ky.length;j++){ if(kx[i] === ky[j] || (kx[i].length >= 2 && ky[j].length >= 2 && (kx[i].indexOf(ky[j]) >= 0 || ky[j].indexOf(kx[i]) >= 0))) return 'match'; }
+  }
+  return 'conflict';
+}
+function _rulesDays(a, b){ var x = Date.parse(a || ''), y = Date.parse(b || ''); return (isNaN(x) || isNaN(y)) ? 99999 : Math.abs(Math.round((x - y) / 86400000)); }
+function _rulesFpSig(d){ return _cmFpItems(d).map(function(x){ return (x.ex ? '!' : '') + x.k; }).sort().join(','); }
+// 'same': one reward read twice (same periods and figures; a name alike when the products are not clearly the same).
+// 'changed': the same name and start days, and either only the end moved (by 7 days or less: a later sheet extending the
+// period) or only the figures changed (a later sheet raising an amount). la, lb: _rulesLbl of a and b when the caller has them.
+function _rulesSame(a, b, la, lb){
+  var t = a.type || 'rate';
+  if(t === 'rate' || t !== (b.type || 'rate') || _cmInsKey(a.insurer) !== _cmInsKey(b.insurer)) return '';
+  var da = a.data || {}, db = b.data || {};
+  if((da.fps || []).slice().sort().join(',') !== (db.fps || []).slice().sort().join(',')) return '';
+  var sc = _rulesScope(a, b);
+  if(sc === 'conflict') return '';
+  var wa = _rulesWins(a), wb = _rulesWins(b), sameW = true, endsNear = true, minsSame = true, i;
+  if(wa.length !== wb.length) return '';
+  for(i=0;i<wa.length;i++){
+    if(!wa[i][0] || wa[i][0] !== wb[i][0]) return '';
+    if(wa[i][1] !== wb[i][1] || wa[i][2] !== wb[i][2]) sameW = false;
+    if(wa[i][2] !== wb[i][2]) minsSame = false;
+    if(_rulesDays(wa[i][1], wb[i][1]) > 7) endsNear = false;
+  }
+  la = la || _rulesLbl(a); lb = lb || _rulesLbl(b);
+  var strong = _rulesLblNear(la, lb, true), weak = strong || _rulesLblNear(la, lb, false);
+  var ia = _rulesItemKey(da.item), ib = _rulesItemKey(db.item), gOk = (t !== 'gift' || ia === ib || _rulesNear(ia, ib, false));
+  var valsSame = (_rulesVals(a) === _rulesVals(b));
+  if(sameW && valsSame && gOk && (sc === 'match' || strong)) return 'same';
+  if(!(sc === 'match' ? weak : strong)) return '';
+  if(!((sameW && !valsSame) || (!sameW && minsSame && endsNear && valsSame && gOk))) return '';
+  var fa = _rulesFpSig(da), fb = _rulesFpSig(db);
+  return (fa && fb && fa !== fb) ? '' : 'changed';
+}
+// rewards a newer card restates: { index of the dropped rule: { w: index of the kept rule, why } }. The same reward read
+// twice goes first; two rules of one card are only merged when two of its sheets repeat one reward. A changed reprint
+// replaces the older rule only when it is the one match between the two cards (two alike rewards of a card stay).
+function _rulesNewest(list){
+  var gone = {}, by = {}, lb = [], ed = [], i, j, k, e;
+  for(i=0;i<list.length;i++){
+    lb.push(_rulesLbl(list[i]));
+    var t0 = list[i].type || 'rate';
+    if(t0 === 'rate') continue;
+    k = _cmInsKey(list[i].insurer) + '|' + t0;
+    if(!by[k]) by[k] = [];
+    by[k].push(i);
+  }
+  function cmp(fn){
+    for(var g in by){
+      if(!by.hasOwnProperty(g)) continue;
+      var ix = by[g];
+      for(var x=0;x<ix.length;x++){ for(var y=x+1;y<ix.length;y++){ if(!gone[ix[x]] && !gone[ix[y]]) fn(ix[x], ix[y]); } }
+    }
+  }
+  function camp(r){ return String(r.campaignId || ''); }
+  function img(r){ var v = (r.data || {}).img; return (v === undefined || v === null) ? '' : String(v); }
+  cmp(function(p, q){
+    var a = list[p], b = list[q];
+    if(_rulesSame(a, b, lb[p], lb[q]) !== 'same') return;
+    if(camp(a) === camp(b)){ if(img(a) !== '' && img(b) !== '' && img(a) !== img(b)) gone[q] = { w:p, why:'same' }; return; }
+    if(_cmRuleAge(b) >= _cmRuleAge(a)) gone[p] = { w:q, why:'same' }; else gone[q] = { w:p, why:'same' };
+  });
+  cmp(function(p, q){
+    var a = list[p], b = list[q];
+    if(camp(a) === camp(b) || _rulesSame(a, b, lb[p], lb[q]) !== 'changed') return;
+    ed.push(_cmRuleAge(b) >= _cmRuleAge(a) ? [p, q] : [q, p]);
+  });
+  // how many matches rule x has on card c
+  function cnt(x, c){ var n = 0; for(var z=0;z<ed.length;z++){ if((ed[z][0] === x && camp(list[ed[z][1]]) === c) || (ed[z][1] === x && camp(list[ed[z][0]]) === c)) n++; } return n; }
+  for(e=0;e<ed.length;e++){
+    var o = ed[e][0], n = ed[e][1];
+    if(cnt(o, camp(list[n])) !== 1 || cnt(n, camp(list[o])) !== 1) continue;
+    if(!gone[o] || _cmRuleAge(list[n]) > _cmRuleAge(list[gone[o].w])) gone[o] = { w:n, why:'changed' };
+  }
+  return gone;
+}
+// rule id -> { by: the rule counted instead, why }, from the last dedupe of the full list
+var _rdMemo = null;
+function _rulesGoneOf(id){
+  if(!id || !_rules) return null;
+  _rulesDedupe(_rules);
+  var g = (_rdMemo && _rdMemo.gone) || {}, cur = g[id], why = cur ? cur.why : '', n = 0;
+  if(!cur) return null;
+  while(cur.by && g[cur.by.id] && n < 20){ if(g[cur.by.id].why === 'changed') why = 'changed'; cur = g[cur.by.id]; n++; }
+  return { by:cur.by, why:why };
+}
+// the card a rule came from, the way the campaign list names it (month, week, then the day it was registered)
+function _rulesCardName(r){
+  var cid = String((r && r.campaignId) || ''), list = (typeof _sichaekAllCache !== 'undefined' && _sichaekAllCache) || [], i;
+  for(i=0;i<list.length;i++){
+    if(String(list[i].id) !== cid) continue;
+    var c = list[i], wk = _sichaekWeekOf(c), mo = _sichaekMonthOf(c), rg = _sichaekRegLbl(c);
+    var nm = wk ? String(c.startWeek || '').trim() + ' 카드' : (mo ? mo + '월 공통 카드' : '다른 카드');
+    return nm + (rg ? '(' + rg + ' 등록)' : '');
+  }
+  var t = _cmRuleAge(r);
+  if(!t) return '다른 카드';
+  var dt = new Date(t);
+  return (dt.getMonth() + 1) + '/' + dt.getDate() + ' 등록 카드';
+}
+// the purple line under a rule of card campId that another rule stands for
+function _rulesGoneTxt(g, campId){
+  if(String(g.by.campaignId || '') === String(campId || '')) return '↪ 이 카드의 다른 장표에 같은 시상이 있어서 한 번만 계산';
+  var nm = _rulesCardName(g.by);
+  if(g.why === 'changed') return '↪ ' + nm + '에 기간·금액이 바뀐 같은 시상이 있어서 그 카드 것으로 계산';
+  return '↪ 같은 시상이 ' + nm + '에도 있어서 그 카드 것으로 한 번만 계산';
+}
 function _rulesDedupe(list){
-  var seen = {}, out = [], i;
-  for(i=0;i<(list||[]).length;i++){ var sg = _rulesSig(list[i]); if(seen[sg]) continue; seen[sg] = true; out.push(list[i]); }
+  list = list || [];
+  if(_rdMemo && _rdMemo.src === list && _rdMemo.n === list.length && _rdMemo.rates === _rates) return _rdMemo.out;
+  var on = [], i;
+  // a rule switched off never stands in for a copy that is on
+  for(i=0;i<list.length;i++){ if(list[i] && list[i].active !== false) on.push(list[i]); }
+  // exact copies: the newest card's copy is kept (same figures either way)
+  var bySig = {}, keep = {}, gone = {};
+  for(i=0;i<on.length;i++){
+    var sg = _rulesSig(on[i]);
+    if(bySig[sg] === undefined){ bySig[sg] = i; keep[i] = true; continue; }
+    var j0 = bySig[sg];
+    if(_cmRuleAge(on[i]) > _cmRuleAge(on[j0])){ delete keep[j0]; if(on[j0].id) gone[on[j0].id] = { by:on[i], why:'same' }; bySig[sg] = i; keep[i] = true; }
+    else if(on[i].id) gone[on[i].id] = { by:on[j0], why:'same' };
+  }
+  var out = [];
+  for(i=0;i<on.length;i++){ if(keep[i]) out.push(on[i]); }
   // a later sheet that extends a period: the same cond reward whose windows start on the same days with the same
   // minimums but end later replaces the earlier sheet's copy (two sheets of one campaign are left as they are)
   var fam = {}, drop = {};
@@ -30978,11 +31166,19 @@ function _rulesDedupe(list){
     if(fam[key] === undefined){ fam[key] = i; continue; }
     var j = fam[key], a = out[j];
     if(String(a.campaignId||'') === String(r.campaignId||'')) continue;
-    if(_cmRuleAge(r) >= _cmRuleAge(a)){ drop[j] = true; fam[key] = i; } else drop[i] = true;
+    if(_cmRuleAge(r) >= _cmRuleAge(a)){ drop[j] = true; if(a.id) gone[a.id] = { by:r, why:'changed' }; fam[key] = i; }
+    else { drop[i] = true; if(r.id) gone[r.id] = { by:a, why:'changed' }; }
   }
   var res = [];
   for(i=0;i<out.length;i++){ if(!drop[i]) res.push(out[i]); }
-  return res;
+  // rewards a newer card restates, read a little differently or with a changed period or figures
+  var nw = _rulesNewest(res), fin = [];
+  for(i=0;i<res.length;i++){
+    if(!nw[i]){ fin.push(res[i]); continue; }
+    if(res[i].id) gone[res[i].id] = { by:res[nw[i].w], why:nw[i].why };
+  }
+  _rdMemo = { src:list, n:list.length, rates:_rates, out:fin, gone:gone };
+  return fin;
 }
 function _cmRulesOf(insurer){
   var out = [], list = _rulesDedupe(_rules || []);
@@ -31697,13 +31893,23 @@ function _reRender(){
     h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">' + (_re.reading ? _reProgressHtml() : (_re.failed ? '읽지 못했습니다 · 🔄 다시 읽기 또는 아래에서 직접 추가' : '장표 이미지를 올리면 자동으로 읽어서 채워집니다')) + '</div>';
   }
   if(_re.rules.length && _re.reading && _re.progress) h += '<div style="font-size:11px;color:var(--text3);padding:2px 2px 6px">' + _reProgressHtml() + '</div>';
+  // rules of this card that another rule stands for in the estimate (a newer weekly sheet reprinting them, or another
+  // sheet of this card repeating them)
+  var goneN = 0, goneX = 0, goneOf = [];
+  for(var gi=0;gi<_re.rules.length;gi++){
+    var gg = (_re.campaignId && _re.rules[gi].id) ? _rulesGoneOf(_re.rules[gi].id) : null;
+    goneOf.push(gg);
+    if(gg){ goneN++; if(String(gg.by.campaignId || '') !== String(_re.campaignId)) goneX++; }
+  }
+  if(goneN) h += '<div style="font-size:11px;color:#6D4FB8;background:rgba(109,79,184,.06);border-radius:8px;padding:6px 9px;margin:0 0 6px;line-height:1.5">↪ 이 카드 시상 ' + goneN + '개는 같은 시상이 ' + (goneX === goneN ? '다른 카드에' : (goneX ? '다른 카드나 이 카드의 다른 장표에' : '이 카드의 다른 장표에')) + ' 있어서 한 번만 계산돼요 (보라색 줄)</div>';
   for(var i=0;i<_re.rules.length;i++){
     var r = _re.rules[i], tt = _RE_TYPE[r.type] || _RE_TYPE.rate;
     if(!(_re.edit && _re.edit[i])){
       // compact summary: numbers to check at a glance; 수정 opens the full form
       h += '<div class="re-card" style="padding:9px 11px"><div class="re-head" style="margin-bottom:3px"><span class="re-tag" style="color:' + tt[1] + ';background:' + tt[2] + '">' + tt[0] + '</span><b style="font-size:12.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _cmEsc(r.label || '(이름 없음)') + '</b>'
          + '<span onclick="_reEdit(' + i + ')" style="font-size:11px;font-weight:700;color:var(--gold2);cursor:pointer;white-space:nowrap">수정</span><span onclick="_reDel(' + i + ')" style="color:#C0392B;font-size:12px;cursor:pointer;margin-left:4px">✕</span></div>'
-         + '<div style="font-size:12px;color:var(--text);line-height:1.5">' + _reSummary(r) + '</div></div>';
+         + '<div style="font-size:12px;color:var(--text);line-height:1.5">' + _reSummary(r) + '</div>'
+         + (goneOf[i] ? '<div style="font-size:11px;color:#6D4FB8;margin-top:3px;line-height:1.45">' + _cmEsc(_rulesGoneTxt(goneOf[i], _re.campaignId)) + '</div>' : '') + '</div>';
       continue;
     }
     h += '<div class="re-card"><div class="re-head"><span class="re-tag" style="color:' + tt[1] + ';background:' + tt[2] + '">' + tt[0] + '</span>'
@@ -31890,7 +32096,7 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
 }
 // after a read: the same reward printed on several sheets is kept once, and the per-sheet checks become one summary
 function _reCheckBuild(checks, imgs, failed, secs){
-  var m = _reCheckMake(_re.rules, _re.insurer, checks, imgs, failed, secs);
+  var m = _reCheckMake(_re.rules, _re.insurer, checks, imgs, failed, secs, _re.campaignId);
   _re.rules = m.rules; _re.check = m.check;
 }
 // Sheets of one card are read one at a time, so a sheet that names a product group (its rule label carries the group
@@ -31928,7 +32134,7 @@ function _reFamilyWiden(rules){
   return { n:n, from:from, to:fam.prods.length, label:String(fam.label || fam.title || '') };
 }
 // one card's read: the same reward printed on several sheets kept once, and the per-sheet checks as one summary
-function _reCheckMake(rules, insurer, checks, imgs, failed, secs){
+function _reCheckMake(rules, insurer, checks, imgs, failed, secs, campId){
   var wd = _reFamilyWiden(rules || []);
   var seen = {}, kept = [], dup = 0, q;
   for(q=0;q<rules.length;q++){
@@ -31945,10 +32151,30 @@ function _reCheckMake(rules, insurer, checks, imgs, failed, secs){
   }
   for(q=0;q<kept.length;q++){ if((kept[q].prods && kept[q].prods.length) || kept[q].prodsAll) ck.linked++; }
   if(dup) ck.fixes.unshift('장표 여러 장에 반복된 같은 시상 ' + dup + '개 → 1개로 합침');
+  // the same rewards already saved on another card of this insurer (a weekly sheet reprinting the month's rewards)
+  var rpN = 0, chN = 0, mine = String(campId || '');
+  if(_rules && _rules.length){
+    for(q=0;q<kept.length;q++){
+      var nr = { insurer:insurer, type:kept[q].type || 'rate', title:kept[q].label || '', from:kept[q].from || '', to:kept[q].to || '', data:kept[q] };
+      if(nr.type === 'rate') continue;
+      var hit = '', nsg = _rulesSig(nr), nlb = _rulesLbl(nr);
+      for(var z=0;z<_rules.length;z++){
+        var o2 = _rules[z];
+        if(!o2 || o2.active === false || String(o2.campaignId || '') === mine) continue;
+        if(_rulesSig(o2) === nsg){ hit = 'same'; break; }
+        var m2 = _rulesSame(o2, nr, null, nlb);
+        if(m2 === 'same'){ hit = 'same'; break; }
+        if(m2 === 'changed') hit = 'changed';
+      }
+      if(hit === 'same') rpN++; else if(hit === 'changed') chN++;
+    }
+  }
+  if(rpN) ck.fixes.push('다른 카드에 이미 있는 같은 시상 ' + rpN + '개 → 한 번만 계산 (최신 카드 것 기준)');
+  if(chN) ck.fixes.push('다른 카드의 같은 시상과 기간·금액이 다른 것 ' + chN + '개 → 최신 카드 것으로 계산');
   if(wd.n) ck.fixes.unshift('"' + wd.label + '" 장표 기준으로 다른 장표의 구간·조건 시상 ' + wd.n + '개를 상품군 전체에 적용 (상품 ' + wd.from + '개 → ' + wd.to + '개, 합산)');
   if(failed) ck.errors.push('장표 ' + failed + '장 읽기 실패 — 🔄 다시 읽기');
   var any = false; for(q=0;q<checks.length;q++){ if(checks[q]) any = true; }
-  return { rules:kept, check:(any || dup || failed || wd.n) ? ck : null };
+  return { rules:kept, check:(any || dup || failed || wd.n || rpN || chN) ? ck : null };
 }
 function _reCheckHtml(){
   var c = _re.check; if(!c) return '';
@@ -32301,7 +32527,7 @@ function _rbCardDone(card){
     if(x.st === 'ok'){ if(x.rules && x.rules.length) all = all.concat(x.rules); if(x.check) checks[j] = x.check; }
     else if(!firstErr){ firstErr = x.err; why = x.why; }
   }
-  var m = _reCheckMake(all, card.insurer, checks, card.n, card.failed, Math.round((Date.now() - card.t0) / 1000));
+  var m = _reCheckMake(all, card.insurer, checks, card.n, card.failed, Math.round((Date.now() - card.t0) / 1000), card.id);
   card.rules = m.rules; card.check = m.check; card.err = firstErr; card.why = why;
   if(!all.length){ card.st = 'fail'; if(!card.why) card.why = '읽은 항목 없음'; }
   else if(card.failed) card.st = 'fail';
@@ -32827,9 +33053,12 @@ function _cmEvalRules(recs, fpId, ym){
     } else if(r.type === 'per'){
       var pf = r.from || d.from || mFrom, pt = r.to || d.to || mTo;
       if(!_cmOverlap(pf, pt, mFrom, mTo)) continue;
-      var wp = _cmSumWindow(recs, fpId, r, pf, pt);
+      // a per-contract reward over several months: each month counts its own contracts
+      var pf2 = pf < mFrom ? mFrom : pf, pt2 = pt > mTo ? mTo : pt;
+      var wp = _cmSumWindow(recs, fpId, r, pf2, pt2);
       res.n = wp.n; res.sum = wp.sum; res.amt = wp.n * (d.amt||0); res.pct = res.n ? 100 : 0;
       res.period = pf.substr(5).replace('-','.') + '~' + pt.substr(5).replace('-','.');
+      if(pf2 !== pf || pt2 !== pt) res.monthPart = parseInt(ym.substr(5, 2), 10) + '월분';
       res.active = wp.n > 0;
     }
     out.push(res);
@@ -32852,6 +33081,14 @@ function _cmEvalRules(recs, fpId, ym){
   if(drop.length) out = out.filter(function(x){ return drop.indexOf(x) < 0; });
   return out;
 }
+// the month a reward is decided: the month its last window ends
+function _cmEvEndYm(ev, ym){
+  var r = ev.rule || {}, d = r.data || {}, end = '';
+  if((ev.type === 'cond' || ev.type === 'gift') && d.conds && d.conds.length){
+    for(var i=0;i<d.conds.length;i++){ var t = String(d.conds[i].to || _cmMonthEnd(ym)); if(t > end) end = t; }
+  } else end = String(r.to || d.to || _cmMonthEnd(ym));
+  return end.substr(0, 7);
+}
 // cut (optional, yyyy-mm-dd): only records up to that day (one day's gain = total with the day minus total without it)
 function _cmBuild(fpId, ym, cut, extra, only){
   // what-if rows (simulation) join without being saved; only: those rows alone, apart from the saved month
@@ -32868,10 +33105,17 @@ function _cmBuild(fpId, ym, cut, extra, only){
   }
   items.sort(function(a,b){ return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
   var evals = _cmEvalRules(recs, fpId, ym);
+  // a reward whose period runs into a later month counts once, in the month it ends (later = that month);
+  // per-contract rewards already count each month's own contracts
+  for(var le=0;le<evals.length;le++){
+    if(evals[le].type === 'per') continue;
+    var lym = _cmEvEndYm(evals[le], ym);
+    if(lym > ym) evals[le].later = lym;
+  }
   // FP-level 시상 shown per contract: split by each contract's share of the 월초 that counted toward the rule
   for(var ae=0;ae<evals.length;ae++){
     var av = evals[ae];
-    if(!av.amt || av.gift) continue;
+    if(!av.amt || av.gift || av.later) continue;
     var ad = av.rule.data || {}, r0 = av.rule;
     var wins = [];
     if(av.type === 'cond'){ for(var ac=0;ac<(ad.conds||[]).length;ac++) wins.push({ from:(ad.conds[ac].from || ym + '-01'), to:(ad.conds[ac].to || _cmMonthEnd(ym)) }); }
@@ -32911,8 +33155,8 @@ function _cmBuild(fpId, ym, cut, extra, only){
   t.gifts = 0;
   for(var e=0;e<evals.length;e++){
     var ev = evals[e];
-    if(ev.gift){ if(ev.done) t.gifts++; continue; }
-    if(!ev.amt) continue;
+    if(ev.gift){ if(ev.done && !ev.later) t.gifts++; continue; }
+    if(!ev.amt || ev.later) continue;
     if(ev.bucket === 'm1') t.sc1 += ev.amt; else if(ev.bucket === 'y3') t.sc3 += ev.amt; else t.sc2 += ev.amt;
   }
   t.total = t.m1 + t.sc1 + t.y1 + t.y2 + t.sc2 + t.y3 + t.sc3;
@@ -32947,11 +33191,11 @@ function _cmMonthlyHtml(fpId, first, cur){
   var cut = Math.min(CM_MO_SHOW, ms.length), more = _cmMoMore || (ms.length > cut && _cmYm < ms[cut - 1] && _cmYm >= first);
   function card(m){
     var B = _cmBuild(fpId, m), t = B.t, n = B.items.length;
-    if(!n) return '<div class="cm-mr z"><span class="m">' + _cmMoLab(m) + ' 업적</span><span class="cm-mini">업적 없음</span></div>';
+    if(!n && !(t.total > 0)) return '<div class="cm-mr z"><span class="m">' + _cmMoLab(m) + ' 업적</span><span class="cm-mini">업적 없음</span></div>';
     var prem = 0, y3 = t.y3 + t.sc3;
     for(var k=0;k<B.items.length;k++){ if(!B.items[k].lump) prem += B.items[k].amount; }
     return '<div class="cm-mr' + (m === _cmYm ? ' on' : '') + '" onclick="_cmGoYm(\'' + m + '\')"><div class="t"><span class="m">' + _cmMoLab(m) + ' 업적</span>' + (m === cur ? '<em>이번 달</em>' : '') + '<span class="tot">합계<b>' + _cmMan(t.total) + '</b></span></div>'
-      + '<div class="s">' + n + '건 · 보장월초 ' + _cmMan(prem) + '</div>'
+      + '<div class="s">' + (n ? n + '건 · 보장월초 ' + _cmMan(prem) : '이 달 계약 없음 · 앞 달부터 이어진 시상') + '</div>'
       + '<div class="v"><span>' + _cmWhen('m1') + '<b>' + _cmMan(t.m1 + t.sc1) + '</b></span><span>' + _cmWhen('y2') + '<b>' + _cmMan(t.y2 + t.sc2) + '</b></span>' + (_cmHas(y3) ? '<span>' + _cmWhen('y3') + '<b>' + _cmMan(y3) + '</b></span>' : '<span class="no"></span>') + '</div></div>';
   }
   for(i=0;i<cut;i++) h += card(ms[i]);
@@ -32960,7 +33204,7 @@ function _cmMonthlyHtml(fpId, first, cur){
     if(more){ for(i=cut;i<ms.length;i++) h += card(ms[i]); }
     h += '<div class="cm-mr-more" onclick="_cmMoToggle()">' + (more ? '이전 업적 접기 ▴' : '이전 업적 ' + old + '개월 더 보기 ▾<span class="cm-mini">' + rg + '</span>') + '</div>';
   }
-  return h + '<div class="cm-mini" style="margin:7px 2px 2px">그 달 업적 기준 금액 · 누르면 그 달 화면으로</div>';
+  return h + '<div class="cm-mini" style="margin:7px 2px 2px">그 달 업적 기준 금액 · 여러 달에 걸친 시상은 끝나는 달에 · 누르면 그 달 화면으로</div>';
 }
 function _cmGoYm(ym){ _cmYm = ym; _commRender(); var ov = document.getElementById('commOverlay'), bx = ov ? ov.querySelector('.mgmt-box') : null; if(bx) bx.scrollTop = 0; }
 
@@ -33396,7 +33640,7 @@ function _commRender0(){
   h += '<div class="cm-total"><span>💎 총 예상</span><b>' + _cmMan(total) + '</b></div>';
   if(_cmYm === _cmTodayStr().substr(0,7)) h += _cmSimHtml('me', fpId);
   // ── 시책 결과(달성) / 한 걸음 더(더 하면 받는 것) / 해당 안 됨 — three accordions ──
-  var resC = '', resN = 0, resSum = 0, resGift = 0, nudC = '', nudN = 0, missC = '', missN = 0, nudL = [];
+  var resC = '', resN = 0, resSum = 0, resGift = 0, nudC = '', nudN = 0, missC = '', missN = 0, nudL = [], resL = '', resLN = 0, resLM = '';
   var bkName = { m1:'익월', y2:'2차년', y3:'3차년' };
   function evHead(ev, tag, icon){ return '<div class="cm-row"><b style="font-size:12px">' + (icon||'') + _cmEsc(ev.insurer) + ' ' + _cmEsc(ev.label) + '</b>' + (_cmFpInN(ev.rule.data || {}) ? '<span class="cm-tag cm-fpt">체크분만</span>' : '') + (tag||'') + '</div>'; }
   for(var e=0;e<B.evals.length;e++){
@@ -33434,7 +33678,7 @@ function _commRender0(){
     }
     // what the FP has now, in words
     var nowTxt = '';
-    if(ev.type === 'per') nowTxt = ev.n + '건';
+    if(ev.type === 'per') nowTxt = (ev.monthPart ? ev.monthPart + ' ' : '') + ev.n + '건';
     else if(ev.type === 'cond' && ev.sums){
       var parts = [], todayS = _cmTodayStr();
       for(var c=0;c<ev.sums.length;c++){ if(String(ev.conds[c].from||'') > todayS) continue; parts.push((ev.conds.length > 1 ? _cmMd(ev.conds[c].from) + '~ ' : '') + _cmMan(ev.sums[c]) + '/' + _cmMan(ev.conds[c].min||0)); }
@@ -33442,7 +33686,13 @@ function _commRender0(){
     } else nowTxt = '지금 ' + _cmMan(ev.sum);
     if(ev.unitTxt) nowTxt += ' (' + ev.unitTxt + ')';
     if(ev.unkTxt) nowTxt += ' · ' + ev.unkTxt;
-    if(ev.amt){
+    if(ev.amt && ev.later){
+      var lmo = parseInt(ev.later.substr(5, 2), 10) + '월';
+      resLN++; resLM = (resLM === '' || resLM === lmo) ? lmo : '-';
+      resL += '<div class="cm-card cm-later">' + evHead(ev, '<span class="cm-mini" style="white-space:nowrap">' + (ev.type === 'cond' ? '조건 달성' : '누적 구간') + '</span>')
+            + '<div class="cm-row" style="margin-top:5px;align-items:flex-start;gap:8px"><span class="cm-wrow" style="align-items:flex-start">' + _cmWhen(ev.bucket === 'm1' ? 'm1' : (ev.bucket === 'y3' ? 'y3' : 'y2')) + '<span class="cm-mini" style="padding-top:2px">' + _cmEsc(nowTxt) + (ev.type === 'cond' ? '' : ' · ' + _cmEsc(ev.period||'')) + (ev.when ? ' · ' + _cmEsc(ev.when) + ' 지급' : '') + '</span></span><b class="cm-later-a">' + _cmMan(ev.amt) + '</b></div>'
+            + '<div class="cm-later-n">↪ ' + lmo + '에 끝나는 시상이라 ' + lmo + ' 합계에 들어가요</div></div>';
+    } else if(ev.amt){
       resN++; resSum += ev.amt;
       resC += '<div class="cm-card">' + evHead(ev, '<span class="cm-mini" style="white-space:nowrap">' + (ev.type === 'cond' ? '조건 달성' : (ev.type === 'per' ? '건당 정액' : '누적 구간')) + '</span>')
             + '<div class="cm-row" style="margin-top:5px;align-items:flex-start;gap:8px"><span class="cm-wrow" style="align-items:flex-start">' + _cmWhen(ev.bucket === 'm1' ? 'm1' : (ev.bucket === 'y3' ? 'y3' : 'y2')) + '<span class="cm-mini" style="padding-top:2px">' + _cmEsc(nowTxt) + (ev.type === 'cond' ? '' : ' · ' + _cmEsc(ev.period||'')) + (ev.when ? ' · ' + _cmEsc(ev.when) + ' 지급' : '') + '</span></span><b style="font-size:14px;color:#6D4FB8;white-space:nowrap">' + _cmMan(ev.amt) + '</b></div></div>';
@@ -33516,10 +33766,11 @@ function _commRender0(){
     resN++; resSum += gsum;
     rateC += '<div class="cm-card"><div class="cm-row"><b style="font-size:12px">' + _cmEsc(G.co) + ' ' + _cmEsc(_cmRuleLabel(G.r)) + '</b><span class="cm-mini" style="white-space:nowrap">건별 %</span></div>' + grows + '</div>';
   }
-  resC = rateC + resC;
+  resC = rateC + resC + resL;
+  var resLTxt = resLN ? (resLM !== '-' ? resLM : '끝나는 달') + ' 합계에 ' + resLN + '개' : '';
   h += '<div class="cm-grp">📋 ' + parseInt(_cmYm.substr(5, 2), 10) + '월 체결 내역</div>';
   var ctPos = h.length;
-  if(resC) h += _cmAccHtml('res', '✅ 시책 결과', resN + '개' + (resSum ? ' · ' + _cmMan(resSum) : '') + (resGift ? ' · 🎁 ' + resGift : ''), resC, 'g');
+  if(resC) h += _cmAccHtml('res', '✅ 시책 결과', (!resN && !resGift && resLN) ? resLTxt : resN + '개' + (resSum ? ' · ' + _cmMan(resSum) : '') + (resGift ? ' · 🎁 ' + resGift : '') + (resLN ? ' · ' + resLTxt : ''), resC, 'g');
   if(nudC) h += _cmAccHtml('nud', '🎯 시책 한 걸음 더', nudN + '개 · 더 하면 받는 것', nudC, 'p');
   if(missC) h += _cmAccHtml('miss', 'ℹ️ 해당 안 된 시책', missN + '개 · 이유', missC, 'n');
   // contracts: one framed card per contract, inside an accordion
@@ -34397,7 +34648,7 @@ function _cmRankHtml(){
     if(_cmBr !== 'all' && bk !== _cmBr) continue;
     if(!t.cnt){ if(f.perfOff !== true){ idle++; idleNm.push({ nm:f.name, bk:bk }); } continue; }
     var scSrc = [];
-    for(var e2=0;e2<B.evals.length;e2++){ var ev2 = B.evals[e2]; if(ev2.amt) scSrc.push(_cmEsc(ev2.insurer) + ' ' + _cmEsc(ev2.label) + ' ' + _cmMan(ev2.amt)); }
+    for(var e2=0;e2<B.evals.length;e2++){ var ev2 = B.evals[e2]; if(ev2.amt && !ev2.later) scSrc.push(_cmEsc(ev2.insurer) + ' ' + _cmEsc(ev2.label) + ' ' + _cmMan(ev2.amt)); }
     for(var it2=0;it2<B.items.length;it2++){ var sc2 = B.items[it2].sc; if(sc2 && (sc2.m1 || sc2.y2)) scSrc.push(_cmEsc(B.items[it2].co) + ' ' + _cmEsc(sc2.label) + ' ' + _cmMan(sc2.m1 + sc2.y2)); }
     list.push({ id:f.id, name:f.name, bk:bk, t:t, scSrc:scSrc, bj:_cmBjLine(B.items) });
     sumT += t.total; sumM1 += t.m1 + t.sc1; calc += t.calc; cnt += t.cnt; noProd += t.noProd;
