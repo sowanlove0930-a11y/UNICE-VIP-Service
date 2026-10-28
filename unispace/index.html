@@ -2473,6 +2473,25 @@ body.theme-light .cc-partners .cc-name{ color: #9A7418; }
   }
 }
 
+/* phone consult cards (below 700px): each card is as tall as its content and the card list scrolls
+   (overflow:hidden cards used to be squeezed to the screen height, cutting the icon and the text);
+   the small buttons sit in their own row above the icon so they never cover the title */
+@media (max-width: 699px) {
+  .consult-tools { grid-auto-rows: max-content; }
+  .consult-card { justify-content: flex-start; gap: 7px; padding: 46px 10px 16px; }
+  .consult-card .cc-icon { flex-shrink: 0; width: 50px; height: 50px; font-size: 24px; border-radius: 16px; margin: 0 0 3px; }
+  .consult-card .cc-name { font-size: 17px; line-height: 1.25; letter-spacing: -0.3px; margin: 0; }
+  .consult-card .cc-desc { font-size: 11px; line-height: 1.45; word-break: keep-all; margin: 0; }
+  .cc-video-btn, .cc-share-btn, .cc-ptn-share, .cc-ptn-admin { top: 9px; right: 9px; width: 30px; height: 30px; }
+  .cc-share-btn.show ~ .cc-video-btn, .cc-ptn-share ~ .cc-ptn-admin { right: 45px; }
+  .pc-only-tool .pc-only-badge { top: 12px; left: 9px; width: auto; height: 24px; padding: 0 8px 0 6px; gap: 3px; border-radius: 12px; font-size: 11px; }
+  .pc-only-tool .pc-only-badge::after { content: 'PC 전용'; font-size: 10px; font-weight: 700; letter-spacing: -0.2px; }
+}
+@media (max-width: 380px) {
+  .consult-card { padding-left: 7px; padding-right: 7px; }
+  .consult-card .cc-desc { font-size: 10.5px; letter-spacing: -0.3px; }
+}
+
 /* ── 작은 화면(폭 좁은 폰) 글자 깨짐 방지: 한 단계 더 축소 ── */
 @media (max-width: 380px) {
   .btn-title { font-size: 15px; letter-spacing: -0.5px; }
@@ -6675,6 +6694,7 @@ function _openFromPush(op){
     if(op === 'moneywalk'){ setTimeout(function(){ if(typeof openMoneywalk==='function') openMoneywalk(typeof _MW_DEEP_LEAD !== 'undefined' ? _MW_DEEP_LEAD : ''); }, 500); return; }
     if(op === 'jobdesk'){ setTimeout(function(){ if(typeof openJobdesk==='function') openJobdesk(typeof _JD_DEEP_LEAD !== 'undefined' ? _JD_DEEP_LEAD : ''); }, 500); return; }
     if(op === 'today'){ window.location.href = 'today_alarm.html'; return; }
+    if(op === 'cust'){ window.location.href = 'customer.html'; return; }
     if(op === 'perf'){ setTimeout(function(){ if(typeof openPerfView==='function') openPerfView(); }, 400); return; }
     if(op === 'bojtop' || op === 'stdfp'){
       if(typeof _dashForegroundRefresh==='function') _dashForegroundRefresh(true); // 푸시로 들어오면 무조건 최신화
@@ -6702,10 +6722,11 @@ function showDashboard() {
   // 푸시 탭으로 들어온 경우(?open=today): 로그인 완료됐으니 오늘의 알림 페이지로 이동
   try {
     var _op = new URLSearchParams(location.search).get('open');
-    if (_op === 'today') {
+    // ?open=cust (momdeun quote request push): the customer list, where today's new customer is listed first
+    if (_op === 'today' || _op === 'cust') {
       // 파라미터 제거 후 이동(뒤로가기 시 무한루프 방지)
       history.replaceState(null, '', location.pathname);
-      window.location.href = 'today_alarm.html';
+      window.location.href = (_op === 'cust') ? 'customer.html' : 'today_alarm.html';
       return;
     }
     if (_op) {
@@ -15519,6 +15540,8 @@ function openLinkSend() {
       body.setAttribute('data-filled', '1');
     }
   }
+  // load the kakao sdk now so a share click opens the kakao window inside the click
+  if (typeof _ckpKakaoReady === 'function') _ckpKakaoReady(function(){});
   ov.classList.add('on');
 }
 
@@ -17651,6 +17674,8 @@ function toggleConsultMode() {
     btn.textContent = '✕ 상담 종료';
     document.body.style.overflow = 'hidden';
     if (typeof initToolVideoButtons === 'function') initToolVideoButtons();
+    // load the kakao sdk now: a later share click then opens the kakao window inside the click (pc popup blockers)
+    if (typeof _ckpKakaoReady === 'function') _ckpKakaoReady(function(){});
   } else {
     overlay.classList.remove('open');
     btn.classList.remove('active');
@@ -17810,13 +17835,11 @@ function _momdeunShareOk() {
   if (currentUser.momdeun === false) { showToast('🚫 맘든든 사용 권한이 없습니다 · 관리자 문의'); return false; }
   return true;
 }
-// kakao card on phones, copy text + link on pc (same as shareHealthcare)
+// kakao card on phones and pc (pc opens the kakao share window, like sharePartners); text + link copy only when kakao fails
 function shareMomdeun(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!_momdeunShareOk()) return false;
   var url = _momdeunCustLink();
-  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (!isMobileDev) { _mdShareFallback(url); return false; }
   _ckpKakaoReady(function(ok) {
     if (!ok) { _mdShareFallback(url); return; }
     try {
@@ -27576,7 +27599,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 246;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 247;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
