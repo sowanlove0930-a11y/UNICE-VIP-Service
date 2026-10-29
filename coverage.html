@@ -3398,6 +3398,21 @@ function removeFile(idx, type) {
   renderFileList(type);
 }
 
+// Turn an Anthropic API error response into a message the FP can act on
+async function apiErrorMessage(resp, label) {
+  let msg = '';
+  try { const j = await resp.json(); msg = (j && j.error && j.error.message) || ''; } catch (e) {}
+  const m = msg.toLowerCase();
+  if (m.includes('password')) return '🔒 비밀번호가 걸린 PDF라서 AI가 열 수 없어요. PDF를 열어 비밀번호를 입력한 뒤 [인쇄 → PDF로 저장]으로 새로 저장해서 올려주세요.';
+  if (m.includes('page') && (m.includes('maximum') || m.includes('exceed') || m.includes('limit'))) return '📄 PDF 페이지가 너무 많아요. 보장분석에 필요한 페이지만 나눠서 올려주세요.';
+  if (m.includes('prompt is too long') || m.includes('too long') || m.includes('too large') || resp.status === 413) return '📄 PDF 용량(분량)이 너무 커요. 필요한 페이지만 남기거나 파일을 나눠서 올려주세요.';
+  if (m.includes('could not process') || m.includes('invalid pdf') || m.includes('pdf')) return '📄 PDF 파일을 읽을 수 없어요. 파일이 손상됐을 수 있으니 다시 저장해서 올려주세요. (' + msg + ')';
+  if (m.includes('credit balance')) return '💳 AI 사용 잔액이 부족해요. 관리자에게 알려주세요.';
+  if (resp.status === 401) return '🔑 AI 키가 올바르지 않아요. 관리자에게 알려주세요.';
+  if (resp.status === 429 || resp.status === 529) return '⏳ 지금 AI 사용자가 많아요. 1~2분 뒤 다시 시도해주세요.';
+  return (label || 'API 오류') + ': ' + resp.status + (msg ? ' (' + msg + ')' : '');
+}
+
 // ============================================================
 // PDF → Base64
 // ============================================================
@@ -3827,6 +3842,12 @@ async function startAnalysis() {
           messages: [{ role: 'user', content: stage1Docs }]
         })
       });
+      if (resp1.status === 400) {
+        // The same files go to stage 2, so stop here instead of showing the premium modal first
+        const stage1Err = new Error(await apiErrorMessage(resp1));
+        stage1Err.fatal = true;
+        throw stage1Err;
+      }
       if (resp1.ok) {
         const raw1 = await resp1.json();
         const text1 = (raw1.content && raw1.content[0]) ? raw1.content[0].text : '';
@@ -3837,6 +3858,7 @@ async function startAnalysis() {
         if (pd.premiums && pd.premiums.length > 0) stage1Premiums = pd.premiums;
       }
     } catch(e1err) {
+      if (e1err.fatal) throw e1err;
       console.warn('1단계 보험료 추출 실패:', e1err);
     }
     setLoadingProgress(24,'보험료 확인 완료!','담보 분석 준비 중...','✅','📋 분석 단계 1/3 — 보험료 추출 완료');
@@ -3896,7 +3918,7 @@ async function startAnalysis() {
       })
     });
 
-    if (!resp.ok) throw new Error('API 오류: ' + resp.status);
+    if (!resp.ok) throw new Error(await apiErrorMessage(resp));
 
     const raw = await resp.json();
     const text = (raw.content && raw.content[0]) ? raw.content[0].text : '';
@@ -3947,7 +3969,7 @@ async function startAnalysis() {
               messages: [{ role: 'user', content: userContent }]
             })
           });
-          if (!retryResp.ok) throw new Error('재시도 API 오류: ' + retryResp.status);
+          if (!retryResp.ok) throw new Error(await apiErrorMessage(retryResp, '재시도 API 오류'));
           const retryRaw = await retryResp.json();
           const retryText = (retryRaw.content && retryRaw.content[0]) ? retryRaw.content[0].text : '';
           let retryJson = null;
