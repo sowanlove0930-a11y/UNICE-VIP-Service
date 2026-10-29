@@ -1808,7 +1808,7 @@ async function shareKakao(btn) {
     const files = await Promise.all(canvases.map((c,i)=>new Promise(res=>{
       c.toBlob(blob=>res(new File([blob],`${name}님_${labels[i]}.jpg`,{type:'image/jpeg'})),'image/jpeg',0.93);
     })));
-    if(navigator.share && navigator.canShare({files})){
+    if(navigator.share && navigator.canShare && navigator.canShare({files})){
       await navigator.share({title:name+'님 보험청구 케어맵', text:'유니스지사 보험청구 케어맵 3종 세트입니다.', files});
     } else {
       files.forEach((f,i)=>{
@@ -3351,7 +3351,7 @@ zoneEx.addEventListener('dragover', (e) => { e.preventDefault(); zoneEx.classLis
 zoneEx.addEventListener('dragleave', () => zoneEx.classList.remove('dragover'));
 zoneEx.addEventListener('drop', (e) => {
   e.preventDefault(); zoneEx.classList.remove('dragover');
-  addFiles(Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf'), 'existing');
+  addFiles(Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf' || isImageFile(f)), 'existing');
 });
 
 // ── 보완 설계 상품 PDF ──
@@ -3368,14 +3368,14 @@ zoneNew.addEventListener('dragover', (e) => { e.preventDefault(); zoneNew.classL
 zoneNew.addEventListener('dragleave', () => zoneNew.classList.remove('dragover'));
 zoneNew.addEventListener('drop', (e) => {
   e.preventDefault(); zoneNew.classList.remove('dragover');
-  addFiles(Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf'), 'new');
+  addFiles(Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf' || isImageFile(f)), 'new');
 });
 } // end if (zoneNew)
 
 function addFiles(files, type) {
   const arr = type === 'existing' ? uploadedFilesExisting : uploadedFilesNew;
   files.forEach(f => {
-    if (!arr.find(u => u.name === f.name)) arr.push(f);
+    if (!arr.find(u => u.name === f.name && u.size === f.size)) arr.push(f);
   });
   renderFileList(type);
 }
@@ -3404,6 +3404,7 @@ async function apiErrorMessage(resp, label) {
   try { const j = await resp.json(); msg = (j && j.error && j.error.message) || ''; } catch (e) {}
   const m = msg.toLowerCase();
   if (m.includes('password')) return '🔒 비밀번호가 걸린 PDF라서 AI가 열 수 없어요. PDF를 열어 비밀번호를 입력한 뒤 [인쇄 → PDF로 저장]으로 새로 저장해서 올려주세요.';
+  if (m.includes('exceeds') && m.includes('mb')) return '📄 PDF 용량이 너무 커요(한 번에 32MB까지). 필요한 페이지만 남기거나 파일을 나눠서 올려주세요.';
   if (m.includes('page') && (m.includes('maximum') || m.includes('exceed') || m.includes('limit'))) return '📄 PDF 페이지가 너무 많아요. 보장분석에 필요한 페이지만 나눠서 올려주세요.';
   if (m.includes('prompt is too long') || m.includes('too long') || m.includes('too large') || resp.status === 413) return '📄 PDF 용량(분량)이 너무 커요. 필요한 페이지만 남기거나 파일을 나눠서 올려주세요.';
   if (m.includes('could not process') || m.includes('invalid pdf') || m.includes('pdf')) return '📄 PDF 파일을 읽을 수 없어요. 파일이 손상됐을 수 있으니 다시 저장해서 올려주세요. (' + msg + ')';
@@ -3411,6 +3412,383 @@ async function apiErrorMessage(resp, label) {
   if (resp.status === 401) return '🔑 AI 키가 올바르지 않아요. 관리자에게 알려주세요.';
   if (resp.status === 429 || resp.status === 529) return '⏳ 지금 AI 사용자가 많아요. 1~2분 뒤 다시 시도해주세요.';
   return (label || 'API 오류') + ': ' + resp.status + (msg ? ' (' + msg + ')' : '');
+}
+
+// ============================================================
+// Large PDF shrink (the API takes at most 32MB per request, base64 included)
+// ============================================================
+const PDF_REQUEST_BUDGET = 30 * 1024 * 1024;   // base64 chars for all files, leaves room for prompts
+const PDF_LIB_URLS = {
+  pdfjs: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  pdfjsWorker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  pdflib: 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'
+};
+
+function loadScriptOnce(src) {
+  return new Promise((res, rej) => {
+    if (document.querySelector('script[data-src="' + src + '"]')) return res();
+    const el = document.createElement('script');
+    el.src = src; el.dataset.src = src;
+    el.onload = () => res(); el.onerror = () => rej(new Error('라이브러리 로드 실패: ' + src));
+    document.head.appendChild(el);
+  });
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+// Re-render every page as a JPEG and rebuild the PDF; the page text is kept in f.extraText
+async function shrinkPdf(f, maxWidth, quality) {
+  await loadScriptOnce(PDF_LIB_URLS.pdfjs);
+  await loadScriptOnce(PDF_LIB_URLS.pdflib);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_LIB_URLS.pdfjsWorker;
+  const src = await pdfjsLib.getDocument({ data: base64ToBytes(f.data) }).promise;
+  const out = await PDFLib.PDFDocument.create();
+  const texts = [];
+  for (let i = 1; i <= src.numPages; i++) {
+    const page = await src.getPage(i);
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(2, maxWidth / base.width);
+    const vp = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    const jpgB64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+    const img = await out.embedJpg(base64ToBytes(jpgB64));
+    out.addPage([base.width, base.height]).drawImage(img, { x: 0, y: 0, width: base.width, height: base.height });
+    try {
+      const tc = await page.getTextContent();
+      const t = tc.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+/g, ' ').trim();
+      if (t) texts.push('[' + i + '쪽]\n' + t);
+    } catch (e) {}
+    page.cleanup();
+    canvas.width = canvas.height = 0;
+    setLoadingProgress(6, '파일 용량을 줄이고 있어요', f.name + ' · ' + i + '/' + src.numPages + '쪽', '🗜️', '📋 준비 — 큰 PDF 용량 줄이는 중');
+  }
+  await src.destroy();
+  return { data: bytesToBase64(await out.save()), text: texts.join('\n\n') };
+}
+
+// Shrink the biggest PDFs until all files fit in one request
+async function shrinkPdfsIfTooBig(files) {
+  const total = () => files.reduce((n, f) => n + f.data.length + (f.extraText ? f.extraText.length * 3 : 0), 0);
+  if (total() <= PDF_REQUEST_BUDGET) return;
+  const steps = [[1400, 0.72], [1100, 0.6], [900, 0.5]];
+  for (const [w, q] of steps) {
+    const pdfs = files.filter(f => !(f.mimeType || '').startsWith('image/') && !f._shrunk)
+      .sort((a, b) => b.data.length - a.data.length);
+    const targets = pdfs.length ? pdfs : files.filter(f => f._orig);
+    for (const f of targets) {
+      if (total() <= PDF_REQUEST_BUDGET) return;
+      if (!f._orig) f._orig = f.data;
+      const r = await shrinkPdf({ name: f.name, data: f._orig }, w, q);
+      f.data = r.data; f.extraText = r.text; f._shrunk = true;
+      console.log('[shrink] ' + f.name + ' → ' + Math.round(f.data.length / 1048576) + 'MB (w' + w + ', q' + q + ')');
+    }
+    if (total() <= PDF_REQUEST_BUDGET) return;
+    files.forEach(f => { f._shrunk = false; });
+  }
+  if (total() > PDF_REQUEST_BUDGET) throw new Error('📄 PDF 용량이 너무 커서 줄여도 한 번에 보낼 수 없어요. 파일을 나눠서(보유계약 부분만 등) 올려주세요.');
+}
+
+// Text pdf.js read from a shrunk PDF, so numbers stay exact after the pages became pictures
+function shrunkTextBlock(f) {
+  return { type: 'text', text: '[위 PDF(' + f.name + ')는 용량 때문에 이미지로 바꿨습니다. 아래는 원본 PDF에서 읽은 글자입니다. 숫자는 이 글자를 우선 참고하세요.]\n' + f.extraText };
+}
+
+// API blocks for one uploaded file (images stay images; a shrunk PDF also sends its original text)
+function fileContentBlocks(f) {
+  const mime = f.mimeType || 'application/pdf';
+  if (mime.startsWith('image/')) return [{ type: 'image', source: { type: 'base64', media_type: mime, data: f.data } }];
+  const blocks = [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data } }];
+  if (f.extraText) blocks.push(shrunkTextBlock(f));
+  return blocks;
+}
+
+// ============================================================
+// Uploaded photos: the API takes JPEG/PNG/GIF/WEBP up to 5MB, so phone photos (HEIC, 12MP) are redrawn as JPEG
+// ============================================================
+const API_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+function isImageFile(f) {
+  return /^image\//.test(f.type || '') || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(f.name || '');
+}
+
+function loadImageFile(f) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); res(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('image decode failed')); };
+    img.src = url;
+  });
+}
+
+async function filePayload(f, type) {
+  if (!isImageFile(f)) return { name: f.name, data: await fileToBase64(f), mimeType: 'application/pdf', type };
+  const mime = (f.type || '').toLowerCase();
+  if (API_IMAGE_TYPES.includes(mime) && f.size <= 3.5 * 1024 * 1024) {
+    return { name: f.name, data: await fileToBase64(f), mimeType: mime, type };
+  }
+  let img;
+  try { img = await loadImageFile(f); }
+  catch (e) { throw new Error('🖼 ' + f.name + ' 사진을 열 수 없어요. 아이폰 사진(HEIC)이면 JPG로 저장하거나 화면을 캡처해서 올려주세요.'); }
+  const scale = Math.min(1, 2400 / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round((img.naturalWidth || img.width) * scale);
+  canvas.height = Math.round((img.naturalHeight || img.height) * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const data = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+  canvas.width = canvas.height = 0;
+  return { name: f.name, data, mimeType: 'image/jpeg', type };
+}
+
+// ============================================================
+// Stage 2 is streamed: a customer with many contracts needs more than 16,000 output tokens,
+// and a long silent request can be dropped by the network
+// ============================================================
+const STAGE2_MAX_TOKENS = 32000;
+
+function streamErrorMessage(err) {
+  const t = (err && err.type) || '';
+  const m = (err && err.message) || '';
+  if (t === 'overloaded_error' || t === 'rate_limit_error') return '⏳ 지금 AI 사용자가 많아요. 1~2분 뒤 다시 시도해주세요.';
+  return 'AI 응답 중 오류가 났어요. 다시 시도해주세요. (' + (m || t || 'stream error') + ')';
+}
+
+async function callClaudeStream(body, onText) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify(Object.assign({}, body, { stream: true }))
+  });
+  if (!resp.ok) {
+    const e = new Error(await apiErrorMessage(resp));
+    e.apiError = true;
+    throw e;
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', text = '', stopReason = null;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith('data:')) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(5)); } catch (e) { continue; }
+        if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') {
+          text += ev.delta.text;
+          if (onText) onText(text);
+        } else if (ev.type === 'message_delta' && ev.delta && ev.delta.stop_reason) {
+          stopReason = ev.delta.stop_reason;
+        } else if (ev.type === 'error') {
+          const e = new Error(streamErrorMessage(ev.error));
+          e.apiError = true;
+          throw e;
+        }
+      }
+    }
+  } catch (e) {
+    if (e.apiError) throw e;
+    const e2 = new Error('🌐 AI 응답을 받는 중에 연결이 끊겼어요. 인터넷 연결을 확인하고 다시 시도해주세요.');
+    e2.apiError = true;
+    throw e2;
+  }
+  return { text, stopReason };
+}
+
+// "49,320원" / 49320 → 49320, "미표시" → null
+function premiumToWon(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return isFinite(v) ? Math.round(v) : null;
+  const d = String(v).replace(/[^0-9]/g, '');
+  return d ? parseInt(d, 10) : null;
+}
+
+// ============================================================
+// Coverage values: the screen, the totals and the Excel cells expect plain 만원 numbers,
+// but the AI sometimes returns {"disease_daily":3,"injury_daily":3}, arrays or text like "1억4,000만"
+// ============================================================
+const COVERAGE_NUM_FIELDS = ['disease_death', 'accident_death', 'high_cancer', 'cancer_diagnosis', 'similar_cancer',
+  'cancer_treat_once', 'cancer_treat_repeat', 'brain_vessel', 'brain_stroke', 'brain_bleed', 'brain_drug',
+  'brain_treat_once', 'brain_treat_repeat', 'heart_ischemic', 'heart_mi', 'arrhythmia', 'heart_drug',
+  'heart_treat_once', 'heart_treat_repeat', 'surgery', 'cancer_surgery', 'hospitalization', 'dementia',
+  'homecare', 'caregiver'];
+const CONTRACT_TEXT_FIELDS = ['company', 'product', 'category', 'coverage_period', 'payment_period', 'memo',
+  'silson_generation', 'maturity_date', 'payment_method', 'payment_summary'];
+
+// Several amounts in one value are added, except caregiver: it is a per-day amount, so the larger one counts
+function combineAmounts(nums, field) {
+  if (!nums.length) return null;
+  return field === 'caregiver' ? Math.max.apply(null, nums) : nums.reduce((a, b) => a + b, 0);
+}
+
+function amountFromText(s, field) {
+  s = String(s).replace(/,/g, '')
+    .replace(/(\d+(?:\.\d+)?)\s*천\s*만/g, (m, n) => (parseFloat(n) * 1000) + '만')
+    .replace(/(\d+(?:\.\d+)?)\s*백\s*만/g, (m, n) => (parseFloat(n) * 100) + '만');
+  const eok = s.match(/(\d+(?:\.\d+)?)\s*억\s*(\d+(?:\.\d+)?)?/);
+  if (eok) return Math.round(parseFloat(eok[1]) * 10000 + (eok[2] ? parseFloat(eok[2]) : 0));
+  let nums = s.match(/\d+(?:\.\d+)?(?=\s*만)/g) || [];
+  if (!nums.length) nums = s.match(/\d+(?:\.\d+)?/g) || [];
+  return combineAmounts(nums.map(Number).filter(n => !isNaN(n)), field);
+}
+
+function coverageNumber(v, field) {
+  if (v === null || v === undefined || v === '' || typeof v === 'boolean') return null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (typeof v === 'object') {
+    const parts = (Array.isArray(v) ? v : Object.values(v)).map(x => coverageNumber(x, field)).filter(x => x !== null);
+    return combineAmounts(parts, field);
+  }
+  const s = String(v).trim();
+  if (s[0] === '{' || s[0] === '[') {
+    try { return coverageNumber(JSON.parse(s), field); } catch (e) {}
+  }
+  return amountFromText(s, field);
+}
+
+function textValue(v) {
+  if (v === null || v === undefined || typeof v === 'string') return v;
+  if (Array.isArray(v)) return v.map(textValue).filter(Boolean).join('\n');
+  if (typeof v === 'object') return Object.keys(v).map(k => k + ' ' + textValue(v[k])).join(', ');
+  return String(v);
+}
+
+function normalizeContractValues(json) {
+  if (!json) return json;
+  ['contracts', 'savings_contracts', 'other_contracts'].forEach(key => {
+    (json[key] || []).forEach(c => {
+      if (!c || typeof c !== 'object') return;
+      COVERAGE_NUM_FIELDS.forEach(f => {
+        if (c[f] !== null && c[f] !== undefined && typeof c[f] !== 'number') c[f] = coverageNumber(c[f], f);
+      });
+      CONTRACT_TEXT_FIELDS.forEach(f => {
+        if (c[f] !== null && c[f] !== undefined && typeof c[f] !== 'string') c[f] = textValue(c[f]);
+      });
+      if (c.monthly_premium !== null && c.monthly_premium !== undefined && typeof c.monthly_premium !== 'string') {
+        const won = typeof c.monthly_premium === 'object' ? null : premiumToWon(c.monthly_premium);
+        c.monthly_premium = won === null ? null : String(won);
+      }
+    });
+  });
+  return json;
+}
+
+// Amounts written in 원 instead of 만원: only values impossible in 만원 for that field are divided
+// (17154 = 1억7,154만 and 36200 = 3억6,200만 stay as they are)
+const AMOUNT_UNIT_LIMITS = { hospitalization: 1000, caregiver: 1000, disease_death: 1000000, accident_death: 1000000 };
+function fixAmountUnits(c) {
+  COVERAGE_NUM_FIELDS.forEach(f => {
+    const v = parseFloat(String(c[f] === null || c[f] === undefined ? '' : c[f]).replace(/[^0-9.]/g, ''));
+    if (!v || isNaN(v)) return;
+    if (v >= (AMOUNT_UNIT_LIMITS[f] || 100000)) c[f] = Math.round(v / 10000);
+  });
+}
+
+// ============================================================
+// Same contract or two contracts? Dedupe keys built from the first letters of a product name
+// match different products of one company (삼성 새로고침100세 2종 / 새로고침 3종)
+// ============================================================
+function _coKey(s) {
+  return String(s || '').replace(/[\s　]/g, '').replace(/\(주\)|주식회사|유한회사|무배당/g, '')
+    .replace(/손해보험/g, '손보').replace(/생명보험/g, '생명').replace(/화재보험/g, '화재').toLowerCase();
+}
+
+function _sameCompany(a, b) {
+  const x = _coKey(a), y = _coKey(b);
+  return !!(x && y && (x.includes(y) || y.includes(x)));
+}
+
+function contractStartYm(c) {
+  const m = String(c.coverage_period || '').match(/(\d{4})[.\-\/](\d{1,2})/);
+  return m ? m[1] + '.' + m[2].padStart(2, '0') : '';
+}
+
+function contractPremiumWon(c) {
+  return parseInt(String(c.monthly_premium || '').replace(/[^0-9]/g, ''), 10) || 0;
+}
+
+// Two rows are different contracts when their start months differ, or when their premiums differ by 1,000원 or
+// more and both premiums are on the stage 1 list for that company (without a list, differing premiums count
+// unless the start months are known to be equal)
+function isDistinctContract(a, b, stage1) {
+  const sa = contractStartYm(a), sb = contractStartYm(b);
+  if (sa && sb && sa !== sb) return true;
+  const pa = contractPremiumWon(a), pb = contractPremiumWon(b);
+  if (!(pa > 0 && pb > 0 && Math.abs(pa - pb) >= 1000)) return false;
+  const list = (stage1 || []).filter(p => _sameCompany(p.company, a.company)).map(p => Number(p.premium) || 0);
+  if (list.length) return list.some(p => Math.abs(p - pa) < 10) && list.some(p => Math.abs(p - pb) < 10);
+  return !(sa && sb);
+}
+
+// ============================================================
+// Renewal rows: the AI's row and the code's rows for one contract are kept once
+// ============================================================
+function _prodKey(s, company) {
+  let p = _coKey(String(s || '').replace(/\(무\)/g, '')).replace(/[()\[\]{}\/.,·:_\-]/g, '');
+  const full = _coKey(company), short = full.replace(/생명|손보|화재/g, '');
+  if (full && p.startsWith(full)) p = p.slice(full.length);
+  else if (short && p.startsWith(short)) p = p.slice(short.length).replace(/^(생명|손보|화재)/, '');
+  return p;
+}
+
+function _commonPrefixLen(a, b) {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i;
+}
+
+function _rowPremium(r) {
+  return parseInt(String(r.current_premium || '').replace(/[^0-9]/g, ''), 10) || 0;
+}
+
+function _sameRenewalTarget(coA, prA, premA, coB, prB, premB) {
+  if (!_sameCompany(coA, coB)) return false;
+  const na = _prodKey(prA, coA), nb = _prodKey(prB, coB);
+  if (!na || !nb) return false;
+  if (premA && premB && Math.abs(premA - premB) >= 10) return false;
+  if (na === nb || na.includes(nb) || nb.includes(na)) return true;
+  return premA > 0 && premB > 0 && _commonPrefixLen(na, nb) >= 4;
+}
+
+function renewalRowMatches(r, c) {
+  return _sameRenewalTarget(r.company, r.product, _rowPremium(r), c.company, c.product, contractPremiumWon(c));
+}
+
+function dedupeRenewalAlerts(list) {
+  const concrete = r => (/확인\s*필요/.test(String(r.renewal_cycle || '')) ? 0 : 2) + (/확인\s*필요/.test(String(r.renewal_date || '')) ? 0 : 1);
+  const out = [];
+  (list || []).forEach(r => {
+    const i = out.findIndex(o => _sameRenewalTarget(o.company, o.product, _rowPremium(o), r.company, r.product, _rowPremium(r)));
+    if (i < 0) out.push(r);
+    else if (concrete(r) > concrete(out[i])) out[i] = r;
+  });
+  return out;
 }
 
 // ============================================================
@@ -3479,7 +3857,7 @@ function confirmPremiums() {
   const result = rows.map(function(p, i) {
     const input = document.getElementById('pcm-val-' + i);
     const val = input ? input.value.trim() : '';
-    const num = val === '' ? null : Number(val);
+    const num = val === '' ? (p.premium === 0 ? 0 : null) : Number(val);
     return { company: p.company, product: p.product, premium: num };
   });
   overlay.classList.add('hidden');
@@ -3487,46 +3865,35 @@ function confirmPremiums() {
 }
 
 // ── [Stage 3] 누락 계약 재분석 — Stage1 감지 누락 계약의 담보를 PDF에서 직접 추출
-async function runStage3(json, existingPdfs, missingList) {
+async function runStage3(json, existingPdfs, missingList, systemPrefix) {
   if (!missingList || missingList.length === 0) return json;
 
   var missingDesc = missingList.map(function(m, i) {
-    return (i+1) + '. ' + (m.company||'') + ' / ' + (m.product||'');
+    return (i+1) + '. ' + (m.company||'') + ' / ' + (m.product||'')
+      + (m.premium ? ' (월보험료 ' + Number(m.premium).toLocaleString() + '원)' : '');
   }).join('\n');
 
+  // Stage 3 uses the stage 2 instructions, so the missing contracts come back in the same fields and formats
   var stage3UserText = [
     '아래 보험 계약들이 이전 분석에서 누락되었습니다.',
-    '첨부된 동일 PDF에서 해당 계약들의 담보 정보를 추출해주세요.',
+    '첨부된 같은 자료에서 이 계약들만 찾아 담보를 추출해주세요.',
+    '같은 회사의 이름이 비슷한 다른 계약과 섞지 말고, 월보험료와 가입일로 구분하세요.',
     '',
     '[누락 계약 목록]',
     missingDesc,
     '',
     '[출력 규칙]',
-    '- 반드시 {"contracts":[...]} JSON만 출력. 설명·영어 금지.',
-    '- monthly_premium은 반드시 0으로 설정 (보험료는 별도 처리)',
-    '- 각 계약마다: company, product, category, monthly_premium,',
-    '  payment_period, coverage_period,',
-    '  cancer_diagnosis, high_cancer, similar_cancer,',
-    '  cancer_treat_once, cancer_treat_repeat, cancer_surgery,',
-    '  brain_vessel, brain_stroke, brain_bleed, brain_treat_once, brain_treat_repeat,',
-    '  heart_ischemic, heart_mi, heart_treat_once, heart_treat_repeat,',
-    '  surgery, hospitalization, caregiver, dementia, memo',
-    '- 금액 단위: 만원 (1억=10000)',
-    '- 담보 없으면 null',
-    '',
-    '[암 담보 합산 규칙 — 반드시 준수]',
-    '- cancer_diagnosis: 신정원 담보명 "암진단" "통합암진단" "재진단암" "특정암진단" 모두 합산.',
-    '  단 유사암/소액암 계열은 cancer_diagnosis 절대 금지.',
-    '  예: 12대특정암 5000만 + 4대특정암Ⅱ 3000만 + 4대특정암 3000만 + 폐암 3000만 → 전부 cancer_diagnosis 합산',
-    '- similar_cancer: 신정원 "유사암진단" "소액암진단(유사암진단)" "갑상선암" 계열만 합산.',
-    '- high_cancer: 통합형암보험(롯데 let:smile 88플러스 등)은 null. 별도 고액암 담보가 명시된 경우만 사용.',
-    '- cancer_treat_repeat: 신정원 "암치료비(반복)" "항암치료비" 계열. 치료당 최고 금액 1개.',
-    '- cancer_treat_once: 신정원 "암치료비(1회한)" "중입자" 계열. 1회 지급 최고 금액.'
+    '- 반드시 {"contracts":[...]} JSON만 출력. 설명·영어 금지. customer_info, claim_guide 등 다른 키는 출력하지 마세요.',
+    '- 각 계약은 시스템 지침의 contracts 항목과 같은 필드·같은 형식으로 작성 (모든 필드 포함, 담보 없으면 null).',
+    '- 금액 필드는 만원 단위 숫자 하나만 (객체·배열·문자열 금지).',
+    '  hospitalization = 질병입원일당 + 상해입원일당 합계(만원/일), caregiver = 간병인사용입원일당 중 큰 금액(만원/일)',
+    '- coverage_period는 "YYYY.MM~YYYY.MM\\n(N세만기/N년납/납입회차/총회차회)" 형식',
+    '- monthly_premium은 위 목록의 월보험료(원)를 숫자만 문자열로 (예: "63438")'
   ].join('\n');
 
   var userContent = [];
   existingPdfs.forEach(function(f) {
-    userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data } });
+    fileContentBlocks(f).forEach(function(b) { userContent.push(b); });
   });
   userContent.push({ type: 'text', text: stage3UserText });
 
@@ -3541,32 +3908,15 @@ async function runStage3(json, existingPdfs, missingList) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        system: [
-          '당신은 보험 담보 분석 전문가입니다. 첨부된 메리츠화재 LIFE REPORT PDF에서 지정된 계약의 담보를 추출합니다.',
-          '',
-          '## 암 담보 분류 규칙 (반드시 준수)',
-          'cancer_diagnosis (일반암 진단비):',
-          '  신정원 담보명이 "암진단" "통합암진단" "재진단암" "특정암진단" 인 담보 금액을 모두 합산.',
-          '  예) 통합형일반암진단비(12대특정암) 5000만 + 통합형일반암진단비(4대특정암Ⅱ) 3000만',
-          '      + 통합형일반암진단비(4대특정암) 3000만 + 재발및잔여암진단비 1000만 × N + 전이암진단비 2000만 × N',
-          '      → 전부 cancer_diagnosis 에 합산',
-          '  ⚠️ 유사암/소액암 계열은 cancer_diagnosis 금지.',
-          '',
-          'similar_cancer (유사암 진단비):',
-          '  신정원 "유사암진단" "소액암진단(유사암진단)" "갑상선암" 계열만 합산.',
-          '',
-          'high_cancer: 통합형암보험(롯데 let:smile 88플러스 등)은 null.',
-          '',
-          'cancer_treat_repeat: 치료할 때마다 반복 지급되는 암치료비. 치료당 최고 금액.',
-          'cancer_treat_once: 최초 1회만 지급되는 암치료비(중입자 등).',
-          '',
-          '## 출력 형식',
-          '반드시 {"contracts":[...]} JSON만 출력. 설명/영어 금지. 금액 단위: 만원(1억=10000).'
-        ].join('\n'),
+        max_tokens: 8000,
+        system: (systemPrefix || '') + SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userContent }]
       })
     });
+    if (!resp.ok) {
+      console.warn('[Stage 3] 실패:', await apiErrorMessage(resp));
+      return json;
+    }
 
     var data = await resp.json();
     var rawText = (data.content||[]).map(function(b){ return b.text||''; }).join('');
@@ -3589,59 +3939,39 @@ async function runStage3(json, existingPdfs, missingList) {
     }
 
     if (!s3Json || !Array.isArray(s3Json.contracts)) return json;
+    normalizeContractValues(s3Json);
+    s3Json.contracts.forEach(fixAmountUnits);
 
-    // merge: stub → Stage3 결과로 교체 (contractIdx 우선, fallback 유연 매칭)
-    // missingList 순서와 s3Json.contracts 순서가 일치한다고 가정 (순서 기반 + 유연 fallback)
+    // merge: each result replaces the stub of the same company with the same premium,
+    // then the stub at the same list position, then the first stub of that company
+    var _isStub = function(c) { return (c.memo||'').includes('AI누락-Stage1감지'); };
     var _usedStubIdx = new Set();
     s3Json.contracts.forEach(function(c3, s3i) {
+      var stubs = [];
+      (json.contracts||[]).forEach(function(c, i) {
+        if (!_usedStubIdx.has(i) && _isStub(c) && _sameCompany(c.company, c3.company)) stubs.push(i);
+      });
+      if (!stubs.length) return;
+      var c3Prem = contractPremiumWon(c3);
       var stubIdx = -1;
-
-      // 1순위: missingList[s3i].contractIdx 직접 사용
-      if (missingList[s3i] && typeof missingList[s3i].contractIdx === 'number') {
-        var ci = missingList[s3i].contractIdx;
-        if (ci >= 0 && ci < (json.contracts||[]).length &&
-            (json.contracts[ci].memo||'').includes('AI누락-Stage1감지') &&
-            !_usedStubIdx.has(ci)) {
-          stubIdx = ci;
-        }
+      if (c3Prem) {
+        stubs.some(function(i) {
+          if (Math.abs(contractPremiumWon(json.contracts[i]) - c3Prem) < 1000) { stubIdx = i; return true; }
+          return false;
+        });
       }
-
-      // 2순위: 보험료 기반 fallback (1순위 실패 시)
       if (stubIdx < 0) {
-        var c3Prem = Number(String(c3.monthly_premium||'0').replace(/[^0-9]/g,''));
-        for (var i = 0; i < (json.contracts||[]).length; i++) {
-          if (_usedStubIdx.has(i)) continue;
-          var c = json.contracts[i];
-          if (!(c.memo||'').includes('AI누락-Stage1감지')) continue;
-          var cPrem = Number(String(c.monthly_premium||'0').replace(/[^0-9]/g,''));
-          var coMatch = (c.company||'').includes((c3.company||'').slice(0,3)) ||
-                        (c3.company||'').includes((c.company||'').slice(0,3));
-          // 보험료 일치로 매칭 (1000원 이내 오차)
-          if (coMatch && Math.abs(cPrem - cPrem) < 1000) { // 같은 회사면 인덱스순 최초 미사용 stub
-            stubIdx = i; break;
-          }
-        }
+        var byOrder = missingList[s3i] ? missingList[s3i].contractIdx : -1;
+        stubIdx = stubs.indexOf(byOrder) >= 0 ? byOrder : stubs[0];
       }
 
-      // 3순위: 미사용 stub 중 같은 회사 최초 항목
-      if (stubIdx < 0) {
-        for (var j = 0; j < (json.contracts||[]).length; j++) {
-          if (_usedStubIdx.has(j)) continue;
-          var cj = json.contracts[j];
-          if (!(cj.memo||'').includes('AI누락-Stage1감지')) continue;
-          if ((cj.company||'').slice(0,3) === (c3.company||'').slice(0,3)) {
-            stubIdx = j; break;
-          }
-        }
-      }
-
-      if (stubIdx >= 0) {
-        _usedStubIdx.add(stubIdx);
-        var savedPremium = json.contracts[stubIdx].monthly_premium;
-        c3.monthly_premium = savedPremium; // Stage1 보험료 유지
-        c3.memo = ((c3.memo||'').replace('AI누락-Stage1감지-담보확인필요','').trim() + ' ✅Stage3재추출').trim();
-        json.contracts[stubIdx] = c3;
-      }
+      _usedStubIdx.add(stubIdx);
+      var stub = json.contracts[stubIdx];
+      c3.monthly_premium = stub.monthly_premium; // Stage1 보험료 유지
+      c3.category = c3.category || stub.category || '건강보험';
+      if (stub.no !== undefined && c3.no === undefined) c3.no = stub.no;
+      c3.memo = ((c3.memo||'').replace('AI누락-Stage1감지-담보확인필요','').trim() + ' ✅Stage3재추출').trim();
+      json.contracts[stubIdx] = c3;
     });
 
     delete json._missingContracts;
@@ -3780,9 +4110,10 @@ async function startAnalysis() {
   try {
     // PDF → base64 변환
     const [existingPdfs, newPdfs] = await Promise.all([
-      Promise.all(uploadedFilesExisting.map(async f => ({ name: f.name, data: await fileToBase64(f), mimeType: f.type || 'application/pdf', type: 'existing' }))),
-      Promise.all(uploadedFilesNew.map(async f => ({ name: f.name, data: await fileToBase64(f), mimeType: f.type || 'application/pdf', type: 'new' })))
+      Promise.all(uploadedFilesExisting.map(f => filePayload(f, 'existing'))),
+      Promise.all(uploadedFilesNew.map(f => filePayload(f, 'new')))
     ]);
+    await shrinkPdfsIfTooBig(existingPdfs.concat(newPdfs));
 
     // Anthropic API 직접 호출
     const userContent = [];
@@ -3794,6 +4125,7 @@ async function startAnalysis() {
         userContent.push({ type: 'image', source: { type: 'base64', media_type: mime, data: f.data } });
       } else {
         userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data } });
+        if (f.extraText) userContent.push(shrunkTextBlock(f));
       }
     });
 
@@ -3806,6 +4138,7 @@ async function startAnalysis() {
           userContent.push({ type: 'image', source: { type: 'base64', media_type: mime, data: f.data } });
         } else {
           userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data } });
+          if (f.extraText) userContent.push(shrunkTextBlock(f));
         }
       });
     }
@@ -3815,7 +4148,7 @@ async function startAnalysis() {
     // [1단계] 보험료 전용 추출 → 확인 모달 표시
     // ─────────────────────────────────────────────
     const stage1Images = userContent.filter(function(c){ return c.type === 'image'; });
-    const stage1Pdfs   = userContent.filter(function(c){ return c.type === 'document'; });
+    const stage1Pdfs   = userContent.filter(function(c){ return c.type === 'document' || (c.type === 'text' && c.text.indexOf('[위 PDF(') === 0); });
     const stage1Src    = stage1Images.length > 0 ? stage1Images : stage1Pdfs;
     const stage1Docs   = stage1Src.concat([{
       type: 'text',
@@ -3837,7 +4170,7 @@ async function startAnalysis() {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
-          max_tokens: 2000,
+          max_tokens: 4000,
           system: STAGE1_PREMIUM_PROMPT,
           messages: [{ role: 'user', content: stage1Docs }]
         })
@@ -3850,12 +4183,16 @@ async function startAnalysis() {
       }
       if (resp1.ok) {
         const raw1 = await resp1.json();
-        const text1 = (raw1.content && raw1.content[0]) ? raw1.content[0].text : '';
-        let c1 = text1.replace(/```json|```/g, '').trim();
+        const text1 = (raw1.content || []).map(function(b){ return b.text || ''; }).join('');
+        const fence1 = text1.match(/```(?:json)?\s*([\s\S]*?)```/);
+        let c1 = (fence1 ? fence1[1] : text1).trim();
         const s1 = c1.indexOf('{'), e1 = c1.lastIndexOf('}');
         if (s1 !== -1 && e1 !== -1) c1 = c1.substring(s1, e1 + 1);
         const pd = JSON.parse(c1);
-        if (pd.premiums && pd.premiums.length > 0) stage1Premiums = pd.premiums;
+        // "49,320원" → 49320, "미표시" → null (a text premium used to turn into "NaN")
+        if (pd.premiums && pd.premiums.length > 0) stage1Premiums = pd.premiums.map(function(p) {
+          return Object.assign({}, p, { premium: premiumToWon(p.premium) });
+        });
       }
     } catch(e1err) {
       if (e1err.fatal) throw e1err;
@@ -3902,26 +4239,21 @@ async function startAnalysis() {
     setLoadingProgress(28,'담보 항목을 분석하고 있어요','암·뇌혈관·심장 보장 분석 중...','🧠','📋 분석 단계 2/3 — 전체 담보 분석 중');
     const stage2System = confirmedPremiumsBlock + SYSTEM_PROMPT;
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 16000,
-        system: stage2System,
-        messages: [{ role: 'user', content: userContent }]
-      })
+    const _expectedCount = Math.max(1, confirmedPremiums.length);
+    let _seenCount = 0;
+    const stage2 = await callClaudeStream({
+      model: 'claude-sonnet-4-6',
+      max_tokens: STAGE2_MAX_TOKENS,
+      system: stage2System,
+      messages: [{ role: 'user', content: userContent }]
+    }, function(partial) {
+      const cut = partial.search(/"(payment_summary|renewal_alerts|coverage_gaps|claim_guide)"\s*:/);
+      const n = ((cut >= 0 ? partial.slice(0, cut) : partial).match(/"company"\s*:/g) || []).length;
+      if (n === _seenCount) return;
+      _seenCount = n;
+      setLoadingProgress(Math.min(78, 28 + Math.round(50 * n / _expectedCount)), null, '계약 ' + n + '건째 정리 중...');
     });
-
-    if (!resp.ok) throw new Error(await apiErrorMessage(resp));
-
-    const raw = await resp.json();
-    const text = (raw.content && raw.content[0]) ? raw.content[0].text : '';
+    const text = stage2.text;
 
     // JSON 파싱
     let json;
@@ -3949,29 +4281,20 @@ async function startAnalysis() {
           throw new Error('JSON 추출 실패');
         }
       } catch {
+        if (stage2.stopReason === 'max_tokens') {
+          throw new Error('📄 계약이 너무 많아서 AI 답변이 중간에 끊겼어요. PDF를 두 개로 나눠서(보유계약 앞쪽/뒤쪽) 각각 분석해주세요.');
+        }
         // 4차: 자동 재시도 — JSON 없이 영어로만 응답한 경우
         console.warn('[Stage2] JSON 파싱 실패, 재시도 중...');
         const _retryMsgEl = document.getElementById('loading-msg');
         if (_retryMsgEl) _retryMsgEl.textContent = '⚠️ AI 응답 오류 — 자동 재시도 중... (잠시만 기다려주세요)';
         try {
-          const retryResp = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': ANTHROPIC_API_KEY,
-              'anthropic-version': '2023-06-01',
-              'anthropic-dangerous-direct-browser-access': 'true'
-            },
-            body: JSON.stringify({
-              model: 'claude-sonnet-4-6',
-              max_tokens: 16000,
-              system: stage2System + '\n\n🚨 반드시 JSON만 출력. 설명·영어 금지. 첫 글자는 반드시 {',
-              messages: [{ role: 'user', content: userContent }]
-            })
-          });
-          if (!retryResp.ok) throw new Error(await apiErrorMessage(retryResp, '재시도 API 오류'));
-          const retryRaw = await retryResp.json();
-          const retryText = (retryRaw.content && retryRaw.content[0]) ? retryRaw.content[0].text : '';
+          const retryText = (await callClaudeStream({
+            model: 'claude-sonnet-4-6',
+            max_tokens: STAGE2_MAX_TOKENS,
+            system: stage2System + '\n\n🚨 반드시 JSON만 출력. 설명·영어 금지. 첫 글자는 반드시 {',
+            messages: [{ role: 'user', content: userContent }]
+          })).text;
           let retryJson = null;
           const rci = retryText.indexOf('"contracts"');
           if (rci !== -1) {
@@ -4006,6 +4329,7 @@ async function startAnalysis() {
           if (!retryJson.claim_guide && json && json.claim_guide) retryJson.claim_guide = json.claim_guide;
           json = retryJson;
         } catch(retryErr) {
+          if (retryErr.apiError) throw retryErr; // 혼잡·연결 끊김 등은 그 이유를 그대로 표시
           const _isTimeout = retryErr.name === 'AbortError';
           throw new Error(_isTimeout
             ? 'AI 응답 시간 초과. PDF 재업로드 후 다시 시도해주세요.'
@@ -4026,6 +4350,7 @@ async function startAnalysis() {
 
     // 🔧 후처리 교정 (Sonnet 오류 자동 보정) - 상령일 교정 포함
     setLoadingProgress(80,'보장 항목을 정리하고 있어요','계약별 담보 교정 중...','🎯','📋 분석 단계 2/3 — 분석 완료, 데이터 정리 중');
+    json._stage1Premiums = confirmedPremiums;
     json = postProcessJson(json);
 
     // 후처리 교정 후 _anniversaryDate 재설정 (교정된 값 반영)
@@ -4070,25 +4395,53 @@ async function startAnalysis() {
         return false;
       };
 
-      confirmedPremiums.forEach(function(cp) {
-        if (cp.premium === null || cp.premium === undefined) return;
-        var cpNum = Number(cp.premium);
-        if (cpNum === 0) return;
-        var cpCo = _normCo(cp.company);
-        var cpPr = _normPr(cp.product);
-
-        allArrays.forEach(function(arr) {
-          arr.forEach(function(c) {
-            var cCo = _normCo(c.company);
-            var cPr = _normPr(c.product);
-            var coMatch = cCo && cpCo && (cCo.includes(cpCo) || cpCo.includes(cCo) || cCo === cpCo);
-            var prMatch = cpPr.length >= 3 && _prSimilar(cpPr, cPr);
-            if (coMatch && prMatch) {
-              c.monthly_premium = String(cpNum);
-              if (c.memo) c.memo = c.memo.replace(/⚠보험료0확인필요/g, '').trim();
-            }
-          });
+      // Each confirmed premium goes to one contract. A contract that already shows one of them keeps it;
+      // the rest go to the contract whose name shares the longest run of letters with the confirmed name.
+      // (Before, every similar name got every premium, so 새로고침100세 2종 and 새로고침 3종 ended with the same one.)
+      var _lcsLen = function(a, b) {
+        var best = 0, prev = new Array(b.length + 1).fill(0);
+        for (var i = 1; i <= a.length; i++) {
+          var cur = new Array(b.length + 1).fill(0);
+          for (var j = 1; j <= b.length; j++) {
+            if (a[i-1] === b[j-1]) { cur[j] = prev[j-1] + 1; if (cur[j] > best) best = cur[j]; }
+          }
+          prev = cur;
+        }
+        return best;
+      };
+      var _coEq = function(a, b) { return !!(a && b && (a.includes(b) || b.includes(a))); };
+      var _allCs = [].concat(json.contracts || [], json.savings_contracts || [], json.other_contracts || []);
+      var _premDone = new Set();
+      var _pickBest = function(x, ok) {
+        var best = null, bestLen = 0;
+        _allCs.forEach(function(c) {
+          if (_premDone.has(c)) return;
+          var cPr = _normPr(c.product);
+          if (!_coEq(_normCo(c.company), x.co) || !_prSimilar(x.pr, cPr) || !ok(c)) return;
+          var l = _lcsLen(x.pr, cPr);
+          if (l > bestLen) { best = c; bestLen = l; }
         });
+        return best;
+      };
+      var _cpLeft = confirmedPremiums.filter(function(cp) {
+        return cp.premium !== null && cp.premium !== undefined && Number(cp.premium) > 0;
+      }).map(function(cp) {
+        return { num: Number(cp.premium), co: _normCo(cp.company), pr: _normPr(cp.product) };
+      }).filter(function(x) { return x.co && x.pr.length >= 3; });
+      _cpLeft = _cpLeft.filter(function(x) {
+        var c = _pickBest(x, function(c) {
+          return Math.abs((Number(String(c.monthly_premium || '').replace(/[^0-9]/g, '')) || 0) - x.num) < 10;
+        });
+        if (!c) return true;
+        _premDone.add(c);
+        return false;
+      });
+      _cpLeft.forEach(function(x) {
+        var c = _pickBest(x, function() { return true; });
+        if (!c) return;
+        c.monthly_premium = String(x.num);
+        if (c.memo) c.memo = c.memo.replace(/⚠보험료0확인필요/g, '').trim();
+        _premDone.add(c);
       });
 
       // ── 롯데손보 연도코드 전용 강제 매칭 (슬라이딩 윈도우 보완)
@@ -4106,16 +4459,21 @@ async function startAnalysis() {
         };
         var _lotteCP = confirmedPremiums.filter(_isLotteCp);
         if (!_lotteCP.length) return;
+        var _isLotteRow = function(c) {
+          return String(c.company||'').includes('롯데') ||
+                 String(c.product||'').toLowerCase().replace(/[\s:]/g,'').includes('letsmile');
+        };
         (json.contracts||[]).forEach(function(c) {
-          if (!(String(c.company||'').includes('롯데') ||
-                String(c.product||'').toLowerCase().replace(/[\s:]/g,'').includes('letsmile'))) return;
+          if (!_isLotteRow(c)) return;
           var cCode = _lotteCode(c.product);
           if (!cCode) return;
-          var matched = _lotteCP.find(function(cp) {
+          // only when the code points to exactly one premium and one contract
+          var matched = _lotteCP.filter(function(cp) {
             return _lotteCode(cp.product) === cCode && Number(cp.premium) > 0;
           });
-          if (matched) {
-            c.monthly_premium = String(Number(matched.premium));
+          var sameRows = (json.contracts||[]).filter(function(o) { return _isLotteRow(o) && _lotteCode(o.product) === cCode; });
+          if (matched.length === 1 && sameRows.length === 1) {
+            c.monthly_premium = String(Number(matched[0].premium));
           }
         });
       })();
@@ -4132,18 +4490,21 @@ async function startAnalysis() {
           var cpYr = _getYrCode(cp.product);
           if (!cpYr || Number(cp.premium) <= 0) return;
           var cpCo = _normCo(cp.company);
+          // only when this company has exactly one confirmed premium and one contract with this code
+          var sameCp = confirmedPremiums.filter(function(o) {
+            return _getYrCode(o.product) === cpYr && Number(o.premium) > 0 && _coEq(_normCo(o.company), cpCo);
+          });
+          if (sameCp.length !== 1) return;
+          var rows = [];
           allArrays.forEach(function(arr) {
             arr.forEach(function(c) {
               var cYr = _getYrCode(c.product);
               if (!cYr) return; // 연도코드 없는 계약은 슬라이딩 윈도우 결과 유지
-              var cCo = _normCo(c.company);
-              var coMatch = cCo && cpCo && (cCo.includes(cpCo) || cpCo.includes(cCo) || cCo === cpCo);
-              if (coMatch && cYr === cpYr) {
-                // 연도코드 완전 일치 → 슬라이딩 윈도우 결과 override
-                c.monthly_premium = String(Number(cp.premium));
-              }
+              if (_coEq(_normCo(c.company), cpCo) && cYr === cpYr) rows.push(c);
             });
           });
+          // 연도코드 완전 일치 → 슬라이딩 윈도우 결과 override
+          if (rows.length === 1) rows[0].monthly_premium = String(Number(cp.premium));
         });
       })();
 
@@ -4195,7 +4556,7 @@ async function startAnalysis() {
     if (json._missingContracts && json._missingContracts.length > 0) {
       setLoadingProgress(82,'누락 계약을 추가 확인하고 있어요','누락 계약 ' + json._missingContracts.length + '건 재분석 중...','🔎','📋 분석 단계 3/3 — 누락 계약 재확인 중');
       try {
-        json = await runStage3(json, existingPdfs, json._missingContracts);
+        json = await runStage3(json, existingPdfs, json._missingContracts, confirmedPremiumsBlock);
         analysisResult = json;
       } catch(eS3) {
         console.warn('[Stage 3 호출] skip:', eS3);
@@ -4301,6 +4662,8 @@ async function startAnalysis() {
     } catch(ePpm) { console.warn('[Fix E] 사후보험료모달 skip:', ePpm); }
 
     setLoadingProgress(97,'케어맵을 완성하고 있어요','거의 다 됐어요! 🎉','🏆','📋 완성 중...');
+    normalizeContractValues(json);
+    json.renewal_alerts = dedupeRenewalAlerts(json.renewal_alerts);
     renderResults(json);
 
     // 사용 로그 기록 - GET 방식 (CORS 우회)
@@ -4332,7 +4695,10 @@ async function startAnalysis() {
     stopLoadingAnim();
     document.getElementById('loading-section').classList.add('hidden');
     document.getElementById('upload-section').classList.remove('hidden');
-    showError('분석 중 오류가 발생했습니다: ' + err.message);
+    const _msg = (err && err.message) || String(err);
+    showError('분석 중 오류가 발생했습니다: ' + (/failed to fetch|networkerror|load failed/i.test(_msg)
+      ? '🌐 인터넷 연결이 끊겼거나 AI 서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요.'
+      : _msg));
   }
 }
 
@@ -4346,6 +4712,7 @@ function showError(msg) {
 // JSON 후처리 교정 (Sonnet 오류 자동 보정)
 // ============================================================
 function postProcessJson(json) {
+  normalizeContractValues(json);
   const ci = json.customer_info || {};
 
   // ── Fix D (강화 v127): savings_contracts 내부 이중등록 제거
@@ -4478,31 +4845,27 @@ function postProcessJson(json) {
       var comp = String(c.company || '');
       if (!comp.includes('한화손보') && !comp.includes('한화손해')) return;
       if (!prod.includes('한아름') && !prod.includes('순환계') && !prod.includes('2대질환')) return;
-      // brain/heart_treat_repeat이 5000 미만이면 claim_guide에서 정답 추출 시도
+      // Only a value the AI wrote about 10 times too small is corrected, with the amount written right after
+      // "한화손보" in a 뇌/심장 guide (before, an empty field took another company's amount, e.g. 롯데 1억4,000만)
       var btr = Number(c.brain_treat_repeat) || 0;
       var htr = Number(c.heart_treat_repeat) || 0;
-      if (btr >= 5000 && htr >= 5000) return; // 이미 정상
-      var guides = json.claim_guide || [];
+      var cur = Math.max(btr, htr);
+      if (cur <= 0 || cur >= 5000) return;
+      var guides = (json.claim_guide || []).filter(function(g) {
+        return /뇌|심장|심근|순환계/.test((g.situation || '') + (g.claimable || ''));
+      });
       var extracted = 0;
-      for (var gi = 0; gi < guides.length; gi++) {
-        var txt = (guides[gi].insurers_and_amount || '') + (guides[gi].claimable || '');
-        // "한화손보 X,XXX만" 또는 "한화손보 1억X,XXX만" 패턴 추출
-        var m1 = txt.match(/한화손보[^【]*?(\d+억)?(\d{1,5}),(\d{3})만/);
-        if (m1) {
-          var eo = m1[1] ? parseInt(m1[1]) * 10000 : 0;
-          var val = eo + parseInt(m1[2] + m1[3]);
-          if (val > 5000) { extracted = val; break; }
-        }
-        // "1억7,154만" 패턴 (숫자 앞 컨텍스트 없이)
-        var m2 = txt.match(/1억(\d{1,2}),(\d{3})만/);
-        if (m2) {
-          var val2 = 10000 + parseInt(m2[1] + m2[2]);
-          if (val2 > 5000) { extracted = val2; break; }
+      for (var gi = 0; gi < guides.length && !extracted; gi++) {
+        var txt = String(guides[gi].insurers_and_amount || '').replace(/,/g, '');
+        var reH = /한화손보[^0-9【+\n]{0,20}(?:(\d+)억\s*)?(\d+)만/g, m1;
+        while ((m1 = reH.exec(txt))) {
+          var val = (m1[1] ? parseInt(m1[1]) * 10000 : 0) + parseInt(m1[2]);
+          if (val > cur * 8 && val < cur * 12) { extracted = val; break; }
         }
       }
-      if (extracted > 5000) {
-        c.brain_treat_repeat = extracted;
-        c.heart_treat_repeat = extracted;
+      if (extracted) {
+        if (btr > 0 && extracted > btr * 8 && extracted < btr * 12) c.brain_treat_repeat = extracted;
+        if (htr > 0 && extracted > htr * 8 && extracted < htr * 12) c.heart_treat_repeat = extracted;
         c.memo = ((c.memo||'') + ' [순환계치료비' + extracted + '만원자동교정]').trim();
       }
     });
@@ -4646,15 +5009,18 @@ function postProcessJson(json) {
       return hit || p.substring(0, 4);
     };
     const _prem = c => String(c.monthly_premium||'0').replace(/[^0-9]/g,'');
-    const seen = new Map();
+    const seen = new Map();    // key → rows kept under it
     const seenAlt = new Map(); // 연도코드 기반 보조 매칭
     const deduped = [];
+    // a key match is the same contract only if start month / premium do not say otherwise
+    const _sameAs = (map, k, c) => (k && map.has(k)) ? (map.get(k).find(e => !isDistinctContract(e, c, json._stage1Premiums)) || null) : null;
+    const _keep = (map, k, c) => { if (!k) return; if (!map.has(k)) map.set(k, []); map.get(k).push(c); };
     json.contracts.forEach(c => {
       const key = _normCompD(c.company) + '_' + _normProdD(c.product, c.company);
       // 보조키: 회사 + 연도코드 + 상품핵심어 (노이즈 제거)
       const yc = _yrCode(c.product);
       const altKey = yc ? (_normCompD(c.company) + '_' + yc + '_' + _coreWord(c.product, c.company)) : null;
-      let existing = seen.has(key) ? seen.get(key) : (altKey && seenAlt.has(altKey) ? seenAlt.get(altKey) : null);
+      let existing = _sameAs(seen, key, c) || _sameAs(seenAlt, altKey, c);
       if (existing) {
         const _merge = f => {
           const ev = parseFloat(existing[f])||0;
@@ -4662,10 +5028,10 @@ function postProcessJson(json) {
           if (cv > 0 && ev === 0) existing[f] = cv;
           else if (cv > 0 && ev > 0) existing[f] = ev; // 더 큰 값 유지
         };
-        ['cancer_diagnosis','high_cancer','similar_cancer','cancer_treat_once','cancer_treat_repeat',
-         'brain_vessel','brain_stroke','brain_bleed','brain_treat_once','brain_treat_repeat',
-         'heart_ischemic','heart_mi','heart_treat_once','heart_treat_repeat',
-         'surgery','hospitalization','dementia','caregiver'].forEach(_merge);
+        ['disease_death','accident_death','cancer_diagnosis','high_cancer','similar_cancer','cancer_treat_once','cancer_treat_repeat',
+         'brain_vessel','brain_stroke','brain_bleed','brain_drug','brain_treat_once','brain_treat_repeat',
+         'heart_ischemic','heart_mi','arrhythmia','heart_drug','heart_treat_once','heart_treat_repeat',
+         'surgery','cancer_surgery','hospitalization','dementia','homecare','caregiver'].forEach(_merge);
         if (c.silson) existing.silson = true;
         // 상품명: 더 구체적인(긴) 이름 유지하고, 그 쪽의 보험료를 함께 채택
         // (축약명 행에 다른 계약 보험료가 오매칭된 경우 방어 — 구체적 이름 쪽이 정답일 확률이 높음)
@@ -4679,8 +5045,8 @@ function postProcessJson(json) {
           if (ep === 0 && cp2 > 0) existing.monthly_premium = c.monthly_premium;
         }
       } else {
-        seen.set(key, c);
-        if (altKey) seenAlt.set(altKey, c);
+        _keep(seen, key, c);
+        _keep(seenAlt, altKey, c);
         deduped.push(c);
       }
     });
@@ -4775,24 +5141,9 @@ function postProcessJson(json) {
     }
   }));
 
-  // ③-C Fix-Unit: 원→만원 단위 오류 자동 교정
-  // 타입A: 값 > 50000 → ÷10000 (원→만원), 타입B: 10001~50000이고 끝자리≠0 → ÷10 (천원→만원)
-  const _unitFields = ['cancer_diagnosis','high_cancer','similar_cancer','cancer_treat_once','cancer_treat_repeat',
-    'brain_vessel','brain_stroke','brain_bleed','brain_drug','brain_treat_once','brain_treat_repeat',
-    'heart_ischemic','heart_mi','arrhythmia','heart_drug','heart_treat_once','heart_treat_repeat',
-    'surgery','cancer_surgery','hospitalization','dementia','caregiver','homecare',
-    'disease_death','accident_death'];
-  (json.contracts||[]).forEach(c => {
-    _unitFields.forEach(f => {
-      const v = parseFloat(String(c[f]||'0').replace(/[^0-9.]/g,''));
-      if (!v || isNaN(v)) return;
-      if (v > 50000) {
-        c[f] = Math.round(v / 10000); // 원→만원
-      } else if (v > 10000 && v % 10 !== 0) {
-        c[f] = Math.round(v / 10); // 천원→만원
-      }
-    });
-  });
+  // ③-C Fix-Unit: 원으로 적힌 금액 → 만원 (그 항목에서 만원으로는 불가능한 크기일 때만)
+  // 예전 '끝자리≠0이면 ÷10' 규칙은 1억7,154만(17154)을 1,715로 바꿔서 뺐음
+  (json.contracts||[]).forEach(fixAmountUnits);
 
   // ③-D 현대해상 Hi시리즈 cancer_treat_once 오배정 방지
   // AI가 신정원 "고액항암치료비(표적)" 담보를 cancer_treat_once에 임의 금액으로 배정하는 오류
@@ -4844,7 +5195,7 @@ function postProcessJson(json) {
           const rp = ((r.company||'')+(r.product||'')).replace(/\s/g,'');
           const cp = ((c.company||'')+(c.product||'')).replace(/\s/g,'');
           return rp === cp;
-        });
+        }) || (json.renewal_alerts||[]).find(r => renewalRowMatches(r, c)); // AI가 상품명을 조금 다르게 쓴 행
         // AI가 준 값이 있으면 그대로 사용, 없으면 기본값
         return {
           company: c.company||'',
@@ -4897,7 +5248,7 @@ function postProcessJson(json) {
   // 갱신형 상품인데 renewal_alerts에 없는 경우 추가
   const RENEWAL_KW = ['갱신형', '갱신담보', '(1001)', '[2404]', '(2404)', '1001', '2404'];
   const existingAlertProducts = (json.renewal_alerts || []).map(r =>
-    (r.product || '').replace(/\s/g, '')
+    ((r.company||'') + (r.product || '')).replace(/\s/g, '')
   );
 
   // 건강보험 중 갱신형 누락 보완
@@ -5742,7 +6093,7 @@ function postProcessJson(json) {
           ? '연만기형 운전자보험 — 매년 갱신으로 고령 시 급등 가능. 비갱신 운전자보험 전환 검토 권고'
           : '갱신형 담보 포함 — 비갱신 전환 검토 권고'
       });
-      exKeysO.push(pk);
+      exKeysO.push(compProd);
     });
   }
 
@@ -5752,7 +6103,7 @@ function postProcessJson(json) {
     var exKeysM = (json.renewal_alerts || []).map(function(r) {
       return (r.company||'') + '_' + (r.product || '');
     });
-    var THIS_YEAR = 2026;
+    var THIS_YEAR = new Date().getFullYear();
     var MATURITY_WARN_YEARS = 15; // 15년 이내 만기 감지
     (json.contracts || []).forEach(function(c) {
       var period = c.coverage_period || '';
@@ -5997,27 +6348,39 @@ function postProcessJson(json) {
     };
     // ① savings와 중복된 contracts 제거
     const _fSavKeys = new Set((json.savings_contracts||[]).map(_fNorm));
-    // ② contracts 내부 중복 제거 (낮은 보험료 우선 유지)
-    const _fSeen = new Map(); // key → index in _fDeduped
+    // ② contracts 내부 중복 제거 (낮은 보험료 우선 유지) — 가입월·보험료가 다른 계약은 따로 유지
+    const _fSeen = new Map(); // key → rows kept under it
     const _fDeduped = [];
+    const _fToSav = [];
     (json.contracts||[]).forEach(c => {
-      if (c.category === '저축성') return; // savings에서 처리
+      if (c.category === '저축성') { _fToSav.push(c); return; } // savings로 이동 (예전엔 그냥 사라졌음)
       if (_fSavKeys.has(_fNorm(c))) return; // savings 중복
       const k = _fNorm(c);
-      const existIdx = _fSeen.get(k);
-      if (existIdx !== undefined) {
+      const same = (_fSeen.get(k) || []).find(e => !isDistinctContract(e, c, json._stage1Premiums));
+      if (same) {
         // 이미 있음 → 보험료가 낮은 것으로 교체 (AI 과대기재 제거)
-        const ep = parseInt(String(_fDeduped[existIdx].monthly_premium||'0').replace(/[^0-9]/g,''))||0;
+        const ep = parseInt(String(same.monthly_premium||'0').replace(/[^0-9]/g,''))||0;
         const cp = parseInt(String(c.monthly_premium||'0').replace(/[^0-9]/g,''))||0;
-        if (cp > 0 && cp < ep) _fDeduped[existIdx].monthly_premium = c.monthly_premium;
+        if (cp > 0 && (ep === 0 || cp < ep)) same.monthly_premium = c.monthly_premium;
         return; // 중복은 추가 안 함
       }
-      _fSeen.set(k, _fDeduped.length);
+      if (!_fSeen.has(k)) _fSeen.set(k, []);
+      _fSeen.get(k).push(c);
       _fDeduped.push(c);
     });
     json.contracts = _fDeduped;
+    if (_fToSav.length) {
+      json.savings_contracts = json.savings_contracts || [];
+      _fToSav.forEach(c => {
+        if (_fSavKeys.has(_fNorm(c))) return;
+        json.savings_contracts.push(c);
+        _fSavKeys.add(_fNorm(c));
+      });
+    }
   } catch(e) {}
 
+  normalizeContractValues(json);
+  json.renewal_alerts = dedupeRenewalAlerts(json.renewal_alerts);
   return json;
 }
 
@@ -6292,7 +6655,7 @@ function renderResults(json) {
         const start = new Date(+dm[1],+dm[2]-1,+dm[3]);
         const end = new Date(start);
         end.setFullYear(end.getFullYear()+parseInt(ym[1]));
-        return new Date(2026,3,20) >= end;
+        return new Date() >= end;
       }
       // other_contracts 보완: maturity_date + payment_period 기반 날짜 계산 시도
       const mt = String(cx.maturity_date||'');
@@ -6511,6 +6874,7 @@ async function downloadExcel() {
   if(labelEl) labelEl.textContent = '생성 중...';
   try {
   const json = analysisResult;
+  normalizeContractValues(json);
   const ci = json.customer_info || {};
   const customerName = ci.name || json._customerName || json._extractedName || '고객';
   const customerAge   = ci.age || json._insuranceAge || '';
@@ -6704,10 +7068,12 @@ async function downloadExcel() {
       let ni=2;
       const surgArr=_contribs('surgery'); const surgSum=_sum('surgery');
       const hospArr=_contribs('hospitalization'); const hospSum=_sum('hospitalization');
-      if(surgSum>0){ amt+=`\n\n${['①','②','③','④','⑤'][ni-1]} 상해수술비\n   ${_fmt(surgArr)}`; ni++; }
-      if(hospSum>0){ amt+=`\n\n${['①','②','③','④','⑤'][ni-1]} 상해입원일당\n   ${_fmt(hospArr)}만/일`; ni++; }
+      // surgery / hospitalization hold 질병+상해 together, so the labels say so; daily amounts read 만/일
+      const _fmtDay = arr => arr.map(c=>`${c.co} ${c.amt.toLocaleString()}만/일`).join(' + ')+` = 【합계 ${arr.reduce((a,c)=>a+c.amt,0).toLocaleString()}만/일】`;
+      if(surgSum>0){ amt+=`\n\n${['①','②','③','④','⑤'][ni-1]} 수술비(질병+상해)\n   ${_fmt(surgArr)}`; ni++; }
+      if(hospSum>0){ amt+=`\n\n${['①','②','③','④','⑤'][ni-1]} 입원일당(질병+상해)\n   ${_fmtDay(hospArr)}`; ni++; }
       amt+=`\n\n${['①','②','③','④','⑤'][ni-1]} 실손  ${_silsonCo}`;
-      const claimItems=['상해사망보험금'].concat(surgSum>0?['상해수술비']:[]).concat(hospSum>0?['상해입원일당']:[]).concat(['실손의료비']);
+      const claimItems=['상해사망보험금'].concat(surgSum>0?['수술비(질병+상해)']:[]).concat(hospSum>0?['입원일당(질병+상해)']:[]).concat(['실손의료비']);
       cg.push({ situation:'🚑 상해사고 발생 시', claimable:claimItems.join('\n'), insurers_and_amount:amt, insurers:[..._ins(acd.map(c=>({co:c.company}))).split('\n'),hasSilson?_silsonCo+'(실손)':''].filter(Boolean).join('\n') });
     }
 
@@ -6848,10 +7214,10 @@ async function downloadExcel() {
       const ct1 = _p10(c.cancer_treat_once);
       const ctr = _p10(c.cancer_treat_repeat);
       if (ct1 >= 5000 && ctr < 2000 && ctr > 0) {
-        c.memo = ((c.memo||'') + ' ⚠항암치료비(반복)과소—여성생식기항암치료비500만+암주요치료비합산재확인').trim();
+        if (!(c.memo||'').includes('⚠항암치료비(반복)과소')) c.memo = ((c.memo||'') + ' ⚠항암치료비(반복)과소—여성생식기항암치료비500만+암주요치료비합산재확인').trim();
       }
       if (ctr >= 1000) {
-        c.memo = ((c.memo||'') + ' [반복치료비케어맵표기확인]').trim();
+        if (!(c.memo||'').includes('[반복치료비케어맵표기확인]')) c.memo = ((c.memo||'') + ' [반복치료비케어맵표기확인]').trim();
       }
     });
   }
@@ -7011,7 +7377,7 @@ async function downloadExcel() {
     if(ctrSum<1000) gaps.push({ item:'암 치료비(반복)', current:ctrSum>0?ctrSum.toLocaleString()+'만원/회':'미가입', recommended:'1,000만원/회', shortfall:ctrSum>0?'△ '+(1000-ctrSum).toLocaleString()+'만원':'미가입', advice:'항암·방사선 반복 치료비 부족. 비갱신형 추가 권고' });
     if(svSum<5000) gaps.push({ item:'수술비', current:svSum>0?svSum.toLocaleString()+'만원':'미가입', recommended:'5,000만원', shortfall:svSum>0?'△ '+(5000-svSum).toLocaleString()+'만원':'미가입', advice:'수술비 일부 갱신형 포함. 비갱신 수술비 보강 권고' });
     // 만기·갱신 임박
-    const urgentRenewals=(json.renewal_alerts||[]).filter(r=>{ const y=parseInt((r.renewal_date||'').split('.')[0]); return y>0&&y<=2027; });
+    const urgentRenewals=(json.renewal_alerts||[]).filter(r=>{ const y=parseInt((r.renewal_date||'').split('.')[0]); return y>0&&y<=new Date().getFullYear()+1; });
     if(urgentRenewals.length>0) gaps.push({ item:'⚠ 갱신·만기 임박', current:'주요 계약 '+urgentRenewals.length+'건', recommended:'신규 가입 플랜 수립', shortfall:'—', advice:urgentRenewals.map(r=>r.company+' '+r.product+' → '+r.renewal_date+' 갱신/만기').join('\n') });
     // 실손 리스크
     const silsonGen=(json.silson_info&&json.silson_info.generation)||'';
@@ -7122,7 +7488,7 @@ async function downloadExcel() {
     });
 
     // AI 원본 + 코드 보완 합산 후 갱신예정일 오름차순 정렬
-    json.renewal_alerts = [...(json.renewal_alerts||[]), ..._toAdd].sort((a,b)=>{
+    json.renewal_alerts = dedupeRenewalAlerts([...(json.renewal_alerts||[]), ..._toAdd]).sort((a,b)=>{
       const da = (a.renewal_date||'').replace(/[^0-9]/g,'');
       const db = (b.renewal_date||'').replace(/[^0-9]/g,'');
       return da < db ? -1 : da > db ? 1 : 0;
@@ -7231,7 +7597,7 @@ async function downloadExcel() {
       const start = new Date(+dm[1],+dm[2]-1,+dm[3]);
       const end = new Date(start);
       end.setFullYear(end.getFullYear()+parseInt(ym[1]));
-      return new Date(2026,3,20) >= end;
+      return new Date() >= end;
     }
     { const _ps=String(c.memo||c.payment_summary||''); return !_ps.includes('납입완료예정') && _ps.includes('납입완료'); }
   };
@@ -7480,7 +7846,7 @@ async function downloadExcel() {
 
   // 납입현황 — 총 납입금액 계산 (월보험료 × 납입개월수)
   // monthly_premium 항상 원 단위
-  const _today = new Date(2026, 3, 20); // 2026.04.20
+  const _today = new Date();
   const _toWon = v => { const n=parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return (isNaN(n)||n<100)?0:n; };
 
   // coverage_period에서 시작일 및 납입기간(개월) 추출
@@ -7533,29 +7899,19 @@ async function downloadExcel() {
     const hit=kinds.find(k=>p.includes(k)); return hit||p.substring(0,4);
   };
   const _intPrem = c => parseInt(String(c.monthly_premium||'0').replace(/[^0-9]/g,''))||0;
+  // 납입 합계에서만 빼고, 분석 데이터(상품명·보험료)는 바꾸지 않음 — 가입월·보험료가 다른 계약은 별개
+  const _intDup = new Set();
   (json.contracts||[]).forEach(c=>{
     const yc=_intYr(c.product);
     if (!yc) return; // 연도코드 없으면 내부 dedup 대상 아님 (오병합 방지)
     const k=_intCo(c.company)+'_'+yc+'_'+_intCore(c.product,c.company);
-    if (_internalSeen.has(k)) {
-      const ex=_internalSeen.get(k);
-      // 더 구체적(긴) 상품명 + 그 보험료 채택
-      if (String(c.product||'').length > String(ex.product||'').length) {
-        ex._dupProduct = c.product;
-        if (_intPrem(c)>0) ex._dupPremium = c.monthly_premium;
-      }
-      c._isDupRemove = true; // allForPay에서 제외
-    } else {
-      _internalSeen.set(k, c);
-    }
-  });
-  // 병합 결과를 대표 계약에 반영
-  _internalSeen.forEach(ex=>{
-    if (ex._dupProduct) ex.product = ex._dupProduct;
-    if (ex._dupPremium) ex.monthly_premium = ex._dupPremium;
+    const same=(_internalSeen.get(k)||[]).find(ex=>!isDistinctContract(ex,c,json._stage1Premiums));
+    if (same) { _intDup.add(c); return; }
+    if (!_internalSeen.has(k)) _internalSeen.set(k, []);
+    _internalSeen.get(k).push(c);
   });
   const _dedupedContracts = (json.contracts||[]).filter(c=>{
-    if (c._isDupRemove) return false; // 내부 중복 제거
+    if (_intDup.has(c)) return false; // 내부 중복 제거
     if (c.category === '저축성') return false; // savings_contracts에서 계산됨
     if (_savNormKeys.has(_normSavDedup(c))) return false; // 정규화 키로 savings와 중복 감지
     const pk=String((c.company||'')+(c.product||'')).replace(/\s/g,'');
@@ -7577,7 +7933,7 @@ async function downloadExcel() {
   const allForPay = [..._dedupedContracts, ..._dedupedOther, ..._dedupedSavings];
 
   // 납입완료 검증: coverage_period 날짜+납입기간으로 코드가 직접 판단 (AI 메모 오류 방지)
-  const _todayPay = new Date(2026, 3, 20);
+  const _todayPay = new Date();
   const _isReallyPaid = c => {
     const cp = String(c.coverage_period||c.payment_period||'');
     const dm = cp.match(/(\d{4})\.(\d{2})\.(\d{2})/);
@@ -7706,7 +8062,7 @@ async function downloadExcel() {
   }
 
   // 03시트 납입금액 계산 공용 함수
-  const _today3 = new Date(2026, 3, 20);
+  const _today3 = new Date();
   const _toWon3 = v => { const n=parseFloat(String(v||'0').replace(/[^0-9.]/g,'')); return (isNaN(n)||n<100)?0:n; };
   const _parsePayment3 = (c_or_cp) => {
     // contract 객체 또는 문자열 모두 허용
