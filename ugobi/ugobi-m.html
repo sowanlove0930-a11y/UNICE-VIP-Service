@@ -427,6 +427,15 @@ h3{font-size:19px;font-weight:800;letter-spacing:-.035em}
 .cta.ghost:after{display:none}
 #s6 .again{margin-top:18px}
 .rh .spk{top:12px;right:14px;font-size:40px}
+/* ── v11: 첫 화면 아래 버튼이 설명(①②③)으로 먼저 데려가요 ── */
+#ctaHow{display:none}
+body:not(.how-seen):not(.has-r) #ctaHow{display:flex}
+body:not(.how-seen):not(.has-r) #ctaStart{display:none}
+.cta.guide{font-size:18px;letter-spacing:-.03em;gap:7px}
+.cta.guide .arr{display:inline-block;font-size:20px;font-weight:800;animation:nudge 1.1s ease-in-out infinite}
+#ctaStart.popin{animation:popin .6s cubic-bezier(.2,.9,.3,1.35)}
+@keyframes popin{0%{transform:scale(.88);filter:brightness(1.25)}55%{transform:scale(1.045)}100%{transform:scale(1);filter:none}}
+@media (max-width:370px){.cta.guide{font-size:16.5px}}
 </style>
 </head>
 <body>
@@ -442,14 +451,14 @@ h3{font-size:19px;font-weight:800;letter-spacing:-.035em}
   </div>
 
   <div class="sec">
-    <h2>어떻게 이만큼 절감될까요?</h2>
+    <h2 id="how">어떻게 이만큼 절감될까요?</h2>
     <p class="eg" id="howEg"></p>
     <div class="how">
-      <div class="step card"><div class="sh"><i>1</i>같은 보장도 회사마다 값이 달라요</div><div class="scap">암·뇌혈관·심장을 똑같이 넣었을 때</div><div id="how1"></div></div>
+      <div class="step card" id="st1"><div class="sh"><i>1</i>같은 보장도 회사마다 값이 달라요</div><div class="scap">암·뇌혈관·심장을 똑같이 넣었을 때</div><div id="how1"></div></div>
       <div class="down">↓</div>
-      <div class="step card"><div class="sh"><i>2</i>그런데 보장마다 제일 싼 회사가 달라요</div><div id="how2"></div></div>
+      <div class="step card" id="st2"><div class="sh"><i>2</i>그런데 보장마다 제일 싼 회사가 달라요</div><div id="how2"></div></div>
       <div class="down">↓</div>
-      <div class="step card"><div class="sh"><i>3</i>보장마다 제일 싼 곳에 따로 가입하면</div><div id="how3"></div></div>
+      <div class="step card" id="st3"><div class="sh"><i>3</i>보장마다 제일 싼 곳에 따로 가입하면</div><div id="how3"></div></div>
     </div>
   </div>
 
@@ -463,7 +472,7 @@ h3{font-size:19px;font-weight:800;letter-spacing:-.035em}
     <div><b><span class="fpn"></span><span class="fpj">가</span> 도와드려요</b><small>한화생명금융서비스 유니스지사</small></div>
   </div>
   <p class="fine">2026.09 생명·손해보험 비교가이드북 요율로 계산 · 같은 보장, 가장 비싼 곳과 비교</p>
-  <div class="ctabar"><div><button class="cta" id="ctaStart" onclick="go(1)">내 나이로 계산하기 <small>· 30초</small></button><div class="ctas2"><button class="cta ghost" onclick="go(1)">다시 계산</button><button class="cta" onclick="go(6)">내 결과 보기 →</button></div></div></div>
+  <div class="ctabar"><div><button class="cta guide" id="ctaHow" onclick="howNext()"><span id="ctaHowT">어떻게 절감되는지 보기</span><b class="arr">↓</b></button><button class="cta" id="ctaStart" onclick="go(1)">내 나이로 계산하기 <small>· 30초</small></button><div class="ctas2"><button class="cta ghost" onclick="go(1)">다시 계산</button><button class="cta" onclick="go(6)">내 결과 보기 →</button></div></div></div>
 </section>
 
 <!-- ═════════ 1~4. 질문 ═════════ -->
@@ -729,7 +738,7 @@ function show(n){
   $('s'+n).classList.add('on');CUR=n;window.scrollTo(0,0);
   $('safe').classList.toggle('on',n>=1&&n<=4);
   document.body.classList.toggle('has-r',!!R);
-  if(n>=1&&n<=4){stepBar(n);LASTQ=n;}else if(n===0)LASTQ=0;
+  if(n>=1&&n<=4){stepBar(n);LASTQ=n;}else if(n===0){LASTQ=0;checkHow();}
   if(n===7)fillMine();
   if(n===8)fillDone();
 }
@@ -758,6 +767,34 @@ window.addEventListener('popstate',function(e){
   if((n===6||n===7)&&!R)n=0;
   show(n);
 });
+
+/* ── 첫 화면 아래 버튼: 설명(①②③)을 보기 전엔 "어떻게 절감되는지 보기 ↓"가 설명으로 데려가고,
+      ③까지 보면(손가락으로 내려도) "내 나이로 계산하기"로 바뀌어요. 바로 눌러 설명을 건너뛰지 않게 (10/29) ── */
+var HOW_SEEN=false,howTick=0;
+/* the part of the screen above the bottom button (from the bar's height: while the screen fades in, its transform moves the fixed bar) */
+function ctaTop(){var b=document.querySelector('#s0 .ctabar');return window.innerHeight-(b?b.offsetHeight:90)+6;}
+function howSeen(){
+  if(HOW_SEEN)return;HOW_SEEN=true;
+  document.body.classList.add('how-seen');
+  var b=$('ctaStart');b.classList.remove('popin');void b.offsetWidth;b.classList.add('popin');
+}
+function checkHow(){
+  if(HOW_SEEN||CUR!==0)return;
+  if($('st3').getBoundingClientRect().bottom<=ctaTop())return howSeen();   /* ③을 다 봤거나 지나갔어요 */
+  $('ctaHowT').textContent=$('how').getBoundingClientRect().top<window.innerHeight*0.5?'계속 보기':'어떻게 절감되는지 보기';
+}
+/* 다 안 보인 첫 단계로 내려가요: 처음엔 제목(①부터), 그다음 ②, ③ */
+function howNext(){
+  var vb=ctaTop(),ids=['st1','st2','st3'];
+  for(var i=0;i<ids.length;i++){
+    var el=$(ids[i]);if(el.getBoundingClientRect().bottom<=vb+1)continue;
+    if(i===0)el=$('how');
+    window.scrollTo({top:Math.max(0,el.getBoundingClientRect().top+window.scrollY-16),behavior:'smooth'});return;
+  }
+  howSeen();
+}
+window.addEventListener('scroll',function(){if(!howTick)howTick=requestAnimationFrame(function(){howTick=0;checkHow();});},{passive:true});
+window.addEventListener('resize',checkHow);
 
 /* ── 계산 중 ── */
 var ldTimer=null;
@@ -935,6 +972,7 @@ function toast(m){var t=$('toast');t.textContent=m;t.classList.add('on');clearTi
 
 renderLanding();
 try{history.replaceState({s:0},'')}catch(e){}
+requestAnimationFrame(checkHow);
 loadFp();
 </script>
 </body>
