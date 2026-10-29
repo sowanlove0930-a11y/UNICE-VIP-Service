@@ -1592,6 +1592,10 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .sag .sa-row { margin-bottom: 6px; }
 .sag .sa-row:last-child { margin-bottom: 0; }
 #sendAcc { display: none; }
+/* momdeun locked for this fp (blocked in the fp admin list): no momdeun row in the link-send window, no ➤ on the momdeun consult card */
+.sag .md-off { display: none; }
+body.momdeun-off .sa-momdeun, body.momdeun-off .cc-momdeun .cc-ptn-share, body.momdeun-off .sag .md-on { display: none; }
+body.momdeun-off .sag .md-off { display: inline; }
 .lsm-overlay { display:none; position:fixed; inset:0; background:rgba(43,38,28,.4);
   z-index:9500; align-items:center; justify-content:center; padding:16px; }
 .lsm-overlay.on { display:flex; }
@@ -6750,6 +6754,8 @@ function showDashboard() {
   if (typeof _syncPushToken === 'function') setTimeout(_syncPushToken, 2500);
   // the commission screen opened to everyone on the server: a plain FP's menu shows it without opening the perf entry first
   if (typeof _commOpenCheck === 'function') setTimeout(_commOpenCheck, 3500);
+  // momdeun lock: the saved flag now, the server's flag a moment later
+  if (typeof _applyMomdeunLock === 'function') { _applyMomdeunLock(); setTimeout(_refreshMomdeunLock, 1500); }
   var _pdMenu = document.getElementById('pushDiagMenu');
   if (_pdMenu) _pdMenu.style.display = (currentUser.id === 'ktk01' || currentUser.role === '대표') ? '' : 'none';
   var _wk = document.getElementById('wkspBtn');
@@ -15542,6 +15548,8 @@ function openLinkSend() {
   }
   // load the kakao sdk now so a share click opens the kakao window inside the click
   if (typeof _ckpKakaoReady === 'function') _ckpKakaoReady(function(){});
+  // momdeun lock: hide the momdeun row now if locked, then ask the server again
+  if (typeof _applyMomdeunLock === 'function') { _applyMomdeunLock(); _refreshMomdeunLock(); }
   ov.classList.add('on');
 }
 
@@ -17676,6 +17684,8 @@ function toggleConsultMode() {
     if (typeof initToolVideoButtons === 'function') initToolVideoButtons();
     // load the kakao sdk now: a later share click then opens the kakao window inside the click (pc popup blockers)
     if (typeof _ckpKakaoReady === 'function') _ckpKakaoReady(function(){});
+    // momdeun lock: hide the ➤ now if locked, then ask the server again
+    if (typeof _applyMomdeunLock === 'function') { _applyMomdeunLock(); _refreshMomdeunLock(); }
   } else {
     overlay.classList.remove('open');
     btn.classList.remove('active');
@@ -17807,6 +17817,28 @@ function openHomefitConsult(e) {
   }
   window.open(url, '_blank');
   return false;
+}
+// momdeun lock (blocked in the fp admin list): this fp gets no momdeun row in the link-send window and no ➤ on the consult card
+function _applyMomdeunLock() {
+  var off = !!(currentUser && currentUser.momdeun === false);
+  if (document.body) document.body.classList.toggle('momdeun-off', off);
+}
+// the saved login can be older than the lock: re-check it on the server
+// (the gas fetch layer shares the same GET for 15 s, so repeated opens cost at most one call per 15 s)
+function _refreshMomdeunLock() {
+  if (!currentUser || !currentUser.id || typeof UNISPACE_GAS_URL === 'undefined') return;
+  var me = currentUser.id;
+  fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(me) + '&_=' + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (res) {
+      if (!res || !res.ok || typeof res.momdeun !== 'boolean') return;
+      if (!currentUser || currentUser.id !== me) return;
+      if (currentUser.momdeun !== res.momdeun) {
+        currentUser.momdeun = res.momdeun;
+        try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch (e) {}
+      }
+      _applyMomdeunLock();
+    })['catch'](function () {});
 }
 // open momdeun (kids insurance tool) with logged-in fp code (pc, tablet and phone: the page has a phone layout)
 function openMomdeunConsult(e) {
@@ -26860,7 +26892,7 @@ function doCheckin() { doSmartCheckin(); }
           <div class="sag-ic">🎬</div>
           <div class="sag-tx">
             <div class="a">고객 안내 자료</div>
-            <div class="b">친구추가 · VIP 서비스 · 라이프 디자인 · 소비자 패널 · 맘든든 (6)</div>
+            <div class="b">친구추가 · VIP 서비스 · 라이프 디자인 · 소비자 패널<span class="md-on"> · 맘든든 (6)</span><span class="md-off"> (5)</span></div>
           </div>
           <div class="sag-chev">▾</div>
         </div>
@@ -26903,7 +26935,7 @@ function doCheckin() { doSmartCheckin(); }
           <button type="button" class="sa-sbtn" onclick="return sharePanelCards(event)">보내기</button>
         </div>
       </div>
-      <div class="sa-row">
+      <div class="sa-row sa-momdeun">
         <div class="sa-ic">🧡</div>
         <div class="sa-tx"><div class="a">맘든든 · 자녀 보험<span class="sa-new" data-until="2026-11-30">NEW</span></div><div class="b">아이 보장 한눈에 · 휴대폰으로 견적 신청</div></div>
         <div class="sa-acts">
@@ -27599,7 +27631,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 247;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 248;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
