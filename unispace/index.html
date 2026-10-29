@@ -1599,6 +1599,8 @@ body.theme-light .cc-video-btn { background: rgba(255,255,255,0.7); color: #333;
 .sag .md-off { display: none; }
 body.momdeun-off .sa-momdeun, body.momdeun-off .cc-momdeun .cc-ptn-share, body.momdeun-off .sag .md-on { display: none; }
 body.momdeun-off .sag .md-off { display: inline; }
+/* ugobi locked for this fp (blocked in the fp admin list): no U고비 customer-link row in the link-send window, no ➤ on the U-GOBI consult card */
+body.ugobi-off .sa-ugobi, body.ugobi-off .cc-ugobi .cc-ptn-share, body.ugobi-off .sag .ug-on { display: none; }
 .lsm-overlay { display:none; position:fixed; inset:0; background:rgba(43,38,28,.4);
   z-index:9500; align-items:center; justify-content:center; padding:16px; }
 .lsm-overlay.on { display:flex; }
@@ -6317,7 +6319,7 @@ const SUBMENUS = {
 var TOOL_VIDEOS = {
   vip:     { id: 'tC4_Ed7OJhk', title: 'VIP 고객지원 서비스 안내영상', orient: 'landscape' },
   panel:   { id: 'LChecM_Du1M', title: '소비자 패널 안내영상', orient: 'landscape' },
-  ugobi:   { id: '7Zg4ptPasCM', title: 'U-GOBI 소개 영상' },
+  ugobi:   { id: '7Zg4ptPasCM', title: 'U-GOBI 소개 영상' },   // no ▶ on the consult card for now (251): its ➤ sends the U고비 mobile link
   carefit: { id: 'jvSS1-bKHGc', title: '올라이프 케어핏 소개 영상' },
   nohupai: { id: 'KzIj5g6jrdM', title: '노후파이클래스 소개 영상' },
   jenius:  { id: '', title: '제니스 케어맵 소개 영상' },
@@ -17839,6 +17841,12 @@ function openHomefitConsult(e) {
 function _applyMomdeunLock() {
   var off = !!(currentUser && currentUser.momdeun === false);
   if (document.body) document.body.classList.toggle('momdeun-off', off);
+  // ugobi lock: no U고비 customer-link row either; the group header counts the rows that are left
+  var ugOff = !!(currentUser && currentUser.ugobi === false);
+  if (document.body) document.body.classList.toggle('ugobi-off', ugOff);
+  var n = 5 + (off ? 0 : 1) + (ugOff ? 0 : 1);
+  var els = document.querySelectorAll('.sa-info-n');
+  for (var i = 0; i < els.length; i++) els[i].textContent = n;
 }
 // the saved login can be older than the lock: re-check it on the server
 // (the gas fetch layer shares the same GET for 15 s, so repeated opens cost at most one call per 15 s)
@@ -17848,10 +17856,12 @@ function _refreshMomdeunLock() {
   fetch(UNISPACE_GAS_URL + '?action=getFpInfo&fp=' + encodeURIComponent(me) + '&_=' + Date.now())
     .then(function (r) { return r.json(); })
     .then(function (res) {
-      if (!res || !res.ok || typeof res.momdeun !== 'boolean') return;
+      if (!res || !res.ok) return;
       if (!currentUser || currentUser.id !== me) return;
-      if (currentUser.momdeun !== res.momdeun) {
-        currentUser.momdeun = res.momdeun;
+      var changed = false;
+      if (typeof res.momdeun === 'boolean' && currentUser.momdeun !== res.momdeun) { currentUser.momdeun = res.momdeun; changed = true; }
+      if (typeof res.ugobi === 'boolean' && currentUser.ugobi !== res.ugobi) { currentUser.ugobi = res.ugobi; changed = true; }
+      if (changed) {
         try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch (e) {}
       }
       _applyMomdeunLock();
@@ -17937,6 +17947,76 @@ function openMomdeunPreview(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!_momdeunShareOk()) return false;
   window.open(_momdeunCustLink(), '_blank');
+  return false;
+}
+// ugobi mobile customer link: the customer sees the savings on the phone and the request comes back to this fp (push + customer list)
+var UGOBI_M_CARD = {
+  title: 'U고비 · 보장은 그대로, 보험료만 쏙',
+  desc:  '같은 보장인데 보험사마다 보험료가 달라요. 30초면 내 나이로 절감액을 확인할 수 있어요.',
+  btn:   '내 절감액 확인하기',
+  img:   'https://unice-vip.co.kr/ugobi-m-og.jpg'
+};
+function _ugobiMCustLink() {
+  return 'https://unice-vip.co.kr/ugobi-m.html?fp=' + encodeURIComponent(String(currentUser.id)) + '&c=1';
+}
+function _ugobiMShareOk() {
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  if (currentUser.ugobi === false) { showToast('🚫 U고비 사용 권한이 없습니다 · 관리자 문의'); return false; }
+  return true;
+}
+// kakao card on phones and pc, like shareMomdeun; text + link copy only when kakao fails
+function shareUgobiM(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!_ugobiMShareOk()) return false;
+  var url = _ugobiMCustLink();
+  _ckpKakaoReady(function(ok) {
+    if (!ok) { _ugShareFallback(url); return; }
+    try {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: UGOBI_M_CARD.title,
+          description: UGOBI_M_CARD.desc,
+          imageUrl: UGOBI_M_CARD.img,
+          imageWidth: 800,
+          imageHeight: 400,
+          link: { mobileWebUrl: url, webUrl: url }
+        },
+        buttons: [
+          { title: UGOBI_M_CARD.btn, link: { mobileWebUrl: url, webUrl: url } }
+        ]
+      });
+    } catch (e) {
+      _ugShareFallback(url);
+    }
+  });
+  return false;
+}
+function _ugShareFallback(url) {
+  var sender = _shareSender();
+  var msg = (sender ? sender + ' 보내드립니다.\n' : '')
+    + '[U고비 · 보장은 그대로, 보험료만 쏙]\n'
+    + '같은 보장인데 보험사마다 보험료가 달라요.\n'
+    + '30초면 내 나이로 절감액을 확인하고, 전화 안내도 신청할 수 있어요.';
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share) {
+    navigator.share({ text: msg, url: url }).catch(function(e){});
+    return;
+  }
+  var full = msg + '\n' + url;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(full).then(function() {
+      showToast('📋 링크가 복사되었습니다. 카톡에 붙여넣어 보내세요');
+    }).catch(function() { shareVipApplyLegacyCopy(full); });
+  } else {
+    shareVipApplyLegacyCopy(full);
+  }
+}
+// preview what the customer sees
+function openUgobiMPreview(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!_ugobiMShareOk()) return false;
+  window.open(_ugobiMCustLink(), '_blank');
   return false;
 }
 // open nohupai with logged-in fp code so it skips its own login
@@ -26815,8 +26895,8 @@ function doCheckin() { doSmartCheckin(); }
 
   <div class="consult-tools">
     <a class="consult-card cc-ugobi pc-only-tool" href="https://unice-vip.co.kr/ugobi/index.html" target="_blank" onclick="return openUgobiConsult(event)">
-      <button type="button" class="cc-share-btn" data-vid="ugobi" onclick="return shareToolVideo('ugobi',event)" aria-label="영상 링크 보내기">&#10148;</button>
-      <button type="button" class="cc-video-btn" data-vid="ugobi" onclick="return openToolVideo('ugobi',event)" aria-label="홍보영상 보기">▶</button>
+      <button type="button" class="cc-ptn-share" onclick="return shareUgobiM(event)" aria-label="U고비 고객에게 보내기">&#10148;</button>
+      <!-- video ▶ hidden for now (251). To show it again, put this back: <button type="button" class="cc-video-btn" data-vid="ugobi" onclick="return openToolVideo('ugobi',event)" aria-label="홍보영상 보기">▶</button> -->
       <div class="cc-icon">💎</div>
       <div class="cc-name">U-GOBI</div>
       <div class="cc-desc">실시간 보험료 비교<br>손보 10사 · 생보 14사</div>
@@ -26909,7 +26989,7 @@ function doCheckin() { doSmartCheckin(); }
           <div class="sag-ic">🎬</div>
           <div class="sag-tx">
             <div class="a">고객 안내 자료</div>
-            <div class="b">친구추가 · VIP 서비스 · 라이프 디자인 · 소비자 패널<span class="md-on"> · 맘든든 (6)</span><span class="md-off"> (5)</span></div>
+            <div class="b">친구추가 · VIP 서비스 · 라이프 디자인 · 소비자 패널<span class="md-on"> · 맘든든</span><span class="ug-on"> · U고비</span> (<span class="sa-info-n">7</span>)</div>
           </div>
           <div class="sag-chev">▾</div>
         </div>
@@ -26958,6 +27038,14 @@ function doCheckin() { doSmartCheckin(); }
         <div class="sa-acts">
           <button type="button" class="sa-vbtn" onclick="return openMomdeunPreview(event)">미리보기</button>
           <button type="button" class="sa-sbtn" onclick="return shareMomdeun(event)">보내기</button>
+        </div>
+      </div>
+      <div class="sa-row sa-ugobi">
+        <div class="sa-ic">💎</div>
+        <div class="sa-tx"><div class="a">U고비 · 보험료 절감<span class="sa-new" data-until="2026-11-30">NEW</span></div><div class="b">같은 보장 최저가 · 휴대폰으로 신청</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-vbtn" onclick="return openUgobiMPreview(event)">미리보기</button>
+          <button type="button" class="sa-sbtn" onclick="return shareUgobiM(event)">보내기</button>
         </div>
       </div>
         </div>
@@ -27648,7 +27736,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 249;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 251;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
