@@ -1299,6 +1299,9 @@ body.theme-light .hl-role.r1 { color:#1E4F8A; } body.theme-light .hl-role.r2 { c
 .hl-info .chip.e { cursor:pointer; border-color:var(--border2); } .hl-info .chip.add { color:#34D399; cursor:pointer; border:1px dashed rgba(52,211,153,.5); background:transparent; }
 .hl-addrow { padding:9px 12px; border-top:1px dashed var(--border2); font-size:12.5px; font-weight:800; color:#34D399; text-align:center; cursor:pointer; }
 .hl-addco { border:1.5px dashed var(--border2); border-radius:14px; padding:13px; text-align:center; font-size:13px; font-weight:800; color:var(--text2); cursor:pointer; flex:none; }
+.hl-addco.top { border:1.5px solid #1F9268; background:rgba(31,146,104,.12); color:#34D399; font-size:14px; padding:12px; }
+body.theme-light .hl-addco.top { color:#1F7A4D; }
+.hl-co.flash { box-shadow:0 0 0 2px #1F9268; transition:box-shadow .3s; }
 .hl-empty { text-align:center; color:var(--text2); padding:30px 10px; font-size:13px; }
 .hl-big { font-size:22px; font-weight:900; letter-spacing:.5px; text-align:center; margin:6px 0 12px; font-variant-numeric:tabular-nums; color:var(--text); }
 .hl-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -12497,6 +12500,7 @@ function _hlRenderList(){
   var q = _hl.q, ed = _hl.edit, h = '';
   var kinds = q ? ['life','non'] : [_hl.kind];
   var shown = 0;
+  if (ed) h += '<div class="hl-addco top" onclick="_hlEditCo(\'\')">＋ 보험사 추가 <small style="font-weight:700;opacity:.8">(' + _hlKindKo(_hl.kind) + ')</small></div>';
   for (var ki=0; ki<kinds.length; ki++) {
     var cos = _hlCos(kinds[ki]);
     for (var i=0; i<cos.length; i++) {
@@ -12508,7 +12512,7 @@ function _hlRenderList(){
         if (!people.length && !infos.length) continue;
       }
       shown++;
-      h += '<div class="hl-co ' + co.kind + '">';
+      h += '<div class="hl-co ' + co.kind + '" id="hlco_' + co.id + '">';
       h += '<div class="hl-ch"><span class="nm">' + _hlEsc(co.company) + (q ? ' <small>' + _hlKindKo(co.kind) + '</small>' : '') + '</span>';
       if (ed) {
         h += '<span class="hl-coact">'
@@ -12555,8 +12559,8 @@ function _hlRenderList(){
       h += '</div>';
     }
   }
-  if (ed) h += '<div class="hl-addco" onclick="_hlEditCo(\'\')">＋ 원수사 추가 (' + _hlKindKo(_hl.kind) + ')</div>';
-  if (!shown && !ed) h = '<div class="hl-empty">' + (q ? '검색 결과가 없어요' : '등록된 원수사가 없어요' + (_hl.canEdit ? ' — ✏️ 편집에서 추가해 주세요' : '')) + '</div>' + h;
+  if (ed) h += '<div class="hl-addco" onclick="_hlEditCo(\'\')">＋ 보험사 추가 (' + _hlKindKo(_hl.kind) + ')</div>';
+  if (!shown && !ed) h = '<div class="hl-empty">' + (q ? '검색 결과가 없어요' : '등록된 원수사가 없어요' + (_hl.canEdit ? ' — ✏️ 편집 → ＋ 보험사 추가' : '')) + '</div>' + h;
   el.innerHTML = h;
 }
 // ── tap a person: call / text / save as contact (kakao friend) / copy ──
@@ -12609,10 +12613,10 @@ function _hlSaveContact(id){
 function _hlEditCo(id){
   var co = id ? _hlById(id) : null;
   _hl.ed = { type:'co', id:id, kind: co ? co.kind : _hl.kind };
-  var h = '<div class="ral-shh">' + (co ? '원수사 수정' : '원수사 추가') + '</div><div class="ral-shs">이름은 목록 전체에 바로 반영돼요</div>'
+  var h = '<div class="ral-shh">' + (co ? '보험사 수정' : '보험사 추가') + '</div><div class="ral-shs">' + (co ? '이름은 목록 전체에 바로 반영돼요' : '저장하면 바로 담당자를 넣을 수 있어요') + '</div>'
     + '<div class="hl-f">'
     + '<label>구분</label><div class="hl-chips" id="hlKindChips"><span class="' + (_hl.ed.kind==='life'?'on':'') + '" onclick="_hlPick(\'kind\',\'life\',this)">🟡 생보</span><span class="' + (_hl.ed.kind==='non'?'on':'') + '" onclick="_hlPick(\'kind\',\'non\',this)">🔴 손보</span></div>'
-    + '<label>원수사 이름</label><input type="text" class="ral-in" id="hlfCompany" value="' + _hlEsc(co ? co.company : '') + '" placeholder="예: 한화생명">'
+    + '<label>보험사 이름</label><input type="text" class="ral-in" id="hlfCompany" value="' + _hlEsc(co ? co.company : '') + '" placeholder="예: ' + (_hl.ed.kind==='non' ? 'DB손해보험' : '한화생명') + '">'
     + '</div>'
     + '<div class="ral-btns"><button type="button" class="ral-bt g" onclick="_alSheetClose()">취소</button><button type="button" class="ral-bt" style="background:#1F9268" onclick="_hlSaveCo()">저장</button></div>';
   _alSheetOpen(h);
@@ -12626,8 +12630,13 @@ function _hlPick(key, val, el){
 }
 function _hlSaveCo(){
   var name = String((document.getElementById('hlfCompany')||{}).value||'').trim();
-  if (!name) { showToast('원수사 이름을 입력해 주세요'); return; }
-  _hlSend({ action:'hotlineSave', row:{ id:_hl.ed.id||'', type:'co', kind:_hl.ed.kind, company:name } }, '✅ 원수사 저장');
+  if (!name) { showToast('보험사 이름을 입력해 주세요'); return; }
+  var key = name.replace(/\s+/g,'').toLowerCase();
+  var all = (_hl.data||[]).filter(function(r){ return r.type==='co' && r.id !== (_hl.ed.id||''); });
+  for (var i=0;i<all.length;i++) {
+    if (String(all[i].company||'').replace(/\s+/g,'').toLowerCase() === key) { showToast('⚠️ ' + all[i].company + '은(는) 이미 ' + _hlKindKo(all[i].kind) + '에 있어요'); return; }
+  }
+  _hlSend({ action:'hotlineSave', row:{ id:_hl.ed.id||'', type:'co', kind:_hl.ed.kind, company:name } }, '✅ 보험사 저장');
 }
 function _hlEditPerson(coId, id){
   var p = id ? _hlById(id) : null;
@@ -12709,6 +12718,13 @@ function _hlMove(id, dir){
   _hlRenderList();
   _hlPost({ action:'hotlineOrder', ids: sib.map(function(x){ return x.id; }) }).then(function(res){ if (!res || !res.ok) { showToast('⚠️ 순서 저장 실패'); _hlLoad(); } }).catch(function(){ showToast('⚠️ 순서 저장 실패'); _hlLoad(); });
 }
+function _hlAfterNewCo(coId){
+  setTimeout(function(){
+    var card = document.getElementById('hlco_' + coId);
+    if (card) { try { card.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(e) { card.scrollIntoView(); } card.classList.add('flash'); setTimeout(function(){ card.classList.remove('flash'); }, 1600); }
+    if (_hlById(coId)) _hlEditPerson(coId, '');
+  }, 350);
+}
 function _hlSend(body, okMsg){
   var btns = document.querySelectorAll('#ralNumBox .ral-bt');
   for (var i=0;i<btns.length;i++) btns[i].disabled = true;
@@ -12729,6 +12745,7 @@ function _hlSend(body, okMsg){
     showToast(okMsg);
     _hlRender();
     _hlLoad();
+    if (body.action === 'hotlineSave' && body.row && body.row.type === 'co' && !body.row.id && res.row) _hlAfterNewCo(res.row.id);
   }).catch(function(){ for (var k=0;k<btns.length;k++) btns[k].disabled = false; showToast('⚠️ 네트워크 오류 — 다시 시도해 주세요'); });
 }
 
@@ -27631,7 +27648,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 248;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 249;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
