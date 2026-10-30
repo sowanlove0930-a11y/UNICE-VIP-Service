@@ -1601,6 +1601,8 @@ body.momdeun-off .sa-momdeun, body.momdeun-off .cc-momdeun .cc-ptn-share, body.m
 body.momdeun-off .sag .md-off { display: inline; }
 /* ugobi locked for this fp (blocked in the fp admin list): no U고비 customer-link row in the link-send window, no ➤ on the U-GOBI consult card */
 body.ugobi-off .sa-ugobi, body.ugobi-off .cc-ugobi .cc-ptn-share, body.ugobi-off .sag .ug-on { display: none; }
+/* nohupai 2.0 locked for this fp (blocked in the fp admin list): no 평생든든 customer-link row in the link-send window */
+body.pension-off .sa-pension, body.pension-off .sag .ps-on { display: none; }
 .lsm-overlay { display:none; position:fixed; inset:0; background:rgba(43,38,28,.4);
   z-index:9500; align-items:center; justify-content:center; padding:16px; }
 .lsm-overlay.on { display:flex; }
@@ -4456,7 +4458,7 @@ window.UNISPACE_FCM = {
     <table class="fp-table" id="fpMgmtTable">
       <thead>
         <tr onclick="_fpMgmtSortClick(event)" title="제목을 누르면 정렬돼요 (한 번 더 누르면 반대로 · No.는 처음 순서)">
-          <th style="width:34px;text-align:right" data-sk="no">No.</th><th data-sk="name">이름</th><th data-sk="id">사번</th><th data-sk="branch">지점</th><th data-sk="role">역할</th><th data-sk="active">유니스페이스</th><th data-sk="attend">📋 출결</th><th data-sk="perf">📊 업적집계</th><th data-sk="std">🎖️ 스탠다드</th><th data-sk="actplan">📝 활동계획</th><th data-sk="comm">💰 수수료</th><th data-sk="carefit">케어핏</th><th data-sk="carefit2">케어핏2.0</th><th data-sk="ugobi">U고비</th><th data-sk="nohupai">노후파이</th><th data-sk="nohupai2">노후파이2.0</th><th data-sk="homefit">홈케어핏</th><th data-sk="momdeun">맘든든</th><th data-sk="jenius">제니스</th><th data-sk="team">🧞 알라딘</th><th data-sk="phoenix">🔥 피닉스</th><th>비번초기화</th><th>삭제</th>
+          <th style="width:34px;text-align:right" data-sk="no">No.</th><th data-sk="name">이름</th><th data-sk="id">사번</th><th data-sk="branch">지점</th><th data-sk="role">역할</th><th data-sk="active">유니스페이스</th><th data-sk="attend">📋 출결</th><th data-sk="perf">📊 업적집계</th><th data-sk="std">🎖️ 스탠다드</th><th data-sk="actplan">📝 활동계획</th><th data-sk="comm">💰 수수료</th><th data-sk="carefit">케어핏</th><th data-sk="carefit2">케어핏2.0</th><th data-sk="ugobi">U고비</th><th data-sk="nohupai">노후파이</th><th data-sk="nohupai2" title="노후파이2.0 + 평생든든 고객 링크">노후파이2.0</th><th data-sk="homefit">홈케어핏</th><th data-sk="momdeun">맘든든</th><th data-sk="jenius">제니스</th><th data-sk="team">🧞 알라딘</th><th data-sk="phoenix">🔥 피닉스</th><th>비번초기화</th><th>삭제</th>
         </tr>
       </thead>
       <tbody id="fpMgmtBody"></tbody>
@@ -7587,7 +7589,7 @@ var _FP_TOGGLE_DEFS = {
   carefit2: { action:'setCarefit2Access', resKey:'carefit2', icon:'\uD83E\uDE7A', label:'\uCF00\uC5B4\uD54F 2.0' },
   ugobi:    { action:'setUgobiAccess',    resKey:'ugobi',    icon:'\uD83D\uDC8E', label:'U\uACE0\uBE44' },
   nohupai:  { action:'setNohupaiAccess',  resKey:'nohupai',  icon:'\uD83C\uDF19', label:'\uB178\uD6C4\uD30C\uC774' },
-  nohupai2: { action:'setNohupai2Access', resKey:'nohupai2', icon:'\uD83E\uDD67', label:'\uB178\uD6C4\uD30C\uC774 2.0' },
+  nohupai2: { action:'setNohupai2Access', resKey:'nohupai2', icon:'\uD83E\uDD67', label:'\uB178\uD6C4\uD30C\uC774 2.0 · 평생든든' },
   homefit:  { action:'setHomefitAccess',  resKey:'homefit',  icon:'\uD83C\uDFE0', label:'\uD648\uCF00\uC5B4\uD54F' },
   momdeun:  { action:'setMomdeunAccess',  resKey:'momdeun',  icon:'🧡', label:'맘든든' },
   jenius:   { action:'setJeniusAccess',   resKey:'jenius',   icon:'\u26A1', label:'\uC81C\uB2C8\uC2A4' },
@@ -17844,7 +17846,10 @@ function _applyMomdeunLock() {
   // ugobi lock: no U고비 customer-link row either; the group header counts the rows that are left
   var ugOff = !!(currentUser && currentUser.ugobi === false);
   if (document.body) document.body.classList.toggle('ugobi-off', ugOff);
-  var n = 5 + (off ? 0 : 1) + (ugOff ? 0 : 1);
+  // 평생든든 follows the 노후파이2.0 permission (the 유동화 consult tool): no 평생든든 row when it is blocked
+  var psOff = !!(currentUser && currentUser.nohupai2 === false);
+  if (document.body) document.body.classList.toggle('pension-off', psOff);
+  var n = 5 + (off ? 0 : 1) + (ugOff ? 0 : 1) + (psOff ? 0 : 1);
   var els = document.querySelectorAll('.sa-info-n');
   for (var i = 0; i < els.length; i++) els[i].textContent = n;
 }
@@ -17861,6 +17866,7 @@ function _refreshMomdeunLock() {
       var changed = false;
       if (typeof res.momdeun === 'boolean' && currentUser.momdeun !== res.momdeun) { currentUser.momdeun = res.momdeun; changed = true; }
       if (typeof res.ugobi === 'boolean' && currentUser.ugobi !== res.ugobi) { currentUser.ugobi = res.ugobi; changed = true; }
+      if (typeof res.nohupai2 === 'boolean' && currentUser.nohupai2 !== res.nohupai2) { currentUser.nohupai2 = res.nohupai2; changed = true; }
       if (changed) {
         try { localStorage.setItem('unispace_user', JSON.stringify(currentUser)); } catch (e) {}
       }
@@ -18018,6 +18024,78 @@ function openUgobiMPreview(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!_ugobiMShareOk()) return false;
   window.open(_ugobiMCustLink(), '_blank');
+  return false;
+}
+// 평생든든 customer link (사망보험금 유동화 · 내 연금액 알아보기): the customer applies on the phone and the request comes back
+// to this fp (push + customer list + the 평생든든신청 sheet); the page lives in the 노후파이2/pension/ folder
+// (the folder name is percent-encoded here so the Kakao card link and image always work)
+var PENSION_M_CARD = {
+  title: '평생든든 · 사망보험금을 살아서 연금으로',
+  desc:  '현 정부 국정과제로 새로 시작한 제도예요. 종신보험이 있든 없든, 내 보험으로 받을 연금을 전부 확인해 보세요.',
+  btn:   '내 연금액 알아보기',
+  img:   'https://unice-vip.co.kr/%EB%85%B8%ED%9B%84%ED%8C%8C%EC%9D%B42/pension/og.jpg'
+};
+function _pensionMCustLink() {
+  return 'https://unice-vip.co.kr/%EB%85%B8%ED%9B%84%ED%8C%8C%EC%9D%B42/pension/index.html?fp=' + encodeURIComponent(String(currentUser.id)) + '&c=1';
+}
+function _pensionMShareOk() {
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  if (currentUser.nohupai2 === false) { showToast('🚫 평생든든(노후파이2.0) 사용 권한이 없습니다 · 관리자 문의'); return false; }
+  return true;
+}
+// kakao card on phones and pc, like shareUgobiM; text + link copy only when kakao fails
+function sharePensionM(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!_pensionMShareOk()) return false;
+  var url = _pensionMCustLink();
+  _ckpKakaoReady(function(ok) {
+    if (!ok) { _psShareFallback(url); return; }
+    try {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: PENSION_M_CARD.title,
+          description: PENSION_M_CARD.desc,
+          imageUrl: PENSION_M_CARD.img,
+          imageWidth: 1200,
+          imageHeight: 600,
+          link: { mobileWebUrl: url, webUrl: url }
+        },
+        buttons: [
+          { title: PENSION_M_CARD.btn, link: { mobileWebUrl: url, webUrl: url } }
+        ]
+      });
+    } catch (e) {
+      _psShareFallback(url);
+    }
+  });
+  return false;
+}
+function _psShareFallback(url) {
+  var sender = _shareSender();
+  var msg = (sender ? sender + ' 보내드립니다.\n' : '')
+    + '[평생든든 · 사망보험금을 살아서 연금으로]\n'
+    + '현 정부 국정과제로 새로 시작한 제도예요.\n'
+    + '종신보험이 있든 없든, 내 연금액 알아보기를 휴대폰으로 신청할 수 있어요.';
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share) {
+    navigator.share({ text: msg, url: url }).catch(function(e){});
+    return;
+  }
+  var full = msg + '\n' + url;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(full).then(function() {
+      showToast('📋 링크가 복사되었습니다. 카톡에 붙여넣어 보내세요');
+    }).catch(function() { shareVipApplyLegacyCopy(full); });
+  } else {
+    shareVipApplyLegacyCopy(full);
+  }
+}
+// preview what the customer sees
+function openPensionMPreview(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!_pensionMShareOk()) return false;
+  window.open(_pensionMCustLink(), '_blank');
   return false;
 }
 // open nohupai with logged-in fp code so it skips its own login
@@ -26990,7 +27068,7 @@ function doCheckin() { doSmartCheckin(); }
           <div class="sag-ic">🎬</div>
           <div class="sag-tx">
             <div class="a">고객 안내 자료</div>
-            <div class="b">친구추가 · VIP 서비스 · 라이프 디자인 · 소비자 패널<span class="md-on"> · 맘든든</span><span class="ug-on"> · U고비</span> (<span class="sa-info-n">7</span>)</div>
+            <div class="b">친구추가 · VIP 서비스 · 라이프 디자인 · 소비자 패널<span class="md-on"> · 맘든든</span><span class="ug-on"> · U고비</span><span class="ps-on"> · 평생든든</span> (<span class="sa-info-n">8</span>)</div>
           </div>
           <div class="sag-chev">▾</div>
         </div>
@@ -27047,6 +27125,14 @@ function doCheckin() { doSmartCheckin(); }
         <div class="sa-acts">
           <button type="button" class="sa-vbtn" onclick="return openUgobiMPreview(event)">미리보기</button>
           <button type="button" class="sa-sbtn" onclick="return shareUgobiM(event)">보내기</button>
+        </div>
+      </div>
+      <div class="sa-row sa-pension">
+        <div class="sa-ic">🏖️</div>
+        <div class="sa-tx"><div class="a">평생든든 · 내 연금액<span class="sa-new" data-until="2026-11-30">NEW</span></div><div class="b">사망보험금 유동화 · 휴대폰으로 신청</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-vbtn" onclick="return openPensionMPreview(event)">미리보기</button>
+          <button type="button" class="sa-sbtn" onclick="return sharePensionM(event)">보내기</button>
         </div>
       </div>
         </div>
@@ -27737,7 +27823,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 252;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 253;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
