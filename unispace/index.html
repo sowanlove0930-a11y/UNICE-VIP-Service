@@ -3397,6 +3397,20 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 .rc2-pk-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
 .rc2-pk-mon { font-size:12px; font-weight:700; color:var(--text); }
 .rc2-pk-nav { background:none; border:none; color:var(--text2); font-size:16px; cursor:pointer; padding:2px 8px; }
+/* 258: multi-day schedules = one bar per week row (desktop cell padding 5 + border 1 + half gap 2) */
+.sched-cal-cell > div.run-r { margin-right:-8px; padding-right:13px !important; border-top-right-radius:0 !important; border-bottom-right-radius:0 !important; }
+.sched-cal-cell > div.run-l { margin-left:-8px; padding-left:13px !important; border-top-left-radius:0 !important; border-bottom-left-radius:0 !important; }
+/* bar chips are opaque (tint over the box colour) so the cell borders under the join don't show through */
+.sched-cal-cell > div.run-r, .sched-cal-cell > div.run-l { background-color:var(--bg2) !important; background-image:linear-gradient(var(--rc), var(--rc)) !important; }
+@media (max-width:600px){
+  .sched-cal-cell > div.run-r { margin-right:-6px; padding-right:9px !important; }
+  .sched-cal-cell > div.run-l { margin-left:-6px; padding-left:9px !important; }
+}
+.sched-range { display:flex; align-items:center; gap:6px; }
+.sched-range .pk-trigger { flex:1; min-width:0; padding:9px 10px; }
+.sched-range .pk-trigger > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sched-range .til { color:var(--text3); font-weight:700; flex:none; }
+.sched-range .pk-x { flex:none; margin-left:auto; margin-right:6px; width:18px; height:18px; line-height:18px; text-align:center; border-radius:50%; background:rgba(0,0,0,.08); color:var(--text2); font-size:10px; }
 .sched-scope { display:flex; gap:4px; background:var(--bg3,#F3EFE6); border-radius:10px; padding:3px; margin-bottom:10px; }
 .sched-scope button { flex:1; border:none; background:transparent; border-radius:8px; padding:8px 6px; font-size:13px; font-weight:700; color:var(--text3); cursor:pointer; font-family:inherit; }
 .sched-scope button.on { background:#fff; color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.10); }
@@ -14108,6 +14122,75 @@ function openScheduleModal(){
 function closeScheduleModal(){ document.getElementById('scheduleOverlay').classList.remove('open'); }
 function schedPrevMonth(){ _schedMonth.setMonth(_schedMonth.getMonth()-1); renderSchedCal(); }
 function schedNextMonth(){ _schedMonth.setMonth(_schedMonth.getMonth()+1); renderSchedCal(); }
+// -- 258: a schedule may run over several days (endDate '' = one day) --
+function _schedEnd(s){ var d=String((s&&s.date)||''), e=String((s&&s.endDate)||''); return (e && e>d) ? e : d; }
+function _schedIsRun(s){ return !!s && _schedEnd(s)!==String(s.date||''); }
+function _schedOn(s, ds){ return !!(s && s.date) && s.date<=ds && ds<=_schedEnd(s); }
+// items on one day: runs first (earlier start, longer first) so bars line up across days, then singles (cmp or list order)
+function _schedRunCmp(a, b){
+  if(a.date!==b.date) return a.date<b.date?-1:1;
+  var ea=_schedEnd(a), eb=_schedEnd(b); if(ea!==eb) return ea>eb?-1:1;
+  return String(a.id||'').localeCompare(String(b.id||''));
+}
+function _schedDayItems(list, ds, cmp){
+  return (list||[]).map(function(s,i){ return { s:s, i:i }; }).filter(function(x){ return _schedOn(x.s, ds); }).sort(function(a,b){
+    var ra=_schedIsRun(a.s)?0:1, rb=_schedIsRun(b.s)?0:1;
+    if(ra!==rb) return ra-rb;
+    if(ra===0) return _schedRunCmp(a.s, b.s);
+    return cmp ? (cmp(a.s,b.s) || a.i-b.i) : a.i-b.i;
+  }).map(function(x){ return x.s; });
+}
+// bar joins inside one week row: run-l = continues from the day before, run-r = continues to the next day
+function _schedRunCls(s, ds){
+  if(!_schedIsRun(s)) return '';
+  var dow=new Date(ds+'T00:00:00').getDay(), c='';
+  if(ds>s.date && dow!==0) c+=' run-l';
+  if(ds<_schedEnd(s) && dow!==6) c+=' run-r';
+  return c;
+}
+function _schedRangeTxt(s){
+  if(!_schedIsRun(s)) return '';
+  var a=new Date(s.date+'T00:00:00'), b=new Date(_schedEnd(s)+'T00:00:00'), W=['일','월','화','수','목','금','토'];
+  var f=function(d){ return (d.getMonth()+1)+'/'+d.getDate()+'('+W[d.getDay()]+')'; };
+  return f(a)+' ~ '+f(b)+' · '+(Math.round((b-a)/86400000)+1)+'일';
+}
+function _setRangeEnd(inputId, dispId, ds){
+  var de=document.getElementById(inputId); if(de) de.value=ds||'';
+  var disp=document.getElementById(dispId);
+  if(disp){
+    if(ds){ disp.textContent=parseInt(ds.slice(5,7),10)+'월 '+parseInt(ds.slice(8,10),10)+'일'; disp.classList.remove('pk-ph'); }
+    else { disp.textContent=disp.getAttribute('data-ph')||'끝나는 날 (선택)'; disp.classList.add('pk-ph'); }
+  }
+  var x=document.getElementById(dispId.replace('Disp','X')); if(x) x.style.display=ds?'':'none';
+}
+// end picker opens on the start month; picking the start day itself means one day
+function openRangeEndPicker(inputId, dispId, startId){
+  var st=(document.getElementById(startId)||{}).value||'';
+  _openDatePickerFor(inputId, dispId, function(ds){
+    var s0=(document.getElementById(startId)||{}).value||'';
+    if(s0 && ds<=s0){ _setRangeEnd(inputId, dispId, ''); if(ds<s0) showToast('⚠️ 끝나는 날은 시작일보다 뒤여야 해요'); }
+    else _setRangeEnd(inputId, dispId, ds);
+  });
+  if(!document.getElementById(inputId).value && st){
+    var p=st.split('-'), base=new Date();
+    _pkDateOffset=(parseInt(p[0],10)-base.getFullYear())*12+(parseInt(p[1],10)-1-base.getMonth());
+    renderPkDate();
+  }
+}
+// a new start on or after the end day drops the end day
+function _rangeStartPicked(endInputId, endDispId, ds){
+  var e=document.getElementById(endInputId);
+  if(e && e.value && e.value<=ds) _setRangeEnd(endInputId, endDispId, '');
+}
+function openMySchedStartPicker(){
+  _openDatePickerFor('mySchedDate','mySchedDateDisp', function(ds){ _rangeStartPicked('mySchedEndDate','mySchedEndDisp', ds); });
+}
+// read + check a form's range; returns null (and shows why) when the end is before the start
+function _readRange(startId, endId){
+  var d=(document.getElementById(startId)||{}).value||'', e=(document.getElementById(endId)||{}).value||'';
+  if(e && d && e<d){ showToast('⚠️ 끝나는 날이 시작일보다 빨라요'); return null; }
+  return { date:d, endDate:(e && e>d) ? e : '' };
+}
 function renderSchedCal(){
   var lbl=document.getElementById('schedMonthLabel');
   if(lbl) lbl.textContent = _schedMonth.getFullYear()+'년 '+(_schedMonth.getMonth()+1)+'월';
@@ -14123,7 +14206,7 @@ function renderSchedCal(){
   for(var b=0;b<startDow;b++){ h+='<div></div>'; }
   for(var day=1;day<=daysInMonth;day++){
     var ds=y+'-'+('0'+(m+1)).slice(-2)+'-'+('0'+day).slice(-2);
-    var dayScheds=db.filter(function(s){ return s.date===ds; });
+    var dayScheds=_schedDayItems(db, ds);
     var isToday=(ds===todayStr);
     var chips='';
     dayScheds.slice(0,3).forEach(function(s){
@@ -14132,7 +14215,7 @@ function renderSchedCal(){
       else if(s.type==='non'){ bg='rgba(15,142,126,.14)'; col='#0C6B5E'; label=s.company||'손보교육'; }
       else if(s.type==='support'){ bg='rgba(109,79,184,.14)'; col='#5B3FA0'; label='🤝'+(s._fromFp||'지원'); }
       else { bg='rgba(192,57,49,.13)'; col='#C0392B'; label=s.title||'중요'; }
-      chips+='<div style="margin-top:3px;font-size:11px;background:'+bg+';color:'+col+';border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+escHtmlSch(label)+'</div>';
+      chips+='<div class="'+_schedRunCls(s, ds)+'" style="margin-top:3px;font-size:11px;background:'+bg+';--rc:'+bg+';color:'+col+';border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+escHtmlSch(label)+'</div>';
     });
     if(dayScheds.length>3){ chips+='<div style="font-size:10px;color:var(--text3);margin-top:2px">+'+(dayScheds.length-3)+'</div>'; }
     var _hol = getHolidayName(ds);
@@ -14252,17 +14335,24 @@ function _renderMySchedCal(){
   for(var b=0;b<startDow;b++){ h+='<div></div>'; }
   for(var day=1;day<=daysInMonth;day++){
     var ds=y+'-'+('0'+(m+1)).slice(-2)+'-'+('0'+day).slice(-2);
-    var my=mine.filter(function(s){ return s.date===ds; }).sort(_myByTime);
-    var og=org.filter(function(s){ return s.date===ds; });
+    var my=_schedDayItems(mine, ds, _myByTime);
+    var og=_schedDayItems(org, ds);
+    // runs (mine and 지사) first so bars line up across days, then my one-day items, then 지사 one-day items
+    var notRun=function(s){ return !_schedIsRun(s); };
+    var all=my.filter(_schedIsRun).map(function(s){ return { s:s, m:1 }; }).concat(og.filter(_schedIsRun).map(function(s){ return { s:s, m:0 }; }))
+      .sort(function(a,b){ return _schedRunCmp(a.s, b.s); })
+      .concat(my.filter(notRun).map(function(s){ return { s:s, m:1 }; }))
+      .concat(og.filter(notRun).map(function(s){ return { s:s, m:0 }; }));
     var chips='', n=0;
-    my.forEach(function(s){
+    all.forEach(function(x){
       if(n>=3) return; n++;
-      chips+='<div style="margin-top:3px;font-size:11px;background:'+MYC.bg+';color:'+MYC.col+';border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700">'+(s.time?'<span class="mysch-t">'+escHtmlSch(s.time)+' </span>':'')+escHtmlSch(s.title||'내 일정')+'</div>';
-    });
-    og.forEach(function(s){
-      if(n>=3) return; n++;
-      var label=(s.type==='life'||s.type==='non')?(s.company||(s.type==='life'?'생보교육':'손보교육')):(s.title||'중요');
-      chips+='<div style="margin-top:3px;font-size:11px;background:rgba(120,120,120,.10);color:var(--text3);border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">'+escHtmlSch(label)+'</div>';
+      var s=x.s;
+      if(x.m){
+        chips+='<div class="'+_schedRunCls(s, ds)+'" style="margin-top:3px;font-size:11px;background:'+MYC.bg+';--rc:'+MYC.bg+';color:'+MYC.col+';border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700">'+(s.time?'<span class="mysch-t">'+escHtmlSch(s.time)+' </span>':'')+escHtmlSch(s.title||'내 일정')+'</div>';
+      } else {
+        var label=(s.type==='life'||s.type==='non')?(s.company||(s.type==='life'?'생보교육':'손보교육')):(s.title||'중요');
+        chips+='<div class="'+_schedRunCls(s, ds)+'" style="margin-top:3px;font-size:11px;background:rgba(120,120,120,.10);--rc:rgba(120,120,120,.10);color:var(--text3);border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">'+escHtmlSch(label)+'</div>';
+      }
     });
     var total=my.length+og.length;
     if(total>3){ chips+='<div style="font-size:10px;color:var(--text3);margin-top:2px">+'+(total-3)+'</div>'; }
@@ -14279,8 +14369,8 @@ function _renderMySchedCal(){
 }
 function _myDayClick(ds){
   var dl=document.getElementById('schedDayList'); if(!dl || !_myTok()) return;
-  var my=getMySchedDB().filter(function(s){ return s.date===ds; }).sort(_myByTime);
-  var og=_myShowOrg?getSchedDB().filter(function(s){ return s.date===ds; }):[];
+  var my=_schedDayItems(getMySchedDB(), ds, _myByTime);
+  var og=_myShowOrg?_schedDayItems(getSchedDB(), ds):[];
   if(!my.length && !og.length){ openMySchedForm('', ds); return; }
   var p=ds.split('-');
   var h='<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">'+parseInt(p[1],10)+'월 '+parseInt(p[2],10)+'일</div>';
@@ -14289,6 +14379,7 @@ function _myDayClick(ds){
       '<span style="float:right;font-size:10px;color:var(--text3)">수정 ›</span>'+
       '<span style="font-size:10px;font-weight:700;color:'+MYC.col+'">🔒 내 일정</span> '+
       '<span style="font-size:13px;font-weight:700;color:var(--text)">'+escHtmlSch(s.title||'내 일정')+(s.time?' · '+escHtmlSch(s.time):'')+'</span>'+
+      (_schedIsRun(s)?'<div style="font-size:11.5px;color:'+MYC.col+';margin-top:3px;font-weight:600">📆 '+_schedRangeTxt(s)+'</div>':'')+
       (s.memo?'<div style="font-size:11.5px;color:var(--text2);margin-top:3px;white-space:pre-wrap;line-height:1.5">'+escHtmlSch(s.memo)+'</div>':'')+
     '</div>';
   });
@@ -14297,7 +14388,8 @@ function _myDayClick(ds){
     var main=(s.type==='life'||s.type==='non')?((s.company?s.company+' · ':'')+(s.title||(s.type==='life'?'생보 교육':'손보 교육'))):(s.title||'중요 일정');
     h+='<div style="background:rgba(120,120,120,.07);border-radius:8px;padding:8px 11px;margin-bottom:6px;opacity:.75">'+
       '<span style="font-size:10px;font-weight:700;color:var(--text3)">🏢 지사 · '+tag+'</span> '+
-      '<span style="font-size:12.5px;font-weight:600;color:var(--text2)">'+escHtmlSch(main)+(s.time?' · '+escHtmlSch(s.time):'')+'</span></div>';
+      '<span style="font-size:12.5px;font-weight:600;color:var(--text2)">'+escHtmlSch(main)+(s.time?' · '+escHtmlSch(s.time):'')+'</span>'+
+      (_schedIsRun(s)?'<div style="font-size:11px;color:var(--text3);margin-top:2px">📆 '+_schedRangeTxt(s)+'</div>':'')+'</div>';
   });
   h+='<button type="button" onclick="openMySchedForm(\'\',\''+ds+'\')" style="width:100%;margin-top:4px;padding:8px;border:1px dashed #7C3AED;background:rgba(124,58,237,.05);color:#5B21B6;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ 이 날 내 일정 추가</button>';
   dl.innerHTML=h;
@@ -14318,6 +14410,7 @@ function openMySchedForm(id, ds){
   document.getElementById('mySchedTime').value=s?(s.time||''):'';
   document.getElementById('mySchedMemo').value=s?(s.memo||''):'';
   _mySetDate(s?s.date:(ds||_schedYmd(new Date())));
+  _setRangeEnd('mySchedEndDate','mySchedEndDisp', (s && _schedIsRun(s)) ? _schedEnd(s) : '');
   document.getElementById('mySchedFormOverlay').classList.add('open');
 }
 function closeMySchedForm(){ document.getElementById('mySchedFormOverlay').classList.remove('open'); }
@@ -14342,11 +14435,12 @@ function saveMySched(){
   var time=document.getElementById('mySchedTime').value.trim();
   var memo=document.getElementById('mySchedMemo').value.trim();
   if(!date){ showToast('⚠️ 날짜를 선택해 주세요'); return; }
+  var _rg=_readRange('mySchedDate','mySchedEndDate'); if(!_rg) return;
   if(!title){ showToast('⚠️ 일정 내용을 입력해 주세요'); return; }
   var db=getMySchedDB(), item=null;
   for(var i=0;i<db.length && _myEditId;i++){ if(db[i].id===_myEditId){ item=db[i]; break; } }
   if(!item){ item={ id:'my_'+Date.now()+'_'+Math.random().toString(36).substr(2,5) }; db.push(item); }
-  item.date=date; item.title=title; item.time=time; item.memo=memo;
+  item.date=date; item.endDate=_rg.endDate; item.title=title; item.time=time; item.memo=memo;
   saveMySchedDB(db);
   _myPost({ action:'saveMySchedule', data:item }, function(why){ showToast('⚠️ 내 일정이 서버에 저장되지 않았습니다 ('+(why||'오류')+') — 다시 저장해 주세요'); });
   closeMySchedForm();
@@ -14371,7 +14465,7 @@ function escHtmlSch(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt
 function schedDayClick(ds){
   if(_schedScope==='my' && _mySchedOn()){ _myDayClick(ds); return; }
   var db=getSchedDB();
-  var list=db.filter(function(s){ return s.date===ds; });
+  var list=_schedDayItems(db, ds);
   var dl=document.getElementById('schedDayList');
   if(!dl) return;
   if(!list.length){
@@ -14411,6 +14505,7 @@ function schedDayClick(ds){
       editHint+
       '<span style="font-size:10px;font-weight:700;color:'+col+'">'+tag+'</span> '+
       '<span style="font-size:13px;font-weight:600;color:var(--text)">'+escHtmlSch(main)+timeTxt+'</span>'+
+      (_schedIsRun(s) ? '<div style="font-size:11.5px;color:var(--text2);margin-top:3px;font-weight:600">📆 '+_schedRangeTxt(s)+'</div>' : '')+
     '</div>';
   });
   if(_schedIsAdmin()){
@@ -14454,6 +14549,7 @@ function openSchedForm(id){
       document.getElementById('schedCompany').value=s.company||'';
       document.getElementById('schedTitle').value=s.title||'';
       _setSchedDate(s.date||'');
+      _setRangeEnd('schedEndDate','schedEndDisp', _schedIsRun(s) ? _schedEnd(s) : '');
       document.getElementById('schedTime').value=s.time||'';
     }
   } else {
@@ -14461,6 +14557,7 @@ function openSchedForm(id){
     document.getElementById('schedCompany').value='';
     document.getElementById('schedTitle').value='';
     _setSchedDate(_schedYmd(new Date()));
+    _setRangeEnd('schedEndDate','schedEndDisp','');
     document.getElementById('schedTime').value='';
   }
   document.getElementById('schedFormOverlay').classList.add('open');
@@ -14473,6 +14570,8 @@ function saveSchedule(){
   var company=document.getElementById('schedCompany').value.trim();
   var time=document.getElementById('schedTime').value.trim();
   if(!date){ showToast('⚠️ 날짜를 선택해 주세요'); return; }
+  var _rg=_readRange('schedDate','schedEndDate'); if(!_rg) return;
+  var endDate=_rg.endDate;
   if((_schedType==='life'||_schedType==='non') && !company && !title){ showToast('⚠️ 교육 회사나 내용을 입력해 주세요'); return; }
   if(_schedType==='imp' && !title){ showToast('⚠️ 일정 내용을 입력해 주세요'); return; }
   var db=getSchedDB();
@@ -14480,13 +14579,13 @@ function saveSchedule(){
   if(_schedEditId){
     for(var i=0;i<db.length;i++){
       if(db[i].id===_schedEditId){
-        db[i].type=_schedType; db[i].date=date; db[i].title=title; db[i].company=company; db[i].time=time;
+        db[i].type=_schedType; db[i].date=date; db[i].endDate=endDate; db[i].title=title; db[i].company=company; db[i].time=time;
         item=db[i];
         break;
       }
     }
   } else {
-    item={ id:'sch_'+Date.now()+'_'+Math.random().toString(36).substr(2,5), type:_schedType, date:date, title:title, company:company, time:time, by:(currentUser?currentUser.name:'') };
+    item={ id:'sch_'+Date.now()+'_'+Math.random().toString(36).substr(2,5), type:_schedType, date:date, endDate:endDate, title:title, company:company, time:time, by:(currentUser?currentUser.name:'') };
     db.push(item);
   }
   saveSchedDB(db);
@@ -25712,7 +25811,7 @@ function openResDatePicker(){
   _openDatePickerFor('resNextDate','resNextDateDisp');
 }
 function openSchedDatePicker(){
-  _openDatePickerFor('schedDate','schedDateDisp');
+  _openDatePickerFor('schedDate','schedDateDisp', function(ds){ if(typeof _rangeStartPicked==='function') _rangeStartPicked('schedEndDate','schedEndDisp', ds); });
 }
 function _setSchedDate(ds){
   var de=document.getElementById('schedDate'); if(de) de.value=ds||'';
@@ -27566,12 +27665,16 @@ function doCheckin() { doSmartCheckin(); }
         <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">일정 내용</div>
         <input type="text" id="mySchedTitle" maxlength="200" placeholder="예) 아이 학교 상담, 병원, 지인 미팅" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-        <div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">날짜</div>
-          <div class="pk-trigger" id="mySchedDateTrig" onclick="_openDatePickerFor('mySchedDate','mySchedDateDisp')"><span id="mySchedDateDisp" class="pk-ph">날짜 선택</span><span class="pk-ico">📅</span></div>
-          <input type="hidden" id="mySchedDate">
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">날짜 <span style="font-weight:500;color:var(--text3)">· 며칠 동안이면 끝나는 날도 골라 주세요</span></div>
+        <div class="sched-range">
+          <div class="pk-trigger" id="mySchedDateTrig" onclick="openMySchedStartPicker()"><span id="mySchedDateDisp" class="pk-ph">날짜 선택</span><span class="pk-ico">📅</span></div>
+          <span class="til">~</span>
+          <div class="pk-trigger" id="mySchedEndTrig" onclick="openRangeEndPicker('mySchedEndDate','mySchedEndDisp','mySchedDate')"><span id="mySchedEndDisp" class="pk-ph" data-ph="끝나는 날 (선택)">끝나는 날 (선택)</span><span class="pk-x" id="mySchedEndX" style="display:none" onclick="event.stopPropagation();_setRangeEnd('mySchedEndDate','mySchedEndDisp','')">✕</span><span class="pk-ico">📅</span></div>
         </div>
+        <input type="hidden" id="mySchedDate"><input type="hidden" id="mySchedEndDate">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
         <div>
           <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">시간 (선택)</div>
           <input type="text" id="mySchedTime" maxlength="20" placeholder="예) 14:00" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
@@ -27612,12 +27715,16 @@ function doCheckin() { doSmartCheckin(); }
         <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">일정 내용</div>
         <input type="text" id="schedTitle" placeholder="일정 제목·내용" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">날짜</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">날짜 <span style="font-weight:500;color:var(--text3)">· 며칠 동안이면 끝나는 날도 골라 주세요</span></div>
+        <div class="sched-range">
           <div class="pk-trigger" id="schedDateTrig" onclick="openSchedDatePicker()"><span id="schedDateDisp" class="pk-ph">날짜 선택</span><span class="pk-ico">📅</span></div>
-          <input type="hidden" id="schedDate">
+          <span class="til">~</span>
+          <div class="pk-trigger" id="schedEndTrig" onclick="openRangeEndPicker('schedEndDate','schedEndDisp','schedDate')"><span id="schedEndDisp" class="pk-ph" data-ph="끝나는 날 (선택)">끝나는 날 (선택)</span><span class="pk-x" id="schedEndX" style="display:none" onclick="event.stopPropagation();_setRangeEnd('schedEndDate','schedEndDisp','')">✕</span><span class="pk-ico">📅</span></div>
         </div>
+        <input type="hidden" id="schedDate"><input type="hidden" id="schedEndDate">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div>
           <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">시간 (선택)</div>
           <input type="text" id="schedTime" placeholder="예) 10:00" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
@@ -28554,7 +28661,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 257;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 258;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
