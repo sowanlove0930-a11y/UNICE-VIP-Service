@@ -3397,6 +3397,19 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 .rc2-pk-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
 .rc2-pk-mon { font-size:12px; font-weight:700; color:var(--text); }
 .rc2-pk-nav { background:none; border:none; color:var(--text2); font-size:16px; cursor:pointer; padding:2px 8px; }
+.sched-scope { display:flex; gap:4px; background:var(--bg3,#F3EFE6); border-radius:10px; padding:3px; margin-bottom:10px; }
+.sched-scope button { flex:1; border:none; background:transparent; border-radius:8px; padding:8px 6px; font-size:13px; font-weight:700; color:var(--text3); cursor:pointer; font-family:inherit; }
+.sched-scope button.on { background:#fff; color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.10); }
+.sched-scope button.on.my { color:#5B21B6; box-shadow:0 1px 4px rgba(91,33,182,.18); }
+@media (max-width:600px){ .sched-cal-cell .mysch-t { display:none; } }
+.mysch-lock { text-align:center; padding:34px 16px; border:1px dashed #C9B8F0; border-radius:12px; background:rgba(124,58,237,.04); }
+.mysch-lock .ic { font-size:30px; }
+.mysch-lock .t { font-size:15px; font-weight:800; margin-top:6px; color:var(--text); }
+.mysch-lock .d { font-size:12px; color:var(--text3); margin-top:4px; line-height:1.6; }
+.mysch-lock input { margin-top:14px; width:100%; max-width:240px; box-sizing:border-box; padding:10px 12px; border:1px solid var(--bdr); border-radius:9px; font-size:14px; font-family:inherit; background:var(--surface); color:var(--text); }
+.mysch-lock button { display:block; margin:10px auto 0; padding:10px 26px; border:none; border-radius:9px; background:#6D28D9; color:#fff; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+.mysch-toggle { display:inline-flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; color:var(--text2); }
+.mysch-toggle input { accent-color:#6D28D9; margin:0; }
 .rc2-pk-dow { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; font-size:10px; color:var(--text3); text-align:center; margin-bottom:2px; }
 .rc2-pk-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
 .rc2-pk-day { min-height:46px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:4px; font-size:12px; color:var(--text); border-radius:6px; cursor:pointer; }
@@ -5263,6 +5276,7 @@ var IDLE_LIMIT_MS = 3 * 60 * 60 * 1000;
 var _idleTimer = null;
 function _autoLogout() {
   try { localStorage.removeItem('unispace_user'); } catch(e) {}
+  try { if (typeof _myClearDevice === 'function') _myClearDevice(); } catch(eMy) {}
   showAppAlert('3시간간 활동이 없어 자동 로그아웃되었습니다.<br>다시 로그인해 주세요.', {
     icon: '🔒',
     title: '자동 로그아웃',
@@ -6226,6 +6240,7 @@ function doLogin(fromBio) {
       return;
     }
     var _newUser = _adaptGasUser(res);
+    try { if (typeof _myClearDevice === 'function') _myClearDevice(); if (res.mySchedTok && res.id) localStorage.setItem('unispace_myschedtok_' + String(res.id).trim().toLowerCase(), res.mySchedTok); } catch(eMy) {}
     // 이전 로그인 사용자와 다르면 데이터 캐시 초기화 (FP 전환 시 데이터 섞임 방지)
     try {
       var _prev = JSON.parse(localStorage.getItem('unispace_user') || 'null');
@@ -7358,6 +7373,7 @@ function resolveConfirm(result) {
 function _bigClear(key){ try { delete _BIG[key]; } catch(e) {} try { _idbDel(key); } catch(e2) {} try { localStorage.removeItem(key); } catch(e3) {} }
 function _doLogoutNow() {
   try { localStorage.removeItem('unispace_user'); } catch(e) {}
+  try { if (typeof _myClearDevice === 'function') _myClearDevice(); } catch(eMy) {}
   try { ['unispace_activities','unispace_customers','unispace_attendance','unispace_prereport'].forEach(_bigClear); } catch(e0) {}
   try { localStorage.removeItem('unispace_att_roster'); localStorage.removeItem('unispace_fp_roster'); localStorage.removeItem('unispace_activities'); } catch(e) {}
   try { localStorage.removeItem('unispace_customers'); } catch(e) {}
@@ -14081,6 +14097,10 @@ function openScheduleModal(){
   _schedMonth = new Date(); _schedMonth.setDate(1); _schedMonth.setHours(0,0,0,0);
   var addHint=document.getElementById('schedAddHint');
   if(addHint) addHint.style.display = _schedIsAdmin() ? '' : 'none';
+  if(!_mySchedOn()) _schedScope='org';
+  var _sst=document.getElementById('schedScopeTabs'); if(_sst) _sst.style.display=_mySchedOn()?'':'none';
+  _schedScopeUi();
+  if(_schedScope==='my') loadMySchedFromGas(function(){ if(document.getElementById('scheduleOverlay').classList.contains('open')) renderSchedCal(); });
   renderSchedCal();
   document.getElementById('scheduleOverlay').classList.add('open');
   if(typeof loadSchedFromGas==='function'){ loadSchedFromGas(function(){ if(document.getElementById('scheduleOverlay').classList.contains('open')) renderSchedCal(); }); }
@@ -14091,6 +14111,7 @@ function schedNextMonth(){ _schedMonth.setMonth(_schedMonth.getMonth()+1); rende
 function renderSchedCal(){
   var lbl=document.getElementById('schedMonthLabel');
   if(lbl) lbl.textContent = _schedMonth.getFullYear()+'년 '+(_schedMonth.getMonth()+1)+'월';
+  if(_schedScope==='my' && _mySchedOn()){ _renderMySchedCal(); return; }
   var y=_schedMonth.getFullYear(), m=_schedMonth.getMonth();
   var first=new Date(y,m,1), startDow=first.getDay();
   var daysInMonth=new Date(y,m+1,0).getDate();
@@ -14124,8 +14145,231 @@ function renderSchedCal(){
   var grid=document.getElementById('schedCalGrid'); if(grid) grid.innerHTML=h;
   var dl=document.getElementById('schedDayList'); if(dl) dl.innerHTML='';
 }
+// -- 257: private personal schedule (server: GAS 25q getMySchedules / saveMySchedule / deleteMySchedule) --
+var _schedScope=(function(){ try{ return localStorage.getItem('unispace_sched_scope')==='my'?'my':'org'; }catch(e){ return 'org'; } })();
+var _myShowOrg=(function(){ try{ return localStorage.getItem('unispace_sched_showorg')!=='0'; }catch(e){ return true; } })();
+var _myEditId='';
+var MYC={ col:'#5B21B6', bg:'rgba(124,58,237,.15)', bg2:'rgba(124,58,237,.07)', bd:'#7C3AED' };
+// same rule as GAS 25q _mySchedEligible: 대표 · 교육지점장 · 지점장 (a 매니저 title never)
+function _mySchedOn(){
+  if(!currentUser) return false;
+  var id=String(currentUser.id||'').trim().toLowerCase(), tt=String(currentUser.title||'').trim(), lv=String(currentUser.level||'').trim().toLowerCase();
+  if(id==='ktk01'||id==='h2503162') return true;
+  if(tt==='지점장'||tt==='교육지점장') return true;
+  return lv==='manager' && tt.indexOf('매니저')<0;
+}
+function _myUid(){ return String((currentUser&&currentUser.id)||'').trim().toLowerCase(); }
+function _myKey(){ return 'unispace_mysched_'+_myUid(); }
+function _myTokKey(){ return 'unispace_myschedtok_'+_myUid(); }
+function _myTok(){ try{ return _myUid()?(localStorage.getItem(_myTokKey())||''):''; }catch(e){ return ''; } }
+function getMySchedDB(){ try{ var a=JSON.parse(localStorage.getItem(_myKey())||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function saveMySchedDB(a){ try{ localStorage.setItem(_myKey(), JSON.stringify(a||[])); }catch(e){} }
+// drop every cached personal schedule and key on this device (login, logout)
+function _myClearDevice(){
+  try{
+    var ks=[];
+    for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && (k.indexOf('unispace_mysched_')===0 || k.indexOf('unispace_myschedtok_')===0)) ks.push(k); }
+    ks.forEach(function(k){ localStorage.removeItem(k); });
+  }catch(e){}
+}
+function _myByTime(a,b){ return String(a.time||'99').localeCompare(String(b.time||'99')); }
+function _schedScopeUi(){
+  var my=(_schedScope==='my' && _mySchedOn());
+  var o=document.getElementById('schedScopeOrg'), m=document.getElementById('schedScopeMy');
+  if(o) o.className=my?'':'on';
+  if(m) m.className=my?'on my':'';
+  var lo=document.getElementById('schedLegendOrg'); if(lo) lo.style.display=my?'none':'flex';
+  var lm=document.getElementById('mySchedLegend'); if(lm) lm.style.display=(my && _myTok())?'flex':'none';
+  var cb=document.getElementById('mySchedShowOrg'); if(cb) cb.checked=_myShowOrg;
+  var hint=document.getElementById('schedAddHint'); if(hint) hint.style.display=(my || _schedIsAdmin())?'':'none';
+}
+function schedSetScope(sc){
+  _schedScope=(sc==='my' && _mySchedOn())?'my':'org';
+  try{ localStorage.setItem('unispace_sched_scope', _schedScope); }catch(e){}
+  _schedScopeUi();
+  var dl=document.getElementById('schedDayList'); if(dl) dl.innerHTML='';
+  if(!_schedMonth) return;
+  renderSchedCal();
+  if(_schedScope==='my') loadMySchedFromGas(function(){ if(_schedScope==='my') renderSchedCal(); });
+}
+function mySchedToggleOrg(on){
+  _myShowOrg=!!on;
+  try{ localStorage.setItem('unispace_sched_showorg', _myShowOrg?'1':'0'); }catch(e){}
+  renderSchedCal();
+}
+function loadMySchedFromGas(cb){
+  var tok=_myTok();
+  if(!_mySchedOn() || !tok){ if(cb) cb(); return; }
+  var uid=_myUid();
+  fetch(UNISPACE_GAS_URL+'?action=getMySchedules&fp='+encodeURIComponent(currentUser.id)+'&tok='+encodeURIComponent(tok)+'&_='+Date.now(), { cache:'no-store' })
+    .then(function(r){ return r.json(); }).then(function(res){
+      if(uid!==_myUid()){ if(cb) cb(); return; }
+      if(res && res.ok && Array.isArray(res.data)) saveMySchedDB(res.data);
+      else if(res && res.auth===false) _mySchedDropTok();
+      if(cb) cb();
+    }).catch(function(){ if(cb) cb(); });
+}
+function _mySchedDropTok(){
+  try{ localStorage.removeItem(_myTokKey()); localStorage.removeItem(_myKey()); }catch(e){}
+  _schedScopeUi();
+}
+// devices logged in before 25q (or after a password change) unlock once with the password
+function mySchedUnlock(){
+  var inp=document.getElementById('mySchedPw'); var pw=inp?inp.value:'';
+  if(!pw){ showToast('⚠️ 비밀번호를 입력해 주세요'); return; }
+  var btn=document.getElementById('mySchedPwBtn'); if(btn){ btn.disabled=true; btn.textContent='확인 중…'; }
+  var uid=_myUid();
+  fetch(UNISPACE_GAS_URL+'?action=login&fp='+encodeURIComponent(currentUser.id)+'&pw='+encodeURIComponent(pw))
+    .then(function(r){ return r.json(); }).then(function(res){
+      if(btn){ btn.disabled=false; btn.textContent='확인'; }
+      if(!res || !res.ok){ showToast('⚠️ '+((res&&res.msg)||'비밀번호를 확인해 주세요')); if(inp) inp.value=''; return; }
+      if(!res.mySchedTok){ showToast('⚠️ 이 계정은 아직 개인 일정을 쓸 수 없어요 (서버 25q 배포 확인)'); return; }
+      if(uid!==_myUid()) return;
+      try{ localStorage.setItem(_myTokKey(), res.mySchedTok); }catch(e){}
+      _schedScopeUi();
+      renderSchedCal();
+      loadMySchedFromGas(function(){ renderSchedCal(); });
+    }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='확인'; } showToast('⚠️ 네트워크 오류'); });
+}
+function _renderMySchedCal(){
+  var grid=document.getElementById('schedCalGrid'); var dl=document.getElementById('schedDayList');
+  if(!_myTok()){
+    if(grid) grid.innerHTML='<div class="mysch-lock"><div class="ic">🔒</div><div class="t">내 일정은 나만 볼 수 있어요</div>'+
+      '<div class="d">이 기기에서 처음 열 때 한 번만<br>로그인 비밀번호를 확인해요</div>'+
+      '<input type="password" id="mySchedPw" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')mySchedUnlock()">'+
+      '<button type="button" id="mySchedPwBtn" onclick="mySchedUnlock()">확인</button></div>';
+    if(dl) dl.innerHTML='';
+    _schedScopeUi();
+    return;
+  }
+  var y=_schedMonth.getFullYear(), m=_schedMonth.getMonth();
+  var startDow=new Date(y,m,1).getDay(), daysInMonth=new Date(y,m+1,0).getDate();
+  var mine=getMySchedDB(), org=_myShowOrg?getSchedDB():[];
+  var todayStr=_schedYmd(new Date());
+  var dows=['일','월','화','수','목','금','토'];
+  var h='<div class="sched-cal-grid" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;font-size:13px">';
+  dows.forEach(function(d,i){ h+='<div style="text-align:center;color:'+(i===0?'#C0392B':i===6?'#2563EB':'var(--text3)')+';padding:6px 0;font-weight:700">'+d+'</div>'; });
+  for(var b=0;b<startDow;b++){ h+='<div></div>'; }
+  for(var day=1;day<=daysInMonth;day++){
+    var ds=y+'-'+('0'+(m+1)).slice(-2)+'-'+('0'+day).slice(-2);
+    var my=mine.filter(function(s){ return s.date===ds; }).sort(_myByTime);
+    var og=org.filter(function(s){ return s.date===ds; });
+    var chips='', n=0;
+    my.forEach(function(s){
+      if(n>=3) return; n++;
+      chips+='<div style="margin-top:3px;font-size:11px;background:'+MYC.bg+';color:'+MYC.col+';border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700">'+(s.time?'<span class="mysch-t">'+escHtmlSch(s.time)+' </span>':'')+escHtmlSch(s.title||'내 일정')+'</div>';
+    });
+    og.forEach(function(s){
+      if(n>=3) return; n++;
+      var label=(s.type==='life'||s.type==='non')?(s.company||(s.type==='life'?'생보교육':'손보교육')):(s.title||'중요');
+      chips+='<div style="margin-top:3px;font-size:11px;background:rgba(120,120,120,.10);color:var(--text3);border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">'+escHtmlSch(label)+'</div>';
+    });
+    var total=my.length+og.length;
+    if(total>3){ chips+='<div style="font-size:10px;color:var(--text3);margin-top:2px">+'+(total-3)+'</div>'; }
+    var _hol=getHolidayName(ds), _dow=new Date(y,m,day).getDay();
+    var _dayColor=_hol?'#C0392B':(_dow===0?'#C0392B':_dow===6?'#2563EB':'');
+    var _holChip=_hol?'<div style="font-size:10px;color:#C0392B;font-weight:700;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_hol+'</div>':'';
+    var isToday=(ds===todayStr);
+    h+='<div class="sched-cal-cell" onclick="schedDayClick(\''+ds+'\')" style="min-height:78px;border:'+(isToday?'2px solid #7C3AED':'1px solid var(--bdr)')+';border-radius:8px;padding:6px 5px;cursor:pointer;font-size:14px;font-weight:600'+(_dayColor?';color:'+_dayColor:'')+'">'+day+_holChip+chips+'</div>';
+  }
+  h+='</div>';
+  if(grid) grid.innerHTML=h;
+  if(dl) dl.innerHTML='';
+  _schedScopeUi();
+}
+function _myDayClick(ds){
+  var dl=document.getElementById('schedDayList'); if(!dl || !_myTok()) return;
+  var my=getMySchedDB().filter(function(s){ return s.date===ds; }).sort(_myByTime);
+  var og=_myShowOrg?getSchedDB().filter(function(s){ return s.date===ds; }):[];
+  if(!my.length && !og.length){ openMySchedForm('', ds); return; }
+  var p=ds.split('-');
+  var h='<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">'+parseInt(p[1],10)+'월 '+parseInt(p[2],10)+'일</div>';
+  my.forEach(function(s){
+    h+='<div data-myid="'+escHtmlSch(s.id)+'" onclick="openMySchedForm(this.getAttribute(\'data-myid\'))" style="background:'+MYC.bg2+';border-left:3px solid '+MYC.bd+';border-radius:8px;padding:9px 11px;margin-bottom:6px;cursor:pointer">'+
+      '<span style="float:right;font-size:10px;color:var(--text3)">수정 ›</span>'+
+      '<span style="font-size:10px;font-weight:700;color:'+MYC.col+'">🔒 내 일정</span> '+
+      '<span style="font-size:13px;font-weight:700;color:var(--text)">'+escHtmlSch(s.title||'내 일정')+(s.time?' · '+escHtmlSch(s.time):'')+'</span>'+
+      (s.memo?'<div style="font-size:11.5px;color:var(--text2);margin-top:3px;white-space:pre-wrap;line-height:1.5">'+escHtmlSch(s.memo)+'</div>':'')+
+    '</div>';
+  });
+  og.forEach(function(s){
+    var tag=s.type==='life'?'📘 생보교육':s.type==='non'?'📗 손보교육':'⭐ 중요';
+    var main=(s.type==='life'||s.type==='non')?((s.company?s.company+' · ':'')+(s.title||(s.type==='life'?'생보 교육':'손보 교육'))):(s.title||'중요 일정');
+    h+='<div style="background:rgba(120,120,120,.07);border-radius:8px;padding:8px 11px;margin-bottom:6px;opacity:.75">'+
+      '<span style="font-size:10px;font-weight:700;color:var(--text3)">🏢 지사 · '+tag+'</span> '+
+      '<span style="font-size:12.5px;font-weight:600;color:var(--text2)">'+escHtmlSch(main)+(s.time?' · '+escHtmlSch(s.time):'')+'</span></div>';
+  });
+  h+='<button type="button" onclick="openMySchedForm(\'\',\''+ds+'\')" style="width:100%;margin-top:4px;padding:8px;border:1px dashed #7C3AED;background:rgba(124,58,237,.05);color:#5B21B6;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ 이 날 내 일정 추가</button>';
+  dl.innerHTML=h;
+}
+function _mySetDate(ds){
+  var de=document.getElementById('mySchedDate'); if(de) de.value=ds||'';
+  var disp=document.getElementById('mySchedDateDisp');
+  if(disp){ if(ds){ disp.textContent=parseInt(ds.slice(5,7),10)+'월 '+parseInt(ds.slice(8,10),10)+'일'; disp.classList.remove('pk-ph'); } else { disp.textContent='날짜 선택'; disp.classList.add('pk-ph'); } }
+}
+function openMySchedForm(id, ds){
+  if(!_mySchedOn() || !_myTok()) return;
+  _myEditId=id||'';
+  var s=id?getMySchedDB().filter(function(x){ return x.id===id; })[0]:null;
+  if(id && !s) return;
+  document.getElementById('mySchedFormTitle').textContent=s?'🔒 내 일정 수정':'🔒 내 일정 추가';
+  document.getElementById('mySchedDelBtn').style.display=s?'':'none';
+  document.getElementById('mySchedTitle').value=s?(s.title||''):'';
+  document.getElementById('mySchedTime').value=s?(s.time||''):'';
+  document.getElementById('mySchedMemo').value=s?(s.memo||''):'';
+  _mySetDate(s?s.date:(ds||_schedYmd(new Date())));
+  document.getElementById('mySchedFormOverlay').classList.add('open');
+}
+function closeMySchedForm(){ document.getElementById('mySchedFormOverlay').classList.remove('open'); }
+function _myPost(body, onFail){
+  body.fp=currentUser.id; body.tok=_myTok();
+  var tryOnce=function(n){
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if(res && res.ok) return;
+        if(res && res.auth===false){ _mySchedDropTok(); showToast('🔒 비밀번호를 다시 확인해 주세요'); renderSchedCal(); return; }
+        if(n<2) setTimeout(function(){ tryOnce(n+1); }, 2500); else if(onFail) onFail(res && res.msg);
+      })
+      .catch(function(){ if(n<2) setTimeout(function(){ tryOnce(n+1); }, 2500); else if(onFail) onFail('네트워크'); });
+  };
+  tryOnce(0);
+}
+function saveMySched(){
+  if(!_mySchedOn() || !_myTok()) return;
+  var date=document.getElementById('mySchedDate').value;
+  var title=document.getElementById('mySchedTitle').value.trim();
+  var time=document.getElementById('mySchedTime').value.trim();
+  var memo=document.getElementById('mySchedMemo').value.trim();
+  if(!date){ showToast('⚠️ 날짜를 선택해 주세요'); return; }
+  if(!title){ showToast('⚠️ 일정 내용을 입력해 주세요'); return; }
+  var db=getMySchedDB(), item=null;
+  for(var i=0;i<db.length && _myEditId;i++){ if(db[i].id===_myEditId){ item=db[i]; break; } }
+  if(!item){ item={ id:'my_'+Date.now()+'_'+Math.random().toString(36).substr(2,5) }; db.push(item); }
+  item.date=date; item.title=title; item.time=time; item.memo=memo;
+  saveMySchedDB(db);
+  _myPost({ action:'saveMySchedule', data:item }, function(why){ showToast('⚠️ 내 일정이 서버에 저장되지 않았습니다 ('+(why||'오류')+') — 다시 저장해 주세요'); });
+  closeMySchedForm();
+  var d=new Date(date+'T00:00:00'); if(d.getFullYear()!==_schedMonth.getFullYear()||d.getMonth()!==_schedMonth.getMonth()){ _schedMonth=new Date(d.getFullYear(), d.getMonth(), 1); }
+  renderSchedCal();
+  _myDayClick(date);
+  showToast('🔒 내 일정이 저장되었습니다');
+}
+function deleteMySched(){
+  if(!_myEditId) return;
+  var _id=_myEditId;
+  closeMySchedForm();
+  showConfirm({icon:'🗑️',iconCls:'confirm-icon-danger',title:'내 일정 삭제',msg:'이 일정을 삭제할까요?',okLabel:'삭제',okCls:'red'}).then(function(ok){
+    if(!ok) return;
+    saveMySchedDB(getMySchedDB().filter(function(s){ return s.id!==_id; }));
+    _myPost({ action:'deleteMySchedule', id:_id }, function(why){ showToast('⚠️ 삭제가 서버에 반영되지 않았습니다 ('+(why||'오류')+')'); });
+    renderSchedCal();
+    showToast('삭제되었습니다');
+  });
+}
 function escHtmlSch(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function schedDayClick(ds){
+  if(_schedScope==='my' && _mySchedOn()){ _myDayClick(ds); return; }
   var db=getSchedDB();
   var list=db.filter(function(s){ return s.date===ds; });
   var dl=document.getElementById('schedDayList');
@@ -27280,6 +27524,10 @@ function doCheckin() { doSmartCheckin(); }
       <div class="mgmt-title">📅 일정</div>
       <button type="button" onclick="closeScheduleModal()" class="modal-close-x" aria-label="닫기">✕</button>
     </div>
+    <div class="sched-scope" id="schedScopeTabs" style="display:none">
+      <button type="button" id="schedScopeOrg" class="on" onclick="schedSetScope('org')">🏢 지사 일정</button>
+      <button type="button" id="schedScopeMy" onclick="schedSetScope('my')">🔒 내 일정</button>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px">
         <button type="button" onclick="schedPrevMonth()" style="background:var(--surface);border:1px solid var(--bdr);border-radius:7px;width:30px;height:30px;cursor:pointer;color:var(--text2)">‹</button>
@@ -27290,12 +27538,54 @@ function doCheckin() { doSmartCheckin(); }
     </div>
     <div style="flex:1;overflow-y:auto;min-height:0">
       <div id="schedCalGrid"></div>
-      <div style="display:flex;gap:14px;margin-top:12px;font-size:12px;color:var(--text2);flex-wrap:wrap">
+      <div id="mySchedLegend" style="display:none;gap:14px;margin-top:12px;font-size:12px;color:var(--text2);flex-wrap:wrap;align-items:center">
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#7C3AED;vertical-align:-1px"></span> 내 일정</span>
+        <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#CFCBC2;vertical-align:-1px"></span> 지사 일정</span>
+        <label class="mysch-toggle" style="margin-left:auto"><input type="checkbox" id="mySchedShowOrg" onchange="mySchedToggleOrg(this.checked)" checked> 지사 일정 같이 보기</label>
+        <span style="flex-basis:100%;font-size:11px;color:var(--text3)">🔒 내 일정은 나만 볼 수 있어요 · 다른 사람 화면에는 나오지 않아요</span>
+      </div>
+      <div id="schedLegendOrg" style="display:flex;gap:14px;margin-top:12px;font-size:12px;color:var(--text2);flex-wrap:wrap">
         <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#2563EB;vertical-align:-1px"></span> 생보 교육</span>
         <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#0F8E7E;vertical-align:-1px"></span> 손보 교육</span>
         <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#C0392B;vertical-align:-1px"></span> 중요 일정</span>
       </div>
       <div id="schedDayList" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 257: private personal schedule (대표 · 지점장 · 교육지점장) -->
+<div class="mgmt-overlay" id="mySchedFormOverlay" style="z-index:672">
+  <div class="mgmt-box" style="max-width:400px;max-height:88vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="mgmt-title" id="mySchedFormTitle">🔒 내 일정 추가</div>
+      <button type="button" onclick="closeMySchedForm()" class="modal-close-x" aria-label="닫기">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;min-height:0">
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">일정 내용</div>
+        <input type="text" id="mySchedTitle" maxlength="200" placeholder="예) 아이 학교 상담, 병원, 지인 미팅" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">날짜</div>
+          <div class="pk-trigger" id="mySchedDateTrig" onclick="_openDatePickerFor('mySchedDate','mySchedDateDisp')"><span id="mySchedDateDisp" class="pk-ph">날짜 선택</span><span class="pk-ico">📅</span></div>
+          <input type="hidden" id="mySchedDate">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">시간 (선택)</div>
+          <input type="text" id="mySchedTime" maxlength="20" placeholder="예) 14:00" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
+        </div>
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">메모 (선택)</div>
+        <textarea id="mySchedMemo" rows="3" maxlength="1000" placeholder="장소, 준비물, 연락처 등" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin:-6px 0 14px">🔒 나만 볼 수 있어요</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="mgmt-btn mgmt-btn-confirm" onclick="saveMySched()" style="flex:1;background:#6D28D9;border-color:#6D28D9;color:#fff">저장</button>
+      <button type="button" id="mySchedDelBtn" onclick="deleteMySched()" style="display:none;padding:0 16px;border:1px solid var(--bdr);background:transparent;border-radius:9px;font-size:13px;color:#C0392B;cursor:pointer;font-family:inherit">🗑️ 삭제</button>
     </div>
   </div>
 </div>
@@ -28264,7 +28554,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 256;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 257;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
