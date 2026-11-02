@@ -13951,12 +13951,13 @@ function submitSichaek(){
   function _done(){
     btn.disabled = false;
     showToast('✅ 시책이 등록되었습니다' + (total>1 ? ' ('+total+'장)' : ''));
-    if(typeof _sichaekRulesSubmit === 'function') _sichaekRulesSubmit(window._sichaekLastCampId || '');
     closeSichaekAdd();
     _sichaekTab = 'active';
     document.getElementById('sichaekTabActive').classList.add('sichaek-tab-on');
     document.getElementById('sichaekTabEnded').classList.remove('sichaek-tab-on');
     loadSichaek();
+    // 264: the 💰 시책적용 window of the new card opens at once with the read that began when the pictures were chosen
+    if(typeof _sichaekRulesOpen === 'function') _sichaekRulesOpen(window._sichaekLastCampId || '', insurer, kind, week, total);
   }
   // 1장째: 캔페인 생성 -> 나머지: 장표 추가 순차 업로드
   fetch(UNISPACE_GAS_URL, {
@@ -28703,7 +28704,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 263;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 264;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -33137,6 +33138,10 @@ function _reRender(){
   var box = document.getElementById(_re.box);
   if(!box) return;
   var h = '';
+  if(_re.campaignId && !_re.reading && (_re.saving || _re.saved)){
+    h += '<div style="font-size:11.5px;line-height:1.5;border-radius:10px;padding:7px 10px;margin:2px 0 8px;' + (_re.saving ? 'color:var(--text2);background:var(--bg3)' : 'color:#1F9268;background:#EEF8F3;border:1px solid rgba(31,146,104,.35)') + '">'
+       + (_re.saving ? '💾 등록한 카드에 저장하는 중…' : '<b>✅ 등록하면서 저장됐어요</b> · 숫자를 확인하고, 고친 것이 있으면 아래 저장을 다시 눌러주세요') + '</div>';
+  }
   if(_re.check && !_re.reading) h += _reCheckHtml();
   if(!_re.rules.length){
     h += '<div style="font-size:11px;color:var(--text3);padding:6px 2px">' + (_re.reading ? _reProgressHtml() : (_re.failed ? '읽지 못했습니다 · 🔄 다시 읽기 또는 아래에서 직접 추가' : '장표 이미지를 올리면 자동으로 읽어서 채워집니다')) + '</div>';
@@ -33296,7 +33301,7 @@ function _reProgressHtml(){
 function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
   if(!currentUser) return;
   if(_re.reading) return;
-  var gen = _reGen;
+  var gen = _reGen, ctx = _re;
   // one request per image: each call stays short and progress is visible
   var jobs = [];
   _re.title = _re.title || '';
@@ -33320,7 +33325,19 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
   }, 1000);
   function finish(){
     clearInterval(tick);
-    if(gen !== _reGen) return;
+    if(gen !== _reGen){
+      // 264: the window of this registration read is gone (another card's window, a new registration): with 적용 ticked
+      // its rules still go to the card it was read for
+      if(ctx.autoSave && ctx.campaignId){
+        ctx.autoSave = false;
+        var all = [], q;
+        for(q=0;q<results.length;q++){ if(results[q] && results[q].length) all = all.concat(results[q]); }
+        var mk = _reCheckMake(all, ctx.insurer, checks, jobs.length, failed, Math.round((Date.now() - t0) / 1000), ctx.campaignId);
+        if(mk.rules.length) _reSaveRules(ctx.campaignId, ctx.insurer, ctx.kind, mk.rules, true, function(ok){ if(ok){ showToast('✅ ' + ctx.insurer + ' 시책적용 ' + mk.rules.length + '개 저장 (등록 때 읽은 것)'); if(typeof loadSichaek === 'function') loadSichaek(); if(typeof _rbMarkSaved === 'function') _rbMarkSaved(ctx.campaignId); } });
+      }
+      _reLinkState(btn, false); _reSyncLink();
+      return;
+    }
     _re.reading = false; _re.progress = null;
     // keep the 장표 order stable
     for(var r=0;r<results.length;r++){ if(results[r] && results[r].length) _re.rules = _re.rules.concat(results[r]); }
@@ -33329,20 +33346,23 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
     if(!got && failed){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ ' + (firstErr || '읽기 실패') + ' · 다시 읽기를 눌러주세요'); return; }
     if(!got){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
     _reRender();
-    showToast('✅ ' + got + '개 항목 읽음 (' + secs + '초' + (cached ? ' · 아까 읽어둔 결과' : '') + ')' + (failed ? ' · 장표 ' + failed + '장은 실패(다시 읽기)' : '') + ' · 숫자 확인 후 저장하세요');
+    showToast('✅ ' + got + '개 항목 읽음 (' + secs + '초' + (cached ? ' · 아까 읽어둔 결과' : '') + ')' + (failed ? ' · 장표 ' + failed + '장은 실패(다시 읽기)' : '') + ((_re.autoSave && _re.campaignId) ? ' · 카드에 저장하는 중' : ' · 숫자 확인 후 저장하세요'));
+    _reAutoSave();
   }
   // all 장표 at once: each is its own server run, so the wall time is the slowest one, not the sum
   function runJob(j){
     var job = jobs[j];
     function post(imgs){
       _reReadAIPost(imgs, job.img ? '' : campaignId, (job.img ? undefined : job.idx), !!fresh, function(ok, res){
-        if(gen !== _reGen){ clearInterval(tick); _reLinkState(btn, false); _reSyncLink(); return; }
-        if(ok){ var rules = (res && res.rules) || []; for(var ri=0;ri<rules.length;ri++){ rules[ri].img = job.idx; } if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !_re.title) _re.title = res.title; if(res && res.cached) cached++; if(res && res.check) checks[j] = res.check; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
+        // 264: a registration read goes on after its window is gone when 적용 was ticked (its rules are saved to the card)
+        var alive = (gen === _reGen);
+        if(!alive && !(ctx.autoSave && ctx.campaignId)){ clearInterval(tick); _reLinkState(btn, false); _reSyncLink(); return; }
+        if(ok){ var rules = (res && res.rules) || []; for(var ri=0;ri<rules.length;ri++){ rules[ri].img = job.idx; } if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !ctx.title) ctx.title = res.title; if(res && res.cached) cached++; if(res && res.check) checks[j] = res.check; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
         else { failed++; if(!firstErr) firstErr = (res && res.msg) || ''; try { console.warn('[시책 읽기] 장표 ' + (j+1) + ' 실패: ' + ((res && res.msg) || '')); } catch(eW) {} }
         doneCnt++;
-        _re.progress = { done:doneCnt, total:jobs.length, secs:Math.round((Date.now() - t0) / 1000) }; _reRender();
+        if(alive){ _re.progress = { done:doneCnt, total:jobs.length, secs:Math.round((Date.now() - t0) / 1000) }; _reRender(); }
         if(doneCnt >= jobs.length) finish();
-      });
+      }, ctx);
     }
     if(job.img) _cmShrink(job.img.data, function(d, m){ post([{ data:d, mime:m }]); });
     else post([]);
@@ -33536,17 +33556,55 @@ function sichaekReadAI(btn, auto){
   if(!auto){ _re.rules = []; _re.edit = {}; _re.failed = false; _reRender(); }
   _reReadAI(_sichaekFiles, '', btn, 0, !auto);
 }
-function _sichaekRulesSubmit(campId){
-  var tg = document.getElementById('sichaekRulesApply');
-  if(!_commCanUse() || !campId || !_re.rules.length || (tg && !tg.checked)) return;
-  var parts = _sichaekInsVal().split('|');
-  _re.insurer = parts[0] || _re.insurer; _re.kind = parts[1] || _re.kind;
-  _reSave(campId, false, function(ok){ if(ok) showToast('✅ 시책적용 ' + _re.rules.length + '개 저장 · 수수료 예상에 반영됩니다'); });
+// 264: right after registration the 💰 시책적용 window of the new card opens with the read that began when the pictures
+// were chosen: still running (it carries on, nothing is read twice) or done. With 적용 ticked the rules are saved to the
+// card as soon as the read is complete; the window stays open to check the numbers.
+function _sichaekRulesOpen(campId, insurer, kind, week, imgCount){
+  if(!_commCanUse() || !campId) return;
+  var tg = document.getElementById('sichaekRulesApply'), apply = !(tg && !tg.checked);
+  _rulesCampId = campId; _rulesImgCount = parseInt(imgCount, 10) || 1;
+  if(!_re.reading && !_re.rules.length){
+    // nothing came of the registration read: the window reads the saved pictures as it always did
+    openRulesFor(campId, insurer, kind, week, _rulesImgCount);
+    _re.autoSave = apply;
+    return;
+  }
+  _re.box = 'rulesBox'; _re.campaignId = campId; _re.imgCount = _rulesImgCount;
+  _re.insurer = insurer || _re.insurer; _re.kind = kind || _re.kind;
+  _re.autoSave = apply; _re.edit = {};
+  var ttl = document.getElementById('rulesTitle'); if(ttl) ttl.textContent = '💰 시책적용 · ' + insurer + (week ? ' · ' + week : '');
+  document.getElementById('rulesOverlay').classList.add('open');
+  _reRender();
+  _reAutoSave();
+}
+// a registration read with 💰 수수료 예상에 적용 ticked is saved to its card as soon as it is complete
+function _reAutoSave(){
+  if(!_re.autoSave || !_re.campaignId || _re.reading) return;
+  _re.autoSave = false;
+  if(!_re.rules.length) return;
+  var ctx = _re, cid = _re.campaignId, n = _re.rules.length;
+  ctx.saving = true; _reRender();
+  _reSave(cid, true, function(ok){
+    ctx.saving = false;
+    if(ok){ ctx.saved = n; showToast('✅ 시책적용 ' + n + '개 저장 · 수수료 예상에 반영됩니다'); if(typeof loadSichaek === 'function') loadSichaek(); if(typeof _rbMarkSaved === 'function') _rbMarkSaved(cid); }
+    // the window may be showing another card by now, or a rule may be open for editing
+    if(_re !== ctx) return;
+    var ed = false; for(var k in (_re.edit || {})){ if(_re.edit[k]) ed = true; }
+    if(!ed) _reRender();
+  });
 }
 // ── 기존 시책의 시책률 편집 모달 ──────────────────
 var _rulesCampId = '';
 var _rulesImgCount = 1;
 function openRulesFor(campId, insurer, kind, startWeek, imgCount){
+  // 264: this card's registration read is still running, or its rules are on their way to the card: show that, not a new read
+  if(campId && String(_re.campaignId || '') === String(campId) && _re.box === 'rulesBox' && (_re.reading || _re.saving)){
+    _rulesCampId = campId; _rulesImgCount = parseInt(imgCount, 10) || _rulesImgCount;
+    var t0 = document.getElementById('rulesTitle'); if(t0) t0.textContent = '💰 시책적용 · ' + insurer + (startWeek ? ' · ' + startWeek : '');
+    document.getElementById('rulesOverlay').classList.add('open');
+    _reRender();
+    return;
+  }
   _rulesCampId = campId;
   _rulesImgCount = parseInt(imgCount, 10) || 1;
   var mon = parseInt(String(startWeek||'').replace(/[^0-9]/g,''),10);
@@ -33999,10 +34057,11 @@ function submitSichaekEdit(){
 }
 function rulesReadAI(btn){
   if(_re.reading) return;
-  _re.rules = []; _re.edit = {}; _re.failed = false; _reRender();
+  _re.rules = []; _re.edit = {}; _re.failed = false; _re.saved = 0; _reRender();
   _reReadAI([], _rulesCampId, btn, _rulesImgCount, true);
 }
 function rulesSaveClick(btn){
+  if(_re.saving){ showToast('💾 저장 중입니다 · 잠시만요'); return; }
   var label = btn.textContent; btn.disabled = true; btn.textContent = '저장 중…';
   _reSave(_rulesCampId, true, function(ok){
     btn.disabled = false; btn.textContent = label;
