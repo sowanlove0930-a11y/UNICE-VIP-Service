@@ -6812,6 +6812,8 @@ function _openFromPush(op){
     if(op === 'jobdesk'){ setTimeout(function(){ if(typeof openJobdesk==='function') openJobdesk(typeof _JD_DEEP_LEAD !== 'undefined' ? _JD_DEEP_LEAD : ''); }, 500); return; }
     if(op === 'today'){ window.location.href = 'today_alarm.html'; return; }
     if(op === 'cust'){ window.location.href = 'customer.html'; return; }
+    // 260: 09:00 schedule pushes (GAS 25t) land on today's list
+    if(op === 'sched' || op === 'mysched'){ setTimeout(function(){ if(typeof _schedOpenToday==='function') _schedOpenToday(op==='mysched'?'my':'org'); }, 400); return; }
     if(op === 'perf'){ setTimeout(function(){ if(typeof openPerfView==='function') openPerfView(); }, 400); return; }
     if(op === 'bojtop' || op === 'stdfp'){
       if(typeof _dashForegroundRefresh==='function') _dashForegroundRefresh(true); // 푸시로 들어오면 무조건 최신화
@@ -12189,7 +12191,14 @@ var SCHED_KEY = 'unispace_schedules';
 var _schedMonth = null; // Date, 1st of shown month
 var _schedType = 'life';
 var _schedEditId = '';
-function getSchedDB(){ try{ var a=JSON.parse(localStorage.getItem(SCHED_KEY)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+// 259: times saved before GAS 25s can read "Sat Dec 30 1899 18:00:00 GMT+0827 (...)" (the sheet turned 18:00 into a time value): show HH:mm
+function _schedFixTime(t){
+  var s=String(t==null?'':t);
+  if(s.length>8){ var m=s.match(/(\d{1,2}):(\d{2}):\d{2} GMT/); if(m) return ('0'+m[1]).slice(-2)+':'+m[2]; }
+  return s;
+}
+function _schedFixItem(x){ if(x && x.time) x.time=_schedFixTime(x.time); return x; }
+function getSchedDB(){ try{ var a=JSON.parse(localStorage.getItem(SCHED_KEY)||'[]'); return Array.isArray(a)?a.map(_schedFixItem):[]; }catch(e){ return []; } }
 // derive virtual schedule items from FP manager-support requests for the current branch
 function _supportSchedItems(){
   if(!currentUser) return [];
@@ -14114,12 +14123,30 @@ function openScheduleModal(){
   if(!_mySchedOn()) _schedScope='org';
   var _sst=document.getElementById('schedScopeTabs'); if(_sst) _sst.style.display=_mySchedOn()?'':'none';
   _schedScopeUi();
-  if(_schedScope==='my') loadMySchedFromGas(function(){ if(document.getElementById('scheduleOverlay').classList.contains('open')) renderSchedCal(); });
+  if(_schedScope==='my') loadMySchedFromGas(function(){ if(document.getElementById('scheduleOverlay').classList.contains('open')){ renderSchedCal(); _schedPushShowDay(); } });
   renderSchedCal();
   document.getElementById('scheduleOverlay').classList.add('open');
-  if(typeof loadSchedFromGas==='function'){ loadSchedFromGas(function(){ if(document.getElementById('scheduleOverlay').classList.contains('open')) renderSchedCal(); }); }
+  if(typeof loadSchedFromGas==='function'){ loadSchedFromGas(function(){ if(document.getElementById('scheduleOverlay').classList.contains('open')){ renderSchedCal(); _schedPushShowDay(); } }); }
 }
-function closeScheduleModal(){ document.getElementById('scheduleOverlay').classList.remove('open'); }
+function closeScheduleModal(){ _schedPushDay=''; document.getElementById('scheduleOverlay').classList.remove('open'); }
+// -- 260: open 일정 조회 on today's list (from the 09:00 push) --
+var _schedPushDay='';
+function _schedOpenToday(scope){
+  _schedScope=(scope==='my' && _mySchedOn())?'my':'org';
+  try{ localStorage.setItem('unispace_sched_scope', _schedScope); }catch(e){}
+  _schedPushDay=_schedYmd(new Date());
+  openScheduleModal();
+  _schedPushShowDay();
+}
+// today's list, once there is something to list (the cache may still be empty before the server answers)
+function _schedPushShowDay(){
+  var ds=_schedPushDay; if(!ds) return;
+  if(!document.getElementById('scheduleOverlay').classList.contains('open')) return;
+  var has;
+  if(_schedScope==='my' && _mySchedOn()) has=_myTok() && (_schedDayItems(getMySchedDB(), ds).length || (_myShowOrg && _schedDayItems(getSchedDB(), ds).length));
+  else has=_schedDayItems(getSchedDB(), ds).length;
+  if(has) schedDayClick(ds);
+}
 function schedPrevMonth(){ _schedMonth.setMonth(_schedMonth.getMonth()-1); renderSchedCal(); }
 function schedNextMonth(){ _schedMonth.setMonth(_schedMonth.getMonth()+1); renderSchedCal(); }
 // -- 258: a schedule may run over several days (endDate '' = one day) --
@@ -14245,7 +14272,7 @@ function _myUid(){ return String((currentUser&&currentUser.id)||'').trim().toLow
 function _myKey(){ return 'unispace_mysched_'+_myUid(); }
 function _myTokKey(){ return 'unispace_myschedtok_'+_myUid(); }
 function _myTok(){ try{ return _myUid()?(localStorage.getItem(_myTokKey())||''):''; }catch(e){ return ''; } }
-function getMySchedDB(){ try{ var a=JSON.parse(localStorage.getItem(_myKey())||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function getMySchedDB(){ try{ var a=JSON.parse(localStorage.getItem(_myKey())||'[]'); return Array.isArray(a)?a.map(_schedFixItem):[]; }catch(e){ return []; } }
 function saveMySchedDB(a){ try{ localStorage.setItem(_myKey(), JSON.stringify(a||[])); }catch(e){} }
 // drop every cached personal schedule and key on this device (login, logout)
 function _myClearDevice(){
@@ -28661,7 +28688,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 258;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 260;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
