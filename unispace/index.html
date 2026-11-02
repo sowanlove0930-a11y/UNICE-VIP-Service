@@ -28703,7 +28703,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 261;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 262;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -32871,7 +32871,7 @@ function _perfCoreRules(p, dateStr){
 }
 // reward of one core-cover rule for this row: from the monthly premium, or from the typed core premium when the reward is a % of it
 function _perfCoreGain(pt, p){
-  var d = pt.r.data || {}, base = (d.base === 'part') ? _numWonC(p.core) : _cmScAmt(p.co, p.prod, _numWonC(p.amount)), out = [];
+  var d = pt.r.data || {}, base = (d.base === 'part') ? _numWonC(p.core) : _cmSiAmt(p.co, p.prod, _cmScAmt(p.co, p.prod, _numWonC(p.amount)), _perfDateVal()), out = [];
   var p1 = parseFloat(d.pct1) || 0, p2 = parseFloat(d.pct2) || 0;
   if(p1) out.push('익월 ' + (base ? '+' + _cmMan(base * p1 / 100 * COMM_SC_RATE) : _cmPct(p1)));
   if(p2) out.push(_cmEsc(d.when2 || '13차월') + ' ' + (base ? '+' + _cmMan(base * p2 / 100 * COMM_SC_RATE) : _cmPct(p2)));
@@ -32966,7 +32966,7 @@ function _cmFpInDate(r, dateStr){
 function _cmShort(s, n){ s = String(s || ''); return s.length > n ? s.substr(0, n - 1) + '…' : s; }
 // what one FP-check item moves on this contract, in a few words: the money of a % rule, else the reward names
 function _cmFpEffect(G, p){
-  var parts = [], seen = {}, amt = _cmScAmt(p.co, p.prod, _numWonC(p.amount));
+  var parts = [], seen = {}, amt = _cmSiAmt(p.co, p.prod, _cmScAmt(p.co, p.prod, _numWonC(p.amount)), _perfDateVal());
   for(var j=0;j<G.rules.length;j++){
     var r = G.rules[j], d = r.data || {}, tx = '';
     if(r.type === 'rate'){
@@ -33124,7 +33124,9 @@ function _reSummary(r){
   if(r.prods && r.prods.length) sub.push('상품 ' + r.prods.length + '개: ' + String(r.prods[0]).slice(0, 22) + (r.prods.length > 1 ? '… 외 ' + (r.prods.length - 1) : ''));
   else if(r.prodsAll) sub.push('전 상품' + (r.except && r.except.length ? ' (제외 ' + r.except.length + '개)' : ''));
   if(r.needFps) sub.push('대상 FP 지정 필요');
-  if(r.unsupported && r.unsupported.length) sub.push('참고: ' + r.unsupported.join(', '));
+  var siR = _cmSiRule(r), siT = _cmSiTxt(siR);
+  if(siT) sub.push('✅ 계산 반영: ' + siT);
+  if(siR.rest.length) sub.push('참고: ' + siR.rest.join(', '));
   if(r._agree === true) sub.push('두 번 일치 ✅'); else if(r._agree === false) sub.push('세 번째 판정');
   if(r.note) sub.push(r.note);
   var fpL = '', fpI = _cmFpItems(r);
@@ -34020,7 +34022,8 @@ function _cmProdItem(rec, p){
   var amt = parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0;
   var row = p.prod ? _cmFindRate(p.co, p.prod) : null;
   var scAmt = _perfIsLump(p) ? amt : _cmScAmt(p.co, p.prod, amt);
-  var it = { date:rec.date, fpId:rec.fpId, co:p.co||'', cat:p.cat||'', prod:p.prod||'', amount:amt, scAmt:scAmt, lump:_perfIsLump(p), kind:(row ? row[0] : (p.pk||'')), calc:false, noRate:false, fee:null, gross:null, sc:null, rule:null };
+  var siInfo = _perfIsLump(p) ? { amt:scAmt, why:[] } : _cmSiInfo(p.co, p.prod, scAmt, rec.date), siAmt = siInfo.amt;
+  var it = { date:rec.date, fpId:rec.fpId, co:p.co||'', cat:p.cat||'', prod:p.prod||'', amount:amt, scAmt:scAmt, siAmt:siAmt, siWhy:siInfo.why, lump:_perfIsLump(p), kind:(row ? row[0] : (p.pk||'')), calc:false, noRate:false, fee:null, gross:null, sc:null, rule:null };
   // a single premium must not be multiplied by monthly rates: only rows whose name marks a single premium carry those rates
   var lumpRow = !!(row && /일시납/.test(String(row[2]||'')));
   it.lumpRow = lumpRow;
@@ -34049,13 +34052,13 @@ function _cmProdItem(rec, p){
     if(rule && (it.lump || lumpRow) && !_cmLumpRule(rule)) rule = null;
     if(rule){
       var d = rule.data || {};
-      var s1 = scAmt*(parseFloat(d.pct1)||0)/100*COMM_SC_RATE, s2 = scAmt*(parseFloat(d.pct2)||0)/100*COMM_SC_RATE;
+      var s1 = siAmt*(parseFloat(d.pct1)||0)/100*COMM_SC_RATE, s2 = siAmt*(parseFloat(d.pct2)||0)/100*COMM_SC_RATE;
       it.sc = { m1:s1, y2:s2, pct1:parseFloat(d.pct1)||0, pct2:parseFloat(d.pct2)||0, when2:d.when2||'13차월', label:_cmRuleLabel(rule) };
       it.rule = rule;
       var rx = _cmRateExtra(p, rec.date, rule, (it.lump || lumpRow));
       if(rx){
         var dx = rx.data || {}, x1 = parseFloat(dx.pct1)||0, x2 = parseFloat(dx.pct2)||0;
-        it.sc.m1 += scAmt*x1/100*COMM_SC_RATE; it.sc.y2 += scAmt*x2/100*COMM_SC_RATE;
+        it.sc.m1 += siAmt*x1/100*COMM_SC_RATE; it.sc.y2 += siAmt*x2/100*COMM_SC_RATE;
         if(x1) it.sc.pct1 = x1;
         if(x2){ it.sc.pct2 = x2; it.sc.when2 = dx.when2 || '13차월'; }
         it.sc.label += ' + ' + _cmRuleLabel(rx);
@@ -34068,7 +34071,7 @@ function _cmProdItem(rec, p){
       var pt = it.parts[pi];
       if(!pt.ok) continue;
       var pd = pt.r.data || {};
-      var base = (pd.base === 'part' && pt.core) ? pt.core : scAmt;
+      var base = (pd.base === 'part' && pt.core) ? pt.core : siAmt;
       var a1 = base*(parseFloat(pd.pct1)||0)/100*COMM_SC_RATE, a2 = base*(parseFloat(pd.pct2)||0)/100*COMM_SC_RATE;
       if(!it.sc) it.sc = { m1:0, y2:0, pct1:0, pct2:0, when2:pd.when2||'13차월', label:'' };
       // the picked rule pays nothing later on: the first add-on that does names the month (13th / 15th)
@@ -34104,7 +34107,7 @@ function _cmUnkOk(d, p){
 // pastOk: the window closed before the month being shown, where rows saved before product names were asked count as
 // the insurer's activity (unk = that part of the sum)
 function _cmSumWindow(recs, fpId, rule, from, to, pastOk){
-  var s = 0, n = 0, unk = 0, d = rule.data || {};
+  var s = 0, n = 0, unk = 0, capN = 0, d = rule.data || {};
   for(var i=0;i<recs.length;i++){
     var rec = recs[i];
     if(rec.fpId !== fpId) continue;
@@ -34121,11 +34124,13 @@ function _cmSumWindow(recs, fpId, rule, from, to, pastOk){
         isUnk = true;
       }
       if(!_cmFpOk(d, p)) continue;
-      var a = _cmScAmt(p.co, p.prod, parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0);
+      var a0 = _cmScAmt(p.co, p.prod, parseInt(String(p.amount||'').replace(/[^0-9]/g,''),10) || 0);
+      var a = _cmSiAmt(p.co, p.prod, a0, dt);
+      if(a < a0) capN++;
       s += a; n++; if(isUnk) unk += a;
     }
   }
-  return { sum:s, n:n, unk:unk };
+  return { sum:s, n:n, unk:unk, capN:capN };
 }
 function _cmTierPick(tiers, sum){
   var got = null, next = null;
@@ -34152,6 +34157,45 @@ function _cmScAmt(co, prod, amt){
   if(!u || /종신/.test(String(prod || ''))) return amt;
   return Math.min(amt, u);
 }
+// 262: the per-contract rules a sheet prints under its tables (흥국생명 11월: 건당 월초 30만까지 인정, 표준형 상품 월초×50%):
+// capPer / stdPct on the rule (GAS 25v), or still said in an older rule's unsupported list
+function _cmSiRule(d){
+  d = d || {};
+  var cap = parseInt(d.capPer, 10) || 0, std = parseFloat(d.stdPct) || 0, rest = [], uns = d.unsupported || [];
+  for(var i=0;i<uns.length;i++){
+    var ut = String(uns[i] || ''), mc = ut.match(/건당[^0-9]{0,8}(\d+(?:\.\d+)?)\s*만/), ms = ut.match(/표준형[^0-9%]{0,14}(\d+)\s*%/);
+    var isCap = !!(mc && /한도|까지|인정/.test(ut));
+    if(isCap && !cap) cap = Math.round(parseFloat(mc[1]) * 10000);
+    if(ms && !std) std = parseInt(ms[1], 10);
+    if(!isCap && !ms) rest.push(ut);
+  }
+  if(!(std > 0 && std < 100)) std = 0;
+  return { cap:cap, std:std, rest:rest };
+}
+function _cmSiTxt(si){ var a = []; if(si.cap) a.push('건당 월초 ' + _cmMan(si.cap) + ' 한도'); if(si.std) a.push('표준형 ' + si.std + '% 인정'); return a.join(' · '); }
+// a rate-table row that is a 표준형 on its own (a row joined as "미지급형&표준형" cannot be told apart: whole premium)
+function _cmIsStdProd(prod){ var t = String(prod || ''); return /표준형/.test(t) && !/[&＆]/.test(t) && !/미지급형|일부지급형/.test(t); }
+// the cap and 표준형 share this insurer's rules set for a contract of that day (the strictest of them)
+function _cmSiOf(co, dateStr){
+  var si = { cap:0, std:0 }, list = _cmRulesOf(co);
+  for(var i=0;i<list.length;i++){
+    var r = list[i];
+    if(dateStr && !_cmFpInDate(r, dateStr)) continue;
+    var x = _cmSiRule(r.data);
+    if(x.cap && (!si.cap || x.cap < si.cap)) si.cap = x.cap;
+    if(x.std && (!si.std || x.std < si.std)) si.std = x.std;
+  }
+  return si;
+}
+// the premium one contract brings to the 시책 of its insurer on that day: 표준형 share first, then the per-contract cap
+function _cmSiInfo(co, prod, amt, dateStr){
+  var si = _cmSiOf(co, dateStr), a = amt, why = [];
+  if(si.std && _cmIsStdProd(prod)){ a = Math.round(a * si.std / 100); why.push('표준형 ' + si.std + '%'); }
+  if(si.cap && a > si.cap){ a = si.cap; why.push('건당 ' + _cmMan(si.cap) + ' 한도'); }
+  return { amt:a, why:why };
+}
+function _cmSiAmt(co, prod, amt, dateStr){ return _cmSiInfo(co, prod, amt, dateStr).amt; }
+function _perfDateVal(){ var el = document.getElementById('perfDate'); return (el && el.value) || ''; }
 // tier pick over units: every full unit takes the reward of one unit, the rest takes its own tier; the plain pick of
 // the whole sum is kept when it pays more. next = the nearest sum that pays more, with what it pays
 function _cmUnitPick(tiers, sum, unit){
@@ -34208,6 +34252,7 @@ function _cmEvalRules(recs, fpId, ym){
       if(!_cmOverlap(from, to, mFrom, mTo)) continue;
       var w = _cmSumWindow(recs, fpId, r, from, to);
       var pk = _cmUnitPick(d.tiers, w.sum, _cmUnitOf(r.insurer)); res.unitTxt = _cmUnitTxt(pk);
+      if(w.capN) res.capTxt = _cmSiTxt(_cmSiRule(d)) + ' 적용';
       res.sum = w.sum; res.n = w.n; res.amt = pk.got ? pk.got.amt : 0;
       res.period = from.substr(5).replace('-','.') + '~' + to.substr(5).replace('-','.');
       if(pk.next){ res.next = pk.next; res.need = pk.next.min - w.sum; res.nextAmt = pk.next.amt; res.pct = Math.min(100, Math.round(w.sum / pk.next.min * 100)); }
@@ -34223,6 +34268,7 @@ function _cmEvalRules(recs, fpId, ym){
         var cf = conds[c].from || mFrom, ct = conds[c].to || mTo;
         if(_cmOverlap(cf, ct, mFrom, mTo)) touches = true;
         var ws = _cmSumWindow(recs, fpId, r, cf, ct, ct < mFrom);
+        if(ws.capN && !res.capTxt) res.capTxt = _cmSiTxt(_cmSiRule(d)) + ' 적용';
         if(ws.unk > 0) unkM.push(parseInt(cf.substr(5, 2), 10) + '월');
         sums.push(ws.sum);
         if(ws.sum < (conds[c].min||0)) unmet.push({ idx:c, need:(conds[c].min||0) - ws.sum, sum:ws.sum, from:cf, to:ct, min:(conds[c].min||0) });
@@ -34800,7 +34846,7 @@ function _cmNudHtml(L){
     var G = grp[ord[g]], x0 = G[0], ev0 = x0.ev;
     var nums = function(x){ return '지금 <b style="color:var(--text)">' + _cmMan(x.cur) + '</b> / 목표 <b style="color:var(--text)">' + _cmMan(x.min) + '</b>'; };
     var futLn = function(x){ return x.fut ? '<span class="cm-nd-fut">→ ' + _cmEsc(x.fut) + (x.need > 0 ? '도' : '') + ' 체결하면 +' + _cmMan(x.gain) + '</span>' : ''; };
-    var extra = function(x){ var e = []; if(x.amt && !x.flow) e.push('지금 확보 ' + _cmMan(x.amt) + ' → 채우면 ' + _cmMan(x.amt + x.gain)); if(x.ev.unitTxt) e.push(_cmEsc(x.ev.unitTxt)); if(x.ev.unkTxt) e.push(_cmEsc(x.ev.unkTxt)); return e.length ? '<span class="cm-nd-sub">' + e.join(' · ') + '</span>' : ''; };
+    var extra = function(x){ var e = []; if(x.amt && !x.flow) e.push('지금 확보 ' + _cmMan(x.amt) + ' → 채우면 ' + _cmMan(x.amt + x.gain)); if(x.ev.unitTxt) e.push(_cmEsc(x.ev.unitTxt)); if(x.ev.capTxt) e.push(_cmEsc(x.ev.capTxt)); if(x.ev.unkTxt) e.push(_cmEsc(x.ev.unkTxt)); return e.length ? '<span class="cm-nd-sub">' + e.join(' · ') + '</span>' : ''; };
     if(G.length === 1){
       x0.flow = !!(x0.amt && x0.need > 0);
       h += '<div class="cm-card cm-new">' + x0.head
@@ -34810,7 +34856,7 @@ function _cmNudHtml(L){
          + (x0.need > 0 ? nums(x0) + ' · <b class="cm-nd-red">' + _cmMan(x0.need) + ' 남음</b> (' + _cmMdS(x0.dl) + '까지)' : '지금 기간 달성 ✓')
          + '</span><span class="cm-nd-get"><span>더 받는 돈</span><b>+' + _cmMan(x0.gain) + '</b></span></div>'
          + ((x0.amt && x0.need > 0) ? '<div class="cm-nd-flow"><div class="cm-nd-nb"><span>지금 확보</span><b>' + _cmMan(x0.amt) + '</b></div><i>→</i><div class="cm-nd-nb g"><span>' + _cmMan(x0.min) + ' 채우면</span><b>' + _cmMan(x0.amt + x0.gain) + '</b></div></div>' : '')
-         + (x0.fut || (x0.amt && !(x0.need > 0)) || ev0.unitTxt || ev0.unkTxt ? '<div style="margin-top:2px">' + futLn(x0) + extra(x0) + '</div>' : '')
+         + (x0.fut || (x0.amt && !(x0.need > 0)) || ev0.unitTxt || ev0.capTxt || ev0.unkTxt ? '<div style="margin-top:2px">' + futLn(x0) + extra(x0) + '</div>' : '')
          + '</div>';
       continue;
     }
@@ -34958,6 +35004,7 @@ function _commRender0(){
       nowTxt = parts.join(' · ');
     } else nowTxt = '지금 ' + _cmMan(ev.sum);
     if(ev.unitTxt) nowTxt += ' (' + ev.unitTxt + ')';
+    if(ev.capTxt) nowTxt += ' · ' + ev.capTxt;
     if(ev.unkTxt) nowTxt += ' · ' + ev.unkTxt;
     if(ev.amt && ev.later){
       var lmo = parseInt(ev.later.substr(5, 2), 10) + '월';
@@ -35022,12 +35069,13 @@ function _commRender0(){
   for(var ri=0;ri<B.items.length;ri++){
     var rit = B.items[ri];
     if(!rit.sc) continue;
-    if(rit.rule){ var rdd = rit.rule.data || {}; rgAdd(rit.rule, rit.co, rit.scAmt * (parseFloat(rdd.pct1)||0) / 100 * COMM_SC_RATE, rit.scAmt * (parseFloat(rdd.pct2)||0) / 100 * COMM_SC_RATE, rdd.when2, parseFloat(rdd.pct1)||0, parseFloat(rdd.pct2)||0); }
-    if(rit.rule2){ var rdd2 = rit.rule2.data || {}; rgAdd(rit.rule2, rit.co, rit.scAmt * (parseFloat(rdd2.pct1)||0) / 100 * COMM_SC_RATE, rit.scAmt * (parseFloat(rdd2.pct2)||0) / 100 * COMM_SC_RATE, rdd2.when2, parseFloat(rdd2.pct1)||0, parseFloat(rdd2.pct2)||0); }
+    var rsa = (rit.siAmt === undefined) ? rit.scAmt : rit.siAmt;
+    if(rit.rule){ var rdd = rit.rule.data || {}; rgAdd(rit.rule, rit.co, rsa * (parseFloat(rdd.pct1)||0) / 100 * COMM_SC_RATE, rsa * (parseFloat(rdd.pct2)||0) / 100 * COMM_SC_RATE, rdd.when2, parseFloat(rdd.pct1)||0, parseFloat(rdd.pct2)||0); }
+    if(rit.rule2){ var rdd2 = rit.rule2.data || {}; rgAdd(rit.rule2, rit.co, rsa * (parseFloat(rdd2.pct1)||0) / 100 * COMM_SC_RATE, rsa * (parseFloat(rdd2.pct2)||0) / 100 * COMM_SC_RATE, rdd2.when2, parseFloat(rdd2.pct1)||0, parseFloat(rdd2.pct2)||0); }
     for(var rp=0;rp<(rit.parts||[]).length;rp++){
       var rpt = rit.parts[rp];
       if(!rpt.applied) continue;
-      var rpd = rpt.r.data || {}, rbase = (rpd.base === 'part' && rpt.core) ? rpt.core : rit.scAmt;
+      var rpd = rpt.r.data || {}, rbase = (rpd.base === 'part' && rpt.core) ? rpt.core : rsa;
       rgAdd(rpt.r, rit.co, rbase * (parseFloat(rpd.pct1)||0) / 100 * COMM_SC_RATE, rbase * (parseFloat(rpd.pct2)||0) / 100 * COMM_SC_RATE, rpd.when2, parseFloat(rpd.pct1)||0, parseFloat(rpd.pct2)||0);
     }
   }
@@ -35063,11 +35111,12 @@ function _commRender0(){
     if(it.calc){
       ct += cells;
       // breakdown of the 시책 figures: 건별 % → 핵심담보 → FP-level 시상 (this contract's share)
-      var brk = [];
+      var brk = [], siA = (it.siAmt === undefined) ? it.scAmt : it.siAmt;
       if(_cmMan(it.scAmt) !== _cmMan(it.amount)) brk.push('건당 ' + _cmMan(it.scAmt) + '까지 인정 (수수료·시책)');
-      if(sc && sc.pct1) brk.push('익월 ' + _cmPct(sc.pct1) + ' ' + _cmMan(it.scAmt * sc.pct1 / 100 * COMM_SC_RATE));
-      if(sc && sc.pct2) brk.push(_cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ' ' + _cmMan(it.scAmt * sc.pct2 / 100 * COMM_SC_RATE));
-      for(var pb=0;pb<(it.parts||[]).length;pb++){ if(it.parts[pb].applied){ var pbd = it.parts[pb].r.data || {}; var pbase = (pbd.base === 'part' && it.parts[pb].core) ? it.parts[pb].core : it.scAmt; if(pbd.pct1) brk.push('익월 ' + _cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct1)) + ' ' + _cmMan(pbase * pbd.pct1 / 100 * COMM_SC_RATE)); if(pbd.pct2) brk.push(_cmEsc(pbd.when2 || '13차월') + ' ' + _cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct2)) + ' ' + _cmMan(pbase * pbd.pct2 / 100 * COMM_SC_RATE)); } }
+      if(_cmMan(siA) !== _cmMan(it.scAmt)) brk.push('시책 인정 월초 ' + _cmMan(siA) + ' (' + _cmEsc((it.siWhy || []).join(' · ')) + ')');
+      if(sc && sc.pct1) brk.push('익월 ' + _cmPct(sc.pct1) + ' ' + _cmMan(siA * sc.pct1 / 100 * COMM_SC_RATE));
+      if(sc && sc.pct2) brk.push(_cmEsc(sc.when2) + ' ' + _cmPct(sc.pct2) + ' ' + _cmMan(siA * sc.pct2 / 100 * COMM_SC_RATE));
+      for(var pb=0;pb<(it.parts||[]).length;pb++){ if(it.parts[pb].applied){ var pbd = it.parts[pb].r.data || {}; var pbase = (pbd.base === 'part' && it.parts[pb].core) ? it.parts[pb].core : siA; if(pbd.pct1) brk.push('익월 ' + _cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct1)) + ' ' + _cmMan(pbase * pbd.pct1 / 100 * COMM_SC_RATE)); if(pbd.pct2) brk.push(_cmEsc(pbd.when2 || '13차월') + ' ' + _cmEsc(_cmTitlePct(it.parts[pb].r.title || '핵심담보', pbd.pct2)) + ' ' + _cmMan(pbase * pbd.pct2 / 100 * COMM_SC_RATE)); } }
       for(var pl=0;pl<al.labels.length;pl++) brk.push(_cmEsc(al.labels[pl]));
       if(brk.length) det += '<div class="cm-mini" style="margin-top:4px;color:#6D4FB8">시책 내역: ' + brk.join(' · ') + '</div>';
       if(sc){ det += '<div class="cm-mini" style="margin-top:4px">🎁 ' + _cmEsc(sc.label) + '</div>'; }
@@ -35078,7 +35127,7 @@ function _commRender0(){
         if(ptx.fpOnly) continue;
         var pctTxt = (pd.pct1 ? '익월 ' + _cmPct(pd.pct1) : '') + (pd.pct2 ? ' ' + _cmEsc(pd.when2||'13차월') + ' ' + _cmPct(pd.pct2) : '');
         var plab = pd.coreLabel || '핵심담보 보험료', pIsPart = (pd.base === 'part');
-        var pGain = it.scAmt * ((parseFloat(pd.pct1)||0) + (parseFloat(pd.pct2)||0)) / 100 * COMM_SC_RATE;
+        var pGain = ((it.siAmt === undefined) ? it.scAmt : it.siAmt) * ((parseFloat(pd.pct1)||0) + (parseFloat(pd.pct2)||0)) / 100 * COMM_SC_RATE;
         var pT = _cmEsc(ptx.r.title || pd.label || '');
         if(ptx.auto){
           if(ptx.applied) det += '<div class="cm-mini" style="margin-top:3px">🟢 ' + (ptx.min ? '월초 ' + _cmMan(ptx.min) + '↑ → ' : '') + pT + ' 자동' + (pd.base === 'part' ? ' · 보장P = 월초' : '') + '</div>';
