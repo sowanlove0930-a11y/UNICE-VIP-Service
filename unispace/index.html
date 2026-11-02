@@ -3416,6 +3416,18 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 .sched-scope button.on { background:#fff; color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.10); }
 .sched-scope button.on.my { color:#5B21B6; box-shadow:0 1px 4px rgba(91,33,182,.18); }
 @media (max-width:600px){ .sched-cal-cell .mysch-t { display:none; } }
+/* 261: PC gets a bigger 일정 window (wider box, taller cells, larger day numbers and chips, 4 chips per day) */
+@media (min-width:1000px){
+  #scheduleOverlay .mgmt-box.sched-box { max-width:1180px !important; max-height:94vh !important; }
+  .sched-cal-grid { gap:6px !important; font-size:14px !important; }
+  .sched-cal-grid > div:nth-child(-n+7) { font-size:14px; padding:8px 0 !important; }
+  .sched-cal-cell { min-height:118px !important; padding:8px 7px !important; font-size:16px !important; border-radius:10px !important; }
+  .sched-cal-cell > div { font-size:12.5px !important; padding:3px 7px !important; margin-top:4px !important; border-radius:5px !important; }
+  .sched-cal-cell > div.run-r { margin-right:-11px; padding-right:18px !important; }
+  .sched-cal-cell > div.run-l { margin-left:-11px; padding-left:18px !important; }
+  #schedDayList { font-size:14px; }
+  #schedMonthLabel { font-size:17px !important; }
+}
 .mysch-lock { text-align:center; padding:34px 16px; border:1px dashed #C9B8F0; border-radius:12px; background:rgba(124,58,237,.04); }
 .mysch-lock .ic { font-size:30px; }
 .mysch-lock .t { font-size:15px; font-weight:800; margin-top:6px; color:var(--text); }
@@ -12246,6 +12258,8 @@ function _canEditJoinEvt(){
   return false;
 }
 function _schedYmd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+// 261: chips shown per day before "+N" (PC cells are taller)
+function _schedChipMax(){ try{ return window.innerWidth>=1000 ? 4 : 3; }catch(e){ return 3; } }
 // ── 시책 조회/등록 ─────────────────────────────────
 var _sichaekTab = 'active';
 var _sichaekFileData = null;
@@ -14236,7 +14250,8 @@ function renderSchedCal(){
     var dayScheds=_schedDayItems(db, ds);
     var isToday=(ds===todayStr);
     var chips='';
-    dayScheds.slice(0,3).forEach(function(s){
+    var _cmax=_schedChipMax();
+    dayScheds.slice(0,_cmax).forEach(function(s){
       var bg, col, label;
       if(s.type==='life'){ bg='rgba(37,99,235,.14)'; col='#185FA5'; label=s.company||'생보교육'; }
       else if(s.type==='non'){ bg='rgba(15,142,126,.14)'; col='#0C6B5E'; label=s.company||'손보교육'; }
@@ -14244,7 +14259,7 @@ function renderSchedCal(){
       else { bg='rgba(192,57,49,.13)'; col='#C0392B'; label=s.title||'중요'; }
       chips+='<div class="'+_schedRunCls(s, ds)+'" style="margin-top:3px;font-size:11px;background:'+bg+';--rc:'+bg+';color:'+col+';border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+escHtmlSch(label)+'</div>';
     });
-    if(dayScheds.length>3){ chips+='<div style="font-size:10px;color:var(--text3);margin-top:2px">+'+(dayScheds.length-3)+'</div>'; }
+    if(dayScheds.length>_cmax){ chips+='<div style="font-size:10px;color:var(--text3);margin-top:2px">+'+(dayScheds.length-_cmax)+'</div>'; }
     var _hol = getHolidayName(ds);
     var _dow = new Date(y,m,day).getDay();
     var _dayColor = _hol ? '#C0392B' : (_dow===0?'#C0392B':_dow===6?'#2563EB':'');
@@ -14370,9 +14385,9 @@ function _renderMySchedCal(){
       .sort(function(a,b){ return _schedRunCmp(a.s, b.s); })
       .concat(my.filter(notRun).map(function(s){ return { s:s, m:1 }; }))
       .concat(og.filter(notRun).map(function(s){ return { s:s, m:0 }; }));
-    var chips='', n=0;
+    var chips='', n=0, _cmax=_schedChipMax();
     all.forEach(function(x){
-      if(n>=3) return; n++;
+      if(n>=_cmax) return; n++;
       var s=x.s;
       if(x.m){
         chips+='<div class="'+_schedRunCls(s, ds)+'" style="margin-top:3px;font-size:11px;background:'+MYC.bg+';--rc:'+MYC.bg+';color:'+MYC.col+';border-radius:4px;padding:2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700">'+(s.time?'<span class="mysch-t">'+escHtmlSch(s.time)+' </span>':'')+escHtmlSch(s.title||'내 일정')+'</div>';
@@ -14382,7 +14397,7 @@ function _renderMySchedCal(){
       }
     });
     var total=my.length+og.length;
-    if(total>3){ chips+='<div style="font-size:10px;color:var(--text3);margin-top:2px">+'+(total-3)+'</div>'; }
+    if(total>_cmax){ chips+='<div style="font-size:10px;color:var(--text3);margin-top:2px">+'+(total-_cmax)+'</div>'; }
     var _hol=getHolidayName(ds), _dow=new Date(y,m,day).getDay();
     var _dayColor=_hol?'#C0392B':(_dow===0?'#C0392B':_dow===6?'#2563EB':'');
     var _holChip=_hol?'<div style="font-size:10px;color:#C0392B;font-weight:700;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_hol+'</div>':'';
@@ -27645,7 +27660,7 @@ function doCheckin() { doSmartCheckin(); }
 
 <!-- 일정 조회/관리 모달 -->
 <div class="mgmt-overlay" id="scheduleOverlay" style="z-index:667">
-  <div class="mgmt-box" style="max-width:860px;width:94vw;max-height:92vh;display:flex;flex-direction:column">
+  <div class="mgmt-box sched-box" style="max-width:860px;width:94vw;max-height:92vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div class="mgmt-title">📅 일정</div>
       <button type="button" onclick="closeScheduleModal()" class="modal-close-x" aria-label="닫기">✕</button>
@@ -28688,7 +28703,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 260;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 261;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
