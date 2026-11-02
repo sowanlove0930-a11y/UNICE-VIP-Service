@@ -28703,7 +28703,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 262;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 263;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -34170,26 +34170,52 @@ function _cmSiRule(d){
     if(!isCap && !ms) rest.push(ut);
   }
   if(!(std > 0 && std < 100)) std = 0;
-  return { cap:cap, std:std, rest:rest };
+  // 263: recognition share of named products: [{prods:[names] | kw:[words], pay:[years], pct, label}]
+  var recog = [], rl = d.recog || [];
+  for(var j=0;j<rl.length;j++){ var e = rl[j] || {}, pc = parseFloat(e.pct) || 0; if(pc > 0 && pc < 100 && ((e.prods && e.prods.length) || (e.kw && e.kw.length))) recog.push(e); }
+  return { cap:cap, std:std, rest:rest, recog:recog };
 }
-function _cmSiTxt(si){ var a = []; if(si.cap) a.push('건당 월초 ' + _cmMan(si.cap) + ' 한도'); if(si.std) a.push('표준형 ' + si.std + '% 인정'); return a.join(' · '); }
+function _cmSiTxt(si){
+  var a = [], seen = {};
+  for(var i=0;i<(si.recog||[]).length;i++){ var e = si.recog[i], t = (e.label || '일부 상품') + ' ' + e.pct + '% 인정'; if(!seen[t]){ seen[t] = 1; a.push(t); } }
+  if(si.cap) a.push('건당 월초 ' + _cmMan(si.cap) + ' 한도'); if(si.std) a.push('표준형 ' + si.std + '% 인정');
+  return a.join(' · ');
+}
+// does a recognition entry name this product: its linked rows, or every keyword (and a pay term of the row when given)
+function _cmRecogHit(e, prod){
+  var np = _cmNorm(prod), i;
+  if(!np) return false;
+  if(e.prods && e.prods.length){ if(!_cmInSet(e, 'prods', np)) return false; }
+  else if(e.kw && e.kw.length){ for(i=0;i<e.kw.length;i++){ if(!_cmKwHit(np, _cmNorm(e.kw[i]))) return false; } }
+  else return false;
+  if(e.pay && e.pay.length){
+    var yrs = _cmPayYears(prod);
+    if(yrs){ var ok = false; for(i=0;i<e.pay.length;i++){ var y = parseInt(e.pay[i],10); if(y >= yrs.min && y <= yrs.max) ok = true; } if(!ok) return false; }
+  }
+  return true;
+}
 // a rate-table row that is a 표준형 on its own (a row joined as "미지급형&표준형" cannot be told apart: whole premium)
 function _cmIsStdProd(prod){ var t = String(prod || ''); return /표준형/.test(t) && !/[&＆]/.test(t) && !/미지급형|일부지급형/.test(t); }
 // the cap and 표준형 share this insurer's rules set for a contract of that day (the strictest of them)
 function _cmSiOf(co, dateStr){
-  var si = { cap:0, std:0 }, list = _cmRulesOf(co);
+  var si = { cap:0, std:0, recog:[] }, list = _cmRulesOf(co);
   for(var i=0;i<list.length;i++){
     var r = list[i];
     if(dateStr && !_cmFpInDate(r, dateStr)) continue;
     var x = _cmSiRule(r.data);
     if(x.cap && (!si.cap || x.cap < si.cap)) si.cap = x.cap;
     if(x.std && (!si.std || x.std < si.std)) si.std = x.std;
+    for(var k=0;k<x.recog.length;k++) si.recog.push(x.recog[k]);
   }
   return si;
 }
 // the premium one contract brings to the 시책 of its insurer on that day: 표준형 share first, then the per-contract cap
 function _cmSiInfo(co, prod, amt, dateStr){
   var si = _cmSiOf(co, dateStr), a = amt, why = [];
+  // the share of a named product (the smallest share among the entries that name it)
+  var rpct = 0, rlab = '';
+  for(var ri=0;ri<si.recog.length;ri++){ var re = si.recog[ri]; if(_cmRecogHit(re, prod) && (!rpct || re.pct < rpct)){ rpct = re.pct; rlab = re.label || ''; } }
+  if(rpct){ a = Math.round(a * rpct / 100); why.push((rlab ? rlab + ' ' : '') + rpct + '% 인정'); }
   if(si.std && _cmIsStdProd(prod)){ a = Math.round(a * si.std / 100); why.push('표준형 ' + si.std + '%'); }
   if(si.cap && a > si.cap){ a = si.cap; why.push('건당 ' + _cmMan(si.cap) + ' 한도'); }
   return { amt:a, why:why };
