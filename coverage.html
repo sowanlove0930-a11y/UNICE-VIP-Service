@@ -3791,6 +3791,270 @@ function dedupeRenewalAlerts(list) {
   return out;
 }
 
+
+// ============================================================
+// [coverage_37] 갱신형 특약을 PDF 글자에서 직접 읽기
+// AI가 memo에 "갱신형"을 안 적으면 갱신알림이 통째로 빠지던 문제 → 코드가 별첨 상품별 보험가입현황의
+// 담보명 "(OO년갱신형)" 을 세어 계약별 갱신 주기·갱신예정일을 확정하고 memo/renewal_alerts에 반영
+// ============================================================
+function _nfkc(s) { try { return String(s || '').normalize('NFKC'); } catch (e) { return String(s || ''); } }
+
+// 모든 PDF(이미지 제외)의 글자를 pdf.js로 읽어 f.pageText 에 둔다 (API로는 보내지 않음)
+async function readPdfTexts(files) {
+  for (const f of files) {
+    if ((f.mimeType || '').startsWith('image/')) continue;
+    if (f.extraText) { f.pageText = f.extraText; continue; }
+    try {
+      await loadScriptOnce(PDF_LIB_URLS.pdfjs);
+      pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_LIB_URLS.pdfjsWorker;
+      const src = await pdfjsLib.getDocument({ data: base64ToBytes(f.data) }).promise;
+      const texts = [];
+      for (let i = 1; i <= src.numPages; i++) {
+        const page = await src.getPage(i);
+        try {
+          const tc = await page.getTextContent();
+          const t = tc.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+/g, ' ').trim();
+          if (t) texts.push('[' + i + '쪽]\n' + t);
+        } catch (e) {}
+        page.cleanup();
+      }
+      await src.destroy();
+      f.pageText = texts.join('\n\n');
+    } catch (e) {
+      console.warn('[pdf text] ' + f.name + ' 글자 읽기 실패 (갱신형 자동 판정은 AI 결과만 사용)', e);
+      f.pageText = '';
+    }
+  }
+}
+
+// "별첨 상품별 보험가입현황" 페이지들을 계약별로 나눠 갱신형 담보를 센다
+// → [{company, product, start:'YYYY.MM', end, premium, riderTotal, renewalCount, cycles:{20:29,10:10}, productRenewal}]
+function scanRenewalContracts(text) {
+  const out = [];
+  const t = _nfkc(text).replace(/\r/g, '');
+  const parts = t.split(/별첨\s*상품별\s*보험가입현황/);
+  if (parts.length < 2) return out;
+  const riderRe = /^(\d{1,2})\s+(정액|실손)\s+(.+)$/;
+  const noiseRe = /신용정보원|컨설턴트|^\*|^GA\d|^\[\d+쪽\]|가입담보명|^NO\s|보험기간|계약자|납입주기/;
+  let cur = null;
+  for (let i = 1; i < parts.length; i++) {
+    const body = parts[i];
+    const lines = body.split('\n').map(s => s.trim());
+    const pm = body.match(/보험기간\s*(\d{4})[.\-](\d{2})[.\-](\d{2})\s*~\s*(\d{4})[.\-](\d{2})[.\-](\d{2})/);
+    if (pm) {
+      // 새 계약: 쪽번호 다음 줄 = 회사, 그 다음 줄 = 상품명 (계약자 줄 전까지 이어질 수 있음)
+      let idx = 1;
+      while (idx < lines.length && !lines[idx]) idx++;
+      const company = lines[idx] || ''; idx++;
+      while (idx < lines.length && !lines[idx]) idx++;
+      let product = lines[idx] || ''; idx++;
+      while (idx < lines.length && !/계약자|피보험자|보험기간/.test(lines[idx])) { if (lines[idx]) product += ' ' + lines[idx]; idx++; }
+      const prm = body.match(/월\s*보험료\s*([\d,]+)\s*원/);
+      const pay = body.match(/납입주기\/납입기간\/만기\s*([^\n]+)/);
+      cur = {
+        company: company.trim(), product: product.replace(/\s+/g, ' ').trim(),
+        start: pm[1] + '.' + pm[2], end: pm[4] + '.' + pm[5],
+        premium: prm ? parseInt(prm[1].replace(/,/g, ''), 10) : 0,
+        payText: pay ? pay[1].trim() : '',
+        riders: []
+      };
+      out.push(cur);
+    } else if (!cur) {
+      continue; // 계약 머리 없이 나온 조각은 건너뜀
+    }
+    // 담보 줄 (31번부터는 다음 쪽에 이어짐)
+    let last = null;
+    lines.forEach(l => {
+      const m = l.match(riderRe);
+      if (m) { last = { no: +m[1], kind: m[2], text: m[3] }; cur.riders.push(last); return; }
+      if (!l || /^\d{1,2}$/.test(l) || noiseRe.test(l)) { if (/^\d{1,2}$/.test(l) || noiseRe.test(l)) last = null; return; }
+      if (last) last.text += ' ' + l; // 긴 담보명이 다음 줄로 넘어간 경우
+    });
+  }
+  return out.map(c => {
+    const prodRenewal = /갱신/.test(c.product) && !/비갱신/.test(c.product);
+    const cycles = {};
+    let renewalCount = 0;
+    c.riders.forEach(r => {
+      const txt = r.text;
+      if (!/갱신/.test(txt) || /비갱신/.test(txt)) return;
+      renewalCount++;
+      const ym = txt.match(/(\d{1,2})\s*년\s*갱신/);
+      const y = ym ? parseInt(ym[1], 10) : 0;
+      cycles[y] = (cycles[y] || 0) + 1;
+    });
+    // 상품명이 (갱신형)인데 담보명에 주기가 없으면: 상품명의 OO년, 없으면 보험기간 길이(1·3·5·10·15·20년)로 주기 추정
+    let prodCycle = 0;
+    if (prodRenewal) {
+      const pm = c.product.match(/(\d{1,2})\s*년\s*갱신/);
+      if (pm) prodCycle = parseInt(pm[1], 10);
+      else {
+        const span = parseInt(c.end.slice(0, 4), 10) - parseInt(c.start.slice(0, 4), 10);
+        if ([1, 3, 5, 10, 15, 20].indexOf(span) >= 0 && c.end.slice(5) === c.start.slice(5)) prodCycle = span;
+      }
+      // 상품 자체가 갱신형이면 "갱신" 글자가 없는 담보도 전부 갱신형
+      const rest = c.riders.length - renewalCount;
+      if (rest > 0) { cycles[prodCycle] = (cycles[prodCycle] || 0) + rest; renewalCount = c.riders.length; }
+      if (cycles[0] && prodCycle) { cycles[prodCycle] = (cycles[prodCycle] || 0) + cycles[0]; delete cycles[0]; }
+    }
+    return {
+      company: c.company, product: c.product, start: c.start, end: c.end, premium: c.premium, payText: c.payText,
+      riderTotal: c.riders.length, renewalCount, cycles, productRenewal: prodRenewal,
+      renewalNames: c.riders.filter(r => /갱신/.test(r.text) && !/비갱신/.test(r.text)).map(r => r.text.replace(/\s+\S+\s+[\d,]+(만|천|억)?\s*$/, '').trim()).slice(0, 60)
+    };
+  });
+}
+
+// 상품명 비교용 키: (무)·무배당·괄호 안·공백·'보험' 제거, 전각 → 반각
+function _pdfProdKey(s) {
+  return _nfkc(s).replace(/\(무\)|무배당|\(주\)/g, '')
+    .replace(/\([^()]*\)/g, '').replace(/\([^()]*\)/g, '')
+    .replace(/[\s　]/g, '').replace(/보험/g, '').replace(/[\[\]{}\/·:_\-,.]/g, '').toLowerCase();
+}
+
+function _pdfMatchScore(c, f) {
+  if (!_sameCompany(c.company, f.company)) return 0;
+  const a = _pdfProdKey(c.product), b = _pdfProdKey(f.product);
+  if (!a || !b) return 0;
+  const sYm = contractStartYm(c);
+  if (sYm && f.start && sYm !== f.start) return 0; // 시작월이 다르면 다른 계약 (2종/3종 혼동 방지)
+  let score = 0;
+  if (a === b) score = 100;
+  else if (a.includes(b) || b.includes(a)) score = 80;
+  else { const p = _commonPrefixLen(a, b); if (p >= 6) score = 40 + p; }
+  if (!score) return 0;
+  const cp = contractPremiumWon(c);
+  if (cp > 0 && f.premium > 0) score += Math.abs(cp - f.premium) < 10 ? 20 : -15;
+  if (sYm && f.start && sYm === f.start) score += 20;
+  return score;
+}
+
+// 시작월 + 주기(년)로 오늘 이후 첫 갱신월을 계산 → 'YYYY.MM'
+function _nextRenewalYm(startYm, years) {
+  const m = String(startYm || '').match(/(\d{4})\.(\d{1,2})/);
+  if (!m || !(years > 0)) return '';
+  const now = new Date();
+  const cur = now.getFullYear() * 12 + now.getMonth();
+  let ym = parseInt(m[1], 10) * 12 + (parseInt(m[2], 10) - 1);
+  while (ym <= cur) ym += years * 12;
+  return Math.floor(ym / 12) + '.' + String((ym % 12) + 1).padStart(2, '0');
+}
+
+function _ageAt(json, ym) {
+  const age = parseInt(String(json._insuranceAge || (json.customer_info || {}).age || '').replace(/[^0-9]/g, ''), 10);
+  const y = parseInt(String(ym || '').slice(0, 4), 10);
+  if (!age || !y) return 0;
+  return age + (y - new Date().getFullYear());
+}
+
+// PDF에서 센 갱신형 특약을 계약 memo와 renewal_alerts에 확정 반영
+function applyPdfRenewalFacts(json, facts) {
+  try {
+    const list = (facts || []).filter(f => f && f.renewalCount > 0);
+    const allC = [].concat(json.contracts || [], json.other_contracts || []);
+    if (list.length && allC.length) {
+      // 점수 높은 짝부터 1:1 배정
+      const pairs = [];
+      allC.forEach(c => list.forEach(f => { const s = _pdfMatchScore(c, f); if (s >= 46) pairs.push({ c, f, s }); }));
+      pairs.sort((x, y) => y.s - x.s);
+      const usedC = new Set(), usedF = new Set();
+      pairs.forEach(p => {
+        if (usedC.has(p.c) || usedF.has(p.f)) return;
+        usedC.add(p.c); usedF.add(p.f);
+        _applyOneRenewalFact(json, p.c, p.f);
+      });
+      list.forEach(f => { if (!usedF.has(f)) console.warn('[갱신형] PDF 계약을 분석 결과에서 못 찾음: ' + f.company + ' ' + f.product); });
+    }
+    // 갱신주기가 N년인데 갱신예정일이 보험 만기(종기)로 적힌 행 → 시작월 + 주기로 다음 갱신월 계산 (실손 복합계약 등)
+    (json.renewal_alerts || []).forEach(r => {
+      if (r._pdfFixed) return;
+      const cyc = String(r.renewal_cycle || '');
+      const ym = cyc.match(/(\d{1,2})\s*년\s*갱신/) || cyc.match(/^\s*(\d{1,2})\s*년\s*$/);
+      if (!ym) return;
+      const years = parseInt(ym[1], 10);
+      const c = allC.find(x => renewalRowMatches(r, x));
+      if (!c) return;
+      const start = contractStartYm(c);
+      const endM = String(c.coverage_period || '').match(/~\s*(\d{4})[.\-](\d{1,2})/);
+      const end = endM ? endM[1] + '.' + endM[2].padStart(2, '0') : '';
+      const d = String(r.renewal_date || '');
+      const dYm = (d.match(/(\d{4})\.(\d{2})/) || [])[0] || '';
+      if (!start) return;
+      if (/확인\s*필요/.test(d) || !dYm || (end && dYm === end)) {
+        const nx = _nextRenewalYm(start, years);
+        if (nx) r.renewal_date = nx + ' (계산, ' + years + '년갱신)';
+      }
+    });
+  } catch (e) { console.warn('[갱신형] PDF 반영 실패', e); }
+  return json;
+}
+
+function _applyOneRenewalFact(json, c, f) {
+  const cycleYears = Object.keys(f.cycles).map(Number).filter(y => y > 0).sort((a, b) => a - b);
+  const dates = cycleYears.map(y => ({ years: y, count: f.cycles[y], date: _nextRenewalYm(f.start, y) })).filter(d => d.date);
+  const allRenewal = f.renewalCount >= f.riderTotal;
+  const scope = allRenewal
+    ? '전 담보 갱신형 ' + f.renewalCount + '개'
+    : '갱신형 특약 ' + f.renewalCount + '/' + f.riderTotal + '개';
+  const cycleText = cycleYears.length === 0 ? '갱신형 (주기 증권 확인)'
+    : cycleYears.length === 1 ? cycleYears[0] + '년'
+    : cycleYears.map(y => y + '년(' + f.cycles[y] + '개)').join(' · ') + ' 특약별 다름';
+  const dateText = dates.length === 0 ? '증권 확인 필요'
+    : dates.length === 1 ? dates[0].date + ' (계산, ' + dates[0].years + '년갱신)'
+    : dates.map(d => d.date + ' (' + d.years + '년갱신형)').join(' / ') + ' (계산)';
+  const first = dates[0] ? dates[0].date : '';
+  const ageAt = first ? _ageAt(json, first) : 0;
+  const prod = String(c.product || '');
+  const isTooth = prod.includes('치아');
+  const isDriver = /운전자|애니카|하이콜/.test(prod);
+  const expected = cycleYears.length && cycleYears[0] <= 3
+    ? '갱신 시 보험료 인상 (' + cycleYears[0] + '년마다 갱신 — 고령 갱신 시 급등 가능)'
+    : '갱신 시 약 1.5~3배 예상 (특약 종류에 따라 상이' + (ageAt ? ', 갱신 시 ' + ageAt + '세' : '') + ')';
+  const caution = scope + (cycleYears.length === 1 ? ' — ' + cycleYears[0] + '년 갱신' : cycleYears.length > 1 ? ' — ' + cycleText : '')
+    + (ageAt ? ' · ' + first + ' 갱신 시 ' + ageAt + '세' : '')
+    + ' → 고령 갱신 보험료 급등 대비 비갱신 전환 검토 권고';
+
+  // memo: 기존 "⚠ YYYY.MM 갱신예정" 은 PDF 계산값으로 교체
+  let memo = String(c.memo || '').replace(/⚠\s*\d{4}\.\d{2}\s*갱신예정\s*(\([^)]*\))?\s*\/?\s*/g, '').replace(/갱신형\s*담보\s*포함\s*\/?\s*/g, '').trim();
+  const scopeShort = cycleYears.length === 1
+    ? (allRenewal ? '전 담보 ' + cycleYears[0] + '년갱신형 ' + f.renewalCount + '개' : cycleYears[0] + '년갱신형 특약 ' + f.renewalCount + '/' + f.riderTotal + '개')
+    : scope + (cycleYears.length > 1 ? ' (' + cycleYears.map(y => y + '년 ' + f.cycles[y] + '개').join(' · ') + ')' : '');
+  const tag = first ? '⚠ ' + first + ' 갱신예정 · ' + scopeShort : '⚠ ' + scopeShort;
+  c.memo = memo ? tag + '\n' + memo : tag;
+  c._pdfRenewal = { cycles: f.cycles, start: f.start, renewalCount: f.renewalCount, riderTotal: f.riderTotal, next: first };
+
+  const premWon = contractPremiumWon(c) || f.premium || 0;
+  const row = {
+    company: c.company || f.company,
+    product: c.product || f.product,
+    current_premium: premWon ? premWon.toLocaleString() + '원/월' : '확인필요',
+    renewal_date: dateText,
+    renewal_cycle: cycleText,
+    expected_premium: expected,
+    non_renewal_alt: (isTooth || isDriver) ? '❌ 없음' : '✅ 있음',
+    caution,
+    _pdfFixed: true
+  };
+  if (!json.renewal_alerts) json.renewal_alerts = [];
+  const key = ((row.company || '') + (row.product || '')).replace(/\s/g, '');
+  let hit = -1;
+  json.renewal_alerts.forEach((r, i) => {
+    if (hit >= 0) return;
+    const rk = ((r.company || '') + (r.product || '')).replace(/\s/g, '');
+    if (rk === key || renewalRowMatches(r, c)) hit = i;
+  });
+  if (hit >= 0) {
+    const old = json.renewal_alerts[hit];
+    // AI가 쓴 예상보험료 문구가 구체적이면 그대로 둔다
+    if (old.expected_premium && !/확인/.test(old.expected_premium) && /\d/.test(old.expected_premium)) row.expected_premium = old.expected_premium;
+    json.renewal_alerts[hit] = row;
+    // 같은 계약의 다른 행(AI가 상품명을 다르게 쓴 행)은 제거
+    json.renewal_alerts = json.renewal_alerts.filter((r, i) => i === hit || !renewalRowMatches(r, c));
+  } else {
+    json.renewal_alerts.push(row);
+  }
+}
+
 // ============================================================
 // PDF → Base64
 // ============================================================
@@ -4114,6 +4378,12 @@ async function startAnalysis() {
       Promise.all(uploadedFilesNew.map(f => filePayload(f, 'new')))
     ]);
     await shrinkPdfsIfTooBig(existingPdfs.concat(newPdfs));
+
+    // [coverage_37] PDF 글자를 직접 읽어 "(OO년갱신형)" 담보를 계약별로 센다 (AI가 놓쳐도 갱신알림에 들어가게)
+    setLoadingProgress(8, 'PDF 글자를 읽고 있어요', '갱신형 특약 확인 중...', '🔎', '📋 준비 — 갱신형 특약 확인');
+    await readPdfTexts(existingPdfs);
+    const _pdfRenewalFacts = scanRenewalContracts(existingPdfs.map(f => f.pageText || '').join('\n\n'));
+    console.log('[갱신형] PDF에서 찾은 계약', _pdfRenewalFacts);
 
     // Anthropic API 직접 호출
     const userContent = [];
@@ -4663,6 +4933,7 @@ async function startAnalysis() {
 
     setLoadingProgress(97,'케어맵을 완성하고 있어요','거의 다 됐어요! 🎉','🏆','📋 완성 중...');
     normalizeContractValues(json);
+    applyPdfRenewalFacts(json, _pdfRenewalFacts); // [coverage_37] PDF에서 센 갱신형 특약 확정 반영
     json.renewal_alerts = dedupeRenewalAlerts(json.renewal_alerts);
     renderResults(json);
 
