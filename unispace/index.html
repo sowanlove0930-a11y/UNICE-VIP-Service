@@ -1603,6 +1603,8 @@ body.momdeun-off .sag .md-off { display: inline; }
 body.ugobi-off .sa-ugobi, body.ugobi-off .cc-ugobi .cc-ptn-share, body.ugobi-off .sag .ug-on { display: none; }
 /* nohupai 2.0 locked for this fp (blocked in the fp admin list): no 평생든든 customer-link row in the link-send window */
 body.pension-off .sa-pension, body.pension-off .sag .ps-on { display: none; }
+/* 266: on phones the VIP row keeps ▶ 영상 + 보내기 only (three buttons squeeze the title) */
+@media (max-width: 480px) { .sa-vip .sa-pv { display: none; } }
 .lsm-overlay { display:none; position:fixed; inset:0; background:rgba(43,38,28,.4);
   z-index:9500; align-items:center; justify-content:center; padding:16px; }
 .lsm-overlay.on { display:flex; }
@@ -17531,19 +17533,30 @@ function openPartnersDeck(ev) {
 }
 
 var HEALTHCARE_URL = 'https://unice-vip.co.kr/unispace/healthcare.html';
+// 266: card + page redone like 맘든든 / U고비 (friend_og.jpg 1200×600); the customer link carries ?fp=사번&c=1 and the page
+// registers the customer for that FP + pushes the FP (GAS 25z friendLead)
 var HEALTHCARE_CARD = {
-  title: '유니스와 친구추가',
-  desc:  '대학병원 예약 대행 · 명의 찾기 · 손해사정사 무료 자문. 비용 0원 · 가입 의무 없음.',
-  btn:   '유니스와 친구추가',
-  img:   'https://unice-vip.co.kr/unispace/healthcare_og2.jpg'
+  title: '유니스와 친구추가 · 내 보험 혜택 찾기',
+  desc:  '매달 내는 보험, 혜택은 다 쓰고 계세요? 대학병원 예약 대행·명의 찾기·손해사정 무료 자문, 비용 0원.',
+  btn:   '내 보험 혜택 찾기',
+  img:   'https://unice-vip.co.kr/unispace/friend_og.jpg'
 };
+function _hcCustLink() {
+  return HEALTHCARE_URL + '?fp=' + encodeURIComponent(String(currentUser.id)) + '&c=1';
+}
+// preview what the customer sees
+function openHealthcarePreview(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  window.open(_hcCustLink(), '_blank');
+  return false;
+}
 
 function shareHealthcare(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!currentUser || !currentUser.id) { showToast('\u26A0\uFE0F \uB85C\uADF8\uC778 \uC815\uBCF4\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'); return false; }
-  var url = HEALTHCARE_URL + '?fp=' + encodeURIComponent(String(currentUser.id));
-  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (!isMobileDev) { _hcShareFallback(url); return false; }
+  // 266: kakao card on phones and pc (pc opens the kakao share window, like shareMomdeun); text + link copy only when kakao fails
+  var url = _hcCustLink();
   _ckpKakaoReady(function(ok) {
     if (!ok) { _hcShareFallback(url); return; }
     try {
@@ -17553,8 +17566,8 @@ function shareHealthcare(ev) {
           title: HEALTHCARE_CARD.title,
           description: HEALTHCARE_CARD.desc,
           imageUrl: HEALTHCARE_CARD.img,
-          imageWidth: 800,
-          imageHeight: 400,
+          imageWidth: 1200,
+          imageHeight: 600,
           link: { mobileWebUrl: url, webUrl: url }
         },
         buttons: [
@@ -17570,10 +17583,15 @@ function shareHealthcare(ev) {
 
 function _hcShareFallback(url) {
   var sender = _shareSender();
-  var msg = (sender ? sender + ' \uBCF4\uB0B4\uB4DC\uB9BD\uB2C8\uB2E4.\n' : '')
-    + '[\uC720\uB2C8\uC2A4\uC640 \uCE5C\uAD6C\uCD94\uAC00]\n'
-    + '\uAC00\uC785\uD558\uC2E0 \uBCF4\uD5D8\uC5D0 \uC5B4\uB5A4 \uD61C\uD0DD\uC774 \uB4E4\uC5B4 \uC788\uB294\uC9C0 \uCC3E\uC544\uB4DC\uB9BD\uB2C8\uB2E4.\n'
-    + '\uBE44\uC6A9 0\uC6D0 \u00B7 \uAC00\uC785 \uC758\uBB34 \uC5C6\uC74C';
+  var msg = (sender ? sender + ' 보내드립니다.\n' : '')
+    + '[유니스와 친구추가 · 내 보험 혜택 찾기]\n'
+    + '매달 내는 보험, 혜택은 다 쓰고 계세요?\n'
+    + '대학병원 예약 대행 · 명의 찾기 · 손해사정사 무료 자문. 비용 0원 · 가입 의무 없음.';
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share) {
+    navigator.share({ text: msg, url: url }).catch(function(e){});
+    return;
+  }
   var full = msg + '\n' + url;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(full).then(function() {
@@ -18449,17 +18467,63 @@ function _ptaDel(id) {
   }, { icon: '🗑️', title: '신청 삭제', okText: '삭제', cancelText: '취소' });
 }
 
+// 266: VIP 고객지원 서비스 is a kakao card like 맘든든 / U고비 (before: share sheet on phones, clipboard on pc, never the sdk);
+// the customer link carries ?fp=사번&c=1 and the page registers the customer for that FP + pushes the FP (GAS 25z vipLead)
+var VIP_APPLY_URL = 'https://unice-vip.co.kr/vip-apply.html';
+var VIP_APPLY_CARD = {
+  title: 'VIP 고객지원 서비스 · 보험은 가입보다 관리',
+  desc:  '법률·손해사정·헬스케어·청구 케어맵·특화 컨설팅. 3분 영상 보고 신청하면 담당 FP가 바로 연결돼요.',
+  btn:   'VIP 서비스 신청하기',
+  img:   'https://unice-vip.co.kr/vip-apply-og.jpg'
+};
+function _vipCustLink() {
+  return VIP_APPLY_URL + '?fp=' + encodeURIComponent(String(currentUser.id)) + '&c=1';
+}
+// preview what the customer sees
+function openVipApplyPreview(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  window.open(_vipCustLink(), '_blank');
+  return false;
+}
+// kakao card on phones and pc; text + link copy only when kakao fails
 function shareVipApply(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  var url = _vipCustLink();
+  _ckpKakaoReady(function(ok) {
+    if (!ok) { _vipShareFallback(url); return; }
+    try {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: {
+          title: VIP_APPLY_CARD.title,
+          description: VIP_APPLY_CARD.desc,
+          imageUrl: VIP_APPLY_CARD.img,
+          imageWidth: 1200,
+          imageHeight: 600,
+          link: { mobileWebUrl: url, webUrl: url }
+        },
+        buttons: [
+          { title: VIP_APPLY_CARD.btn, link: { mobileWebUrl: url, webUrl: url } }
+        ]
+      });
+    } catch (e) {
+      _vipShareFallback(url);
+    }
+  });
+  return false;
+}
+function _vipShareFallback(url) {
   var sender = _shareSender();
-  var url = 'https://unice-vip.co.kr/vip-apply.html?fp=' + encodeURIComponent(String(currentUser.id));
   var msg = (sender ? sender + ' 보내드립니다.\n' : '')
-    + '보험은 가입보다 관리! 아래 영상 보시고\nVIP 고객지원 서비스를 신청해보세요 :)';
+    + '[VIP 고객지원 서비스 · 보험은 가입보다 관리]\n'
+    + '법률 지원 · 손해사정 · 헬스케어 매칭 · 보험청구 케어맵 · 특화 컨설팅.\n'
+    + '3분 안내영상 보시고 신청하시면 담당 FP가 바로 연결돼요.';
   var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (isMobileDev && navigator.share) {
     navigator.share({ text: msg, url: url }).catch(function(e){});
-    return false;
+    return;
   }
   var full = msg + '\n' + url;
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -18469,7 +18533,6 @@ function shareVipApply(ev) {
   } else {
     shareVipApplyLegacyCopy(full);
   }
-  return false;
 }
 function shareVipApplyLegacyCopy(txt) {
   var ta = document.createElement('textarea');
@@ -27952,18 +28015,20 @@ function doCheckin() { doSmartCheckin(); }
           <div class="sag-chev">▾</div>
         </div>
         <div class="sag-body">
-      <div class="sa-row">
+      <div class="sa-row sa-friend">
         <div class="sa-ic">🤝</div>
-        <div class="sa-tx"><div class="a">유니스와 친구추가</div><div class="b">보험 혜택 찾기 · 사번 자동 기록</div></div>
+        <div class="sa-tx"><div class="a">유니스와 친구추가<span class="sa-new" data-until="2026-11-30">NEW</span></div><div class="b">내 보험 혜택 찾기 · 신청하면 담당 FP 푸시</div></div>
         <div class="sa-acts">
+          <button type="button" class="sa-vbtn sa-pv" onclick="return openHealthcarePreview(event)">미리보기</button>
           <button type="button" class="sa-sbtn" onclick="return shareHealthcare(event)">보내기</button>
         </div>
       </div>
-      <div class="sa-row">
-        <div class="sa-ic">🎬</div>
-        <div class="sa-tx"><div class="a">VIP 고객지원 서비스</div><div class="b">담당자 자동 연결</div></div>
+      <div class="sa-row sa-vip">
+        <div class="sa-ic">👑</div>
+        <div class="sa-tx"><div class="a">VIP 고객지원 서비스<span class="sa-new" data-until="2026-11-30">NEW</span></div><div class="b">3분 안내영상 · 신청하면 담당 FP 푸시</div></div>
         <div class="sa-acts">
           <button type="button" class="sa-vbtn" onclick="return openToolVideo('vip',event)">▶ 영상</button>
+          <button type="button" class="sa-vbtn sa-pv" onclick="return openVipApplyPreview(event)">미리보기</button>
           <button type="button" class="sa-sbtn" onclick="return shareVipApply(event)">보내기</button>
         </div>
       </div>
@@ -28704,7 +28769,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 265;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 266;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
