@@ -3793,7 +3793,7 @@ function dedupeRenewalAlerts(list) {
 
 
 // ============================================================
-// [coverage_37] 갱신형 특약을 PDF 글자에서 직접 읽기
+// [coverage_37] 갱신형 특약을 PDF 글자에서 직접 읽기 · [coverage_38] 상품명 매칭 보강(공통 글자 묶음 + 시작월·보험료)
 // AI가 memo에 "갱신형"을 안 적으면 갱신알림이 통째로 빠지던 문제 → 코드가 별첨 상품별 보험가입현황의
 // 담보명 "(OO년갱신형)" 을 세어 계약별 갱신 주기·갱신예정일을 확정하고 memo/renewal_alerts에 반영
 // ============================================================
@@ -3912,20 +3912,41 @@ function _pdfProdKey(s) {
     .replace(/[\s　]/g, '').replace(/보험/g, '').replace(/[\[\]{}\/·:_\-,.]/g, '').toLowerCase();
 }
 
+// 가장 긴 공통 글자 묶음 길이 (AI가 "암보험과 건강하게" 를 "암보험건강하게" 처럼 한두 글자 빼고 써도 잡히게)
+function _pdfLcsLen(a, b) {
+  let best = 0, prev = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = new Array(b.length + 1).fill(0);
+    for (let j = 1; j <= b.length; j++) {
+      if (a[i - 1] === b[j - 1]) { cur[j] = prev[j - 1] + 1; if (cur[j] > best) best = cur[j]; }
+    }
+    prev = cur;
+  }
+  return best;
+}
+
+// 분석 결과의 계약 c 와 PDF에서 읽은 계약 f 가 같은 계약인지 점수 (46 이상이면 같은 계약)
 function _pdfMatchScore(c, f) {
   if (!_sameCompany(c.company, f.company)) return 0;
   const a = _pdfProdKey(c.product), b = _pdfProdKey(f.product);
   if (!a || !b) return 0;
   const sYm = contractStartYm(c);
   if (sYm && f.start && sYm !== f.start) return 0; // 시작월이 다르면 다른 계약 (2종/3종 혼동 방지)
+  const cp = contractPremiumWon(c);
+  const samePrem = cp > 0 && f.premium > 0 && Math.abs(cp - f.premium) < 10;
+  const sameStart = !!(sYm && f.start && sYm === f.start);
   let score = 0;
   if (a === b) score = 100;
   else if (a.includes(b) || b.includes(a)) score = 80;
-  else { const p = _commonPrefixLen(a, b); if (p >= 6) score = 40 + p; }
+  else {
+    const l = _pdfLcsLen(a, b);
+    if (l >= 6) score = 40 + Math.min(l, 30);          // 이름 일부가 같음 (예: "건강하게사는이야기3종")
+    else if (l >= 4 && (samePrem || sameStart)) score = 30 + l; // 짧게 같아도 보험료·시작월이 받쳐주면
+    else if (samePrem && sameStart) score = 46;        // 이름은 다르게 썼지만 같은 회사·같은 시작월·같은 보험료
+  }
   if (!score) return 0;
-  const cp = contractPremiumWon(c);
-  if (cp > 0 && f.premium > 0) score += Math.abs(cp - f.premium) < 10 ? 20 : -15;
-  if (sYm && f.start && sYm === f.start) score += 20;
+  if (cp > 0 && f.premium > 0) score += samePrem ? 20 : -15;
+  if (sameStart) score += 20;
   return score;
 }
 
@@ -3963,7 +3984,20 @@ function applyPdfRenewalFacts(json, facts) {
         usedC.add(p.c); usedF.add(p.f);
         _applyOneRenewalFact(json, p.c, p.f);
       });
-      list.forEach(f => { if (!usedF.has(f)) console.warn('[갱신형] PDF 계약을 분석 결과에서 못 찾음: ' + f.company + ' ' + f.product); });
+      // 분석 결과에서 짝을 못 찾은 PDF 계약도 갱신알림에서 빠지지 않게 PDF 내용 그대로 행을 만든다
+      list.forEach(f => {
+        if (usedF.has(f)) return;
+        console.warn('[갱신형] PDF 계약을 분석 결과에서 못 찾음 → PDF 기준으로 갱신알림 추가: ' + f.company + ' ' + f.product);
+        const fb = _pdfProdKey(f.product);
+        const similar = (json.renewal_alerts || []).some(r => _sameCompany(r.company, f.company)
+          && (_pdfLcsLen(_pdfProdKey(r.product), fb) >= 6 || (f.premium > 0 && Math.abs(_rowPremium(r) - f.premium) < 10)));
+        if (similar) return; // 이미 비슷한 행이 있으면 중복 생성 안 함
+        const pseudo = { company: f.company, product: f.product.replace(/^\(무\)\s*/, ''), monthly_premium: String(f.premium || ''),
+          coverage_period: f.start + '~' + f.end, memo: '' };
+        _applyOneRenewalFact(json, pseudo, f);
+        const row = (json.renewal_alerts || []).find(r => r._pdfFixed && r.product === pseudo.product);
+        if (row) row.caution = '(PDF 기준) ' + row.caution;
+      });
     }
     // 갱신주기가 N년인데 갱신예정일이 보험 만기(종기)로 적힌 행 → 시작월 + 주기로 다음 갱신월 계산 (실손 복합계약 등)
     (json.renewal_alerts || []).forEach(r => {
