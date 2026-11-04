@@ -28769,7 +28769,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 266;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 267;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -33317,7 +33317,11 @@ function _reRender(){
   if(_re.campaignId && _re.rules.length && !_re.reading && (parseInt(_re.imgCount, 10) || 0) > 1){
     var cv = _reCoverage();
     if(!cv.known) h += '<div class="cm-mini" style="padding:2px 2px 6px">📄 장표 ' + cv.n + '장 · 어느 장표를 읽었는지 기록이 없는 예전 결과 · 🔄 다시 읽기를 누르면 ' + cv.n + '장을 모두 새로 읽습니다</div>';
-    else if(cv.missing.length) h += '<div class="cm-mini" style="padding:2px 2px 6px">📄 장표 ' + cv.n + '장 중 ' + cv.read + '장 읽음 · 🔄 다시 읽기를 누르면 모두 새로 읽습니다</div>';
+    else if(cv.missing.length){
+      var fiv = _re.failedIdx || [];
+      if(fiv.length) h += '<div class="cm-mini" style="padding:2px 2px 6px">📄 장표 ' + cv.n + '장 중 ' + cv.read + '장 읽음 · ' + fiv.map(function(x){ return x + 1; }).join('·') + '번째는 못 읽음 · 🔄 다시 읽기 = 못 읽은 장표만 다시 (읽힌 것은 그대로) · <span onclick="rulesReadAll()" style="color:var(--gold2);cursor:pointer;text-decoration:underline">모두 새로 읽기</span></div>';
+      else h += '<div class="cm-mini" style="padding:2px 2px 6px">📄 장표 ' + cv.n + '장 중 ' + cv.read + '장 읽음 · 🔄 다시 읽기를 누르면 모두 새로 읽습니다</div>';
+    }
   }
   box.innerHTML = h;
   // the re-read link appears only after a read attempt (success or failure)
@@ -33366,6 +33370,7 @@ function _reElapsedText(secs){
 function _reProgressHtml(){
   var p = _re.progress || { done:0, total:1, secs:0 };
   var multi = p.total > 1 ? ' (' + p.total + '장 동시에 · ' + p.done + '장 완료)' : '';
+  if(p.only) multi = ' (못 읽은 ' + p.only.join('·') + '번째 장표만 · ' + p.done + '/' + p.total + '장 완료)';
   return '🤖 AI가 장표를 읽는 중' + multi + ' · <span id="reElapsed">' + _reElapsedText(p.secs || 0) + '</span>';
 }
 // AI: images [{data,mime}] or campaignId. fresh=true ignores a result the server kept from an earlier read.
@@ -33384,8 +33389,10 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
     var n = parseInt(imgCount, 10) || parseInt(_re.imgCount, 10) || 1;
     for(var k=0;k<n && k<6;k++) jobs.push({ idx:k });
   }
-  _re.reading = true; _re.progress = { done:0, total:jobs.length, secs:0 }; _reRender();
-  var got = 0, failed = 0, firstErr = '', doneCnt = 0, cached = 0, t0 = Date.now();
+  // 267: a read of only some 장표 (the ones that failed) joins the rules and checks of the others, read before
+  var partial = !src.length && !!(onlyIdx && onlyIdx.length);
+  _re.reading = true; _re.progress = { done:0, total:jobs.length, secs:0, only:(partial ? jobs.map(function(jb){ return jb.idx + 1; }) : null) }; _reRender();
+  var got = 0, failed = 0, firstErr = '', doneCnt = 0, cached = 0, t0 = Date.now(), okJob = [];
   var results = [], checks = [];
   _re.check = null;
   var tick = setInterval(function(){
@@ -33413,12 +33420,16 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
     _re.reading = false; _re.progress = null;
     // keep the 장표 order stable
     for(var r=0;r<results.length;r++){ if(results[r] && results[r].length) _re.rules = _re.rules.concat(results[r]); }
-    _reCheckBuild(checks, jobs.length, failed, Math.round((Date.now() - t0) / 1000));
+    // 267: checks per 장표 number; a later read of the 장표 that failed joins the checks of the first read
+    var sc = (partial && _re.sheetChecks) ? _re.sheetChecks.slice() : [], fi = [];
+    for(var c2=0;c2<jobs.length;c2++){ if(checks[c2]) sc[jobs[c2].idx] = checks[c2]; if(!okJob[c2]) fi.push(jobs[c2].idx); }
+    _re.sheetChecks = sc; _re.failedIdx = fi;
+    _reCheckBuild(sc, (partial ? Math.max(parseInt(_re.imgCount, 10) || 0, jobs.length) : jobs.length), failed, Math.round((Date.now() - t0) / 1000));
     var secs = Math.round((Date.now() - t0) / 1000);
     if(!got && failed){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ ' + (firstErr || '읽기 실패') + ' · 다시 읽기를 눌러주세요'); return; }
     if(!got){ _re.failed = true; _re.showAdd = true; _reRender(); showToast('⚠️ 읽은 항목이 없습니다 · 직접 추가해 주세요'); return; }
     _reRender();
-    showToast('✅ ' + got + '개 항목 읽음 (' + secs + '초' + (cached ? ' · 아까 읽어둔 결과' : '') + ')' + (failed ? ' · 장표 ' + failed + '장은 실패(다시 읽기)' : '') + ((_re.autoSave && _re.campaignId) ? ' · 카드에 저장하는 중' : ' · 숫자 확인 후 저장하세요'));
+    showToast('✅ ' + (partial ? '못 읽었던 장표에서 ' + got + '개 항목 읽음 → 모두 ' + _re.rules.length + '개' : got + '개 항목 읽음') + ' (' + secs + '초' + (cached ? ' · 아까 읽어둔 결과' : '') + ')' + (failed ? ' · 장표 ' + failed + '장은 실패 · 🔄 다시 읽기를 누르면 그 장표만 다시 읽어요' : '') + ((_re.autoSave && _re.campaignId) ? ' · 카드에 저장하는 중' : ' · 숫자 확인 후 저장하세요'));
     _reAutoSave();
   }
   // all 장표 at once: each is its own server run, so the wall time is the slowest one, not the sum
@@ -33429,7 +33440,7 @@ function _reReadAI(images, campaignId, btn, imgCount, fresh, onlyIdx){
         // 264: a registration read goes on after its window is gone when 적용 was ticked (its rules are saved to the card)
         var alive = (gen === _reGen);
         if(!alive && !(ctx.autoSave && ctx.campaignId)){ clearInterval(tick); _reLinkState(btn, false); _reSyncLink(); return; }
-        if(ok){ var rules = (res && res.rules) || []; for(var ri=0;ri<rules.length;ri++){ rules[ri].img = job.idx; } if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !ctx.title) ctx.title = res.title; if(res && res.cached) cached++; if(res && res.check) checks[j] = res.check; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
+        if(ok){ okJob[j] = true; var rules = (res && res.rules) || []; for(var ri=0;ri<rules.length;ri++){ rules[ri].img = job.idx; } if(rules.length){ got += rules.length; results[j] = rules; } if(res && res.title && !ctx.title) ctx.title = res.title; if(res && res.cached) cached++; if(res && res.check) checks[j] = res.check; try { console.log('[시책 읽기] 장표 ' + (j+1) + ': ' + (res.model||'') + ' / ' + (res.think||'') + ' / AI ' + Math.round((res.elapsedMs||0)/1000) + 's / 전체 ' + Math.round((res.totalMs||0)/1000) + 's / ' + rules.length + '개' + (res.cached ? ' (저장된 결과)' : '') + (res.usage ? ' / tokens ' + JSON.stringify(res.usage) : '')); } catch(eL) {} }
         else { failed++; if(!firstErr) firstErr = (res && res.msg) || ''; try { console.warn('[시책 읽기] 장표 ' + (j+1) + ' 실패: ' + ((res && res.msg) || '')); } catch(eW) {} }
         doneCnt++;
         if(alive){ _re.progress = { done:doneCnt, total:jobs.length, secs:Math.round((Date.now() - t0) / 1000) }; _reRender(); }
@@ -33597,7 +33608,27 @@ function _reCheckHtml(){
   h += list('❌ 확인 필요', c.errors, '#B42318', '#FDF1F0');
   h += list('🔧 앱이 자동으로 바로잡은 것', c.fixes, '#6D4FB8', 'rgba(109,79,184,.06)');
   h += list('⚠️ 참고로만 저장', c.warns, '#C77D14', '#FFFBF2');
+  // 267: the server's read log of this card (admins): time per 장표, passes, model, attempts, errors
+  if(_re.campaignId && currentUser && (currentUser.level === 'admin' || currentUser.id === 'ktk01')) h += '<div style="font-size:10.5px;color:var(--text3);padding:3px 2px 2px"><span onclick="_reLogShow()" style="cursor:pointer;text-decoration:underline">📋 읽기 기록</span> · 장표별 걸린 시간과 AI 시도 (읽기 실패 원인 확인용)</div><div id="reLogBox">' + (_re.logHtml || '') + '</div>';
   return h + '<div style="height:6px"></div>';
+}
+function _reLogShow(){
+  var ctx = _re, box = document.getElementById('reLogBox');
+  if(box) box.innerHTML = '<div class="cm-mini">불러오는 중…</div>';
+  fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'readLog', fp:currentUser.id, campaignId:ctx.campaignId }) })
+  .then(function(r){ return r.json(); }).then(function(res){
+    if(_re !== ctx) return;
+    var items = (res && res.ok && res.items) || [], lines = [];
+    if(!res || !res.ok) lines.push('읽기 기록을 못 가져왔습니다 · ' + ((res && res.msg) || ''));
+    else if(!items.length) lines.push('이 카드의 읽기 기록이 없습니다 (기록은 6시간 보관 · 6분 제한에 걸려 끊긴 읽기는 기록이 안 남아요)');
+    for(var i=0;i<items.length;i++){
+      var e = items[i], at = (e.attempts || []).map(function(a){ return a.model + ' ' + Math.round((a.ms || 0) / 1000) + '초' + (a.code && a.code !== 200 ? ' HTTP ' + a.code : '') + (a.err ? ' ' + a.err : ''); }).join(' → ');
+      var idx = (e.idx === '' || e.idx === undefined || e.idx === null) ? '전체' : ((parseInt(e.idx, 10) + 1) + '번째');
+      lines.push((e.t || '') + ' · 장표 ' + idx + ' · ' + (e.ok ? '✅ ' + (e.rules || 0) + '개' : '❌ ' + (e.err || '실패')) + ' · ' + Math.round((e.ms || 0) / 1000) + '초' + (e.reads ? ' · 읽기 ' + e.reads + '회' : '') + (e.tMax ? ' (한 번에 최장 ' + e.tMax + '초)' : '') + (e.model ? ' · ' + e.model + (e.think ? '/' + e.think : '') : '') + (e.finish && e.finish !== 'end_turn' ? ' · ' + e.finish : '') + (at ? ' · ' + at : ''));
+    }
+    ctx.logHtml = lines.map(function(l){ return '<div style="font-size:10.5px;line-height:1.4;color:var(--text2);background:#fff;border-radius:7px;padding:5px 8px;margin:3px 0;word-break:break-all">' + _cmEsc(l) + '</div>'; }).join('');
+    var bx = document.getElementById('reLogBox'); if(bx) bx.innerHTML = ctx.logHtml;
+  }).catch(function(){ var bx = document.getElementById('reLogBox'); if(bx) bx.innerHTML = '<div class="cm-mini">읽기 기록을 못 가져왔습니다 (네트워크)</div>'; });
 }
 // short hash of an image string: cache key for reads of not-yet-saved images
 function _cmHash(str){
@@ -33608,7 +33639,8 @@ function _cmHash(str){
 }
 // The server keeps reading after the browser stops waiting and caches the result under jobKey,
 // so after the first request gives up the client polls for the finished result instead of starting over.
-var _RE_FIRST_MS = 100000, _RE_TOTAL_MS = 330000, _RE_POLL_MS = 6000;
+// 267: a server run is cut at 6 minutes, so the window waits a little past that for a sheet that ends in its last minute
+var _RE_FIRST_MS = 100000, _RE_TOTAL_MS = 372000, _RE_POLL_MS = 6000;
 function _reReadAIPost(imgs, campaignId, imageIndex, fresh, cb, ctx){
   var hasIdx = (imageIndex !== undefined && imageIndex !== null);
   var jobKey = campaignId ? (campaignId + ':' + (hasIdx ? imageIndex : 'all')) : ('img_' + _cmHash(imgs && imgs[0] ? imgs[0].data : ''));
@@ -33616,7 +33648,7 @@ function _reReadAIPost(imgs, campaignId, imageIndex, fresh, cb, ctx){
   function end(ok, res){ if(finished) return; finished = true; cb(ok, res); }
   function poll(){
     if(finished) return;
-    if(Date.now() - t0 > _RE_TOTAL_MS){ end(false, { msg:'응답 시간 초과 (AI가 5분 넘게 걸림)' }); return; }
+    if(Date.now() - t0 > _RE_TOTAL_MS){ end(false, { msg:'응답 시간 초과 (6분 안에 못 끝남)' }); return; }
     fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'readPoll', fp:currentUser.id, key:jobKey }) })
     .then(function(r){ return r.json(); }).then(function(res){
       if(finished) return;
@@ -34192,7 +34224,21 @@ function submitSichaekEdit(){
 }
 function rulesReadAI(btn){
   if(_re.reading) return;
-  _re.rules = []; _re.edit = {}; _re.failed = false; _re.saved = 0; _reRender();
+  // 267: right after a read in which some 장표 failed (timed out), 🔄 reads just those again and keeps the other sheets'
+  // rules; fresh is off, so a result the server finished after the window stopped waiting is taken as it is
+  var fi = _re.failedIdx || [];
+  if(fi.length && _re.rules.length && _rulesCampId && String(_re.campaignId) === String(_rulesCampId)){
+    _re.failedIdx = []; _re.failed = false; _re.saved = 0; _reRender();
+    _reReadAI([], _rulesCampId, btn, _rulesImgCount, false, fi.slice());
+    return;
+  }
+  rulesReadAll(btn);
+}
+// every 장표 of the card read again from scratch
+function rulesReadAll(btn){
+  if(_re.reading) return;
+  btn = btn || document.querySelector('#rulesOverlay .re-reread');
+  _re.rules = []; _re.edit = {}; _re.failed = false; _re.saved = 0; _re.failedIdx = []; _re.sheetChecks = null; _re.logHtml = ''; _reRender();
   _reReadAI([], _rulesCampId, btn, _rulesImgCount, true);
 }
 function rulesSaveClick(btn){
