@@ -3464,6 +3464,10 @@ body:not(.theme-light) .rc2-text::placeholder { color:#7A8294; }
 .sdp-late { border:1px solid rgba(245,158,11,.45); background:rgba(245,158,11,.08); border-radius:10px; padding:9px 10px 3px; margin-top:10px; }
 .sdp-late .sdp-sec { margin:0 0 7px; color:#B45309; }
 .sdp-empty { font-size:12px; color:var(--text3); padding:6px 2px; }
+.td-box { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.td-box .no { width:20px; height:20px; flex:none; border:2px solid #10965A; border-radius:5px; }
+.td-box input { flex:1; min-width:0; box-sizing:border-box; padding:9px 11px; border:1px solid var(--bdr); border-radius:8px; background:var(--surface); color:var(--text); font-size:13.5px; font-family:inherit; }
+.td-box .x { flex:none; width:26px; height:26px; border:none; border-radius:50%; background:rgba(0,0,0,.06); color:var(--text3); cursor:pointer; font-size:12px; padding:0; font-family:inherit; }
 .sched-fab { display:none; position:absolute; right:16px; bottom:16px; z-index:3; }
 .sched-fab > button { width:54px; height:54px; border-radius:50%; border:none; background:#7C3AED; color:#fff; font-size:28px; line-height:54px; cursor:pointer; box-shadow:0 6px 18px rgba(91,33,182,.4); padding:0; font-family:inherit; }
 .sched-fab .menu { display:none; position:absolute; right:0; bottom:62px; background:var(--bg2); border:1px solid var(--bdr); border-radius:12px; padding:6px; box-shadow:0 8px 22px rgba(0,0,0,.25); white-space:nowrap; }
@@ -14553,6 +14557,26 @@ function _mySetDate(ds){
   if(disp){ if(ds){ disp.textContent=parseInt(ds.slice(5,7),10)+'월 '+parseInt(ds.slice(8,10),10)+'일'; disp.classList.remove('pk-ph'); } else { disp.textContent='날짜 선택'; disp.classList.add('pk-ph'); } }
 }
 var _myEditKind='';
+// 270: one box per 할 일 (Enter → next box, a new box when on the last one)
+function myTodoAddBox(focus){
+  var tl=document.getElementById('mySchedTodoList'); if(!tl) return null;
+  if(tl.children.length>=30){ showToast('⚠️ 한 번에 30개까지 넣을 수 있어요'); return null; }
+  var d=document.createElement('div'); d.className='td-box';
+  d.innerHTML='<span class="no"></span><input type="text" maxlength="200" placeholder="'+(tl.children.length===0?'예) 워홀준비(식당예약, 티켓예약)':'할 일')+'"><button type="button" class="x" aria-label="칸 지우기">✕</button>';
+  var inp=d.querySelector('input');
+  inp.onkeydown=function(e){
+    if(e.key!=='Enter' || e.isComposing) return;
+    e.preventDefault();
+    var nx=d.nextElementSibling || myTodoAddBox();
+    if(nx) nx.querySelector('input').focus();
+  };
+  d.querySelector('.x').onclick=function(){
+    if(tl.children.length>1) tl.removeChild(d); else inp.value='';
+  };
+  tl.appendChild(d);
+  if(focus) setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 30);
+  return d;
+}
 function openMySchedForm(id, ds, kind){
   if(!_mySchedOn() || !_myTok()) return;
   _myEditId=id||'';
@@ -14562,9 +14586,13 @@ function openMySchedForm(id, ds, kind){
   var td=_myEditKind==='todo';
   document.getElementById('mySchedFormTitle').textContent=td?(s?'✅ 할 일 수정':'✅ 할 일 추가'):(s?'🔒 내 일정 수정':'🔒 내 일정 추가');
   document.getElementById('mySchedDelBtn').style.display=s?'':'none';
-  var lb=document.getElementById('mySchedTitleLbl'); if(lb) lb.textContent=td?'할 일':'일정 내용';
+  var multi=td && !s;
+  var lb=document.getElementById('mySchedTitleLbl'); if(lb) lb.textContent=multi?'할 일 · 칸마다 하나씩':(td?'할 일':'일정 내용');
+  var tl=document.getElementById('mySchedTodoList'); if(tl){ tl.innerHTML=''; tl.style.display=multi?'':'none'; if(multi){ myTodoAddBox(); myTodoAddBox(); myTodoAddBox(); } }
+  var tm=document.getElementById('mySchedTodoMore'); if(tm) tm.style.display=multi?'':'none';
+  document.getElementById('mySchedTitle').style.display=multi?'none':'';
   var ti=document.getElementById('mySchedTitle'); ti.placeholder=td?'예) 12월 목표안 초안, 법인 서류 보내기':'예) 아이 학교 상담, 병원, 지인 미팅';
-  ['mySchedTimeRow','mySchedTil','mySchedEndTrig','mySchedRangeHint'].forEach(function(k){ var e=document.getElementById(k); if(e) e.style.display=td?'none':''; });
+  ['mySchedTimeRow','mySchedTil','mySchedEndTrig','mySchedRangeHint','mySchedMemoRow'].forEach(function(k){ var e=document.getElementById(k); if(e) e.style.display=td?'none':''; });
   var sb=document.getElementById('mySchedSaveBtn'); if(sb){ sb.style.background=td?'#10965A':'#6D28D9'; sb.style.borderColor=td?'#10965A':'#6D28D9'; }
   ti.value=s?(s.title||''):'';
   document.getElementById('mySchedTime').value=(s && !td)?(s.time||''):'';
@@ -14572,7 +14600,7 @@ function openMySchedForm(id, ds, kind){
   _mySetDate(s?s.date:(ds||_schedYmd(new Date())));
   _setRangeEnd('mySchedEndDate','mySchedEndDisp', (s && !td && _schedIsRun(s)) ? _schedEnd(s) : '');
   document.getElementById('mySchedFormOverlay').classList.add('open');
-  if(!s) setTimeout(function(){ try{ ti.focus(); }catch(e){} }, 60);
+  if(!s) setTimeout(function(){ try{ (multi?tl.querySelector('input'):ti).focus(); }catch(e){} }, 60);
 }
 function closeMySchedForm(){ document.getElementById('mySchedFormOverlay').classList.remove('open'); }
 function _myPost(body, onFail, onOk){
@@ -14595,14 +14623,34 @@ function saveMySched(){
   var date=document.getElementById('mySchedDate').value;
   var title=document.getElementById('mySchedTitle').value.trim();
   var time=td?'':document.getElementById('mySchedTime').value.trim();
-  var memo=document.getElementById('mySchedMemo').value.trim();
+  var memo=td?'':document.getElementById('mySchedMemo').value.trim();
   if(!date){ showToast('⚠️ 날짜를 선택해 주세요'); return; }
+  // 270: a new 할 일 form takes several lines = several 할 일
+  if(td && !_myEditId){
+    var lines=Array.prototype.map.call(document.querySelectorAll('#mySchedTodoList input'), function(x){ return x.value; }).map(function(x){ return x.replace(/^\s*(?:[-•·*]|\d+[.)])\s*/,'').trim(); }).filter(Boolean).slice(0,30);
+    if(!lines.length){ showToast('⚠️ 할 일을 입력해 주세요'); return; }
+    var db0=getMySchedDB(), base=Date.now(), made=[];
+    lines.forEach(function(t, k){
+      var it={ id:'td_'+(base+k)+'_'+Math.random().toString(36).substr(2,5), date:date, endDate:'', title:t.slice(0,200), time:'', memo:'', kind:'todo', done:false };
+      db0.push(it); made.push(it);
+    });
+    saveMySchedDB(db0);
+    made.forEach(function(it, k){
+      setTimeout(function(){ _myPost({ action:'saveMySchedule', data:it }, function(why){ showToast('⚠️ 할 일 "'+it.title+'"이 서버에 저장되지 않았습니다 ('+(why||'오류')+') — 다시 저장해 주세요'); }, k===0?_myTodoSrvCheck:null); }, k*400);
+    });
+    closeMySchedForm();
+    _schedSelDay=date;
+    var d0=new Date(date+'T00:00:00'); if(d0.getFullYear()!==_schedMonth.getFullYear()||d0.getMonth()!==_schedMonth.getMonth()){ _schedMonth=new Date(d0.getFullYear(), d0.getMonth(), 1); }
+    renderSchedCal();
+    showToast('✅ 할 일 '+made.length+'개를 저장했어요');
+    return;
+  }
   var _rg=td?{ date:date, endDate:'' }:_readRange('mySchedDate','mySchedEndDate'); if(!_rg) return;
   if(!title){ showToast(td?'⚠️ 할 일을 입력해 주세요':'⚠️ 일정 내용을 입력해 주세요'); return; }
   var db=getMySchedDB(), item=null;
   for(var i=0;i<db.length && _myEditId;i++){ if(db[i].id===_myEditId){ item=db[i]; break; } }
   if(!item){ item={ id:(td?'td_':'my_')+Date.now()+'_'+Math.random().toString(36).substr(2,5) }; db.push(item); }
-  item.date=date; item.endDate=_rg.endDate; item.title=title; item.time=time; item.memo=memo;
+  item.date=date; item.endDate=_rg.endDate; item.title=title; item.time=time; if(!td) item.memo=memo; else if(item.memo===undefined) item.memo='';
   item.kind=td?'todo':''; item.done=td?!!item.done:false;
   saveMySchedDB(db);
   _myPost({ action:'saveMySchedule', data:item }, function(why){ showToast('⚠️ '+(td?'할 일':'내 일정')+'이 서버에 저장되지 않았습니다 ('+(why||'오류')+') — 다시 저장해 주세요'); }, td?_myTodoSrvCheck:null);
@@ -27890,6 +27938,8 @@ function doCheckin() { doSmartCheckin(); }
       <div style="margin-bottom:12px">
         <div id="mySchedTitleLbl" style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">일정 내용</div>
         <input type="text" id="mySchedTitle" maxlength="200" placeholder="예) 아이 학교 상담, 병원, 지인 미팅" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
+        <div id="mySchedTodoList" style="display:none"></div>
+        <button type="button" id="mySchedTodoMore" onclick="myTodoAddBox(true)" style="display:none;width:100%;margin-top:2px;padding:8px;border:1.5px dashed #10965A;background:rgba(16,150,90,.06);color:#10965A;border-radius:8px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">＋ 칸 추가</button>
       </div>
       <div style="margin-bottom:12px">
         <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">날짜 <span id="mySchedRangeHint" style="font-weight:500;color:var(--text3)">· 며칠 동안이면 끝나는 날도 골라 주세요</span></div>
@@ -27906,7 +27956,7 @@ function doCheckin() { doSmartCheckin(); }
           <input type="text" id="mySchedTime" maxlength="20" placeholder="예) 14:00" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit">
         </div>
       </div>
-      <div style="margin-bottom:16px">
+      <div id="mySchedMemoRow" style="margin-bottom:16px">
         <div style="font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:600">메모 (선택)</div>
         <textarea id="mySchedMemo" rows="3" maxlength="1000" placeholder="장소, 준비물, 연락처 등" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--bdr);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea>
       </div>
@@ -28889,7 +28939,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 269;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 270;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
