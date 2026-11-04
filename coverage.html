@@ -3793,7 +3793,7 @@ function dedupeRenewalAlerts(list) {
 
 
 // ============================================================
-// [coverage_37] 갱신형 특약을 PDF 글자에서 직접 읽기 · [coverage_38] 상품명 매칭 보강(공통 글자 묶음 + 시작월·보험료)
+// [coverage_37] 갱신형 특약을 PDF 글자에서 직접 읽기 · [coverage_38] 상품명 매칭 보강(공통 글자 묶음 + 시작월·보험료) · [coverage_39] 유의사항에 갱신형 특약 이름·금액
 // AI가 memo에 "갱신형"을 안 적으면 갱신알림이 통째로 빠지던 문제 → 코드가 별첨 상품별 보험가입현황의
 // 담보명 "(OO년갱신형)" 을 세어 계약별 갱신 주기·갱신예정일을 확정하고 memo/renewal_alerts에 반영
 // ============================================================
@@ -3873,16 +3873,6 @@ function scanRenewalContracts(text) {
   }
   return out.map(c => {
     const prodRenewal = /갱신/.test(c.product) && !/비갱신/.test(c.product);
-    const cycles = {};
-    let renewalCount = 0;
-    c.riders.forEach(r => {
-      const txt = r.text;
-      if (!/갱신/.test(txt) || /비갱신/.test(txt)) return;
-      renewalCount++;
-      const ym = txt.match(/(\d{1,2})\s*년\s*갱신/);
-      const y = ym ? parseInt(ym[1], 10) : 0;
-      cycles[y] = (cycles[y] || 0) + 1;
-    });
     // 상품명이 (갱신형)인데 담보명에 주기가 없으면: 상품명의 OO년, 없으면 보험기간 길이(1·3·5·10·15·20년)로 주기 추정
     let prodCycle = 0;
     if (prodRenewal) {
@@ -3892,17 +3882,54 @@ function scanRenewalContracts(text) {
         const span = parseInt(c.end.slice(0, 4), 10) - parseInt(c.start.slice(0, 4), 10);
         if ([1, 3, 5, 10, 15, 20].indexOf(span) >= 0 && c.end.slice(5) === c.start.slice(5)) prodCycle = span;
       }
-      // 상품 자체가 갱신형이면 "갱신" 글자가 없는 담보도 전부 갱신형
-      const rest = c.riders.length - renewalCount;
-      if (rest > 0) { cycles[prodCycle] = (cycles[prodCycle] || 0) + rest; renewalCount = c.riders.length; }
-      if (cycles[0] && prodCycle) { cycles[prodCycle] = (cycles[prodCycle] || 0) + cycles[0]; delete cycles[0]; }
     }
+    // 담보별: 갱신형 여부, 주기(년), 표시용 이름·가입금액
+    const riders = c.riders.map(r => {
+      const txt = r.text;
+      const marked = /갱신/.test(txt) && !/비갱신/.test(txt);
+      const renewal = marked || prodRenewal;            // 상품 자체가 갱신형이면 "갱신" 글자 없는 담보도 갱신형
+      const ym = txt.match(/(\d{1,2})\s*년\s*갱신/);
+      const years = ym ? parseInt(ym[1], 10) : (renewal ? prodCycle : 0);
+      const na = _riderNameAmount(txt);
+      return { no: r.no, kind: r.kind, renewal, years, name: na.name, amount: na.amount };
+    });
+    const cycles = {};
+    const renewalRiders = riders.filter(r => r.renewal);
+    renewalRiders.forEach(r => { cycles[r.years] = (cycles[r.years] || 0) + 1; });
     return {
       company: c.company, product: c.product, start: c.start, end: c.end, premium: c.premium, payText: c.payText,
-      riderTotal: c.riders.length, renewalCount, cycles, productRenewal: prodRenewal,
-      renewalNames: c.riders.filter(r => /갱신/.test(r.text) && !/비갱신/.test(r.text)).map(r => r.text.replace(/\s+\S+\s+[\d,]+(만|천|억)?\s*$/, '').trim()).slice(0, 60)
+      riderTotal: c.riders.length, renewalCount: renewalRiders.length, cycles, productRenewal: prodRenewal,
+      renewalRiders: renewalRiders.map(r => ({ name: r.name, amount: r.amount, years: r.years })),
+      renewalNames: renewalRiders.map(r => r.name).slice(0, 60)
     };
   });
+}
+
+// 담보 줄 "암진단비(유사암제외)(20년갱신형)(기본계약) 일반암 진단비 1,000만" → { name:'암진단비(유사암제외)', amount:'1,000만' }
+function _riderNameAmount(text) {
+  let s = String(text || '').trim();
+  let amount = '';
+  const am = s.match(/(\d+억(?:\s?[\d,]+(?:만|천))?|[\d,]+(?:만|천)원?|[\d,]+원)\s*$/);
+  if (am) { amount = am[1].replace(/\s/g, ''); s = s.slice(0, am.index).trim(); }
+  let name = '';
+  const mk = s.match(/\(\s*\d{1,2}\s*년\s*갱신형?\s*\)?|\(갱신형?\)|갱신형\)/);
+  if (mk) {
+    // 회사 담보명 = 갱신형 표시 괄호까지 + 바로 붙은 (기본계약)(의무) 같은 괄호
+    let end = mk.index + mk[0].length;
+    const g = s.slice(end).match(/^(\([^()\s]*\))+/);
+    if (g) end += g[0].length;
+    name = s.slice(0, end);
+  } else {
+    // 갱신형 표시가 없는 담보(상품 전체가 갱신형인 경우): 첫 토큰, "·" "~" "," "(" "/" 로 끝나면 다음 토큰까지
+    const toks = s.split(/\s+/);
+    name = toks[0] || '';
+    let i = 1;
+    while (i < toks.length && /[·~,(\/]$/.test(toks[i - 1])) { name += toks[i]; i++; }
+    if (!/갱신/.test(name)) { const gi = toks.findIndex(t => /갱신/.test(t)); if (gi > 0) name = toks.slice(0, gi + 1).join(' '); }
+  }
+  name = name.replace(/\(\s*\d{1,2}\s*년\s*갱신형?\s*\)?/g, '').replace(/\((?:기본계약|의무|갱신형?)\)/g, '')
+    .replace(/\([^()]*간편가입\)/g, '').replace(/([·~,(\/])\s+/g, '$1').replace(/\s+/g, ' ').trim();
+  return { name, amount };
 }
 
 // 상품명 비교용 키: (무)·무배당·괄호 안·공백·'보험' 제거, 전각 → 반각
@@ -4044,7 +4071,23 @@ function _applyOneRenewalFact(json, c, f) {
   const expected = cycleYears.length && cycleYears[0] <= 3
     ? '갱신 시 보험료 인상 (' + cycleYears[0] + '년마다 갱신 — 고령 갱신 시 급등 가능)'
     : '갱신 시 약 1.5~3배 예상 (특약 종류에 따라 상이' + (ageAt ? ', 갱신 시 ' + ageAt + '세' : '') + ')';
-  const caution = scope + (cycleYears.length === 1 ? ' — ' + cycleYears[0] + '년 갱신' : cycleYears.length > 1 ? ' — ' + cycleText : '')
+  // 유의사항: 갱신형 특약 이름·가입금액
+  //  - 비갱신과 혼재 → 갱신형 특약을 전부 나열 (주기별로 묶음, 10개 넘으면 "외 N개")
+  //  - 전 담보 갱신형이고 주기가 여럿 → 가장 많은 주기는 개수만, 나머지 주기는 이름 나열 (6개까지)
+  //  - 전 담보 갱신형·주기 하나 → 개수만
+  const rr = f.renewalRiders || [];
+  const fmtR = r => r.name + (r.amount ? ' ' + r.amount : '');
+  const listOf = (arr, cap) => arr.slice(0, cap).map(fmtR).join(' · ') + (arr.length > cap ? ' 외 ' + (arr.length - cap) + '개' : '');
+  const groups = dates.map(d => ({ years: d.years, date: d.date, riders: rr.filter(r => r.years === d.years) }));
+  const biggest = groups.reduce((a, b) => (b.riders.length > (a ? a.riders.length : -1) ? b : a), null);
+  let detail = '';
+  if (rr.length && groups.length) {
+    if (!allRenewal && groups.length === 1) detail = ': ' + listOf(groups[0].riders, 10) + ' — ' + groups[0].years + '년 갱신';
+    else if (!allRenewal) detail = ' — ' + groups.map(g => g.years + '년갱신(' + g.date + ') ' + g.riders.length + '개: ' + listOf(g.riders, 10)).join(' / ');
+    else if (groups.length > 1) detail = ' — ' + groups.map(g => g.years + '년갱신(' + g.date + ') ' + g.riders.length + '개' + (g === biggest ? '' : ': ' + listOf(g.riders, 6))).join(' / ');
+  }
+  if (!detail) detail = cycleYears.length === 1 ? ' — ' + cycleYears[0] + '년 갱신' : cycleYears.length > 1 ? ' — ' + cycleText : '';
+  const caution = scope + detail
     + (ageAt ? ' · ' + first + ' 갱신 시 ' + ageAt + '세' : '')
     + ' → 고령 갱신 보험료 급등 대비 비갱신 전환 검토 권고';
 
@@ -8658,7 +8701,7 @@ async function downloadExcel() {
 
   (json.renewal_alerts||[]).forEach((ra,i)=>{
     const r=3+i; const bg=i%2===0?WHITE:F8;
-    const rh5=autoH([ra.company+' '+ra.product,ra.renewal_date,ra.expected_premium,ra.caution],63.5,63.5,28);
+    const rh5=Math.max(63.5, autoH2([ra.caution],63.5,330,36)); // [coverage_39] 유의사항 길이만큼 행 높이
     ws5.getRow(r).height=rh5;
     // 비갱신대안 색상 판별
     const altVal=ra.non_renewal_alt||'';
