@@ -1205,6 +1205,14 @@ body.theme-light .toast { background: rgba(40,33,18,.96); border: 1px solid rgba
   position: relative;
 }
 .event-btn:hover { background: rgba(255,180,0,0.26); }
+.direct-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(37,99,235,0.10); border: 1px solid rgba(37,99,235,0.45);
+  border-radius: 20px; padding: 7px 14px;
+  color: #1D4ED8; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.direct-btn:hover { background: rgba(37,99,235,0.2); }
 .wksp-btn {
   display: flex; align-items: center; gap: 6px;
   background: rgba(31,140,140,0.12); border: 1px solid rgba(31,140,140,0.5);
@@ -2408,7 +2416,7 @@ body.theme-light .cc-partners .cc-name{ color: #9A7418; }
   .header-clock { display: none; }
   /* 상단 조회 버튼들 모바일 크기 */
   .cust-view-btn, .doc-view-btn, .sichaek-view-btn, .sched-view-btn, .consult-btn,
-  .checkin-smart-btn, .linksend-btn, .event-btn, .wksp-btn {
+  .checkin-smart-btn, .linksend-btn, .event-btn, .wksp-btn, .direct-btn {
     font-size: 12.5px; padding: 11px 10px; border-radius: 14px;
   }
   .event-btn .evdot { top: 7px; right: 9px; }
@@ -4551,7 +4559,8 @@ window.UNISPACE_FCM = {
       <button type="button" class="sched-view-btn" id="scheduleBtn" onclick="openScheduleModal()">📅 일정 조회</button>
       <button type="button" class="consult-btn" id="consultBtn" onclick="toggleConsultMode()">🎯 상담 모드</button>
       <button type="button" class="linksend-btn" id="linkSendBtn" onclick="openLinkSend()">📤 영상 및 링크전송</button>
-      <button type="button" class="event-btn" id="eventBtn" onclick="goWorkPlay()">🎪 워크플레이<span class="evdot" id="evDot"></span></button>
+      <button type="button" class="event-btn" id="eventBtn" style="display:none" onclick="goWorkPlay()">🎪 워크플레이<span class="evdot" id="evDot"></span></button>
+      <button type="button" class="direct-btn" id="directBtn" onclick="openDirectQuote()">🚗 다이렉트견적</button>
       <button type="button" class="wksp-btn" id="wkspBtn" style="display:none" onclick="window.location.href='workshop.html'">🌊 스텝워크샵</button>
       <div class="header-clock">
         <div class="clock-time" id="clockTime">00:00</div>
@@ -36513,5 +36522,244 @@ function _cmRankHtml(){
 
 </script>
 
+
+<!-- ═══════════════════ 271 다이렉트견적 (dq) ═══════════════════ -->
+<style>
+.dq-ov { display:none; position:fixed; inset:0; background:rgba(26,39,68,.45); z-index:100000; align-items:flex-end; justify-content:center; }
+.dq-ov.on { display:flex; }
+.dq-box { width:100%; max-width:600px; height:92vh; height:92dvh; background:#F7F8FB; border-radius:22px 22px 0 0; display:flex; flex-direction:column; overflow:hidden; font-family:inherit; }
+@media (min-width:640px) { .dq-ov { align-items:center; } .dq-box { border-radius:22px; height:860px; max-height:94vh; } }
+.dq-head { padding:14px 18px 12px; display:flex; align-items:center; gap:10px; background:#fff; border-bottom:1px solid #E3E7EF; }
+.dq-head .ic { width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#2563EB,#60A5FA); display:flex; align-items:center; justify-content:center; font-size:17px; }
+.dq-head .t { flex:1; font-size:16.5px; font-weight:800; color:#1A2744; letter-spacing:-.3px; }
+.dq-head .t small { display:block; font-size:11px; color:#5C6678; font-weight:600; margin-top:2px; }
+.dq-x { background:none; border:none; color:#97A0B0; font-size:20px; cursor:pointer; padding:4px 6px; }
+.dq-body { flex:1; overflow-y:auto; padding:14px 16px 18px; -webkit-overflow-scrolling:touch; }
+.dq-card { background:#fff; border:1px solid #E3E7EF; border-radius:16px; padding:14px 14px 12px; margin-bottom:12px; }
+.dq-card h4 { margin:0 0 10px; font-size:14px; font-weight:800; color:#1A2744; }
+.dq-pc { background:linear-gradient(160deg,#EEF4FF 0%,#fff 55%); border-color:#C9D8F5; }
+.dq-pc h4 { display:flex; align-items:center; gap:8px; font-size:15px; }
+.dq-pc h4 small { margin-left:auto; font-size:11px; font-weight:700; color:#5C6678; }
+.dq-legend { display:flex; gap:6px; margin:-2px 0 10px; }
+.dq-tag { display:inline-block; font-size:10.5px; font-weight:800; border-radius:999px; padding:2px 8px; vertical-align:1px; white-space:nowrap; }
+.dq-tag.fp { background:#E7F6EE; color:#0E7A4A; border:1px solid #9FD8BB; }
+.dq-tag.mg { background:#E8EFFE; color:#1D4ED8; border:1px solid #AFC4F5; }
+.dq-tag.tm { background:#FFF4D6; color:#A15C00; border:1px solid #F3CD6B; }
+.dq-tl { list-style:none; margin:0; padding:0; background:#fff; border:1px solid #E3E7EF; border-radius:12px; }
+.dq-tl li { display:flex; align-items:center; gap:9px; padding:8px 10px; border-top:1px solid #EEF1F6; font-size:12.5px; color:#4A5468; line-height:1.4; }
+.dq-tl li:first-child { border-top:none; }
+.dq-tl .n { flex:none; width:22px; height:22px; border-radius:50%; color:#fff; font-size:11.5px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+.dq-tl .n.fp { background:#12B76A; } .dq-tl .n.mg { background:#2563EB; }
+.dq-tl .n.both { background:linear-gradient(135deg,#2563EB 50%,#12B76A 50%); }
+.dq-tl .tx { flex:1; min-width:0; }
+.dq-tl .tx b { display:block; color:#1A2744; font-size:13.5px; }
+.dq-tl .tx em { font-style:normal; color:#0E7A4A; font-weight:700; }
+.dq-warn { margin-top:10px; background:linear-gradient(135deg,#F04438,#D92D20); border-radius:14px; padding:12px 14px; color:#fff; display:flex; gap:11px; align-items:center; box-shadow:0 4px 12px rgba(217,45,32,.25); }
+.dq-warn .big { flex:none; width:38px; height:38px; border-radius:12px; background:rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center; font-size:23px; }
+.dq-warn b { display:block; font-size:15px; letter-spacing:-.3px; margin-bottom:2px; }
+.dq-warn span { font-size:12px; line-height:1.5; opacity:.95; }
+.dq-sec { font-size:13.5px; font-weight:800; color:#1A2744; margin:4px 0 8px; }
+.dq-f { margin-bottom:9px; }
+.dq-f label { display:block; font-size:12px; font-weight:700; color:#5C6678; margin-bottom:4px; }
+.dq-f label em { font-style:normal; color:#F04438; }
+.dq-f label span { font-weight:500; color:#97A0B0; }
+.dq-f input { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #D5DBE6; border-radius:10px; background:#fff; color:#1A2744; font-size:14px; font-family:inherit; }
+.dq-f input:focus { outline:none; border-color:#2563EB; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+.dq-f input.miss { border-color:#F04438; background:#FFF8F7; }
+.dq-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.dq-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.dq-chips button { border:1px solid #D5DBE6; background:#F7F8FB; color:#2B3445; border-radius:999px; padding:5px 10px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; }
+.dq-chips button.on { background:#2563EB; border-color:#2563EB; color:#fff; }
+.dq-safe { font-size:11.5px; color:#5C6678; background:#EEF4FF; border-radius:10px; padding:8px 10px; margin-bottom:10px; line-height:1.5; }
+.dq-pre { white-space:pre-wrap; font-size:12.5px; line-height:1.6; color:#2B3445; background:#F7F8FB; border:1px solid #E3E7EF; border-radius:10px; padding:10px 12px; max-height:220px; overflow:auto; margin:0; font-family:inherit; }
+.dq-missmsg { display:none; margin-top:8px; font-size:12px; color:#B42318; font-weight:700; }
+.dq-foot { background:#fff; border-top:1px solid #E3E7EF; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); }
+.dq-btns { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.dq-btns button, .dq-btns a { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:10px 6px; border-radius:14px; font-size:13.5px; font-weight:800; cursor:pointer; font-family:inherit; border:none; text-decoration:none; line-height:1.2; }
+.dq-btns .e { font-size:20px; line-height:1; }
+.dq-copy { background:#2563EB; color:#fff; }
+.dq-sms { background:#FEE500; color:#3A1D1D; }
+.dq-call { background:#12B76A; color:#fff; }
+.dq-mgr { text-align:center; margin-bottom:8px; font-size:12.5px; color:#5C6678; }
+.dq-mgr b { color:#1A2744; }
+.dq-clear { background:none; border:none; color:#97A0B0; font-size:12px; text-decoration:underline; cursor:pointer; font-family:inherit; padding:0; }
+</style>
+<div class="dq-ov" id="dqOv" onclick="if(event.target===this)closeDirectQuote()">
+  <div class="dq-box" role="dialog" aria-label="다이렉트견적">
+    <div class="dq-head">
+      <div class="ic">🚗</div>
+      <div class="t">다이렉트견적<small>자동차 다이렉트 비교견적 · 정지호 매니저에게 전달</small></div>
+      <button type="button" class="dq-x" onclick="closeDirectQuote()" aria-label="닫기">✕</button>
+    </div>
+    <div class="dq-body" id="dqBody">
+      <div class="dq-card dq-pc">
+        <h4>📋 다이렉트 비교견적 프로세스</h4>
+        <ol class="dq-tl">
+          <li><span class="n fp">1</span><div class="tx"><b>견적정보 전달</b>아래 칸 채워서 매니저에게 보내기</div><span class="dq-tag fp">FP</span></li>
+          <li><span class="n mg">2</span><div class="tx"><b>고객등록</b><em>인증번호는 FP가 받아서 전달</em></div><span class="dq-tag mg">매니저</span></li>
+          <li><span class="n mg">3</span><div class="tx"><b>비교견적 이미지 전달</b>익일까지 FP에게</div><span class="dq-tag mg">매니저</span></li>
+          <li><span class="n fp">4</span><div class="tx"><b>가입회사 선택</b>FP가 고객과 통화</div><span class="dq-tag fp">FP</span></li>
+          <li><span class="n both">5</span><div class="tx"><b>체결</b>매니저에게 맡기셔도 되고, FP가 하셔도 돼요</div></li>
+        </ol>
+        <div class="dq-warn"><div class="big">💰</div><div><b>URL로 가입 안 하면 수수료 없음!</b><span>고객이 꼭 받은 URL로 가입하게 해 주세요.</span></div></div>
+      </div>
+      <div class="dq-card">
+
+        <div class="dq-sec">📍 고객정보</div>
+        <div class="dq-row">
+          <div class="dq-f"><label>성함 <em>*</em></label><input id="dq_name" autocomplete="off"></div>
+          <div class="dq-f"><label>휴대폰번호 <em>*</em></label><input id="dq_phone" type="tel" inputmode="numeric" autocomplete="off" placeholder="010-0000-0000"></div>
+        </div>
+        <div class="dq-f"><label>주민등록번호 <em>*</em></label><input id="dq_jumin" inputmode="numeric" autocomplete="off" placeholder="000000-0000000" maxlength="14"></div>
+        <div class="dq-f"><label>이메일</label><input id="dq_email" type="email" autocomplete="off"></div>
+        <div class="dq-f"><label>통신사</label><input id="dq_telco" autocomplete="off">
+          <div class="dq-chips" data-for="dq_telco"><button type="button">SKT</button><button type="button">KT</button><button type="button">LG U+</button><button type="button">알뜰폰</button></div></div>
+        <div class="dq-f"><label>주소</label><input id="dq_addr" autocomplete="off"></div>
+        <div class="dq-f"><label>결제정보 <span>(계좌 또는 카드)</span></label><input id="dq_pay" autocomplete="off" placeholder="예) 국민카드 / 신한은행 계좌"></div>
+
+        <div class="dq-sec" style="margin-top:14px">📍 차량정보</div>
+        <div class="dq-row">
+          <div class="dq-f"><label>차량번호 <em>*</em></label><input id="dq_carno" autocomplete="off" placeholder="12가 3456"></div>
+          <div class="dq-f"><label>차대번호 <span>(모르면 생략)</span></label><input id="dq_vin" autocomplete="off"></div>
+        </div>
+        <div class="dq-f"><label>차량명 및 연식</label><input id="dq_car" autocomplete="off" placeholder="예) 쏘렌토 2022년식"></div>
+        <div class="dq-f"><label>직전 가입 보험사</label><input id="dq_prev" autocomplete="off"></div>
+        <div class="dq-f"><label>보험 가입 대상 <span>(운전자 범위)</span></label><input id="dq_drv" autocomplete="off">
+          <div class="dq-chips" data-for="dq_drv"><button type="button">기명피보험자 1인</button><button type="button">부부한정</button><button type="button">가족한정</button><button type="button">누구나</button></div></div>
+
+        <div class="dq-sec" style="margin-top:14px">📍 고객 연락 가능 시간</div>
+        <div class="dq-f"><label>통화 가능 요일</label><input id="dq_day" autocomplete="off">
+          <div class="dq-chips" data-for="dq_day"><button type="button">평일</button><button type="button">주말</button><button type="button">아무 때나</button></div></div>
+        <div class="dq-f"><label>통화 가능 시간대</label><input id="dq_time" autocomplete="off" placeholder="예) 오후 2시~5시"></div>
+        <div class="dq-f"><label>기타 요청사항</label><input id="dq_etc" autocomplete="off"></div>
+
+        <div class="dq-sec" style="margin-top:14px">📍 담당 FP정보 <span style="font-size:11.5px;color:#97A0B0;font-weight:600">· 로그인 정보로 자동 입력</span></div>
+        <div class="dq-f"><label>소속 지사</label><input id="dq_fpbr" autocomplete="off"></div>
+        <div class="dq-row">
+          <div class="dq-f"><label>FP 성함</label><input id="dq_fpname" autocomplete="off"></div>
+          <div class="dq-f"><label>FP 연락처</label><input id="dq_fpphone" type="tel" autocomplete="off"></div>
+        </div>
+      </div>
+
+      <div class="dq-card">
+        <h4 style="display:flex;align-items:center">👀 보낼 글 미리보기<button type="button" class="dq-clear" style="margin-left:auto" onclick="dqClear()">고객 입력 지우기</button></h4>
+        <pre class="dq-pre" id="dqPreview"></pre>
+      </div>
+    </div>
+    <div class="dq-foot">
+      <div class="dq-mgr">🚗 다이렉트 담당자 <b>정지호 매니저</b> 010-7797-9846</div>
+      <div class="dq-btns">
+        <button type="button" class="dq-copy" onclick="dqCopy()"><span class="e">📋</span>복사하기</button>
+        <button type="button" class="dq-sms" onclick="dqSms()"><span class="e">✉️</span>문자 보내기</button>
+        <a class="dq-call" href="tel:01077979846"><span class="e">📞</span>전화하기</a>
+      </div>
+      <div class="dq-missmsg" id="dqMiss"></div>
+    </div>
+  </div>
+</div>
+<script>
+var DQ_MGR = { name:'정지호 매니저', phone:'010-7797-9846' };
+var DQ_CUST = ['dq_name','dq_jumin','dq_email','dq_phone','dq_telco','dq_addr','dq_pay','dq_carno','dq_vin','dq_car','dq_prev','dq_drv','dq_day','dq_time','dq_etc'];
+var DQ_REQ = [['dq_name','성함'],['dq_jumin','주민등록번호'],['dq_phone','휴대폰번호'],['dq_carno','차량번호']];
+var _dqInit = false;
+function _dqV(id){ var e=document.getElementById(id); return e ? String(e.value||'').trim() : ''; }
+function _dqSet(id,v){ var e=document.getElementById(id); if(e) e.value=v||''; }
+function _dqFpFill(){
+  var u = (typeof currentUser!=='undefined' && currentUser) ? currentUser : null;
+  if(!u){ try{ u=JSON.parse(localStorage.getItem('unispace_user')||'null'); }catch(e){} }
+  if(!u) return;
+  var ph = u.phone || '';
+  if(!ph && u.id){
+    try{
+      var L = (typeof getMergedFpList==='function') ? getMergedFpList() : (typeof FP_LIST!=='undefined' ? FP_LIST : []);
+      var want = String(u.id).trim().toUpperCase();
+      for(var i=0;i<L.length;i++){ if(String(L[i].id||'').trim().toUpperCase()===want){ ph=L[i].phone||''; break; } }
+    }catch(e){}
+  }
+  var br = String(u.branch||'').trim();
+  var brTxt = (!br || br==='유니스지사') ? '유니스지사' : ('유니스지사 ' + br);
+  if(!_dqV('dq_fpbr')) _dqSet('dq_fpbr', brTxt);
+  if(!_dqV('dq_fpname')) _dqSet('dq_fpname', u.name||'');
+  if(!_dqV('dq_fpphone')) _dqSet('dq_fpphone', ph);
+}
+function _dqHyphenPhone(v){
+  var d=String(v||'').replace(/\D/g,'');
+  if(/^01\d{8,9}$/.test(d)) return d.length===11 ? d.replace(/(\d{3})(\d{4})(\d{4})/,'$1-$2-$3') : d.replace(/(\d{3})(\d{3})(\d{4})/,'$1-$2-$3');
+  return v;
+}
+function _dqBuild(){
+  var L = function(k,id){ return '- ' + k + ' : ' + _dqV(id); };
+  var vin = _dqV('dq_vin');
+  return [
+    '*다이렉트 비교견적 정보',
+    '',
+    '📍 [고객정보]',
+    L('성함','dq_name'), L('주민등록번호','dq_jumin'), L('이메일','dq_email'), L('휴대폰번호','dq_phone'),
+    L('통신사','dq_telco'), L('주소','dq_addr'), L('결제정보(계좌 또는 카드)','dq_pay'),
+    '',
+    '📍 [차량정보]',
+    L('차량번호','dq_carno'), '- 차대번호(모를 경우 생략 가능) : ' + (vin || '생략'), L('차량명 및 연식','dq_car'),
+    '',
+    L('직전 가입 보험사','dq_prev'), L('보험 가입 대상(운전자 범위)','dq_drv'),
+    '',
+    '📍 [고객 연락 가능 시간]',
+    L('통화 가능 요일','dq_day'), L('통화 가능 시간대','dq_time'), L('기타 요청사항','dq_etc'),
+    '',
+    '📍 [담당 FP정보]',
+    L('소속 지사','dq_fpbr'), L('FP 성함','dq_fpname'), L('FP 연락처','dq_fpphone'),
+    '',
+    '[다이렉트 담당자]',
+    DQ_MGR.name + ' ' + DQ_MGR.phone
+  ].join('\n');
+}
+function _dqRender(){ var p=document.getElementById('dqPreview'); if(p) p.textContent=_dqBuild(); }
+function _dqCheck(){
+  var miss=[];
+  DQ_REQ.forEach(function(r){ var e=document.getElementById(r[0]); var m=!_dqV(r[0]); if(e) e.classList.toggle('miss', m); if(m) miss.push(r[1]); });
+  var m=document.getElementById('dqMiss');
+  if(m){ m.style.display=miss.length?'block':'none'; m.textContent=miss.length?('⚠️ 아직 비어 있어요: ' + miss.join(', ') + ' (그래도 복사는 됐어요)'):''; }
+  return miss;
+}
+function _dqCopyText(text, msg){
+  var done=function(){ showToast(msg || '📋 복사했어요 — 카톡에 붙여넣기 하세요'); };
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, function(){ _dqCopyFb(text); done(); }); return; } }catch(e){}
+  _dqCopyFb(text); done();
+}
+function _dqCopyFb(text){
+  try{ var ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }catch(e){}
+}
+function dqCopy(){ _dqCheck(); _dqCopyText(_dqBuild(), '📋 복사했어요 — 정지호 매니저 카톡에 붙여넣기 하세요'); }
+function dqSms(){
+  _dqCheck();
+  var body=_dqBuild();
+  var ios=/iP(hone|ad|od)/.test(navigator.userAgent||'');
+  location.href='sms:' + DQ_MGR.phone.replace(/\D/g,'') + (ios?'&':'?') + 'body=' + encodeURIComponent(body);
+}
+function dqClear(){
+  DQ_CUST.forEach(function(id){ _dqSet(id,''); var e=document.getElementById(id); if(e) e.classList.remove('miss'); });
+  document.querySelectorAll('#dqOv .dq-chips button.on').forEach(function(b){ b.classList.remove('on'); });
+  var m=document.getElementById('dqMiss'); if(m) m.style.display='none';
+  _dqRender(); showToast('🧹 고객 입력을 지웠어요');
+}
+function openDirectQuote(){
+  var ov=document.getElementById('dqOv'); if(!ov) return;
+  if(!_dqInit){
+    _dqInit=true;
+    ov.querySelectorAll('input').forEach(function(e){ e.addEventListener('input', function(){ e.classList.remove('miss'); _dqRender(); }); });
+    ['dq_phone','dq_fpphone'].forEach(function(id){ var e=document.getElementById(id); if(e) e.addEventListener('blur', function(){ e.value=_dqHyphenPhone(e.value); _dqRender(); }); });
+    var j=document.getElementById('dq_jumin');
+    if(j) j.addEventListener('input', function(){ var d=j.value.replace(/\D/g,'').slice(0,13); j.value = d.length>6 ? d.slice(0,6)+'-'+d.slice(6) : d; _dqRender(); });
+    ov.querySelectorAll('.dq-chips').forEach(function(box){
+      var inp=document.getElementById(box.getAttribute('data-for'));
+      box.querySelectorAll('button').forEach(function(b){
+        b.onclick=function(){ box.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x===b); }); inp.value=b.textContent; inp.classList.remove('miss'); _dqRender(); };
+      });
+    });
+  }
+  _dqFpFill(); _dqRender();
+  ov.classList.add('on'); document.body.style.overflow='hidden';
+}
+function closeDirectQuote(){ var ov=document.getElementById('dqOv'); if(ov) ov.classList.remove('on'); document.body.style.overflow=''; }
+</script>
 </body>
 </html>
