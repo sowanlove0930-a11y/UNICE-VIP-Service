@@ -1069,6 +1069,12 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 .att-fp-time { font-size: 10px; color: var(--text3); margin-left: auto; font-variant-numeric: tabular-nums; }
 .att-fp-branch { font-size: 10px; color: var(--text3); }
 .att-col-empty { font-size: 12px; color: var(--text3); text-align: center; padding: 16px 0; }
+/* 275: 출결 카드 지점 전환 (전체/알파/브라보) — 대표·지점장·교육지점장만 보임 */
+.att-br-seg { display: none; gap: 6px; margin-bottom: 10px; align-items: center; }
+.att-br-btn { font-size: 11px; font-weight: 700; padding: 4px 13px; border-radius: 999px; border: 1px solid var(--border2); background: transparent; color: var(--text3); cursor: pointer; font-family: inherit; line-height: 1.4; }
+.att-br-btn.on { background: #5A3FB0; color: #fff; border-color: #5A3FB0; }
+.att-br-btn.on[data-br="알파"] { background: var(--alpha-deep); border-color: var(--alpha-deep); }
+.att-br-btn.on[data-br="브라보"] { background: var(--bravo-deep); border-color: var(--bravo-deep); }
 /* 274: 사전보고 사유 펼침 — 뱃지(미증빙/증빙완료/📋사전보고) 또는 칩을 누르면 토글 */
 .att-fp-chip.att-pr-has { cursor: pointer; }
 .att-pr-badge { cursor: pointer; white-space: nowrap; }
@@ -4956,6 +4962,11 @@ window.UNISPACE_FCM = {
       </div>
       <div class="accordion-body" id="acc3">
         <div style="padding:0 12px 16px">
+          <div class="att-br-seg" id="attBrSeg">
+            <button type="button" class="att-br-btn on" data-br="" onclick="_attSetBrFilter('')">전체</button>
+            <button type="button" class="att-br-btn" data-br="알파" onclick="_attSetBrFilter('알파')">알파</button>
+            <button type="button" class="att-br-btn" data-br="브라보" onclick="_attSetBrFilter('브라보')">브라보</button>
+          </div>
           <div class="att-today-cols">
             <div class="att-col att-col-normal">
               <div class="att-col-head">
@@ -19481,7 +19492,8 @@ function _attShareText() {
   if (!s) return '';
   var n = new Date();
   var _hh = n.getHours(), _mi = n.getMinutes();
-  var head = '*출결현황(' + (n.getMonth() + 1) + '/' + n.getDate() + ' ' + (_hh < 10 ? '0' : '') + _hh + ':' + (_mi < 10 ? '0' : '') + _mi + ' 기준)';
+  var _bfs = _attBrFilter();   // 275: 한 지점만 보고 있으면 그 지점 이름을 머리에
+  var head = '*' + (_bfs ? _bfs + '지점 ' : '') + '출결현황(' + (n.getMonth() + 1) + '/' + n.getDate() + ' ' + (_hh < 10 ? '0' : '') + _hh + ':' + (_mi < 10 ? '0' : '') + _mi + ' 기준)';
   function tmk(fp) { return fp.time ? ' ' + String(fp.time).slice(0, 5) : ''; }
   var st = _attMonthStats();
   function brMk(fp) { return (String(fp.branch || '').indexOf('알파') >= 0) ? '(알)' : '(브)'; }
@@ -19490,6 +19502,8 @@ function _attShareText() {
     for (var i = 0; i < arr.length; i++) {
       if (String(arr[i].branch || '').indexOf('알파') >= 0) a++; else b++;
     }
+    if (_bfs === '알파') return '(알파 ' + a + '명)';
+    if (_bfs === '브라보') return '(브라보 ' + b + '명)';
     return '(알파 ' + a + '명 / 브라보 ' + b + '명)';
   }
   function sec(title, arr, lineFn) {
@@ -19589,7 +19603,7 @@ function renderAttToday(force) {
       }
     } catch(eA) {}
     // admin/branch-head = all branches, others = own branch only
-    var _attSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
+    var _attSeeAll = _attHeadUser(currentUser); // 275: 대표·지점장·교육지점장 = 전 지점
     var _attNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
     var _attMyBr = (currentUser && currentUser.branch) ? _attNb(currentUser.branch) : '';
     var FPS = [];
@@ -19617,6 +19631,11 @@ function renderAttToday(force) {
 }
 
 function _renderAttTodayCards(FPS, todayDb, todayPr) {
+  // 275: 마지막 데이터를 기억해 두고(지점 전환 시 재요청 없이 다시 그림), 선택한 지점으로 거른다
+  window._attLastRender = { FPS: FPS || [], todayDb: todayDb || {}, todayPr: todayPr || {} };
+  var _bf = _attBrFilter();
+  _attSyncBrSeg();
+  if (_bf) FPS = (FPS || []).filter(function(f){ return _attBrOf(f.branch) === _bf; });
   var lateArr=[], absentArr=[], normalArr=[], prereportArr=[], approvedArr=[];
   FPS.forEach(function(fp) {
     var attRec = todayDb[fp.id];
@@ -19649,7 +19668,7 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
       if(br.indexOf('알파')>=0||br==='알') a++;
       else if(br.indexOf('브라보')>=0||br==='브') b++;
     });
-    return a||b ? ('알 '+a+' · 브 '+b) : '';
+    return (a||b) && !_bf ? ('알 '+a+' · 브 '+b) : '';   // 275: 한 지점만 볼 때는 칸 머리 알/브 숫자 생략
   }
   function _setBr(id, arr){ var el=document.getElementById(id); if(el) el.textContent=_brCount(arr); }
   _setBr('normalBr', fullNormalArr);
@@ -19669,7 +19688,7 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
   if(st3s) st3s.textContent = '알파 ' + na + '명 · 브라보 ' + nb + '명';
 
   // 사전보고 칸: 오늘 사전보고한 사람 전원 (증빙 상태 포함)
-  var _prSeeAll = currentUser && (currentUser.role==='대표' || currentUser.role==='지점장');
+  var _prSeeAll = _attHeadUser(currentUser); // 275
   var _prNb = function(b){ var s=String(b||''); if(s.indexOf('알파')>=0) return '알파'; if(s.indexOf('브라보')>=0) return '브라보'; return s; };
   var _prMyBr = (currentUser && currentUser.branch) ? _prNb(currentUser.branch) : '';
   var preList = [];
@@ -19677,6 +19696,7 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
     var pr = todayPr[fid];
     if (!pr) return;
     if (!_prSeeAll && _prMyBr && _prNb(pr.branch) !== _prMyBr) return;
+    if (_bf && _prNb(pr.branch) !== _bf) return;   // 275: 선택 지점만
     var br = (pr.branch || '').replace('지점','');
     preList.push({ id:fid, name:pr.name||'', branch:br, type:pr.type||'', note:pr.note||'', proof:!!pr.proof });
   });
@@ -19693,10 +19713,7 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
   var _asb = document.getElementById('attShareBtn');
   if (_asb) {
     // share allowed for 대표 and 지점장 only
-    var _t9 = currentUser ? String(currentUser.title || '') : '';
-    var _can9 = currentUser && (
-      currentUser.role === '대표' || currentUser.id === 'ktk01' || currentUser.level === 'admin' ||
-      currentUser.role === '지점장' || _t9 === '지점장');
+    var _can9 = _attHeadUser(currentUser); // 275: 대표·알파/브라보 지점장·교육지점장
     _asb.style.display = _can9 ? 'inline-block' : 'none';
   }
 
@@ -19742,6 +19759,42 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
       : '<div class="att-col-empty">없음</div>';
   }
   _attBindPrReasonClick();
+}
+
+// ── 275: 출결 카드 지점 전환(전체/알파/브라보) + 대표·지점장·교육지점장 권한 ──
+// 대표(admin) · 알파/브라보 지점장(level manager 또는 title 지점장) · 교육지점장(H2503162 / 교육 소속 / title 교육지점장)
+function _attHeadUser(u) {
+  if (!u) return false;
+  if (typeof _isManagerUser === 'function' && _isManagerUser(u)) return true;
+  return String(u.title || '') === '교육지점장';
+}
+function _attBrOf(b) { var s = String(b || ''); if (s.indexOf('알파') >= 0 || s === '알') return '알파'; if (s.indexOf('브라보') >= 0 || s === '브') return '브라보'; return s; }
+// 선택 지점 ('' = 전체). 사람(사번)별로 기억. 전체를 볼 수 없는 FP는 항상 ''
+function _attBrFilter() {
+  if (!_attHeadUser(currentUser)) return '';
+  var uid = String((currentUser && currentUser.id) || '');
+  if (window._attBrSelFor !== uid) {
+    var v = ''; try { v = localStorage.getItem('unispace_att_brfilter_' + uid) || ''; } catch(e) {}
+    window._attBrSel = (v === '알파' || v === '브라보') ? v : '';
+    window._attBrSelFor = uid;
+  }
+  return window._attBrSel || '';
+}
+function _attSetBrFilter(v) {
+  v = (v === '알파' || v === '브라보') ? v : '';
+  var uid = String((currentUser && currentUser.id) || '');
+  window._attBrSel = v; window._attBrSelFor = uid;
+  try { localStorage.setItem('unispace_att_brfilter_' + uid, v); } catch(e) {}
+  var L = window._attLastRender;
+  if (L) _renderAttTodayCards(L.FPS, L.todayDb, L.todayPr);
+  else { _attSyncBrSeg(); if (typeof renderAttToday === 'function') renderAttToday(true); }
+}
+function _attSyncBrSeg() {
+  var seg = document.getElementById('attBrSeg'); if (!seg) return;
+  seg.style.display = _attHeadUser(currentUser) ? 'flex' : 'none';
+  var cur = _attBrFilter();
+  var btns = seg.querySelectorAll('.att-br-btn');
+  for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('on', (btns[i].getAttribute('data-br') || '') === cur);
 }
 
 // ── 274: 사전보고 사유 펼침 ──────────────────────────────
@@ -29006,7 +29059,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 274;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 275;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
