@@ -1069,6 +1069,12 @@ body.theme-light .sub-item:hover .sub-item-arrow { background: rgba(26,39,68,0.0
 .att-fp-time { font-size: 10px; color: var(--text3); margin-left: auto; font-variant-numeric: tabular-nums; }
 .att-fp-branch { font-size: 10px; color: var(--text3); }
 .att-col-empty { font-size: 12px; color: var(--text3); text-align: center; padding: 16px 0; }
+/* 274: 사전보고 사유 펼침 — 뱃지(미증빙/증빙완료/📋사전보고) 또는 칩을 누르면 토글 */
+.att-fp-chip.att-pr-has { cursor: pointer; }
+.att-pr-badge { cursor: pointer; white-space: nowrap; }
+.att-pr-badge::after { content: ' ▾'; opacity: .75; }
+.att-pr-reason { font-size: 10.5px; line-height: 1.45; color: var(--text2); margin-top: 4px; padding: 4px 7px; border-radius: 6px; background: rgba(244,163,38,.08); border: 1px dashed rgba(244,163,38,.35); word-break: keep-all; overflow-wrap: anywhere; white-space: normal; }
+.att-pr-reason b { color: var(--text); font-weight: 700; white-space: nowrap; }
 
 /* ── 업적 조회 ── */
 .pv-seg { flex:1; padding:9px; border-radius:9px; font-size:12px; font-weight:700; border:1px solid var(--bdr2); background:var(--surface); color:var(--text2); cursor:pointer; font-family:'Noto Sans KR',sans-serif; transition:all .15s; }
@@ -2484,6 +2490,17 @@ body.theme-light .cc-partners .cc-name{ color: #9A7418; }
   .att-col-label { font-size: 11.5px; white-space: nowrap; flex-shrink: 0; }
   .att-col-count { font-size: 15px; flex-shrink: 0; margin-right: 0; }
   .att-col-br { font-size: 8.5px; margin-right: 3px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* 274: 모바일 간소화 — 헤더 한 줄(제목+날짜), 새로고침은 아이콘만, 칸 머리의 알·브 숫자는 둘째 줄로 (잘림 방지) */
+  .acc-att .accordion-header { padding: 12px 12px; gap: 6px; }
+  .acc-att .accordion-title { font-size: 14px; gap: 5px; white-space: nowrap; min-width: 0; }
+  .acc-att .att-today-date { font-size: 11px !important; white-space: nowrap; }
+  .acc-att #attShareBtn { padding: 4px 8px !important; font-size: 10.5px !important; white-space: nowrap; }
+  .acc-att #attRefreshBtn { padding: 4px 7px !important; white-space: nowrap; }
+  .acc-att #attRefreshTxt { display: none; }
+  .acc-att .att-pr-badge { font-size: 8.5px !important; padding: 1px 4px !important; }
+  .att-col-head { flex-wrap: wrap; row-gap: 2px; }
+  .att-col-count { margin-left: auto; }
+  .att-col-br { flex: 0 0 100%; order: 9; text-align: right; font-size: 9.5px; margin-right: 0; overflow: visible; text-overflow: clip; white-space: nowrap; }
   /* 업적 입력 모달: 화면 폭에 맞추고 가로 넘침 차단 */
   .perf-modal-overlay { padding: 12px !important; }
   .perf-modal { max-width: 100% !important; width: 100% !important; padding: 8px 16px 28px !important; box-sizing: border-box; overflow-x: hidden; }
@@ -19463,7 +19480,9 @@ function _attShareText() {
   var s = window._attTodayShare;
   if (!s) return '';
   var n = new Date();
-  var head = '*출결현황(' + (n.getMonth() + 1) + '/' + n.getDate() + ')';
+  var _hh = n.getHours(), _mi = n.getMinutes();
+  var head = '*출결현황(' + (n.getMonth() + 1) + '/' + n.getDate() + ' ' + (_hh < 10 ? '0' : '') + _hh + ':' + (_mi < 10 ? '0' : '') + _mi + ' 기준)';
+  function tmk(fp) { return fp.time ? ' ' + String(fp.time).slice(0, 5) : ''; }
   var st = _attMonthStats();
   function brMk(fp) { return (String(fp.branch || '').indexOf('알파') >= 0) ? '(알)' : '(브)'; }
   function cnt(arr) {
@@ -19487,10 +19506,10 @@ function _attShareText() {
     return t;
   }
   var txt = head;
-  txt += sec('정상출근', s.normal, function (fp) { return fp.name + brMk(fp); });
+  txt += sec('정상출근', s.normal, function (fp) { return fp.name + brMk(fp) + tmk(fp); });
   txt += sec('지각', s.late, function (fp) {
     var c = st.late[fp.id] || 1;
-    return fp.name + brMk(fp) + ' ' + c + '회';
+    return fp.name + brMk(fp) + tmk(fp) + ' · ' + c + '회';
   });
   txt += sec('미출결', s.absent, function (fp) {
     var c = st.abs[fp.id] || 1;
@@ -19609,13 +19628,15 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
       else            absentArr.push(Object.assign({},fp));
     } else if (attRec.status === '지각') {
       if (proofDone)  approvedArr.push(Object.assign({},fp,{time:attRec.time}));
-      else            lateArr.push(Object.assign({},fp,{time:attRec.time, hasPrereport: !!prRec}));
+      else            lateArr.push(Object.assign({},fp,{time:attRec.time, hasPrereport: !!prRec, prType:(prRec&&prRec.type)||'', prNote:(prRec&&prRec.note)||''}));
     } else {
       normalArr.push(Object.assign({},fp,{time:attRec.time}));
     }
   });
 
-  var fullNormalArr = normalArr.concat(approvedArr);
+  // 274: 정상출근 = 실제로 출결키를 누른 사람만. 사전보고 증빙으로 출결인정된 사람(approvedArr)은 사전보고 칸에만 보인다.
+  //      그래서 네 칸의 합이 전체 인원과 다를 수 있다 (대표 요청 2026-11-09). 카운트·알/브·공유 텍스트도 같은 기준.
+  var fullNormalArr = normalArr;
   document.getElementById('lateCount').textContent   = lateArr.length;
   document.getElementById('absentCount').textContent = absentArr.length; // 사전보고자는 사전보고 칸에만
   document.getElementById('normalCount').textContent = fullNormalArr.length;
@@ -19657,7 +19678,7 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
     if (!pr) return;
     if (!_prSeeAll && _prMyBr && _prNb(pr.branch) !== _prMyBr) return;
     var br = (pr.branch || '').replace('지점','');
-    preList.push({ id:fid, name:pr.name||'', branch:br, type:pr.type||'', proof:!!pr.proof });
+    preList.push({ id:fid, name:pr.name||'', branch:br, type:pr.type||'', note:pr.note||'', proof:!!pr.proof });
   });
   preList.sort(function(a,b){
     if (a.proof !== b.proof) return a.proof ? 1 : -1; // 미증빙 먼저
@@ -19679,45 +19700,79 @@ function _renderAttTodayCards(FPS, todayDb, todayPr) {
     _asb.style.display = _can9 ? 'inline-block' : 'none';
   }
 
-  function chip(fp, showTime, extraBadge) {
+  function chip(fp, showTime, extraBadge, extraBelow) {
     var isAlpha = fp.branch === '알파' || fp.branch === '알파지점';
-    return '<div class="att-fp-chip">' +
+    return '<div class="att-fp-chip'+(extraBelow?' att-pr-has':'')+'"'+(extraBelow?' data-prkey="'+_attEsc(extraBelow.key)+'" title="사유 보기"':'')+'>' +
       '<div class="att-fp-av '+(isAlpha?'av-alpha-br':'av-bravo-br')+'">'+(isAlpha?'알':'브')+'</div>' +
       '<div style="flex:1;min-width:0">' +
-        '<div class="att-fp-name">'+fp.name+(extraBadge||'')+'</div>' +
-        '<div class="att-fp-branch '+(isAlpha?'branch-alpha':'branch-bravo')+'">'+(isAlpha?'알파':'브라보')+'지점</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;min-width:0">' +
+          '<div class="att-fp-name" style="flex:1;min-width:0">'+fp.name+(extraBadge||'')+'</div>' +
+          (showTime&&fp.time?'<span class="att-fp-time">'+fp.time.slice(0,5)+'</span>':'')+
+        '</div>' +
+        (extraBelow?extraBelow.html:'') +
       '</div>' +
-      (showTime&&fp.time?'<span class="att-fp-time">'+fp.time.slice(0,5)+'</span>':'')+
     '</div>';
   }
-  function chips(arr, showTime, badgeFn) {
+  function chips(arr, showTime, badgeFn, belowFn) {
     if (!arr.length) return '<div class="att-col-empty">없음</div>';
-    return arr.map(function(fp){ return chip(fp, showTime, badgeFn?badgeFn(fp):''); }).join('');
+    return arr.map(function(fp){ return chip(fp, showTime, badgeFn?badgeFn(fp):'', belowFn?belowFn(fp):null); }).join('');
   }
 
-  var prBadge  = '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(244,163,38,.12);color:var(--orange);border:1px solid rgba(244,163,38,.2);margin-left:3px">📋사전보고</span>';
-  var okBadge  = '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(16,185,129,.12);color:#34D399;border:1px solid rgba(16,185,129,.2);margin-left:3px">✅출결인정</span>';
+  var prBadge  = '<span class="att-pr-badge" style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(244,163,38,.12);color:var(--orange);border:1px solid rgba(244,163,38,.2);margin-left:3px">📋사전보고</span>';
 
   document.getElementById('lateList').innerHTML =
-    lateArr.length ? chips(lateArr, true, function(fp){ return fp.hasPrereport ? prBadge : ''; }) : '<div class="att-col-empty">없음</div>';
+    lateArr.length ? chips(lateArr, true, function(fp){ return fp.hasPrereport ? prBadge : ''; },
+                           function(fp){ return fp.hasPrereport ? _attPrReason('late:'+fp.id, fp.prType, fp.prNote) : null; })
+                   : '<div class="att-col-empty">없음</div>';
 
   document.getElementById('absentList').innerHTML =
     absentArr.length ? chips(absentArr, false, null) : '<div class="att-col-empty">없음</div>';
 
+  // 274: 출결인정(approvedArr) 칩은 더 이상 여기 안 보임 — 사전보고 칸에 증빙완료로만 보인다
   document.getElementById('normalList').innerHTML =
-    !fullNormalArr.length
-      ? '<div class="att-col-empty">없음</div>'
-      : (approvedArr.length ? chips(approvedArr, false, function(){ return okBadge; }) : '') +
-        (normalArr.length   ? chips(normalArr,   true,  null) : '');
+    normalArr.length ? chips(normalArr, true, null) : '<div class="att-col-empty">없음</div>';
 
-  var pendBadge = '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(244,163,38,.14);color:var(--orange);border:1px solid rgba(244,163,38,.25);margin-left:3px">미증빙</span>';
-  var doneBadge = '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(16,185,129,.14);color:#1F9268;border:1px solid rgba(16,185,129,.25);margin-left:3px">증빙완료</span>';
+  var pendBadge = '<span class="att-pr-badge" style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(244,163,38,.14);color:var(--orange);border:1px solid rgba(244,163,38,.25);margin-left:3px">미증빙</span>';
+  var doneBadge = '<span class="att-pr-badge" style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(16,185,129,.14);color:#1F9268;border:1px solid rgba(16,185,129,.25);margin-left:3px">증빙완료</span>';
   var prListEl = document.getElementById('prereportList');
   if (prListEl) {
     prListEl.innerHTML = preList.length
-      ? chips(preList, false, function(fp){ return fp.proof ? doneBadge : pendBadge; })
+      ? chips(preList, false, function(fp){ return fp.proof ? doneBadge : pendBadge; },
+              function(fp){ return _attPrReason('pre:'+fp.id, fp.type, fp.note); })
       : '<div class="att-col-empty">없음</div>';
   }
+  _attBindPrReasonClick();
+}
+
+// ── 274: 사전보고 사유 펼침 ──────────────────────────────
+function _attEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+var _ATT_PR_TYPE_ICON = { '지각예정':'⚠️', '미출석예정':'❌', '활동':'📌', '리프레쉬':'🌿', '기타사유':'📝' };
+// 열림 상태는 key(칸:사번)별로 기억 → 90초마다 다시 그려도 펼친 사유가 닫히지 않는다
+window._attPrOpen = window._attPrOpen || {};
+function _attPrReason(key, type, note) {
+  var t = String(type||'').trim(), n = String(note||'').trim();
+  var body = '';
+  if (t) body += '<b>' + _attEsc((_ATT_PR_TYPE_ICON[t] || '📋') + ' ' + t) + '</b>';
+  if (n) body += (body ? ' · ' : '') + _attEsc(n);
+  else   body += (body ? ' · ' : '') + '<span style="opacity:.65">사유 미입력</span>';
+  var open = !!window._attPrOpen[key];
+  return { key: key, html: '<div class="att-pr-reason" style="display:' + (open ? 'block' : 'none') + '">' + body + '</div>' };
+}
+function _attBindPrReasonClick() {
+  var host = document.getElementById('acc3');
+  if (!host || host._prBound) return;
+  host._prBound = true;
+  host.addEventListener('click', function(ev) {
+    var t = ev.target;
+    var c = (t && t.closest) ? t.closest('.att-pr-has') : null;
+    if (!c) return;
+    var r = c.querySelector('.att-pr-reason'); if (!r) return;
+    var key = c.getAttribute('data-prkey') || '';
+    var show = (r.style.display === 'none');
+    r.style.display = show ? 'block' : 'none';
+    if (key) { if (show) window._attPrOpen[key] = 1; else delete window._attPrOpen[key]; }
+    ev.stopPropagation();
+  });
 }
 
 // ── 리크루팅 현황 v2 (명단/달력) ────────────────────────
@@ -23923,6 +23978,9 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     var brTag = E.branch==='alpha' ? '<span class="rc2-cal-tag" style="background:var(--alpha-soft);color:var(--alpha-deep)">알파</span>' : '<span class="rc2-cal-tag" style="background:var(--bravo-soft);color:var(--bravo-deep)">브라보</span>';
     var doneTag = E.cancelled ? '<span class="rc2-cal-tag" style="background:rgba(226,75,74,.16);color:#C0392B">✕불참/취소</span>' : (E.done ? '<span class="rc2-cal-tag" style="background:'+(E.branch==='alpha'?'#E7F5EC':'#F1EAF9')+';color:'+(E.branch==='alpha'?'#1F7A4D':'#6B4FA0')+'">✓완료'+(E.next?(' → '+rc2Esc(E.next)):'')+'</span>' : '');
     var refTxt = E.ref ? '추천 '+rc2Esc(E.ref) : '';
+    var _ageN = String(E.age||'').replace(/\D/g,'').slice(0,3);
+    var _ageMini = _ageN ? ('<span class="rc2-age" style="font-weight:700;font-size:11px;margin-left:3px;opacity:.75">'+_ageN+'세</span>') : '';
+    var _ageBig = _ageN ? ('<span class="rc2-age" style="font-weight:700;font-size:13px;opacity:.75">'+_ageN+'세</span>') : '';
     var _hasResult = (E.done || E.cancelled);
     var _isAlBtn = (E.branch==='alpha');
     var _vcColor = _isAlBtn ? '#1F7A4D' : '#6B4FA0';   // 확정 버튼 색 (지점)
@@ -23967,7 +24025,7 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     var _kindPill = '<span style="display:inline-block;font-size:10.5px;font-weight:800;color:#fff;background:'+_kindBg+';border-radius:999px;padding:1px 8px;white-space:nowrap">'+_kind+(E.done?' ✓':'')+'</span>';
     var _mini = '<div class="rc2-mini" data-rcmini="'+_key+'" style="cursor:pointer;background:'+_miniBg+';border-radius:9px;padding:8px 9px;margin-bottom:6px'+(_isNew?(';border:1.5px solid '+_nbc):(_isPh?';border:1.5px dashed #7FB0DA':''))+'">'+
       '<div style="margin-bottom:4px">'+_kindPill+'</div>'+
-      '<div><span style="font-weight:800;font-size:12.5px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:600;font-size:12.5px;margin-left:4px;color:'+_cName+'">'+rc2Esc(E.name)+'</span>'+_newDot+'</div>'+
+      '<div><span style="font-weight:800;font-size:12.5px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:600;font-size:12.5px;margin-left:4px;color:'+_cName+'">'+rc2Esc(E.name)+_ageMini+'</span>'+_newDot+'</div>'+
       (refTxt?('<div style="font-size:10px;margin-top:2px;color:'+_cRef+';opacity:.85">'+refTxt+'</div>'):'')+
     '</div>';
     if(_isAl){ _alCol+=_mini; _alN++; } else { _brCol+=_mini; _brN++; }
@@ -24003,7 +24061,7 @@ function rc2RenderCalDetail(evByDay, dayKey) {
     }
     // 상세 (탭하면 표시) - 하단 공통 영역
     _details += '<div class="rc2-detail-box" data-rcdetail="'+_key+'" style="display:none;background:'+_miniBg+';border:1.5px solid '+_nbc+';border-radius:11px;padding:12px;margin-bottom:8px">'+
-      '<div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;flex-wrap:wrap">'+_kindPill+'<span style="font-weight:800;font-size:15px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:700;font-size:15px;color:'+_cName+'">'+rc2Esc(E.name)+'</span></div>'+
+      '<div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;flex-wrap:wrap">'+_kindPill+'<span style="font-weight:800;font-size:15px;color:'+_cTime+'">'+(E.time||'-')+'</span><span style="font-weight:700;font-size:15px;color:'+_cName+'">'+rc2Esc(E.name)+'</span>'+(_ageBig?('<span style="color:'+_cName+'">'+_ageBig+'</span>'):'')+'</div>'+
       (refTxt?('<div style="font-size:11px;margin-bottom:8px;color:'+_cRef+'">'+refTxt+'</div>'):'<div style="margin-bottom:8px"></div>')+
       _infoHtml+
       '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">'+typeTag+doneTag+brTag+'</div>'+
@@ -28948,7 +29006,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 272;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 274;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
