@@ -2821,6 +2821,7 @@ body.theme-light .quick-cancel,
 body.theme-light .confirm-cancel { background: var(--bg3); }
 
 /* ── 아코디언 섹션 ── */
+.bottom-dashboard > * { flex-shrink: 0; }
 .accordion-section {
   background: var(--bg2); border: 1px solid var(--border2);
   border-radius: var(--r-xl); overflow: hidden;
@@ -8005,7 +8006,7 @@ function openSubmenu(key) {
 
   // 하단 대시보드 숨기기
   var bd = document.querySelector('.bottom-dashboard');
-  if (bd) { bd.style.transition = 'opacity .3s, max-height .3s'; bd.style.opacity = '0'; bd.style.maxHeight = '0'; bd.style.overflow = 'hidden'; bd.style.marginTop = '0'; }
+  if (bd) { if (bd._unlockT) { clearTimeout(bd._unlockT); bd._unlockT = null; } if (!bd.style.maxHeight) { bd.style.maxHeight = bd.scrollHeight + 'px'; void bd.offsetHeight; } bd.style.transition = 'opacity .3s, max-height .3s'; bd.style.opacity = '0'; bd.style.maxHeight = '0'; bd.style.overflow = 'hidden'; bd.style.marginTop = '0'; }
 
   // 펼친 메뉴가 화면에 잘 보이도록 위쪽으로 부드럽게 스크롤 (약간의 여백)
   setTimeout(function() {
@@ -8048,7 +8049,15 @@ function closeSubmenu() {
 
   // 하단 대시보드 다시 표시
   var bd = document.querySelector('.bottom-dashboard');
-  if (bd) { bd.style.opacity = '1'; bd.style.maxHeight = '2000px'; bd.style.overflow = ''; bd.style.marginTop = ''; }
+  if (bd) {
+    // 277: animate to the real height, then drop the cap (a fixed 2000px cut the cards on phones)
+    bd.style.opacity = '1'; bd.style.maxHeight = bd.scrollHeight + 'px'; bd.style.marginTop = '';
+    if (bd._unlockT) clearTimeout(bd._unlockT);
+    bd._unlockT = setTimeout(function(){
+      bd._unlockT = null;
+      if (bd.style.opacity === '1') { bd.style.maxHeight = ''; bd.style.overflow = ''; bd.style.transition = ''; }
+    }, 350);
+  }
 }
 
 // ── 목표 달성률 & TOP 3 ────────────────────────────
@@ -29059,7 +29068,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 275;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 277;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29589,9 +29598,18 @@ if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ s
   var ind=null;
   function _anyModalOpen(){
     if(document.body.classList.contains('modal-open')) return true;
+    // 276: body scroll locked by a popup (다이렉트견적 등) or a newer overlay that is not in the list below
+    if(document.body.style.overflow==='hidden' || document.documentElement.style.overflow==='hidden') return true;
+    if(document.querySelector('.dq-ov.on,.mw-overlay.on')) return true;
     if(document.querySelector('.mgmt-overlay.open,.quick-add-overlay.open,.perf-modal-overlay.open,.notice-modal-overlay.open,.consult-overlay.open,.pk-overlay.open,.detail-overlay.open,.confirm-overlay.open,#recruitOverlay.open')) return true;
     var cal=document.getElementById('rc2CalDetailPop');
     if(cal && cal.style.display!=='none' && cal.offsetParent!==null) return true;
+    return false;
+  }
+  function _inFixed(el){
+    for(var n=el; n && n!==document.body && n.nodeType===1; n=n.parentElement){
+      try{ var cs=getComputedStyle(n); if(cs.position==='fixed' && cs.display!=='none' && n.offsetHeight>window.innerHeight*0.3) return true; }catch(err){ return false; }
+    }
     return false;
   }
   function _hideInd(){ if(ind) ind.style.transform='translateX(-50%) translateY(-50px)'; }
@@ -29607,6 +29625,8 @@ if(typeof window !== 'undefined'){ window.addEventListener('load', function(){ s
     pulling=false; dist=0; _decided=false; _armed=false;
     if(_anyModalOpen()){ _hideInd(); return; }
     if(window.scrollY>0) return;
+    // 276: touch inside any fixed layer (팝업·시트) never starts a page refresh
+    if(_inFixed(e.target)) return;
     // 터치 시작 지점이 어떤 오버레이/모달 내부면 무시
     if(e.target && e.target.closest && e.target.closest('.mgmt-overlay,.quick-add-overlay,.perf-modal-overlay,.notice-modal-overlay,.consult-overlay,.pk-overlay,.detail-overlay,.confirm-overlay,#rc2CalDetailPop')) return;
     if(e.touches && e.touches.length===1){ startY=e.touches[0].clientY; pulling=true; }
@@ -36645,7 +36665,8 @@ function _cmRankHtml(){
 .dq-head .t { flex:1; font-size:16.5px; font-weight:800; color:#1A2744; letter-spacing:-.3px; }
 .dq-head .t small { display:block; font-size:11px; color:#5C6678; font-weight:600; margin-top:2px; }
 .dq-x { background:none; border:none; color:#97A0B0; font-size:20px; cursor:pointer; padding:4px 6px; }
-.dq-body { flex:1; overflow-y:auto; padding:14px 16px 18px; -webkit-overflow-scrolling:touch; }
+.dq-body { flex:1; overflow-y:auto; padding:14px 16px 18px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+.dq-ov { overscroll-behavior:contain; touch-action:pan-y; }
 .dq-card { background:#fff; border:1px solid #E3E7EF; border-radius:16px; padding:14px 14px 12px; margin-bottom:12px; }
 .dq-card h4 { margin:0 0 10px; font-size:14px; font-weight:800; color:#1A2744; }
 .dq-pc { background:linear-gradient(160deg,#EEF4FF 0%,#fff 55%); border-color:#C9D8F5; }
