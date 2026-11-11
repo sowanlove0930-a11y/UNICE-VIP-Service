@@ -9890,7 +9890,7 @@ function _stdFpCompute(){
     if(!agg[key]) agg[key] = { name:r.fpName, branch:r.branch, hanwha:0, son:0, total:0, hasEarly:false };
     agg[key].total += (parseInt(r.total)||0);
     var dd = parseInt((r.date||'').slice(8,10))||0;
-    if(dd>=1 && dd<=10) agg[key].hasEarly = true;
+    if(dd>=1 && dd<=10 && _perfHasNonCar(r)) agg[key].hasEarly = true;
     (r.products||[]).forEach(function(p){
       if(_perfIsLump(p)) return;
       var amt = parseInt(p.amount)||0;
@@ -10584,7 +10584,7 @@ function openPerfEdit(id){
   // 상품 채우기
   if(rec.products && rec.products.length){
     _perfProducts = rec.products.map(function(p){
-      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||''), lump:_perfIsLump(p), prod:(p.prod||''), pk:(p.pk||''), rule:(p.rule||''), core:(p.core||''), fpChk:(p.fpChk||[]).slice(), pay:(parseInt(p.pay,10)||0) };
+      return { co:(p.co||''), cat:(p.cat||''), amount:String(p.amount||''), lump:(_perfIsLump(p) && !_perfIsCar(p)), car:_perfIsCar(p), cust:(p.cust||''), prod:(p.prod||''), pk:(p.pk||''), rule:(p.rule||''), core:(p.core||''), fpChk:(p.fpChk||[]).slice(), pay:(parseInt(p.pay,10)||0) };
     });
   } else {
     _perfProducts = [{co:'', cat:'', amount:'', lump:false}];
@@ -10614,6 +10614,7 @@ function _perfSetDate(ymd){
   var hid=document.getElementById('perfDate');
   var disp=document.getElementById('perfDateDisplay');
   if(hid) hid.value=ymd||'';
+  if(typeof _perfCarDateChanged==='function') setTimeout(_perfCarDateChanged, 0);
   if(disp){
     if(ymd){
       var p=ymd.split('-');
@@ -10789,8 +10790,37 @@ function _perfCntOf(r){
   return n;
 }
 function _perfLumpOf(r){
-  var t=0; ((r&&r.products)||[]).forEach(function(p){ if(_perfIsLump(p)) t+=(parseInt(p.amount)||0); });
+  var t=0; ((r&&r.products)||[]).forEach(function(p){ if(_perfIsLump(p) && !_perfIsCar(p)) t+=(parseInt(p.amount)||0); });
   return t;
+}
+// 282: 자동차보험. 저장할 때 lump:true 도 함께 → 지점 합산·목표·시상·건수·스탠다드 집계에서 빠진다 (옛 서버도). car:true 가 표시
+var PERF_CAR_COS = ['한화손보','현대해상','DB손보','KB손보','메리츠','삼성화재'];
+function _perfIsCar(p){ return !!(p && (p.car===true || p.car==='Y' || p.car==='true')); }
+function _perfHasNonCar(r){
+  var ps=(r&&r.products)||[]; if(!ps.length) return true;
+  for(var i=0;i<ps.length;i++){ if(!_perfIsCar(ps[i])) return true; }
+  return false;
+}
+// 만료일 = 계약일 + 1년, 알림일 = 계약일 + 11개월 (없는 날은 그 달 말일)
+function _perfCarAdd(ds, mon){
+  var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ds||'')); if(!m) return '';
+  var y=+m[1], mo=+m[2]-1+mon, d=+m[3]; y+=Math.floor(mo/12); mo=((mo%12)+12)%12;
+  var last=new Date(y, mo+1, 0).getDate(); if(d>last) d=last;
+  return y+'-'+('0'+(mo+1)).slice(-2)+'-'+('0'+d).slice(-2);
+}
+function _perfCarDay(ds){
+  var dw=['일','월','화','수','목','금','토'], m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(ds||''); if(!m) return '';
+  return (+m[1])+'.'+(+m[2])+'.'+(+m[3])+'('+dw[new Date(+m[1], +m[2]-1, +m[3]).getDay()]+')';
+}
+function togglePerfCar(i){
+  _perfSyncProds();
+  var p=_perfProducts[i];
+  p.car = !p.car;
+  if(p.car){
+    p.lump=false; p.cat='자동차'; p.prod=''; p.pk=''; p.rule=''; p.core=''; p.fpChk=[]; p.pay=0; p.payAuto=false;
+    if(p.co && PERF_COMPANIES.indexOf(p.co)>=0 && PERF_CAR_COS.indexOf(p.co)<0) p.co='';
+  } else { if(p.cat==='자동차') p.cat=''; p.cust=''; }
+  renderPerfProds();
 }
 function addPerfProd(){ _perfSyncProds(); _perfProducts.push({co:'',cat:'',amount:'',lump:false}); renderPerfProds(); }
 function removePerfProd(i){ _perfSyncProds(); _perfProducts.splice(i,1); if(!_perfProducts.length) _perfProducts=[{co:'',cat:'',amount:'',lump:false}]; renderPerfProds(); }
@@ -10803,6 +10833,8 @@ function _perfSyncProds(){
     if(cu && cu.style.display!=='none' && cu.value.trim()) _perfProducts[i].co=cu.value.trim();
     var lk=document.getElementById('perfLump'+i);
     if(lk) _perfProducts[i].lump=!!lk.checked;
+    var cc=document.getElementById('perfCust'+i);
+    if(cc) _perfProducts[i].cust=(cc.value||'').trim().slice(0,20);
     var ce=document.getElementById('perfCore'+i);
     if(ce){ var cn=parseInt((ce.value||'').replace(/[^0-9]/g,''),10); _perfProducts[i].core=(!isNaN(cn)&&cn>0)?String(cn*10000):''; }
   }
@@ -10816,9 +10848,18 @@ function renderPerfProds(){
     // 255: a 종신 product whose name says 'N년납' gets that pay (the FP can change it)
     if(p.cat==='종신' && !(parseInt(p.pay,10)>0) && p.prod){ var _py=_perfPayFromName(p.prod); if(_py){ p.pay=_py; p.payAuto=true; } }
     var delBtn = _perfProducts.length>1 ? '<span onclick="removePerfProd('+i+')" style="position:absolute;top:9px;right:11px;color:#C0392B;font-size:12px;cursor:pointer">✕</span>' : '';
-    var isLump = _perfIsLump(p);
-    var lumpChk = '<label style="position:absolute;top:7px;right:'+(_perfProducts.length>1?'34px':'11px')+';display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:'+(isLump?'#854F0B':'var(--text3)')+';cursor:pointer;user-select:none">'
-      +'<input type="checkbox" id="perfLump'+i+'" '+(isLump?'checked':'')+' onchange="togglePerfLump('+i+')" style="width:15px;height:15px;margin:0;accent-color:#BA7517">일시납</label>';
+    var isCar = _perfIsCar(p);
+    var isLump = !isCar && _perfIsLump(p);
+    var lumpChk = '<div style="position:absolute;top:7px;right:'+(_perfProducts.length>1?'34px':'11px')+';display:flex;align-items:center;gap:10px">'
+      +(isCar ? '' : '<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:'+(isLump?'#854F0B':'var(--text3)')+';cursor:pointer;user-select:none">'
+      +'<input type="checkbox" id="perfLump'+i+'" '+(isLump?'checked':'')+' onchange="togglePerfLump('+i+')" style="width:15px;height:15px;margin:0;accent-color:#BA7517">일시납</label>')
+      +'<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:'+(isCar?'#185FA5':'var(--text3)')+';cursor:pointer;user-select:none">'
+      +'<input type="checkbox" id="perfCar'+i+'" '+(isCar?'checked':'')+' onchange="togglePerfCar('+i+')" style="width:15px;height:15px;margin:0;accent-color:#185FA5">🚗 자동차보험</label></div>';
+    var carExp = isCar ? _perfCarAdd((document.getElementById('perfDate')||{}).value||'', 12) : '';
+    var carNote = (isCar && carExp) ? '<div style="margin-top:9px;padding:9px 11px;border-radius:9px;background:#fff;border:1px solid #B5D4F4;font-size:12px;color:#0C447C;line-height:1.7">'
+      +'<div>📅 만료 예정일 <b>'+_perfCarDay(carExp)+'</b></div>'
+      +'<div>🔔 푸시 알림 <b>'+_perfCarDay(_perfCarAdd(carExp, -1))+' 아침 9시</b></div>'
+      +'<div style="font-size:10.5px;color:#185FA5">만료 한 달 전, 담당 FP에게 고객 갱신 안내 알림이 갑니다</div></div>' : '';
     var lumpNote = isLump ? '<div style="font-size:10px;color:#854F0B;margin-top:7px;line-height:1.5">💰 일시납 — 기록·개인 공유에는 남고, 지점 합산·목표·시상 집계에는 들어가지 않습니다</div>' : '';
     // 분류 칩 (건강상해/종신/저축/기타)
     var catChips='';
@@ -10829,16 +10870,32 @@ function renderPerfProds(){
     }
     // 회사 칩
     var chips='';
-    for(var ci=0;ci<PERF_COMPANIES.length;ci++){
-      var cname=PERF_COMPANIES[ci];
+    var _coList = isCar ? PERF_CAR_COS : PERF_COMPANIES;
+    for(var ci=0;ci<_coList.length;ci++){
+      var cname=_coList[ci];
       var on = (p.co===cname) ? ' perf-co-on' : '';
       chips+='<span class="perf-co'+on+'" onclick="pickPerfCo('+i+',\''+cname+'\')">'+cname+'</span>';
     }
-    var customOn = (p.co && PERF_COMPANIES.indexOf(p.co)<0) ? ' perf-co-on' : '';
+    var customOn = (p.co && _coList.indexOf(p.co)<0) ? ' perf-co-on' : '';
     chips+='<span class="perf-co'+customOn+'" onclick="pickPerfCoCustom('+i+')">+ 직접</span>';
-    var customInput = (p.co && PERF_COMPANIES.indexOf(p.co)<0)
+    var customInput = (p.co && _coList.indexOf(p.co)<0)
       ? '<input type="text" class="perf-input" id="perfCoCustom'+i+'" placeholder="보험사 직접 입력" value="'+(p.co||'').replace(/"/g,'&quot;')+'" oninput="_perfSyncProds()" style="margin-top:6px;font-size:12px">'
       : '<input type="text" class="perf-input" id="perfCoCustom'+i+'" placeholder="보험사 직접 입력" style="display:none;margin-top:6px;font-size:12px" oninput="_perfSyncProds()">';
+    if(isCar){
+      h+='<div style="border:1px solid #85B7EB;border-radius:11px;padding:11px;margin-bottom:8px;position:relative;background:#E6F1FB">'+
+        '<div style="font-size:10px;font-weight:800;color:#0C447C;margin-bottom:7px">상품 '+(i+1)+' <span style="font-size:9px;padding:1px 7px;border-radius:8px;background:#B5D4F4;color:#042C53;margin-left:4px">집계 제외</span></div>'+delBtn+lumpChk+
+        '<div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:5px">보험사 <span style="font-weight:500">(손보사)</span></div>'+
+        '<div class="perf-co-wrap">'+chips+'</div>'+
+        customInput+
+        '<div class="perf-amt-row" style="margin-top:8px">'+
+          '<input type="text" inputmode="numeric" class="perf-input perf-amt-big" id="perfAmt'+i+'" placeholder="금액 (원)" value="'+(p.amount?Number(p.amount).toLocaleString():'')+'" oninput="onPerfAmtInput('+i+')" style="width:100%">'+
+        '</div>'+
+        '<div style="font-size:10px;font-weight:700;color:var(--text3);margin:8px 0 5px">고객명 <span style="color:#C0392B">*</span></div>'+
+        '<input type="text" class="perf-input" id="perfCust'+i+'" maxlength="20" placeholder="고객명 (만료 알림에 나와요)" value="'+String(p.cust||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'" oninput="_perfSyncProds()" style="font-size:12px;width:100%;box-sizing:border-box">'+
+        carNote+
+      '</div>';
+      continue;
+    }
     h+='<div style="border:1px solid '+(isLump?'#EF9F27':'var(--bdr)')+';border-radius:11px;padding:11px;margin-bottom:8px;position:relative;background:'+(isLump?'#FAEEDA':'var(--sur)')+'">'+
       '<div style="font-size:10px;font-weight:800;color:'+(isLump?'#633806':'var(--gold2)')+';margin-bottom:7px">상품 '+(i+1)+(isLump?' <span style="font-size:9px;padding:1px 7px;border-radius:8px;background:#FAC775;color:#412402;margin-left:4px">집계 제외</span>':'')+'</div>'+delBtn+lumpChk+
       '<div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:5px">보험사</div>'+
@@ -10891,16 +10948,20 @@ function onPerfAmtInput(i){
   var pbx = document.getElementById('perfPayBlk' + i);
   if(pbx) pbx.outerHTML = _perfPayBlock(i, _perfProducts[i]);
 }
+function _perfCarDateChanged(){
+  if(typeof _perfProducts==='undefined' || !_perfProducts.some(function(p){ return _perfIsCar(p); })) return;
+  _perfSyncProds(); renderPerfProds();
+}
 function updatePerfProdSum(){
   var el=document.getElementById('perfProdSum');
   if(!el) return;
-  var total=0,cnt=0,lump=0,lcnt=0;
+  var total=0,cnt=0,lump=0,lcnt=0,car=0,ccnt=0;
   // 255: the 종신 applied amount of the products (지점목표 · 유니콘즈 · 워홀)
   var ds=(document.getElementById('perfDate')||{}).value||'', rec=0, cuts=[];
-  _perfProducts.forEach(function(p){ var n=parseInt((String(p.amount)||'').replace(/[^0-9]/g,''))||0; if(n>0){ if(_perfIsLump(p)){ lump+=n; lcnt++; } else { total+=n; cnt++;
+  _perfProducts.forEach(function(p){ var n=parseInt((String(p.amount)||'').replace(/[^0-9]/g,''))||0; if(n>0){ if(_perfIsCar(p)){ car+=n; ccnt++; } else if(_perfIsLump(p)){ lump+=n; lcnt++; } else { total+=n; cnt++;
     var v=_perfProdRec({ cat:p.cat, pay:(parseInt(p.pay,10)||0), amount:n }, ds); rec+=v; if(v<n) cuts.push({ pct:_perfPayPct(p.pay) }); } } });
-  if(cnt>0 || lcnt>0){
-    el.innerHTML='집계 '+total.toLocaleString()+'원 · '+cnt+'건'+(lcnt?'  |  일시납(제외) '+lump.toLocaleString()+'원 · '+lcnt+'건':'')+
+  if(cnt>0 || lcnt>0 || ccnt>0){
+    el.innerHTML='집계 '+total.toLocaleString()+'원 · '+cnt+'건'+(lcnt?'  |  일시납(제외) '+lump.toLocaleString()+'원 · '+lcnt+'건':'')+(ccnt?'  |  🚗 자동차(제외) '+car.toLocaleString()+'원 · '+ccnt+'건':'')+
       (rec<total ? '<div class="pf-sum-rec">🎯 '+_perfRecLabel(cuts)+' '+rec.toLocaleString()+'원 (지점목표·유니콘즈·워홀)</div>' : '');
     el.style.display='';
   }
@@ -10921,6 +10982,16 @@ function confirmPerfInput() {
     var p=_perfProducts[i];
     var amt=parseInt((String(p.amount)||'').replace(/[^0-9]/g,''))||0;
     var co=_perfCoCanon((p.co||'').trim());
+    if(_perfIsCar(p)){
+      if(!co && !amt) continue;
+      if(!co){ showToast('⚠️ 상품 '+(i+1)+'(자동차보험)의 보험사를 선택해 주세요'); return; }
+      if(!amt){ showToast('⚠️ 상품 '+(i+1)+'(자동차보험)의 금액을 입력해 주세요'); return; }
+      if(!String(p.cust||'').trim()){ showToast('⚠️ 상품 '+(i+1)+'(자동차보험)의 고객명을 입력해 주세요'); return; }
+      var cprod={co:co, cat:'자동차', amount:amt, car:true, lump:true};
+      cprod.cust=String(p.cust).trim().slice(0,20);
+      products.push(cprod);
+      continue;
+    }
     if(!co && !p.cat && !amt) continue;
     if(!co){ showToast('⚠️ 상품 '+(i+1)+'의 보험사를 선택해 주세요'); return; }
     if(!p.cat){ showToast('⚠️ 상품 '+(i+1)+'의 분류를 선택해 주세요'); return; }
@@ -10937,7 +11008,8 @@ function confirmPerfInput() {
   if(_perfPtnOn && !_perfPtnPid){ showToast('⚠️ 파트너를 선택해 주세요 (또는 파트너스 칩을 해제)'); return; }
   // total = 집계용 보장월초 (일시납 제외). 일시납 금액은 products 안에만 남는다
   var total=products.reduce(function(s,x){ return s+(x.lump?0:x.amount); },0);
-  var lumpTotal=products.reduce(function(s,x){ return s+(x.lump?x.amount:0); },0);
+  var lumpTotal=products.reduce(function(s,x){ return s+((x.lump && !x.car)?x.amount:0); },0);
+  var carTotal=products.reduce(function(s,x){ return s+(x.car?x.amount:0); },0);
 
   var log=getPerfLog();
   var isEdit = !!_editingPerfId;
@@ -10974,7 +11046,7 @@ function confirmPerfInput() {
   _perfLockSubmit(true);
 
   var _cntN = products.filter(function(x){ return !x.lump; }).length;
-  var amtTxt = fpName+' '+total.toLocaleString()+'원 ('+_cntN+'건)'+(lumpTotal?' + 일시납 '+lumpTotal.toLocaleString()+'원':'');
+  var amtTxt = fpName+' '+total.toLocaleString()+'원 ('+_cntN+'건)'+(lumpTotal?' + 일시납 '+lumpTotal.toLocaleString()+'원':'')+(carTotal?' + 🚗자동차 '+carTotal.toLocaleString()+'원':'');
   var _rcO = _perfRecOf(newPerf), recTxt = (_rcO.rec < _rcO.amt) ? (' · '+_perfRecLabel(_rcO.cuts)+' '+_rcO.rec.toLocaleString()+'원') : '';
 
   _perfSubmitToGas(newPerf, 1, function(okFlag, res){
@@ -11623,7 +11695,7 @@ function renderPerfView(){
   // 필터된 합계 (합계줄용)
   var fSum=0, fCnt=0, pmIn=0, pmAll=0, fRec=0;
   listRecs.forEach(function(r){ fRec+=_perfRecOf(r).rec; });
-  listRecs.forEach(function(r){ fSum+=(parseInt(r.total)||0); fCnt+=_perfCntOf(r); (r.products||[]).forEach(function(p){ pmAll++; if(p.prod) pmIn++; }); });
+  listRecs.forEach(function(r){ fSum+=(parseInt(r.total)||0); fCnt+=_perfCntOf(r); (r.products||[]).forEach(function(p){ if(_perfIsCar(p)) return; pmAll++; if(p.prod) pmIn++; }); });
   var brLabel = _pvBranch==='al'?' · 알파':_pvBranch==='br'?' · 브라보':'';
 
   var listEl = document.getElementById('pvList');
@@ -11639,7 +11711,8 @@ function renderPerfView(){
       var cats = (r.products||[]).map(function(p){
         var kind=(typeof _perfClassify==='function')?_perfClassify(p.co):'etc';
         var badge = kind==='life' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#2E6E8E;color:#fff;margin-right:4px">생</span>' : (kind==='non' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#A85532;color:#fff;margin-right:4px">손</span>' : '');
-        var lumpB = _perfIsLump(p) ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FAC775;color:#412402;margin-right:4px">일시납</span>' : '';
+        var lumpB = _perfIsCar(p) ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#B5D4F4;color:#042C53;margin-right:4px">🚗자동차</span>' : (_perfIsLump(p) ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FAC775;color:#412402;margin-right:4px">일시납</span>' : '');
+        if(_perfIsCar(p)) return '<span style="display:inline-block;white-space:nowrap;color:#185FA5">'+lumpB+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원</span>';
         var pm = p.prod ? '<span class="pv-pm ok" title="' + String(p.prod).replace(/"/g,'&quot;') + '">✓</span>' : '<span class="pv-pm no">미입력</span>';
         return '<span style="display:inline-block;white-space:nowrap'+(_perfIsLump(p)?';color:#854F0B':'')+'">'+lumpB+badge+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원'+pm+_pvRecTag(p, r)+'</span>';
       }).join('<br>');
@@ -11653,7 +11726,7 @@ function renderPerfView(){
       for(var _nk=0; _nk<_pLen; _nk++) _nums.push(_numAcc + 1 + _nk);
       _numAcc += _pLen;
       var numCol = '<td class="pv-numcol">'+_nums.join('<br>')+'</td>';
-      rows+='<tr'+rowClick+'>'+numCol+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td class="pv-prodcol">'+cats+'</td><td class="pv-amt">'+(parseInt(r.total)||0).toLocaleString()+'원'+_pvRecAmt(r)+'</td>'+delCol+'</tr>';
+      rows+='<tr'+rowClick+'>'+numCol+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td class="pv-prodcol">'+cats+'</td><td class="pv-amt">'+(_perfHasNonCar(r) ? (parseInt(r.total)||0).toLocaleString()+'원'+_pvRecAmt(r) : '<span style="font-size:11px;color:#185FA5">🚗 집계 제외</span>')+'</td>'+delCol+'</tr>';
     });
     var dateHead = (_pvRange!=='today') ? '<th>날짜</th>' : '';
     var delHead = canDel ? '<th></th>' : '';
@@ -16264,7 +16337,7 @@ function _buildPerfShareText(){
     var key=r.fpId||r.fpName;
     if(!byFp[key]){ byFp[key]={name:r.fpName, branch:r.branch, items:[]}; order.push(key); }
     (r.products||[]).forEach(function(p){
-      byFp[key].items.push({co:p.co||'', amount:parseInt(p.amount)||0, lump:_perfIsLump(p)});
+      byFp[key].items.push({co:p.co||'', amount:parseInt(p.amount)||0, lump:_perfIsLump(p), car:_perfIsCar(p)});
     });
   });
 
@@ -16277,7 +16350,7 @@ function _buildPerfShareText(){
     n++;
     lines.push(n+'.'+fp.name);
     fp.items.forEach(function(it){
-      lines.push((it.co?it.co+' ':'')+it.amount.toLocaleString()+'원'+(it.lump?' (일시납)':''));
+      lines.push((it.co?it.co+' ':'')+it.amount.toLocaleString()+'원'+(it.car?' (자동차)':(it.lump?' (일시납)':'')));
     });
     lines.push('');
   });
@@ -16504,6 +16577,18 @@ function _perfMonthCut(rows){
   for(var j=0;j<log.length;j++){ var r = log[j]; if(r && String(r.date||'').indexOf(ym)===0 && _perfRecOf(r).rec < (parseInt(r.total,10)||0)) return true; }
   return false;
 }
+function _perfCarShareBlock(){
+  var ym = getCurrentYM(), log = (typeof getPerfLog==='function') ? getPerfLog() : [], rows = [];
+  for(var i=0;i<log.length;i++){
+    var r = log[i]; if(!r || String(r.date||'').indexOf(ym)!==0) continue;
+    (r.products||[]).forEach(function(p){ if(_perfIsCar(p)) rows.push({ d:String(r.date), name:r.fpName||'', branch:r.branch, co:p.co||'', amt:parseInt(p.amount,10)||0 }); });
+  }
+  if(!rows.length) return '';
+  rows.sort(function(a,b){ return a.d < b.d ? -1 : (a.d > b.d ? 1 : 0); });
+  var s = '\n[자동차보험]\n';
+  for(var k=0;k<rows.length;k++) s += (k+1) + '. ' + rows[k].name + ' ' + (rows[k].co ? rows[k].co + ' ' : '') + rows[k].amt.toLocaleString() + '원(' + _perfBrAbbr(rows[k].branch) + ')\n';
+  return s;
+}
 function _perfShareText(){
   var now = new Date();
   var mm = now.getMonth()+1, dd = now.getDate();
@@ -16559,6 +16644,9 @@ function _perfShareText(){
       out += (w1+1) + '. ' + ucW[w1].name + ' ' + _perfRowRec(ucW[w1]).toLocaleString() + '원(' + _perfBrAbbr(ucW[w1].branch) + ')\n';
     }
   }
+
+  // 282: 이달 자동차보험 (계약일 순)
+  out += _perfCarShareBlock();
 
   // 스탠다드FP 달성 현황은 이 공유 문구에서 제외 (2026-09-28) — 스탠다드는 별도 공유 문구가 있음
   return out.replace(/\n+$/,'');
@@ -29085,7 +29173,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 281;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 282;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -35266,7 +35354,7 @@ function _cmBuild(fpId, ym, cut, extra, only){
     var rec = recs[j];
     if(String(rec.date||'').indexOf(ym) !== 0) continue;
     var ps = rec.products || [];
-    for(var k=0;k<ps.length;k++) items.push(_cmProdItem(rec, ps[k]));
+    for(var k=0;k<ps.length;k++){ if(!_perfIsCar(ps[k])) items.push(_cmProdItem(rec, ps[k])); }
   }
   items.sort(function(a,b){ return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
   var evals = _cmEvalRules(recs, fpId, ym);
@@ -37157,6 +37245,7 @@ function _cmMgrDays(team, mgrId, from, to){
     if(mine) od[d] = 1;
     var ps = rec.products || [];
     for(var k=0;k<ps.length;k++){
+      if(_perfIsCar(ps[k])) continue;
       var it = _cmProdItem(rec, ps[k]);
       if(!mine && it.calc){ var g = it.gross; day[d] = (day[d] || 0) + g.m1 + g.y1 + g.y2 + g.y3; dm1[d] = (dm1[d] || 0) + g.m1; if(d === to){ m1 += g.m1; y2 += g.y2; } }
       if(d === to) rows.push({ rec:rec, it:it, mine:mine, name:(mine ? '' : (mem[rec.fpId].name || rec.fpName || '')) });
