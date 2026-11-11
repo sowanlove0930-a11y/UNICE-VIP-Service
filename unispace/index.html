@@ -19104,7 +19104,7 @@ function _fmFrame(){ return document.getElementById('fmFrame'); }
 function _fmSend(){
   var f = _fmFrame();
   if (!f || !f.contentWindow || !_fm.ready || !_fm.got) return;
-  try { f.contentWindow.postMessage({ t:'fm:data', me:_fmMe(), intro:_fm.intro, photo:_fm.photo }, '*'); } catch (e) {}
+  try { f.contentWindow.postMessage({ t:'fm:data', me:_fmMe(), intro:_fm.intro, photo:_fm.photo, gas:UNISPACE_GAS_URL }, '*'); } catch (e) {}
 }
 function _fmLoad(){
   var me = String(currentUser.id);
@@ -19129,9 +19129,12 @@ function openFirstMeet(e) {
   if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
   if (currentUser.first === false) { showToast('🚫 초회상담 사용 권한이 없습니다 · 관리자 문의'); return false; }
   var ov = document.getElementById('fmOv');
-  if (!ov) { ov = document.createElement('div'); ov.id = 'fmOv'; ov.innerHTML = '<iframe id="fmFrame" title="초회상담" allow="fullscreen"></iframe>'; document.body.appendChild(ov); }
+  if (!ov) { ov = document.createElement('div'); ov.id = 'fmOv'; document.body.appendChild(ov); }
   _fm.ready = false;
-  _fmFrame().src = 'first.html?v=' + APP_BUILD;
+  // 286: a fresh iframe each time, address set before it enters the page -> no extra history step (the back key stays with the app)
+  ov.innerHTML = '';
+  var fr = document.createElement('iframe'); fr.id = 'fmFrame'; fr.title = '초회상담'; fr.setAttribute('allow', 'fullscreen'); fr.src = 'first.html?v=' + APP_BUILD;
+  ov.appendChild(fr);
   ov.classList.add('show');
   _fmLoad();
   return false;
@@ -19140,7 +19143,7 @@ function closeFirstMeet() {
   var ov = document.getElementById('fmOv');
   if (!ov) return;
   ov.classList.remove('show'); _fm.ready = false;
-  try { _fmFrame().src = 'about:blank'; } catch (e) {}
+  ov.innerHTML = '';
 }
 function _fmSave(m) {
   var f = _fmFrame(), me = String(currentUser.id);
@@ -27554,6 +27557,11 @@ function doCheckin() { doSmartCheckin(); }
     // 닫기 우선순위 목록 (위에 뜬 것부터). check: 열려있나, close: 닫기 동작
     function _backClosers(){
       return [
+        // 286 초회상담 (full-screen iframe): back closes the popup inside it first, then the deck itself. 다이렉트견적 opened from it sits above and closes first.
+        { check: function(){ var d=document.getElementById('dqOv'); return d && d.classList.contains('on'); },
+          close: function(){ closeDirectQuote(); } },
+        { check: function(){ var e=document.getElementById('fmOv'); return e && e.classList.contains('show'); },
+          close: function(){ var f=document.getElementById('fmFrame'); if(_fm.ready && f && f.contentWindow){ try { f.contentWindow.postMessage({ t:'fm:back' }, '*'); return; } catch(e) {} } closeFirstMeet(); } },
         // 도구 홍보영상 모달 (가장 위 — 상담모드보다 먼저 닫혀야 함)
         { check: function(){ var e=document.getElementById('vidOverlay'); return e && e.classList.contains('open'); },
           close: function(){ if(typeof closeToolVideo==='function') closeToolVideo(); else { var e=document.getElementById('vidOverlay'); if(e) e.classList.remove('open'); } } },
@@ -28411,7 +28419,7 @@ function doCheckin() { doSmartCheckin(); }
     <a class="consult-card cc-first" href="#" onclick="return openFirstMeet(event)">
       <div class="cc-icon">🤝</div>
       <div class="cc-name">초회상담</div>
-      <div class="cc-desc">고객님을 처음 만날 때<br>저와 유니스를 소개합니다</div>
+      <div class="cc-desc">고객님을 처음 만날 때<br>나와 유니스를 소개합니다</div>
     </a>
     <a class="consult-card cc-ugobi pc-only-tool" href="https://unice-vip.co.kr/ugobi/index.html" target="_blank" onclick="return openUgobiConsult(event)">
       <button type="button" class="cc-ptn-share" onclick="return shareUgobiM(event)" aria-label="U고비 고객에게 보내기">&#10148;</button>
@@ -29267,7 +29275,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 284;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 286;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
