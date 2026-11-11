@@ -29085,7 +29085,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 280;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 281;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -29526,6 +29526,13 @@ function _pushDiagTest(){
   } catch(e){}
 }
 
+// 같은 알림(서버가 준 mid 가 같음)은 같은 tag → 여러 번 도착해도 한 장. mid 없는 옛 서버: 같은 글이 10초 안이면 같은 tag
+function _fgPushTag(mid, title, body){
+  if (mid) return 'unispace-fg-' + String(mid);
+  var txt = String(title || '') + '|' + String(body || ''), h = 0;
+  for (var i = 0; i < txt.length; i++) h = (h * 31 + txt.charCodeAt(i)) | 0;
+  return 'unispace-fg-' + (h >>> 0).toString(36) + '-' + Math.floor(Date.now() / 10000);
+}
 // 포그라운드(앱 보고 있을 때) 푸시 수신 → 토스트
 function _initFcmForeground(){
   var messaging = _initFcm();
@@ -29546,7 +29553,7 @@ function _initFcmForeground(){
               body: bodyTxt,
               icon: '/unispace/unispace-192.png',
               badge: '/unispace/unispace-badge.png',
-              tag: d.tag || ('unispace-fg-' + new Date().getTime()),
+              tag: d.tag || _fgPushTag(d.mid, title, bodyTxt),
               data: { url: d.url || './index.html?open=today' },
               requireInteraction: false
             });
