@@ -18019,6 +18019,45 @@ function shareRecruitVideo(key, ev) {
   });
   return false;
 }
+// 293: 실손 인상 안내 영상 (실손 인상 안내 특화팀 2분 모션 영상) → 카톡 카드 → 재생 페이지 silson.html?fp=사번 (영상 파일은 같은 폴더 silson.mp4)
+var SILSON_CARD = { url: 'https://unice-vip.co.kr/unispace/silson.html', title: '실손보험료, 올해도 오르셨나요?',
+  desc: '내 실손은 몇 세대인지, 앞으로 보험료가 얼마나 오를지 2분 영상으로 확인해 보세요. 유니스 실손 인상 안내 특화팀',
+  img: 'https://unice-vip.co.kr/unispace/silson-og.jpg' };
+function _silsonLink() {
+  return SILSON_CARD.url + ((currentUser && currentUser.id) ? '?fp=' + encodeURIComponent(String(currentUser.id)) : '');
+}
+function openSilsonPreview(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  window.open(_silsonLink(), '_blank');
+  return false;
+}
+function shareSilsonVideo(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var c = SILSON_CARD, url = _silsonLink();
+  _ckpKakaoReady(function(ok) {
+    if (!ok) { _silsonShareFallback(url); return; }
+    try {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: { title: c.title, description: c.desc, imageUrl: c.img, imageWidth: 1200, imageHeight: 600,
+                   link: { mobileWebUrl: url, webUrl: url } },
+        buttons: [ { title: '▶ 영상 보기', link: { mobileWebUrl: url, webUrl: url } } ]
+      });
+    } catch (e) { _silsonShareFallback(url); }
+  });
+  return false;
+}
+function _silsonShareFallback(url) {
+  var c = SILSON_CARD, sender = _shareSender();
+  var msg = (sender ? sender + ' 보내드립니다.\n' : '') + '[' + c.title + ']\n' + c.desc;
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share) { navigator.share({ text: msg, url: url }).catch(function(e){}); return; }
+  var full = msg + '\n' + url;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(full).then(function() { showToast('📋 링크가 복사되었습니다. 카톡에 붙여넣어 보내세요'); })
+      .catch(function() { shareVipApplyLegacyCopy(full); });
+  } else { shareVipApplyLegacyCopy(full); }
+}
 function _recruitShareFallback(key, url) {
   var c = RECRUIT_CARDS[key];
   var sender = _shareSender().replace(/ FP(이|가)$/, ' 팀장이');   // 리크루팅: FP 직함은 팀장으로
@@ -19174,7 +19213,7 @@ function _applyMomdeunLock() {
   // 평생든든 follows the 노후파이2.0 permission (the 유동화 consult tool): no 평생든든 row when it is blocked
   var psOff = !!(currentUser && currentUser.nohupai2 === false);
   if (document.body) document.body.classList.toggle('pension-off', psOff);
-  var n = 3 + (off ? 0 : 1) + (ugOff ? 0 : 1) + (psOff ? 0 : 1);
+  var n = 4 + (off ? 0 : 1) + (ugOff ? 0 : 1) + (psOff ? 0 : 1);   // 293: + 실손 인상 안내 영상
   var els = document.querySelectorAll('.sa-info-n');
   for (var i = 0; i < els.length; i++) els[i].textContent = n;
 }
@@ -28592,11 +28631,19 @@ function doCheckin() { doSmartCheckin(); }
           <div class="sag-ic">🎬</div>
           <div class="sag-tx">
             <div class="a">고객 안내 자료</div>
-            <div class="b">친구추가 · VIP 서비스 · 라이프 디자인<span class="md-on"> · 맘든든</span><span class="ug-on"> · U고비</span><span class="ps-on"> · 평생든든</span> (<span class="sa-info-n">6</span>)</div>
+            <div class="b">실손 인상 영상 · 친구추가 · VIP 서비스 · 라이프 디자인<span class="md-on"> · 맘든든</span><span class="ug-on"> · U고비</span><span class="ps-on"> · 평생든든</span> (<span class="sa-info-n">7</span>)</div>
           </div>
           <div class="sag-chev">▾</div>
         </div>
         <div class="sag-body">
+      <div class="sa-row sa-silson">
+        <div class="sa-ic">📈</div>
+        <div class="sa-tx"><div class="a">실손 인상 안내 영상<span class="sa-new" data-until="2026-12-31">NEW</span></div><div class="b">내 실손 세대 · 앞으로의 보험료 · 2분</div></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-vbtn" onclick="return openSilsonPreview(event)">▶ 영상</button>
+          <button type="button" class="sa-sbtn" onclick="return shareSilsonVideo(event)">보내기</button>
+        </div>
+      </div>
       <div class="sa-row sa-friend">
         <div class="sa-ic">🤝</div>
         <div class="sa-tx"><div class="a">유니스와 친구추가<span class="sa-new" data-until="2026-11-30">NEW</span></div><div class="b">내 보험 혜택 찾기 · 신청하면 담당 FP 푸시</div></div>
@@ -29408,7 +29455,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 292;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 293;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
