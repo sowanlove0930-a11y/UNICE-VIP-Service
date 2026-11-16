@@ -1818,6 +1818,16 @@ body.first-off .cc-first{ display:none; }
 #fmOv{ position:fixed; inset:0; z-index:9000; background:#0B1120; display:none; }
 #fmOv.show{ display:block; }
 #fmOv iframe{ border:0; width:100%; height:100%; display:block; }
+#stOv{ position:fixed; inset:0; z-index:9000; background:#0B1120; display:none; }
+#stOv.show{ display:block; }
+#stOv iframe{ border:0; width:100%; height:100%; display:block; }
+.cc-story{ background: linear-gradient(145deg, #0f1a33 0%, #0D1628 55%, #15213b 100%); border:1px solid rgba(124,155,232,.34); }
+.cc-story::before{ background: radial-gradient(circle at 40% 35%, rgba(124,155,232,0.16), transparent 65%); }
+.cc-story::after { background: linear-gradient(90deg, transparent, #7C9BE8, transparent); }
+.cc-story .cc-icon{ background: rgba(124,155,232,0.18); }
+.cc-story .cc-name{ color: #A9C0FF; }
+body.theme-light .cc-story{ background: linear-gradient(160deg, #F2F5FC, #E7EDF9); border-color: rgba(31,42,68,.20); }
+body.theme-light .cc-story .cc-name{ color: #1F2A44; }
 .cc-partners{ background: linear-gradient(145deg, #241a06 0%, #12100a 55%, #1a1204 100%); border: 1px solid rgba(201,168,76,.30); }
 
 .consult-card::before { content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity 0.35s; border-radius: inherit; }
@@ -19285,6 +19295,35 @@ function openFirstMeet(e) {
   _fmLoad();
   return false;
 }
+// 302: 유니스 FP 직무 안내 (story.html) — full-screen like 초회상담; a fresh iframe each time
+var _st = { ready: false };
+function openStoryDeck(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  if (_isPhoneWidth()) return _pcOnlyToolBlocked();
+  var ov = document.getElementById('stOv');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'stOv'; document.body.appendChild(ov); }
+  _st.ready = false;
+  ov.innerHTML = '';
+  var fr = document.createElement('iframe'); fr.id = 'stFrame'; fr.title = '유니스 FP 직무 안내';
+  fr.setAttribute('allow', 'autoplay; fullscreen'); fr.setAttribute('allowfullscreen', '');
+  fr.onload = function () { try { fr.contentWindow.focus(); } catch (x) {} };
+  fr.src = 'story.html?v=' + APP_BUILD;
+  ov.appendChild(fr);
+  ov.classList.add('show');
+  return false;
+}
+function closeStoryDeck() {
+  var ov = document.getElementById('stOv');
+  if (!ov) return;
+  ov.classList.remove('show'); _st.ready = false;
+  ov.innerHTML = '';
+}
+window.addEventListener('message', function (ev) {
+  var f = document.getElementById('stFrame'), m = ev.data;
+  if (!f || ev.source !== f.contentWindow || !m || typeof m !== 'object') return;
+  if (m.t === 'st:ready') _st.ready = true;
+  else if (m.t === 'st:close') closeStoryDeck();
+});
 function closeFirstMeet() {
   var ov = document.getElementById('fmOv');
   if (!ov) return;
@@ -27719,6 +27758,9 @@ function doCheckin() { doSmartCheckin(); }
         // 286 초회상담 (full-screen iframe): back closes the popup inside it first, then the deck itself. 다이렉트견적 opened from it sits above and closes first.
         { check: function(){ var d=document.getElementById('dqOv'); return d && d.classList.contains('on'); },
           close: function(){ closeDirectQuote(); } },
+        // 302 유니스 FP 직무 안내 (full-screen iframe): back closes its video first, then the deck
+        { check: function(){ var e=document.getElementById('stOv'); return e && e.classList.contains('show'); },
+          close: function(){ var f=document.getElementById('stFrame'); if(_st.ready && f && f.contentWindow){ try { f.contentWindow.postMessage({ t:'st:back' }, '*'); return; } catch(e) {} } closeStoryDeck(); } },
         { check: function(){ var e=document.getElementById('fmOv'); return e && e.classList.contains('show'); },
           close: function(){ var f=document.getElementById('fmFrame'); if(_fm.ready && f && f.contentWindow){ try { f.contentWindow.postMessage({ t:'fm:back' }, '*'); return; } catch(e) {} } closeFirstMeet(); } },
         // 도구 홍보영상 모달 (가장 위 — 상담모드보다 먼저 닫혀야 함)
@@ -28629,6 +28671,12 @@ function doCheckin() { doSmartCheckin(); }
       <div class="cc-name">유니스 파트너스</div>
       <div class="cc-desc">알려주기만 하면 되는<br>소개 전용 파트너 제도</div>
     </a>
+    <a class="consult-card cc-story pc-only-tool" href="#" onclick="return openStoryDeck(event)">
+      <div class="cc-icon">💼</div>
+      <div class="cc-name">유니스 FP 직무 안내</div>
+      <div class="cc-desc">입사를 고민하는 분께<br>유니스 FP의 일을 소개합니다</div>
+      <div class="pc-only-badge" role="img" aria-label="PC·태블릿 전용" title="PC·태블릿에서 이용해 주세요">💻</div>
+    </a>
   </div>
 
 
@@ -29473,7 +29521,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 301;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 302;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
