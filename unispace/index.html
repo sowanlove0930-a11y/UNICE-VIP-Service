@@ -29473,7 +29473,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 299;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 300;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -38514,6 +38514,9 @@ body.theme-light .tt-head .t { color:#7A4B00; }
 .tt-edit { width:100%; border:1.5px solid #7B4FD6; border-radius:9px; padding:8px 10px; font-size:14px; font-family:inherit; background:var(--bg2); color:var(--text); }
 .tt-empty { font-size:13.5px; color:var(--text2); padding:14px 4px 6px; text-align:center; }
 .tt-sec { font-size:12px; font-weight:800; color:var(--text2); margin:14px 2px 0; }
+.tt-allrem { width:100%; display:flex; align-items:center; justify-content:center; gap:6px; border:1.5px solid #E5484D; background:rgba(229,72,77,.08); color:#D63B40; border-radius:12px; padding:10px; font-size:13.5px; font-weight:800; cursor:pointer; font-family:inherit; margin-top:4px; }
+.tt-allrem:disabled { opacity:.6; }
+.tt-allrem small { font-weight:600; color:var(--text2); font-size:12px; }
 /* add form */
 .tt-add-ov { position:fixed; inset:0; z-index:9100; background:rgba(20,16,8,.5); display:none; align-items:flex-start; justify-content:center; padding:24px 12px; overflow:auto; }
 .tt-add-ov.open { display:flex; }
@@ -38709,7 +38712,13 @@ function _ttMineHtml(){
 }
 function _ttBossHtml(){
   var all = _tt.data || [], act = all.filter(function(t){ return t.active !== false; }), old = all.filter(function(t){ return t.active === false; });
-  var h = act.length ? act.map(_ttBossRow).join('') : '<div class="tt-empty">오늘 올린 할 일이 없습니다. ＋ 할 일 추가로 올려 주세요.</div>';
+  var h = '';
+  // 300: one push per person with all of their unchecked tasks
+  var ppl = {}; act.forEach(function(t){ (t.undone || []).forEach(function(u){ ppl[(u.branch || '') + '|' + u.name] = 1; }); });
+  var np = Object.keys(ppl).length, lastAll = '';
+  act.forEach(function(t){ if(t.lastRemind && t.lastRemind > lastAll) lastAll = t.lastRemind; });
+  if(np) h += '<button type="button" class="tt-allrem" id="ttAllRem" onclick="ttRemindAll()">🔔 미완료 ' + np + '명에게 남은 할 일 한 번에 알림' + (lastAll ? ' <small>· 마지막 ' + _ttEsc(_ttWhen(lastAll)) + '</small>' : '') + '</button>';
+  h += act.length ? act.map(_ttBossRow).join('') : '<div class="tt-empty">오늘 올린 할 일이 없습니다. ＋ 할 일 추가로 올려 주세요.</div>';
   if(_tt.past) h += '<div class="tt-sec">지난 할 일 (30일)</div>' + (old.length ? old.map(_ttBossRow).join('') : '<div class="tt-empty">지난 할 일이 없습니다.</div>');
   return h;
 }
@@ -38778,6 +38787,13 @@ function ttRemind(id){
       var t = _ttFind(id); if(t && res.lastRemind) t.lastRemind = res.lastRemind;
       _ttRender(); _ttLoad();
     } else { if(b){ b.disabled = false; } _ttRender(); showToast('⚠️ ' + ((res && res.msg) || '알림을 보내지 못했습니다')); }
+  });
+}
+function ttRemindAll(){
+  var b = document.getElementById('ttAllRem'); if(b){ b.disabled = true; b.textContent = '보내는 중…'; }
+  _ttPost({ action:'remindTodayTasksAll' }, function(res){
+    if(res && res.ok){ showToast(res.people ? '🔔 ' + res.people + '명에게 남은 할 일을 한 번에 보냈습니다' : '✅ 모두 완료했습니다'); _ttLoad(); }
+    else { if(b) b.disabled = false; _ttRender(); showToast('⚠️ ' + (_ttOldServer(res) ? '서버(GAS)를 26k로 올려 주세요' : ((res && res.msg) || '알림을 보내지 못했습니다'))); }
   });
 }
 /* ── 추가 창 (대표) ── */
