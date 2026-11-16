@@ -4656,6 +4656,7 @@ window.UNISPACE_FCM = {
     <div class="header-right">
       <button type="button" class="checkin-smart-btn state-ready" id="checkinSmartBtn" onclick="doSmartCheckin()">📍 출근 체크인</button>
       <button type="button" class="tt-btn zero" id="ttBtn" onclick="openTodayTasks()">📢 오늘 할 일<span class="tt-cnt" id="ttCnt"></span></button>
+      <button type="button" class="cp-btn" id="cpBtn" style="display:none" onclick="openCallPractice()">📞 콜 연습<span class="tt-cnt" id="cpCnt"></span></button>
       <button type="button" class="cust-view-btn" id="custViewBtn" onclick="window.location.href='customer.html?tab=list'">🔍 고객 조회</button>
       <button type="button" class="hot-view-btn" id="hotlineBtn" onclick="openHotline()">📞 설계 핫라인</button>
       <button type="button" class="sichaek-view-btn" id="sichaekBtn" onclick="openSichaekModal()">🎁 시책 조회</button>
@@ -6998,6 +6999,7 @@ function _openFromPush(op){
     if(op === 'sched' || op === 'mysched'){ setTimeout(function(){ if(typeof _schedOpenToday==='function') _schedOpenToday(op==='mysched'?'my':'org'); }, 400); return; }
     if(op === 'perf'){ setTimeout(function(){ if(typeof openPerfView==='function') openPerfView(); }, 400); return; }
     if(op === 'todaytask'){ _tt.fromPush = true; setTimeout(function(){ if(typeof openTodayTasks==='function') openTodayTasks(); }, 500); return; }
+    if(op === 'callpractice'){ setTimeout(function(){ if(typeof openCallPractice==='function') openCallPractice('auto'); }, 600); return; }
     if(op === 'bojtop' || op === 'stdfp'){
       if(typeof _dashForegroundRefresh==='function') _dashForegroundRefresh(true); // 푸시로 들어오면 무조건 최신화
       setTimeout(function(){
@@ -7073,6 +7075,7 @@ function showDashboard() {
   renderAttToday(true);
   renderRecruitStat();
   if (typeof _ttInit === 'function') _ttInit();
+  if (typeof _cpInit === 'function') _cpInit();
   if (typeof refreshPartnerLeadBadge === 'function') setTimeout(refreshPartnerLeadBadge, 1200);
   if(typeof _ivLoadFromGas==='function') _ivLoadFromGas();
   if (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) {
@@ -27752,6 +27755,8 @@ function doCheckin() { doSmartCheckin(); }
     // 닫기 우선순위 목록 (위에 뜬 것부터). check: 열려있나, close: 닫기 동작
     function _backClosers(){
       return [
+        // 303 콜 연습: 통화 중 → 끝내기, 다른 화면 → 한 단계 뒤로, 첫 화면 → 닫기
+        { check: function(){ var e=document.getElementById('cpOv'); return e && e.classList.contains('open'); }, close: function(){ _cpBack(); } },
         // 296 오늘 할 일: 추가 창 → 목록
         { check: function(){ var e=document.getElementById('ttAddOv'); return e && e.classList.contains('open'); }, close: function(){ ttCloseAdd(); } },
         { check: function(){ var e=document.getElementById('ttOv'); return e && e.classList.contains('open'); }, close: function(){ closeTodayTasks(); } },
@@ -29521,7 +29526,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 302;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 303;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -38956,6 +38961,790 @@ function ttSave(){
   window.addEventListener('resize', function(){ var ov = document.getElementById('ttOv'); if(ov && ov.classList.contains('open')) _ttPlace(); });
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState === 'visible' && currentUser && Date.now() - _tt.loadedAt > 60000) _ttLoad();
+  });
+})();
+</script>
+
+<!-- ═══════════════════ 303 콜 연습 (cp) ═══════════════════ -->
+<style>
+.cp-btn { display:flex; align-items:center; gap:6px; position:relative; background:rgba(108,75,216,.14); border:1px solid rgba(108,75,216,.5); border-radius:20px; padding:7px 14px; color:#B9A5FF; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all .2s; font-family:'Noto Sans KR',sans-serif; }
+.cp-btn:hover { background:rgba(108,75,216,.24); }
+body.theme-light .cp-btn { color:#5B3CC4; }
+.cp-ov { position:fixed; inset:0; z-index:9000; display:none; background:rgba(20,16,10,.6); overscroll-behavior:contain; }
+.cp-ov.open { display:flex; justify-content:center; align-items:stretch; }
+.cp-wrap { width:100%; max-width:460px; height:100%; background:#F6F3EE; color:#33271B; display:flex; flex-direction:column; position:relative; font-family:'Noto Sans KR',sans-serif; }
+.cp-scr { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+.cp-scr button { font-family:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.cp-scr.dark { padding:0; background:linear-gradient(180deg,#16233F,#0E1730); display:flex; flex-direction:column; overflow:hidden; }
+.cp-top, .cp-hd { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.cp-ttl, .cp-hd b { font-size:21px; font-weight:800; color:#5A3A12; flex:1; }
+.cp-hd b { font-size:19px; }
+.cp-x, .cp-backb { border:none; background:#EDE6D8; color:#5A3A12; width:38px; height:38px; border-radius:50%; font-size:17px; font-weight:800; flex:none; display:flex; align-items:center; justify-content:center; }
+.cp-backb { font-size:24px; padding-bottom:3px; }
+.cp-hd .chip { background:#EEF2FA; color:#3F63B0; border-radius:12px; padding:4px 10px; font-size:12px; font-weight:800; flex:none; }
+.cp-ask { font-size:14px; font-weight:600; color:#6B5E50; margin:4px 0 2px; }
+.cp-empty { text-align:center; color:#8A7B69; font-size:14.5px; font-weight:600; line-height:1.7; padding:60px 10px 20px; }
+.cp-empty.sm { padding:26px 10px 10px; }
+.cp-evrow { width:100%; display:flex; justify-content:space-between; align-items:center; background:#fff; border:1.5px solid #D6CBF6; border-radius:16px; padding:14px 16px; margin:6px 0 14px; font-size:15px; font-weight:800; color:#33271B; text-align:left; }
+.cp-evrow b { font-size:13px; font-weight:800; color:#8A7B69; white-space:nowrap; }
+.cp-evrow.on { background:#6C4BD8; border-color:#6C4BD8; color:#fff; box-shadow:0 4px 14px rgba(108,75,216,.3); }
+.cp-evrow.on b { color:#fff; }
+.cp-pick { width:100%; display:flex; align-items:center; justify-content:space-between; background:#fff; border:2px solid #E8B84A; border-radius:18px; padding:18px; margin-top:11px; box-shadow:0 3px 10px rgba(184,134,11,.10); text-align:left; }
+.cp-pick b { display:block; font-size:19px; font-weight:800; color:#33271B; }
+.cp-pick small { display:block; font-size:12.5px; font-weight:600; color:#8A7B69; margin-top:3px; }
+.cp-pick i { font-style:normal; width:46px; height:46px; border-radius:50%; background:#22A45A; display:flex; align-items:center; justify-content:center; font-size:21px; flex:none; }
+.cp-pick:active { transform:scale(.985); }
+.cp-recrow { width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px; background:#fff; border:1px solid #E6DFD2; border-radius:16px; padding:14px 16px; margin-top:16px; font-size:15px; font-weight:700; color:#33271B; text-align:left; }
+.cp-recrow small { display:block; font-size:12px; color:#8A7B69; font-weight:600; margin-top:2px; }
+.cp-sw { width:50px; height:29px; border-radius:15px; background:#CFC6B6; position:relative; flex:none; transition:background .15s; }
+.cp-sw::after { content:""; position:absolute; left:3px; top:3px; width:23px; height:23px; border-radius:50%; background:#fff; transition:left .15s; }
+.cp-sw.on { background:#1F8A4C; }
+.cp-sw.on::after { left:24px; }
+.cp-links { display:flex; gap:9px; margin-top:16px; }
+.cp-links button { flex:1; border:none; text-align:center; background:#EDE6D8; border-radius:14px; padding:14px 4px; font-size:14px; font-weight:700; color:#5A3A12; }
+.cp-links em { font-style:normal; background:#E24B4A; color:#fff; border-radius:10px; font-size:11.5px; font-weight:800; padding:1px 7px; margin-left:5px; }
+/* call */
+.cp-toprow { display:flex; justify-content:space-between; align-items:center; padding:calc(18px + env(safe-area-inset-top)) 18px 0; font-size:13px; color:#9FB0D6; font-weight:600; flex:none; }
+.cp-rectag { display:inline-flex; align-items:center; gap:6px; background:rgba(226,75,74,.18); border:1px solid #E24B4A; color:#FFD9D8; border-radius:14px; font-size:12px; font-weight:700; padding:4px 11px; }
+.cp-rectag u { width:8px; height:8px; border-radius:50%; background:#E24B4A; display:inline-block; text-decoration:none; animation:cpBlink 1.2s infinite; }
+.cp-rectag.off { background:rgba(159,176,214,.12); border-color:#47609B; color:#9FB0D6; }
+@keyframes cpBlink { 50% { opacity:.25; } }
+.cp-steps { display:flex; gap:6px; justify-content:center; margin:12px 18px 0; flex:none; }
+.cp-steps span { flex:1; text-align:center; font-size:12px; font-weight:700; border-radius:14px; padding:6px 2px; background:#22325A; color:#8FA3D1; border:1.5px solid transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cp-steps .done { background:#1E3A3A; color:#7FD3A6; }
+.cp-steps .now { background:#fff; color:#1A2744; border-color:#F0C24B; }
+.cp-callmid { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 18px 12px; }
+.cp-me { margin-top:16px; background:#31457A; border:1.5px solid #5F78B5; color:#fff; border-radius:18px 18px 4px 18px; padding:15px 16px; font-size:18px; font-weight:600; line-height:1.6; white-space:pre-wrap; word-break:keep-all; overflow-wrap:anywhere; }
+.cp-me .lab, .cp-bub .lab, .cp-model .lab { display:block; font-size:12px; color:#F0C24B; font-weight:800; margin-bottom:5px; }
+.cp-me.sm { font-size:13px; padding:9px 12px; opacity:.82; margin-left:60px; white-space:normal; }
+.cp-bub { display:block; width:100%; border:none; text-align:left; margin-top:14px; background:#fff; color:#1A2744; border-radius:18px 18px 18px 4px; padding:18px 17px; font-size:20px; font-weight:700; line-height:1.5; word-break:keep-all; overflow-wrap:anywhere; }
+.cp-bub .lab { color:#B8860B; }
+.cp-say { margin-top:18px; text-align:center; font-size:16px; font-weight:700; color:#E6EDFF; }
+.cp-model { margin-top:14px; background:rgba(240,194,75,.12); border:1.5px solid #F0C24B; border-radius:14px; padding:12px 14px; font-size:15px; line-height:1.6; font-weight:600; color:#FFF3D0; word-break:keep-all; overflow-wrap:anywhere; }
+.cp-callbot { flex:none; padding:10px 18px calc(18px + env(safe-area-inset-bottom)); }
+.cp-one { display:block; width:100%; border:none; background:#22A45A; color:#fff; border-radius:16px; padding:19px 8px; text-align:center; font-size:18px; font-weight:800; box-shadow:0 0 0 6px rgba(34,164,90,.18); }
+.cp-one:active { background:#1C8B4C; }
+.cp-sub2 { display:flex; justify-content:space-between; margin-top:16px; }
+.cp-sub2 button { border:none; background:none; font-size:14px; font-weight:700; color:#BFD0F5; padding:10px 6px; }
+/* end */
+.cp-done { text-align:center; padding-top:30px; }
+.cp-done .ic { font-size:44px; }
+.cp-done b { display:block; font-size:22px; font-weight:800; color:#5A3A12; margin-top:6px; }
+.cp-done small { display:block; font-size:13.5px; color:#8A7B69; font-weight:600; margin-top:4px; }
+.cp-done + .cp-player { margin-top:20px; }
+.cp-player { display:flex; align-items:center; gap:10px; background:#F3EFFD; border-radius:15px; padding:12px 13px; margin-top:12px; }
+.cp-player .pl { width:44px; height:44px; border:none; border-radius:50%; background:#6C4BD8; color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; flex:none; padding:0; }
+.cp-player .bar { flex:1; height:26px; position:relative; cursor:pointer; }
+.cp-player .bar::before { content:""; position:absolute; left:0; right:0; top:10px; height:6px; border-radius:3px; background:#D6CBF6; }
+.cp-player .bar i { position:absolute; left:0; top:10px; height:6px; width:0; background:#6C4BD8; border-radius:3px; }
+.cp-player .bar b { position:absolute; left:0; top:5px; width:16px; height:16px; border-radius:50%; background:#6C4BD8; margin-left:-8px; }
+.cp-player .bar u { position:absolute; top:7px; width:3px; height:12px; border-radius:2px; background:#E8A21A; text-decoration:none; }
+.cp-player .tm { font-size:12.5px; font-weight:700; color:#5B3CC4; white-space:nowrap; min-width:64px; text-align:right; font-variant-numeric:tabular-nums; }
+.cp-big { display:block; width:100%; border:none; text-align:center; border-radius:16px; padding:17px 8px; font-size:17px; font-weight:800; margin-top:18px; }
+.cp-big.p { background:#6C4BD8; color:#fff; }
+.cp-big.p:disabled { opacity:.6; }
+.cp-big.l { background:#fff; border:1.5px solid #D9CDB8; color:#5A3A12; margin-top:10px; font-size:15px; padding:14px 8px; }
+.cp-to2 { text-align:center; font-size:12.5px; color:#8A7B69; font-weight:600; margin-top:9px; line-height:1.6; }
+.cp-to2.big { font-size:14px; margin:22px 0 8px; }
+/* evaluate / results */
+.cp-ev { background:#fff; border:1px solid #E6DFD2; border-radius:16px; padding:14px; margin-top:10px; }
+.cp-ev.best { border:1.5px solid #E8B84A; }
+.cp-who2 { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.cp-who2 b { font-size:15.5px; font-weight:800; color:#33271B; }
+.cp-who2 span { font-size:12px; color:#8A7B69; font-weight:600; white-space:nowrap; }
+.cp-marks { margin-top:9px; }
+.cp-marks button { width:100%; display:flex; gap:8px; align-items:center; text-align:left; font-size:13px; font-weight:600; color:#33271B; background:#FFF9EC; border:1px solid #F1E0B5; border-radius:11px; padding:9px 10px; margin-top:6px; }
+.cp-marks b { color:#6C4BD8; font-weight:800; white-space:nowrap; }
+.cp-gr { display:flex; gap:6px; margin-top:13px; }
+.cp-gr button { flex:1; text-align:center; border:1.5px solid #D9CDB8; border-radius:13px; padding:14px 2px; font-size:14px; font-weight:700; color:#6B5E50; background:#fff; white-space:nowrap; }
+.cp-gr button.on { border-color:#1F8A4C; background:#EAF7EF; color:#17713D; }
+.cp-cm { border:1.5px solid #D9CDB8; border-radius:12px; padding:9px 11px; margin-top:9px; }
+.cp-cm .cmh, .cp-st .sth { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+.cp-cm small { font-size:11.5px; color:#A79A88; font-weight:700; }
+.cp-cm textarea, .cp-st textarea { display:block; width:100%; border:none; outline:none; resize:none; background:transparent; font-family:inherit; font-size:15px; line-height:1.55; color:#33271B; font-weight:500; margin-top:4px; padding:0; }
+.cp-cm textarea::placeholder, .cp-st textarea::placeholder { color:#B5A996; }
+.cp-mic { border:none; background:none; font-size:12px; font-weight:700; color:#6C4BD8; padding:4px 2px; white-space:nowrap; }
+.cp-mic.on { color:#E24B4A; }
+.cp-ck { display:flex; align-items:center; gap:8px; border:none; background:none; font-size:14px; font-weight:700; color:#5A3A12; margin:11px 2px 0; padding:4px 0; }
+.cp-ck i { width:22px; height:22px; border-radius:6px; border:1.5px solid #CFC6B6; background:#fff; color:#fff; font-style:normal; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
+.cp-ck.on i { background:#1F8A4C; border-color:#1F8A4C; }
+.cp-ev .cp-big { margin-top:12px; font-size:16px; padding:15px 8px; border-radius:14px; }
+.cp-wait { width:100%; text-align:left; background:#fff; border:1px solid #E6DFD2; border-radius:14px; padding:12px 13px; margin-top:10px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.cp-wait p { font-size:14px; font-weight:700; color:#4C3F31; margin:0; }
+.cp-wait small { display:block; font-size:12px; color:#8A7B69; font-weight:600; margin-bottom:2px; }
+.cp-wait > b { font-size:12.5px; font-weight:700; color:#A79A88; white-space:nowrap; }
+.cp-lab { font-size:13px; font-weight:800; color:#8A7B69; margin:20px 2px 0; }
+.cp-badge { display:inline-block; background:#EAF7EF; color:#17713D; border:1.5px solid #1F8A4C; font-size:16px; font-weight:800; border-radius:18px; padding:7px 15px; margin-top:12px; }
+.cp-badge.more { background:#FFF6E0; color:#8A5A00; border-color:#E8A21A; }
+.cp-badge.again { background:#FDECEC; color:#B3302F; border-color:#E24B4A; }
+.cp-badge.sm { font-size:12px; padding:3px 9px; margin-top:0; border-radius:12px; }
+.cp-bestchip { display:inline-block; margin-left:6px; font-size:12.5px; font-weight:800; color:#8A5A00; background:#FFF3D0; border-radius:12px; padding:4px 9px; }
+.cp-waitchip { display:inline-block; margin-top:12px; font-size:13px; font-weight:700; color:#B8860B; background:#FFF9EC; border-radius:12px; padding:5px 11px; }
+.cp-from { font-size:12.5px; font-weight:800; color:#6C4BD8; margin-top:11px; }
+.cp-say2 { background:#F3EFFD; border-radius:4px 14px 14px 14px; padding:10px 12px; font-size:15px; line-height:1.55; font-weight:600; color:#33271B; margin-top:4px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.cp-gone { font-size:12.5px; font-weight:600; color:#A79A88; background:#F3EEE4; border-radius:11px; padding:10px 12px; margin-top:12px; text-align:center; }
+/* my script */
+.cp-seg { display:flex; background:#EDE6D8; border-radius:12px; padding:4px; margin:8px 0 4px; }
+.cp-seg button { flex:1; border:none; background:none; text-align:center; font-size:14px; font-weight:700; color:#8A7B69; padding:10px 0; border-radius:9px; }
+.cp-seg button.on { background:#fff; color:#5A3A12; box-shadow:0 1px 4px rgba(0,0,0,.10); }
+.cp-st { background:#fff; border:1px solid #E6DFD2; border-radius:15px; padding:12px 13px; margin-top:10px; }
+.cp-st:focus-within { border:2px solid #E8B84A; padding:11px 12px; }
+.cp-st .sth b { font-size:14px; font-weight:800; color:#5A3A12; }
+@media (max-width:768px) {
+  .cp-btn { font-size:12.5px; padding:11px 10px; border-radius:14px; }
+}
+@media (min-width:769px) and (max-width:1600px) {
+  /* one more button in the PC header row: tighten the row only for the accounts that see it (1440 wide was already full) */
+  body.cp-on .header-right { gap:7px; }
+  body.cp-on .header-right > button { padding-left:11px; padding-right:11px; }
+}
+@media (min-width:601px) {
+  .cp-wrap { height:min(900px, 94vh); margin:auto; border-radius:22px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+}
+</style>
+<div class="cp-ov" id="cpOv"><div class="cp-wrap"><div class="cp-scr" id="cpScr"></div></div></div>
+<audio id="cpAudio" preload="auto" style="display:none"></audio>
+<script>
+// 303 콜 연습: 대상 고르기 → 통화 (내 멘트 → 그 단계의 고객 반응 → 받아치기) → 끝 (들어보기 · 보내기). 평가는 사람이 한다 (GAS 26l cp*).
+// 테스트 기간: 대표 · 지점장 · 연습 아이디만 버튼이 보인다 (서버가 한 번 더 확인).
+var CP_TEST_IDS = { h20490093:1 };
+var _cp = { d:null, err:'', loading:false, loadedAt:0, view:'home', recOn:true, call:null, rec:null, recorder:null, starting:false, sent:false, sending:false, timer:0,
+            list:null, listAt:0, listErr:false, ev:{ id:'', grade:'', comment:'', best:false, busy:false }, aud:{}, pl:{ key:'', ready:false, loading:'', want:0, fix:false, err:false },
+            sc:null, lastReact:{}, sr:null, wake:null, locked:null, auto:false, uid:'', unlocked:false };
+var _CP_CIRC = ['①','②','③','④','⑤','⑥'];
+var _CP_GRADE = { good:'👍 잘했어요', more:'✍️ 조금만 더', again:'🔁 다시 해봐요' };
+function _cpUid(){ return String((currentUser && currentUser.id) || '').trim().toLowerCase(); }
+function _cpEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _cpMaybe(){ return !!currentUser && (CP_TEST_IDS[_cpUid()] === 1 || (typeof _isManagerUser === 'function' && _isManagerUser(currentUser))); }
+function _cpIsOpen(){ var ov = document.getElementById('cpOv'); return !!(ov && ov.classList.contains('open')); }
+function _cpToast(msg){ showToast(msg); var t = document.getElementById('toast'); if(t) t.classList.add('wide'); }
+function _cpClock(sec){ sec = Math.max(0, Math.floor(sec || 0)); return Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2); }
+function _cpDurK(sec){ sec = Math.max(0, Math.round(sec || 0)); return (sec >= 60 ? Math.floor(sec / 60) + '분 ' : '') + (sec % 60) + '초'; }
+function _cpWhen(iso){
+  var d = new Date(iso); if(isNaN(d.getTime())) return '';
+  var n = new Date(), hm = d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2);
+  var day = function(x){ return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(); }, diff = Math.round((day(n) - day(d)) / 86400000);
+  return diff === 0 ? '오늘 ' + hm : (diff === 1 ? '어제 ' + hm : (d.getMonth() + 1) + '/' + d.getDate());
+}
+function _cpJosa(word, a, b){   // 받침 있으면 a, 없으면 b
+  var c = String(word || '').charCodeAt(String(word || '').length - 1);
+  if(!(c >= 0xAC00 && c <= 0xD7A3)) return b;
+  return (c - 0xAC00) % 28 ? a : b;
+}
+function _cpPost(body, cb){
+  body.fp = currentUser && currentUser.id;
+  var tryOnce = function(n){
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){ if(res && (res.ok || res.msg === '알 수 없는 액션' || res.closed || n >= 1)) cb(res || { ok:false }); else setTimeout(function(){ tryOnce(n + 1); }, 2000); })
+      .catch(function(){ if(n < 1) setTimeout(function(){ tryOnce(n + 1); }, 2000); else cb({ ok:false, msg:'네트워크' }); });
+  };
+  tryOnce(0);
+}
+function _cpMsg(res, fallback){ return (res && res.msg && res.msg !== '네트워크' && res.msg !== '알 수 없는 액션') ? res.msg : fallback; }
+function _cpOpenKey(){ return 'unispace_cp_open_' + _cpUid(); }
+function _cpBtnSync(){
+  var b = document.getElementById('cpBtn'), c = document.getElementById('cpCnt'); if(!b) return;
+  var cached = false; try { cached = localStorage.getItem(_cpOpenKey()) === '1'; } catch(e){}
+  var show = _cpMaybe() && (!!_cp.d || (cached && _cp.err !== 'closed' && _cp.err !== 'old'));
+  b.style.display = show ? '' : 'none';
+  document.body.classList.toggle('cp-on', show);
+  if(!c) return;
+  var n = _cp.d ? ((_cp.d.me && _cp.d.me.canEval ? (_cp.d.wait || 0) : 0) + (_cp.d.news || 0)) : 0;
+  c.textContent = n > 99 ? '99+' : String(n); c.classList.toggle('on', n > 0);
+}
+function _cpLoad(cb){
+  if(!_cpMaybe()){ if(cb) cb(null); return; }
+  var uid = _cpUid();
+  _cp.loading = true;
+  _cpPost({ action:'cpInit' }, function(res){
+    if(uid !== _cpUid()) return;
+    _cp.loading = false;
+    if(res && res.ok){
+      if(res.open){ _cp.d = res; _cp.err = ''; _cp.loadedAt = Date.now(); try { localStorage.setItem(_cpOpenKey(), '1'); } catch(e){} }
+      else { _cp.d = null; _cp.err = 'closed'; try { localStorage.removeItem(_cpOpenKey()); } catch(e){} }
+    } else if(!_cp.d) _cp.err = (res && res.msg === '알 수 없는 액션') ? 'old' : 'net';
+    _cpBtnSync();
+    if(_cpIsOpen() && _cp.view === 'home') _cpRender();
+    if(cb) cb(res);
+  });
+}
+function _cpInit(){
+  var uid = _cpUid();
+  if(_cp.uid !== uid){
+    for(var k in _cp.aud) { try { URL.revokeObjectURL(_cp.aud[k].url); } catch(e){} }
+    _cp.d = null; _cp.err = ''; _cp.list = null; _cp.listAt = 0; _cp.aud = {}; _cp.sc = null; _cp.call = null; _cp.uid = uid;
+    try { _cp.recOn = localStorage.getItem('unispace_cp_rec') !== '0'; } catch(e){ _cp.recOn = true; }
+  }
+  _cpBtnSync();
+  if(_cpMaybe()) _cpLoad();
+}
+function _cpLock(on){
+  var b = document.body, h = document.documentElement;
+  if(on){
+    if(_cp.locked) return;
+    _cp.locked = { bo:b.style.overflow, ho:h.style.overflow, mo:b.classList.contains('modal-open') };
+    b.style.overflow = 'hidden'; h.style.overflow = 'hidden'; b.classList.add('modal-open');
+  } else {
+    if(!_cp.locked) return;
+    var L = _cp.locked; _cp.locked = null;
+    b.style.overflow = L.bo; h.style.overflow = L.ho; if(!L.mo) b.classList.remove('modal-open');
+  }
+}
+function _cpWake(on){
+  try {
+    if(on){ if(navigator.wakeLock && navigator.wakeLock.request) navigator.wakeLock.request('screen').then(function(w){ _cp.wake = w; }).catch(function(){}); }
+    else { if(_cp.wake) _cp.wake.release(); _cp.wake = null; }
+  } catch(e){}
+}
+function openCallPractice(mode){
+  if(!currentUser || !_cpMaybe()) return;
+  var ov = document.getElementById('cpOv'); if(!ov) return;
+  if(_cpIsOpen() && _cp.view === 'call') return;
+  _cp.view = 'home'; _cp.auto = mode === 'auto';
+  ov.classList.add('open'); _cpLock(true); _cpRender();
+  if(!_cp.d || _cp.auto || Date.now() - _cp.loadedAt > 15000) _cpLoad(function(){
+    if(!_cp.auto) return;
+    _cp.auto = false;
+    if(_cp.d && _cpIsOpen() && _cp.view === 'home'){
+      if(_cp.d.me.canEval && _cp.d.wait > 0) _cpGo('eval'); else if(_cp.d.news > 0) _cpGo('result');
+    }
+  });
+}
+function closeCallPractice(){
+  var ov = document.getElementById('cpOv'); if(!ov) return;
+  if(_cp.call && _cp.view === 'call') _cpAbortCall();
+  _cpStopAudio(); _cpDropRec(); _cpSrStop();
+  ov.classList.remove('open'); _cpLock(false);
+}
+function _cpTarget(tid){ var t = (_cp.d && _cp.d.targets) || []; for(var i = 0; i < t.length; i++) if(t[i].id === tid) return t[i]; return null; }
+function _cpScriptOf(tid, st){
+  var m = ((_cp.d && _cp.d.my && _cp.d.my[tid]) || {})[st.n];
+  return m ? { text:m, mine:true } : { text:st.script || '(기본 스크립트가 아직 없어요. 내 스크립트에 적어 주세요)', mine:false };
+}
+function _cpToWord(){
+  var to = (_cp.d && _cp.d.to) || [];
+  if(!to.length) return '평가 목록에';
+  for(var i = 0; i < to.length; i++) if(to[i].title === '지점장') return '지점장에게';
+  return to[0].title === '대표' ? '대표님에게' : '매니저에게';
+}
+function _cpSendLabel(){ var w = _cpToWord(); return w === '평가 목록에' ? '평가 목록에 올리기' : w + ' 보내기'; }
+function _cpHd(title, chip){
+  return '<div class="cp-hd"><button type="button" class="cp-backb" onclick="_cpBack()" aria-label="뒤로">‹</button><b>' + title + '</b>' + (chip ? '<span class="chip">' + _cpEsc(chip) + '</span>' : '') + '</div>';
+}
+function _cpRender(){
+  var el = document.getElementById('cpScr'); if(!el) return;
+  var v = _cp.view;
+  el.className = 'cp-scr' + (v === 'call' ? ' dark' : '');
+  el.innerHTML = v === 'call' ? _cpCallHtml() : v === 'end' ? _cpEndHtml() : v === 'eval' ? _cpEvalHtml() : v === 'result' ? _cpResultHtml() : v === 'script' ? _cpScriptHtml() : _cpHomeHtml();
+  _cpPlayerSync();
+}
+function _cpGo(v){
+  _cpStopAudio(); _cpSrStop();
+  if((v === 'eval' || v === 'result' || v === 'script') && !_cp.d) return;
+  _cp.view = v;
+  if(v === 'eval' || v === 'result'){
+    var seen = v === 'result' && _cp.d.news > 0;
+    if(!_cp.list || seen || Date.now() - _cp.listAt > 10000) _cpLoadList(seen);
+    if(v === 'eval') _cp.ev = { id:'', grade:'', comment:'', best:false, busy:false };
+  }
+  if(v === 'script') _cp.sc = { tid:(_cp.sc && _cp.sc.tid) || (_cp.d.targets[0] && _cp.d.targets[0].id) || 'hidden', draft:JSON.parse(JSON.stringify(_cp.d.my || {})), dirty:false, busy:false };
+  if(v === 'home' && Date.now() - _cp.loadedAt > 5000) _cpLoad();
+  _cpRender();
+  var el = document.getElementById('cpScr'); if(el) el.scrollTop = 0;
+}
+function _cpBack(){
+  var v = _cp.view;
+  if(v === 'call') cpHang();
+  else if(v === 'end') cpEndClose();
+  else if(v === 'script') cpScBack();
+  else if(v === 'eval' || v === 'result') _cpGo('home');
+  else closeCallPractice();
+}
+// ── home
+function _cpHomeHtml(){
+  var d = _cp.d, h = '<div class="cp-top"><div class="cp-ttl">📞 콜 연습</div><button type="button" class="cp-x" onclick="closeCallPractice()" aria-label="닫기">✕</button></div>';
+  if(!d){
+    if(_cp.err === 'old') return h + '<div class="cp-empty">서버를 준비하고 있습니다.<br>잠시 뒤에 다시 열어 주세요.</div>';
+    if(_cp.err === 'closed') return h + '<div class="cp-empty">아직 열리지 않은 메뉴입니다.</div>';
+    if(_cp.err === 'net' && !_cp.loading) return h + '<div class="cp-empty">불러오지 못했습니다.<button type="button" class="cp-big l" onclick="_cp.err=\'\';_cpRender();_cpLoad()">다시 불러오기</button></div>';
+    return h + '<div class="cp-empty">불러오는 중…</div>';
+  }
+  if(d.me.canEval) h += '<button type="button" class="cp-evrow' + (d.wait > 0 ? ' on' : '') + '" onclick="_cpGo(\'eval\')"><span>🎧 녹음 듣고 평가하기</span><b>' + (d.wait > 0 ? '대기 ' + d.wait + '건' : '대기 없음') + ' ▸</b></button>';
+  h += '<div class="cp-ask">누구에게 걸까요?</div>';
+  for(var i = 0; i < d.targets.length; i++){
+    var t = d.targets[i]; if(!t.stages || !t.stages.length) continue;
+    h += '<button type="button" class="cp-pick" data-t="' + t.id + '" onclick="cpStart(\'' + t.id + '\')"><span><b>' + _cpEsc(t.name) + '</b><small>' + _cpEsc(t.sub) + '</small></span><i>📞</i></button>';
+  }
+  h += '<button type="button" class="cp-recrow" onclick="cpToggleRec()"><span>🎙 녹음하기<small>' + (_cp.recOn ? '끝나고 ' + (_cpToWord() === '평가 목록에' ? '평가 목록에 올릴 수 있어요' : _cpToWord() + ' 보낼 수 있어요') : '꺼 두면 혼자 연습만 해요') + '</small></span><span class="cp-sw' + (_cp.recOn ? ' on' : '') + '"></span></button>';
+  h += '<div class="cp-links"><button type="button" onclick="_cpGo(\'script\')">📝 내 스크립트</button><button type="button" onclick="_cpGo(\'result\')">📬 평가 결과' + (d.news > 0 ? '<em>' + d.news + '</em>' : '') + '</button></div>';
+  return h;
+}
+function cpToggleRec(){ _cp.recOn = !_cp.recOn; try { localStorage.setItem('unispace_cp_rec', _cp.recOn ? '1' : '0'); } catch(e){} _cpRender(); }
+// ── recording (the FP's own practice voice only)
+function _cpRecStart(cb){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined'){ cb(false, 'nosupport'); return; }
+  navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } }).then(function(stream){
+    var cand = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'], mime = '', mr = null;
+    for(var i = 0; i < cand.length; i++){ try { if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cand[i])){ mime = cand[i]; break; } } catch(e){} }
+    try { mr = new MediaRecorder(stream, mime ? { mimeType:mime, audioBitsPerSecond:40000 } : { audioBitsPerSecond:40000 }); }
+    catch(e1){ try { mr = new MediaRecorder(stream); } catch(e2){ mr = null; } }
+    if(!mr){ try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e3){} cb(false, 'nosupport'); return; }
+    var R = { stream:stream, mr:mr, chunks:[], mime:String(mr.mimeType || mime || 'audio/webm').split(';')[0] || 'audio/webm' };
+    mr.ondataavailable = function(e){ if(e.data && e.data.size) R.chunks.push(e.data); };
+    try { mr.start(); } catch(e4){ try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e5){} cb(false, 'nosupport'); return; }
+    _cp.recorder = R; cb(true);
+  }).catch(function(err){ cb(false, (err && err.name) || 'denied'); });
+}
+function _cpRecStop(cb){
+  var R = _cp.recorder; _cp.recorder = null;
+  if(!R){ cb(null); return; }
+  var fired = false, fin = function(){
+    if(fired) return; fired = true;
+    try { R.stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e){}
+    var blob = null; try { blob = new Blob(R.chunks, { type:R.mime }); } catch(e2){}
+    cb(blob && blob.size > 300 ? blob : null);
+  };
+  try { R.mr.onstop = fin; if(R.mr.state !== 'inactive') R.mr.stop(); else fin(); } catch(e){ fin(); }
+  setTimeout(fin, 3000);
+}
+function _cpDropRec(){
+  if(_cp.rec){ try { URL.revokeObjectURL(_cp.rec.url); } catch(e){} }
+  _cp.rec = null; _cp.sent = false; _cp.sending = false;
+}
+// ── customer voice (phone TTS)
+function _cpSpeak(text){
+  try {
+    if(!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return;
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(String(text || '')); u.lang = 'ko-KR'; u.rate = 1;
+    var vs = window.speechSynthesis.getVoices() || [];
+    for(var i = 0; i < vs.length; i++) if(/^ko/i.test(vs[i].lang || '')){ u.voice = vs[i]; break; }
+    window.speechSynthesis.speak(u);
+  } catch(e){}
+}
+function _cpTtsStop(){ try { if('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch(e){} }
+// ── call
+function cpStart(tid){
+  if(_cp.starting) return;
+  var T = _cpTarget(tid); if(!T || !T.stages.length) return;
+  _cpStopAudio(); _cpDropRec();
+  var begin = function(recOn, mime, fail){
+    _cp.starting = false;
+    _cp.call = { tid:tid, i:0, phase:'say', t0:Date.now(), marks:[], recOn:recOn, mime:mime || '', recFail:!!fail, react:null, model:false, dur:0, ending:false };
+    _cp.view = 'call'; _cpRender(); _cpWake(true);
+    clearInterval(_cp.timer); _cp.timer = setInterval(_cpTick, 500);
+  };
+  if(!_cp.recOn){ begin(false, ''); return; }
+  _cp.starting = true;
+  _cpRecStart(function(ok, why){
+    if(!_cpIsOpen()){ _cp.starting = false; if(ok) _cpRecStop(function(){}); return; }
+    if(ok) begin(true, _cp.recorder.mime);
+    else {
+      _cpToast(why === 'NotAllowedError' || why === 'SecurityError' ? '🎙 마이크를 허용하면 녹음돼요. 이번에는 녹음 없이 연습합니다' : '🎙 마이크를 쓸 수 없어 녹음 없이 연습합니다');
+      begin(false, '', true);
+    }
+  });
+}
+function _cpElapsed(){ return _cp.call ? (Date.now() - _cp.call.t0) / 1000 : 0; }
+function _cpTick(){
+  var c = _cp.call; if(!c || _cp.view !== 'call'){ clearInterval(_cp.timer); _cp.timer = 0; return; }
+  var el = document.getElementById('cpClock'), sec = _cpElapsed();
+  if(el) el.textContent = _cpClock(sec);
+  if(c.recOn && sec >= ((_cp.d && _cp.d.maxSec) || 180)){ _cpToast('⏱ 3분이 되어 통화를 마쳤어요'); _cpFinish(); }
+}
+function _cpCallHtml(){
+  var c = _cp.call, T = _cpTarget(c.tid), st = T.stages[c.i], last = c.i >= T.stages.length - 1, sc = _cpScriptOf(c.tid, st), k;
+  var h = '<div class="cp-toprow"><span>' + _cpEsc(T.name) + ' · <span id="cpClock">' + _cpClock(_cpElapsed()) + '</span></span>' + (c.recOn ? '<span class="cp-rectag"><u></u>녹음 중</span>' : '<span class="cp-rectag off">녹음 안 함</span>') + '</div>';
+  h += '<div class="cp-steps">';
+  for(k = 0; k < T.stages.length; k++) h += '<span class="' + (k < c.i ? 'done' : (k === c.i ? 'now' : '')) + '">' + (k < c.i ? '✓ ' : (_CP_CIRC[k] || '') + ' ') + _cpEsc(T.stages[k].name) + '</span>';
+  h += '</div><div class="cp-callmid">';
+  if(c.phase === 'say'){
+    h += '<div class="cp-me"><span class="lab">지금 내가 할 말' + (sc.mine ? ' · 내 스크립트' : '') + '</span>' + _cpEsc(sc.text) + '</div>';
+    h += '<div class="cp-say">🎙 소리 내어 말해 보세요</div>';
+  } else {
+    var flat = sc.text.replace(/\s+/g, ' ');
+    if(flat.length > 34){ flat = flat.slice(-34); var sp = flat.indexOf(' '); flat = '… ' + (sp >= 0 && sp < 12 ? flat.slice(sp + 1) : flat); }
+    h += '<div class="cp-me sm"><span class="lab">내가 한 말</span>' + _cpEsc(flat) + '</div>';
+    h += '<button type="button" class="cp-bub" onclick="cpReplay()"><span class="lab">고객 🔊</span>' + _cpEsc(c.react.text) + '</button>';
+    h += c.model ? '<div class="cp-model"><span class="lab">💡 모범답안</span>' + _cpEsc(c.react.model) + '</div>' : '<div class="cp-say">🎙 소리 내어 받아쳐 보세요</div>';
+  }
+  h += '</div><div class="cp-callbot">';
+  if(c.phase === 'say') h += '<button type="button" class="cp-one" id="cpOne" onclick="cpSaid()">' + (st.reacts.length ? '말했어요 → 고객 반응 듣기' : (last ? '말했어요 → 통화 끝' : '말했어요 → 다음')) + '</button>';
+  else h += '<button type="button" class="cp-one" id="cpOne" onclick="cpNext()">' + (last ? '받아쳤어요 → 통화 끝' : '받아쳤어요 → 다음') + '</button>';
+  h += '<div class="cp-sub2">' + (c.phase === 'react' && c.react.model ? '<button type="button" onclick="cpModel()">💡 모범답안' + (c.model ? ' 닫기' : '') + '</button>' : '<span></span>') + '<button type="button" onclick="cpHang()">📵 끝내기</button></div></div>';
+  return h;
+}
+function cpSaid(){
+  var c = _cp.call; if(!c || c.phase !== 'say' || c.ending) return;
+  var T = _cpTarget(c.tid), st = T.stages[c.i], n = st.reacts.length;
+  if(!n){ _cpAdvance(); return; }
+  var key = c.tid + ':' + st.n, k = Math.floor(Math.random() * n);
+  if(n > 1 && k === _cp.lastReact[key]) k = (k + 1) % n;
+  _cp.lastReact[key] = k;
+  c.react = st.reacts[k]; c.model = false; c.phase = 'react';
+  c.marks.push({ t:Math.round(_cpElapsed()), s:st.n, n:st.name, x:c.react.text });
+  _cpRender(); _cpSpeak(c.react.text);
+}
+function cpReplay(){ var c = _cp.call; if(c && c.react) _cpSpeak(c.react.text); }
+function cpModel(){ var c = _cp.call; if(!c || c.phase !== 'react') return; c.model = !c.model; _cpRender(); }
+function cpNext(){ var c = _cp.call; if(!c || c.phase !== 'react' || c.ending) return; _cpAdvance(); }
+function _cpAdvance(){
+  var c = _cp.call, T = _cpTarget(c.tid);
+  _cpTtsStop();
+  if(c.i >= T.stages.length - 1){ _cpFinish(); return; }
+  c.i++; c.phase = 'say'; c.react = null; c.model = false; _cpRender();
+  var m = document.querySelector('#cpScr .cp-callmid'); if(m) m.scrollTop = 0;
+}
+function cpHang(){
+  var c = _cp.call; if(!c || c.ending) return;
+  if(!c.marks.length && c.i === 0 && _cpElapsed() < 5){ _cpAbortCall(); _cp.view = 'home'; _cpRender(); return; }
+  _cpFinish();
+}
+function _cpAbortCall(){
+  clearInterval(_cp.timer); _cp.timer = 0; _cpTtsStop(); _cpWake(false);
+  if(_cp.recorder) _cpRecStop(function(){});
+  _cp.call = null;
+}
+function _cpFinish(){
+  var c = _cp.call; if(!c || c.ending) return;
+  c.ending = true;
+  clearInterval(_cp.timer); _cp.timer = 0; _cpTtsStop(); _cpWake(false);
+  c.dur = Math.max(1, Math.round(_cpElapsed()));
+  var done = function(blob){
+    _cp.rec = blob ? { blob:blob, url:URL.createObjectURL(blob), mime:c.mime || blob.type || 'audio/webm', cid:'cp_' + Date.now().toString(36) + Math.floor(Math.random() * 1e8).toString(36) } : null;
+    _cp.sent = false; _cp.sending = false; _cp.view = 'end'; _cpRender();
+    var el = document.getElementById('cpScr'); if(el) el.scrollTop = 0;
+  };
+  if(c.recOn) _cpRecStop(done); else done(null);
+}
+// ── end: listen + send
+function _cpEndHtml(){
+  var c = _cp.call, T = _cpTarget(c.tid), r = _cp.rec, d = _cp.d, to = (d && d.to) || [];
+  var h = '<div class="cp-done"><div class="ic">' + (_cp.sent ? '✅' : '👏') + '</div><b>' + (_cp.sent ? '보냈어요!' : '연습 끝!') + '</b><small>' + _cpEsc(T ? T.name : '') + ' · ' + _cpDurK(c.dur) + ' · 반론 ' + c.marks.length + '개</small></div>';
+  if(r){
+    h += _cpPlayerHtml('local', c.dur, c.marks, '들어보기');
+    if(_cp.sent) h += '<div class="cp-to2 big">평가가 오면 알림으로 알려 드려요</div>';
+    else {
+      h += '<button type="button" class="cp-big p" id="cpSendBtn" onclick="cpSend()"' + (_cp.sending ? ' disabled' : '') + '>' + (_cp.sending ? '보내는 중…' : _cpSendLabel()) + '</button>';
+      if(to.length) h += '<div class="cp-to2">' + to.map(function(x){ return _cpEsc(x.name + ' ' + x.title); }).join(' · ') + _cpJosa(to[to.length - 1].title, '이', '가') + ' 듣고 평가해요</div>';
+    }
+  } else h += '<div class="cp-to2 big">' + (c.recFail ? '마이크를 쓸 수 없어 녹음하지 못했어요.' : '🎙 녹음을 켜고 연습하면 끝나고 보낼 수 있어요.') + '</div>';
+  h += '<button type="button" class="cp-big l" onclick="cpStart(\'' + c.tid + '\')">🔁 다시 하기</button>';
+  h += '<button type="button" class="cp-big l" onclick="cpEndClose()">' + (r && !_cp.sent ? '보내지 않고 닫기' : '닫기') + '</button>';
+  return h;
+}
+function cpEndClose(){ _cpStopAudio(); _cpDropRec(); _cp.call = null; _cpGo('home'); }
+function cpSend(){
+  var r = _cp.rec, c = _cp.call; if(!r || !c || _cp.sending || _cp.sent) return;
+  _cp.sending = true; _cpRender();
+  var fail = function(msg){ _cp.sending = false; _cpToast('⚠️ ' + msg); if(_cp.view === 'end') _cpRender(); };
+  var fr = new FileReader();
+  fr.onerror = function(){ fail('녹음을 읽지 못했습니다. 다시 눌러 주세요'); };
+  fr.onload = function(){
+    var s = String(fr.result || ''), k = s.indexOf(',');
+    _cpPost({ action:'cpSubmit', cid:r.cid, target:c.tid, dur:c.dur, marks:c.marks, mime:r.mime, data:k >= 0 ? s.slice(k + 1) : s }, function(res){
+      if(_cp.rec !== r) return;
+      if(res && res.ok){
+        _cp.sending = false; _cp.sent = true; _cp.listAt = 0; showToast('📨 보냈어요');
+        if(_cp.view === 'end') _cpRender();
+        _cpLoad();
+      } else fail(_cpMsg(res, '보내지 못했습니다. 다시 눌러 주세요'));
+    });
+  };
+  fr.readAsDataURL(r.blob);
+}
+// ── player (one shared <audio>; a recording is fetched the first time it is played)
+function _cpPlayerHtml(key, dur, marks, label){
+  var u = '';
+  for(var i = 0; i < (marks || []).length; i++) if(dur > 0) u += '<u style="left:' + Math.max(0, Math.min(100, marks[i].t / dur * 100)).toFixed(1) + '%"></u>';
+  return '<div class="cp-player" data-k="' + _cpEsc(key) + '" data-d="' + (Number(dur) || 0) + '" data-l="' + _cpEsc(label) + '"><button type="button" class="pl" onclick="cpPlay(\'' + _cpEsc(key) + '\')" aria-label="재생">▶</button>'
+       + '<div class="bar" onclick="cpSeek(event, \'' + _cpEsc(key) + '\')"><i></i>' + u + '<b></b></div><span class="tm">' + _cpEsc(label) + '</span></div>';
+}
+function _cpMarksHtml(key, marks){
+  if(!marks || !marks.length) return '';
+  var h = '<div class="cp-marks">';
+  for(var i = 0; i < marks.length; i++) h += '<button type="button" onclick="cpPlay(\'' + _cpEsc(key) + '\', ' + (Number(marks[i].t) || 0) + ')"><b>▶ ' + _cpClock(marks[i].t) + '</b><span>' + _cpEsc(marks[i].x) + '</span></button>';
+  return h + '</div>';
+}
+function _cpB64Blob(b64, mime){
+  var bin = atob(b64), n = bin.length, a = new Uint8Array(n);
+  for(var i = 0; i < n; i++) a[i] = bin.charCodeAt(i);
+  return new Blob([a], { type:String(mime || 'audio/webm').split(';')[0] });
+}
+// phones only start sound from inside a tap: the first tap plays this 0.1 s of silence so the recording fetched a moment later may start by itself
+var _CP_SILENT = 'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+function _cpUnlock(a){
+  if(_cp.unlocked) return;
+  _cp.unlocked = true;
+  try { a.src = _CP_SILENT; var p = a.play(); if(p && p.catch) p.catch(function(){}); } catch(e){}
+}
+function _cpDoPlay(){
+  var a = document.getElementById('cpAudio'); if(!a) return;
+  var quiet = !!_cp.pl.quiet; _cp.pl.quiet = false;
+  try { var p = a.play(); if(p && p.catch) p.catch(function(err){ if(!quiet && _cp.pl.key && !_cp.pl.err && !(err && err.name === 'AbortError')) _cpToast('▶ 를 한 번 더 눌러 주세요'); _cpPlayerSync(); }); } catch(e){}
+}
+function _cpAudioReady(){
+  var a = document.getElementById('cpAudio'); if(!a || !_cp.pl.key || _cp.pl.ready) return;
+  _cp.pl.ready = true; _cp.pl.fix = false;
+  if(_cp.pl.want > 0){ try { a.currentTime = _cp.pl.want; } catch(e){} }
+  if(a.paused || a.ended) _cpDoPlay();
+  _cpPlayerSync();
+}
+function cpPlay(key, at){
+  var a = document.getElementById('cpAudio'); if(!a) return;
+  if(_cp.pl.key === key && _cp.pl.ready && !_cp.pl.err){
+    if(at != null){ try { a.currentTime = at; } catch(e){} if(a.paused) _cpDoPlay(); }
+    else if(a.paused){ if(a.ended){ try { a.currentTime = 0; } catch(e2){} } _cpDoPlay(); }
+    else a.pause();
+    _cpPlayerSync(); return;
+  }
+  if(_cp.pl.key === key && !_cp.pl.err){ if(at != null) _cp.pl.want = at; return; }   // still loading
+  var src = key === 'local' ? (_cp.rec ? { url:_cp.rec.url } : null) : _cp.aud[key];
+  if(!src){
+    if(key === 'local' || _cp.pl.loading === key) return;
+    try { a.pause(); } catch(e3){}
+    _cp.pl = { key:'', ready:false, loading:key, want:0, fix:false, err:false }; _cpPlayerSync();
+    _cpUnlock(a);
+    _cpPost({ action:'cpAudio', id:key }, function(res){
+      if(_cp.pl.loading === key) _cp.pl.loading = '';
+      if(res && res.ok && res.data){ try { _cp.aud[key] = { url:URL.createObjectURL(_cpB64Blob(res.data, res.mime)) }; } catch(e4){} }
+      if(_cp.aud[key]){ if(document.querySelector('#cpScr .cp-player[data-k="' + key + '"]') && !_cp.pl.key) cpPlay(key, at); }
+      else { _cpToast('⚠️ ' + _cpMsg(res, '녹음을 불러오지 못했습니다')); _cpPlayerSync(); }
+    });
+    return;
+  }
+  try { a.pause(); } catch(e5){}
+  _cp.pl = { key:key, ready:false, loading:'', want:at == null ? 0 : at, fix:false, err:false };
+  a.src = src.url; try { a.load(); } catch(e6){}
+  _cp.unlocked = true; _cp.pl.quiet = true; _cpDoPlay();
+  _cpPlayerSync();
+  setTimeout(function(){ if(_cp.pl.key === key && !_cp.pl.ready && !_cp.pl.err && a.readyState >= 1) { if(_cp.pl.fix){ try { a.currentTime = 0; } catch(e7){} } _cpAudioReady(); } }, 2500);
+}
+function cpSeek(ev, key){
+  var bar = ev.currentTarget, r = bar.getBoundingClientRect(), el = bar.parentNode, d = parseFloat(el.getAttribute('data-d')) || 0;
+  if(!d || !r.width) { cpPlay(key); return; }
+  cpPlay(key, Math.max(0, Math.min(d - 0.3, (ev.clientX - r.left) / r.width * d)));
+}
+function _cpStopAudio(){
+  var a = document.getElementById('cpAudio');
+  try { if(a && !a.paused) a.pause(); } catch(e){}
+  _cp.pl = { key:'', ready:false, loading:'', want:0, fix:false, err:false };
+}
+function _cpPlayerSync(){
+  var a = document.getElementById('cpAudio'), els = document.querySelectorAll('#cpScr .cp-player');
+  for(var i = 0; i < els.length; i++){
+    var el = els[i], k = el.getAttribute('data-k'), d = parseFloat(el.getAttribute('data-d')) || 0, lab = el.getAttribute('data-l') || '';
+    var active = _cp.pl.key === k && !_cp.pl.err, ready = active && _cp.pl.ready, loading = _cp.pl.loading === k || (active && !ready);
+    var cur = ready && a ? (a.currentTime || 0) : 0, playing = ready && a && !a.paused && !a.ended;
+    if(ready && !d && a && isFinite(a.duration)) d = a.duration;
+    var pct = d > 0 ? Math.max(0, Math.min(100, cur / d * 100)) : 0;
+    el.querySelector('.pl').textContent = loading ? '…' : (playing ? '❚❚' : '▶');
+    el.querySelector('.bar i').style.width = pct + '%'; el.querySelector('.bar b').style.left = pct + '%';
+    el.querySelector('.tm').textContent = loading ? '불러오는 중' : ((ready && (playing || cur > 0.2)) ? _cpClock(cur) + ' / ' + _cpClock(d) : lab);
+  }
+}
+// ── evaluate (대표 · 지점장 · 매니저)
+function _cpLoadList(seen){
+  _cp.listErr = false;
+  _cpPost({ action:'cpList', seen:seen ? 1 : 0 }, function(res){
+    if(res && res.ok){
+      _cp.list = res; _cp.listAt = Date.now();
+      if(_cp.d){ _cp.d.wait = res.wait.length; if(seen) _cp.d.news = 0; _cpBtnSync(); }
+    } else _cp.listErr = true;
+    if(_cpIsOpen() && (_cp.view === 'eval' || _cp.view === 'result')){
+      var ta = document.activeElement && document.activeElement.id === 'cpEvCm';
+      if(!ta) _cpRender();
+    }
+  });
+}
+function _cpListItem(id){
+  var L = _cp.list; if(!L || !id) return null;
+  var all = L.wait.concat(L.done);
+  for(var i = 0; i < all.length; i++) if(all[i].id === id) return all[i];
+  return null;
+}
+function _cpEvCur(){
+  var L = _cp.list; if(!L) return null;
+  var x = _cpListItem(_cp.ev.id);
+  if(!x && L.wait.length){ x = L.wait[0]; _cp.ev = { id:x.id, grade:'', comment:'', best:false, busy:false }; }
+  return x;
+}
+function _cpWho(x){ var all = _cp.d && _cp.d.me.scope === '전 지점'; return _cpEsc((all && x.branch ? x.branch + ' ' : '') + x.name + ' ' + x.title); }
+function _cpEvalHtml(){
+  var d = _cp.d, L = _cp.list, h = _cpHd('🎧 평가 대기' + (L ? ' ' + L.wait.length + '건' : ''), d ? d.me.scope : '');
+  if(!L) return h + '<div class="cp-empty">' + (_cp.listErr ? '불러오지 못했습니다.<button type="button" class="cp-big l" onclick="_cpLoadList()">다시 불러오기</button>' : '불러오는 중…') + '</div>';
+  var cur = _cpEvCur(), i, x;
+  if(!cur) h += '<div class="cp-empty sm">평가할 녹음이 없습니다 👍</div>';
+  else {
+    var e = _cp.ev, G = [['good', '👍 잘했어요'], ['more', '✍️ 조금만 더'], ['again', '🔁 다시']];
+    h += '<div class="cp-ev" id="cpEvCard"><div class="cp-who2"><b>' + _cpWho(cur) + '</b><span>' + _cpEsc(cur.targetName) + ' · ' + _cpWhen(cur.at) + '</span></div>';
+    h += cur.audio ? _cpPlayerHtml(cur.id, cur.dur, cur.marks, _cpClock(cur.dur)) + _cpMarksHtml(cur.id, cur.marks) : '<div class="cp-gone">보관 기간이 지나 지워진 녹음입니다</div>';
+    h += '<div class="cp-gr">';
+    for(i = 0; i < G.length; i++) h += '<button type="button" data-g="' + G[i][0] + '" class="' + (e.grade === G[i][0] ? 'on' : '') + '" onclick="cpEvGrade(\'' + G[i][0] + '\')">' + G[i][1] + '</button>';
+    h += '</div><div class="cp-cm"><div class="cmh"><small>한 줄 코멘트 (안 써도 됩니다)</small><button type="button" class="cp-mic" onclick="cpDictate(\'cpEvCm\', this)">🎤 말로 입력</button></div>'
+       + '<textarea id="cpEvCm" rows="2" maxlength="300" oninput="_cp.ev.comment=this.value">' + _cpEsc(e.comment) + '</textarea></div>';
+    if(d.me.canBest) h += '<button type="button" class="cp-ck' + (e.best ? ' on' : '') + '" id="cpEvBest" onclick="cpEvBest()"><i>✓</i>🏅 베스트로 뽑기</button>';
+    h += '<button type="button" class="cp-big p" id="cpEvSend" onclick="cpEvSend()"' + (e.busy ? ' disabled' : '') + '>' + (e.busy ? '보내는 중…' : (cur.status === 'done' ? '다시 보내기' : '보내기')) + '</button></div>';
+  }
+  for(i = 0; i < L.wait.length; i++){
+    x = L.wait[i]; if(cur && x.id === cur.id) continue;
+    h += '<button type="button" class="cp-wait" onclick="cpEvOpen(\'' + x.id + '\')"><span><small>' + _cpWho(x) + ' · ' + _cpWhen(x.at) + '</small><p>' + _cpEsc(x.targetName) + ' 콜 · ' + _cpClock(x.dur) + '</p></span><b>열기 ▸</b></button>';
+  }
+  var dn = L.done.filter(function(y){ return !cur || y.id !== cur.id; });
+  if(dn.length){
+    h += '<div class="cp-lab">지난 평가</div>';
+    for(i = 0; i < dn.length; i++){
+      x = dn[i];
+      h += '<button type="button" class="cp-wait" onclick="cpEvOpen(\'' + x.id + '\')"><span><small>' + _cpWho(x) + ' · ' + _cpWhen(x.at) + '</small><p>' + _cpEsc(x.targetName) + ' 콜' + (x.best ? ' · 🏅' : '') + '</p></span><span class="cp-badge sm ' + _cpEsc(x.grade) + '">' + (_CP_GRADE[x.grade] || '') + '</span></button>';
+    }
+  }
+  return h;
+}
+function cpEvOpen(id){
+  var x = _cpListItem(id); if(!x) return;
+  _cpStopAudio(); _cpSrStop();
+  _cp.ev = { id:id, grade:x.status === 'done' ? x.grade : '', comment:x.status === 'done' ? (x.comment || '') : '', best:!!x.best, busy:false };
+  _cpRender(); var el = document.getElementById('cpScr'); if(el) el.scrollTop = 0;
+}
+function cpEvGrade(g){
+  _cp.ev.grade = g;
+  var bs = document.querySelectorAll('#cpScr .cp-gr button');
+  for(var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].getAttribute('data-g') === g);
+}
+function cpEvBest(){ _cp.ev.best = !_cp.ev.best; var b = document.getElementById('cpEvBest'); if(b) b.classList.toggle('on', _cp.ev.best); }
+function cpEvSend(){
+  var e = _cp.ev, x = _cpListItem(e.id); if(!x || e.busy) return;
+  if(!e.grade){ _cpToast('👍 · ✍️ · 🔁 중에 하나를 눌러 주세요'); return; }
+  var ta = document.getElementById('cpEvCm'); if(ta) e.comment = ta.value;
+  e.busy = true; var b = document.getElementById('cpEvSend'); if(b){ b.disabled = true; b.textContent = '보내는 중…'; }
+  _cpSrStop();
+  _cpPost({ action:'cpEval', id:e.id, grade:e.grade, comment:e.comment, best:!!e.best }, function(res){
+    e.busy = false;
+    if(res && res.ok){
+      showToast('✅ 평가를 보냈어요');
+      var L = _cp.list;
+      if(L){
+        L.wait = L.wait.filter(function(y){ return y.id !== x.id; }); L.done = L.done.filter(function(y){ return y.id !== x.id; });
+        x.status = 'done'; x.grade = e.grade; x.comment = e.comment; if(_cp.d && _cp.d.me.canBest) x.best = !!e.best;
+        L.done.unshift(x);
+        if(_cp.d){ _cp.d.wait = L.wait.length; _cpBtnSync(); }
+      }
+      _cpStopAudio(); _cp.ev = { id:'', grade:'', comment:'', best:false, busy:false };
+      if(_cp.view === 'eval'){ _cpRender(); var el = document.getElementById('cpScr'); if(el) el.scrollTop = 0; }
+      _cp.listAt = 0;
+    } else {
+      _cpToast('⚠️ ' + _cpMsg(res, '보내지 못했습니다. 다시 눌러 주세요'));
+      var b2 = document.getElementById('cpEvSend'); if(b2){ b2.disabled = false; b2.textContent = x.status === 'done' ? '다시 보내기' : '보내기'; }
+    }
+  });
+}
+// ── my results + best calls
+function _cpResultHtml(){
+  var L = _cp.list, h = _cpHd('📬 평가 결과', ''), i, x;
+  if(!L) return h + '<div class="cp-empty">' + (_cp.listErr ? '불러오지 못했습니다.<button type="button" class="cp-big l" onclick="_cpLoadList()">다시 불러오기</button>' : '불러오는 중…') + '</div>';
+  if(!L.mine.length) h += '<div class="cp-empty sm">아직 보낸 녹음이 없어요.<br>녹음을 켜고 연습한 뒤 보내 보세요.</div>';
+  for(i = 0; i < L.mine.length; i++){
+    x = L.mine[i];
+    h += '<div class="cp-ev"><div class="cp-who2"><b>' + _cpEsc(x.targetName) + ' 콜</b><span>' + _cpWhen(x.at) + '</span></div>';
+    if(x.status === 'done'){
+      h += '<div><span class="cp-badge ' + _cpEsc(x.grade) + '">' + (_CP_GRADE[x.grade] || '') + '</span>' + (x.best ? '<span class="cp-bestchip">🏅 베스트</span>' : '') + '</div>';
+      h += '<div class="cp-from">' + _cpEsc(x.evalName) + '</div>' + (x.comment ? '<div class="cp-say2">' + _cpEsc(x.comment) + '</div>' : '');
+    } else h += '<span class="cp-waitchip">평가 기다리는 중</span>';
+    h += x.audio ? _cpPlayerHtml(x.id, x.dur, x.marks, '내 녹음 듣기') : '<div class="cp-gone">보관 기간이 지나 지워진 녹음입니다</div>';
+    h += '</div>';
+  }
+  if(L.best.length){
+    h += '<div class="cp-lab">🏅 베스트 콜 듣기</div>';
+    for(i = 0; i < L.best.length; i++){
+      x = L.best[i];
+      h += '<div class="cp-ev best"><div class="cp-who2"><b>' + _cpEsc((x.branch ? x.branch + ' ' : '') + x.name + ' ' + x.title) + '</b><span>' + _cpEsc(x.targetName) + ' · ' + _cpClock(x.dur) + '</span></div>' + _cpPlayerHtml(x.id, x.dur, x.marks, '들어보기') + '</div>';
+    }
+  }
+  return h;
+}
+// ── my script
+function _cpScriptHtml(){
+  var d = _cp.d, S = _cp.sc, h = _cpHd('📝 내 스크립트', ''), i;
+  h += '<div class="cp-seg">';
+  for(i = 0; i < d.targets.length; i++) h += '<button type="button" class="' + (d.targets[i].id === S.tid ? 'on' : '') + '" onclick="cpScTab(\'' + d.targets[i].id + '\')">' + _cpEsc(d.targets[i].name) + '</button>';
+  h += '</div>';
+  var T = _cpTarget(S.tid), mine = S.draft[S.tid] || {};
+  for(i = 0; T && i < T.stages.length; i++){
+    var st = T.stages[i];
+    h += '<div class="cp-st"><div class="sth"><b>' + (_CP_CIRC[i] || '') + ' ' + _cpEsc(st.name) + '</b><button type="button" class="cp-mic" onclick="cpDictate(\'cpSc' + st.n + '\', this)">🎤 말로 입력</button></div>'
+       + '<textarea id="cpSc' + st.n + '" rows="4" maxlength="600" placeholder="' + _cpEsc('비워 두면 기본 스크립트가 나와요' + (st.script ? '\n' + st.script : '')) + '" oninput="cpScInput(' + st.n + ', this.value)">' + _cpEsc(mine[st.n] || '') + '</textarea></div>';
+  }
+  h += '<button type="button" class="cp-big p" id="cpScSave" onclick="cpScSave()"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? '저장하는 중…' : '저장') + '</button>';
+  return h;
+}
+function cpScInput(n, v){ var S = _cp.sc; if(!S) return; (S.draft[S.tid] = S.draft[S.tid] || {})[n] = v; S.dirty = true; }
+function cpScTab(tid){ var S = _cp.sc; if(!S || S.tid === tid) return; _cpSrStop(); S.tid = tid; _cpRender(); }
+function cpScSave(cb){
+  var S = _cp.sc, d = _cp.d; if(!S || !d || S.busy) return;
+  var out = {}, i, k;
+  for(i = 0; i < d.targets.length; i++){
+    var T = d.targets[i], src = S.draft[T.id] || {}, o = {};
+    for(k = 0; k < T.stages.length; k++) o[T.stages[k].n] = String(src[T.stages[k].n] || '').trim();
+    out[T.id] = o;
+  }
+  S.busy = true; _cpSrStop();
+  var b = document.getElementById('cpScSave'); if(b){ b.disabled = true; b.textContent = '저장하는 중…'; }
+  _cpPost({ action:'cpSaveScript', scripts:out }, function(res){
+    S.busy = false;
+    if(res && res.ok){ d.my = res.my || {}; S.dirty = false; showToast('💾 저장했어요'); }
+    else _cpToast('⚠️ ' + _cpMsg(res, '저장하지 못했습니다. 다시 눌러 주세요'));
+    var b2 = document.getElementById('cpScSave'); if(b2){ b2.disabled = false; b2.textContent = '저장'; }
+    if(cb) cb(!!(res && res.ok));
+  });
+}
+function cpScBack(){
+  var S = _cp.sc;
+  if(S && S.dirty && !S.busy){ cpScSave(function(ok){ if(ok && _cp.view === 'script') _cpGo('home'); }); return; }
+  _cpGo('home');
+}
+// ── speech to text (script boxes · comment). No recognition on this phone → the keyboard's own 🎤
+function _cpSrStop(){ try { if(_cp.sr) _cp.sr.stop(); } catch(e){} }
+function cpDictate(id, btn){
+  var el = document.getElementById(id); if(!el) return;
+  if(_cp.sr){ _cpSrStop(); return; }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ el.focus(); _cpToast('키보드의 🎤 를 눌러 말로 입력해 주세요'); return; }
+  var r;
+  try { r = new SR(); r.lang = 'ko-KR'; r.interimResults = false; r.continuous = false; r.maxAlternatives = 1; } catch(e){ el.focus(); return; }
+  r.onresult = function(ev){
+    var t = '';
+    for(var i = ev.resultIndex; i < ev.results.length; i++) if(ev.results[i].isFinal) t += ev.results[i][0].transcript;
+    t = String(t || '').trim(); if(!t) return;
+    var max = parseInt(el.getAttribute('maxlength'), 10) || 600;
+    el.value = ((el.value ? el.value.replace(/\s+$/, '') + ' ' : '') + t).slice(0, max);
+    try { el.dispatchEvent(new Event('input', { bubbles:true })); } catch(e2){}
+  };
+  r.onerror = function(ev){ if(ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) _cpToast('🎤 마이크 사용을 허용해 주세요'); else if(ev && ev.error === 'no-speech') showToast('말소리가 들리지 않았어요'); };
+  r.onend = function(){ _cp.sr = null; if(btn && btn.isConnected){ btn.classList.remove('on'); btn.textContent = '🎤 말로 입력'; } };
+  try { r.start(); _cp.sr = r; btn.classList.add('on'); btn.textContent = '🔴 듣는 중 (누르면 끝)'; } catch(e3){ _cp.sr = null; el.focus(); }
+}
+(function(){
+  var a = document.getElementById('cpAudio'); if(!a) return;
+  a.addEventListener('loadedmetadata', function(){
+    if(!_cp.pl.key || _cp.pl.ready) return;
+    if(!isFinite(a.duration)){ _cp.pl.fix = true; try { a.currentTime = 1e101; } catch(e){ _cpAudioReady(); } }   // MediaRecorder files carry no length: make the browser find it so seeking works
+    else _cpAudioReady();
+  });
+  a.addEventListener('timeupdate', function(){
+    if(_cp.pl.fix && !_cp.pl.ready){ try { a.currentTime = 0; } catch(e){} _cpAudioReady(); return; }
+    _cpPlayerSync();
+  });
+  ['play', 'pause', 'ended', 'seeked'].forEach(function(n){ a.addEventListener(n, _cpPlayerSync); });
+  a.addEventListener('error', function(){
+    if(!_cp.pl.key) return;
+    _cp.pl.err = true; _cp.pl.ready = false;
+    _cpToast('⚠️ 이 기기에서는 재생되지 않는 녹음입니다. 다른 휴대폰이나 PC에서 들어 주세요');
+    _cpPlayerSync();
+  });
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible' && currentUser && _cp.d && Date.now() - _cp.loadedAt > 60000 && !(_cpIsOpen() && _cp.view !== 'home')) _cpLoad();
+    if(document.visibilityState === 'visible' && _cp.call && _cp.view === 'call') _cpWake(true);
   });
 })();
 </script>
