@@ -29473,7 +29473,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 300;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 301;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -38471,9 +38471,9 @@ body:not(.theme-light) .tt-btn.zero { background:rgba(229,72,77,.12); color:#FF7
 .tt-cnt { position:absolute; top:-7px; right:-7px; min-width:18px; height:18px; border-radius:9px; background:#E5484D; color:#fff; font-size:11px; font-weight:800; display:none; align-items:center; justify-content:center; padding:0 5px; box-shadow:0 1px 3px rgba(0,0,0,.25); }
 .tt-cnt.on { display:flex; }
 .tt-btn .tt-cnt.boss { background:#fff; color:#7B4FD6; border-color:#7B4FD6; }
-.tt-ov { position:fixed; inset:0; z-index:9000; display:none; }
+.tt-ov { position:fixed; inset:0; z-index:9000; display:none; overscroll-behavior:contain; }
 .tt-ov.open { display:block; }
-.tt-panel { position:fixed; background:var(--bg2); color:var(--text); border:2px solid #E8B94A; border-radius:18px; box-shadow:0 12px 40px rgba(0,0,0,.28); padding:16px 18px 14px; overflow:auto; -webkit-overflow-scrolling:touch; }
+.tt-panel { position:fixed; background:var(--bg2); color:var(--text); border:2px solid #E8B94A; border-radius:18px; box-shadow:0 12px 40px rgba(0,0,0,.28); padding:16px 18px 14px; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
 .tt-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
 .tt-head .t { font-size:17px; font-weight:800; color:#B07800; }
 body.theme-light .tt-head .t { color:#7A4B00; }
@@ -38518,7 +38518,7 @@ body.theme-light .tt-head .t { color:#7A4B00; }
 .tt-allrem:disabled { opacity:.6; }
 .tt-allrem small { font-weight:600; color:var(--text2); font-size:12px; }
 /* add form */
-.tt-add-ov { position:fixed; inset:0; z-index:9100; background:rgba(20,16,8,.5); display:none; align-items:flex-start; justify-content:center; padding:24px 12px; overflow:auto; }
+.tt-add-ov { overscroll-behavior:contain; position:fixed; inset:0; z-index:9100; background:rgba(20,16,8,.5); display:none; align-items:flex-start; justify-content:center; padding:24px 12px; overflow:auto; }
 .tt-add-ov.open { display:flex; }
 .tt-add { width:100%; max-width:560px; background:var(--bg2); color:var(--text); border-radius:20px; padding:20px 20px 18px; box-shadow:0 10px 40px rgba(0,0,0,.3); }
 .tt-add h3 { font-size:18px; font-weight:800; color:#7B4FD6; margin:0 0 4px; }
@@ -38656,14 +38656,31 @@ function _ttPlace(){
   else { var w = Math.min(760, vw - 32); p.style.width = w + 'px'; p.style.right = 'auto'; p.style.left = Math.max(16, Math.min(r.left, vw - w - 16)) + 'px'; }
   p.style.top = top + 'px'; p.style.maxHeight = (vh - top - 16) + 'px';
 }
+// 301: while the list or the add form is open the page behind stays still (no pull-to-refresh, no scroll)
+function _ttLock(on){
+  var b = document.body, h = document.documentElement;
+  if(on){
+    if(_tt.locked) return;
+    _tt.locked = { bo: b.style.overflow, ho: h.style.overflow, mo: b.classList.contains('modal-open') };
+    b.style.overflow = 'hidden'; h.style.overflow = 'hidden'; b.classList.add('modal-open');
+  } else {
+    if(!_tt.locked) return;
+    var L = _tt.locked; _tt.locked = null;
+    b.style.overflow = L.bo; h.style.overflow = L.ho; if(!L.mo) b.classList.remove('modal-open');
+  }
+}
+function _ttLockSync(){
+  var a = document.getElementById('ttOv'), c = document.getElementById('ttAddOv');
+  _ttLock(!!((a && a.classList.contains('open')) || (c && c.classList.contains('open'))));
+}
 function openTodayTasks(){
   if(!currentUser) return;
   var ov = document.getElementById('ttOv'); if(!ov) return;
   _tt.menu = ''; _tt.edit = '';
-  ov.classList.add('open'); _ttPlace(); _ttRender();
+  ov.classList.add('open'); _ttLockSync(); _ttPlace(); _ttRender();
   if(!_tt.data || Date.now() - _tt.loadedAt > 20000) _ttLoad();
 }
-function closeTodayTasks(){ var ov = document.getElementById('ttOv'); if(ov) ov.classList.remove('open'); if(_tt.past){ _tt.past = false; _ttLoad(); } }
+function closeTodayTasks(){ var ov = document.getElementById('ttOv'); if(ov) ov.classList.remove('open'); _ttLockSync(); if(_tt.past){ _tt.past = false; _ttLoad(); } }
 var _TT_AUD = { head:['tt-b-head','지점장'], mgr:['tt-b-mgr','지점장·매니저'], all:['tt-b-all','전체'] };
 function _ttBadgeHtml(a){ var x = _TT_AUD[a] || _TT_AUD.all; return '<span class="tt-badge ' + x[0] + '">' + x[1] + '</span>'; }
 function _ttPeriod(t){
@@ -38807,9 +38824,9 @@ function ttOpenAdd(){
   document.getElementById('ttPush').classList.remove('on');
   var sv = document.getElementById('ttSave'); sv.disabled = false;
   _ttCount();
-  document.getElementById('ttAddOv').classList.add('open');
+  document.getElementById('ttAddOv').classList.add('open'); _ttLockSync();
 }
-function ttCloseAdd(){ document.getElementById('ttAddOv').classList.remove('open'); }
+function ttCloseAdd(){ document.getElementById('ttAddOv').classList.remove('open'); _ttLockSync(); }
 function ttPickAud(a){
   _tt.aud = a;
   Array.prototype.forEach.call(document.querySelectorAll('#ttAud .tt-opt'), function(b){ b.classList.toggle('on', b.getAttribute('data-a') === a); });
