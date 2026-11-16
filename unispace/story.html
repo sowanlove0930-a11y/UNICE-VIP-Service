@@ -656,8 +656,25 @@ function dayTab(k){document.querySelectorAll('.day').forEach(function(d){d.setAt
 var VID={recruitNew:{id:'twE9ekB5QEY',t:'유니스 FP 이야기 · 신인FP'},ugobi:{id:'p7UFh8yI-Qc',t:'U고비 · 보험료 절감 안내 (2분)'},carefit:{id:'jvSS1-bKHGc',t:'올라이프 케어핏 소개 영상'},nohupai:{id:'KzIj5g6jrdM',t:'노후파이클래스 소개 영상'},
  vip:{id:'tC4_Ed7OJhk',t:'VIP 고객지원 서비스 안내영상'},lifedesign:{id:'_LrViA_Tc20',t:'유니스 라이프 디자인 홍보영상'}};
 var TOOL={ugobi:'https://unice-vip.co.kr/ugobi/index.html',carefit:'https://unice-vip.co.kr/올라이프_케어핏/carefit.html',nohupai:'https://unice-vip.co.kr/노후파이/index.html',jenius:'https://unice-vip.co.kr/coverage.html',first:'https://unice-vip.co.kr/unispace/first.html'};
+/* 유튜브 자막 자동 표시 끄기 (대표 2026-11-16): 재생이 시작되면 자막을 내림. 안 먹혀도 영상은 그대로 */
+function ytNoCC(f){
+  if(!f||f._nocc)return;f._nocc=1;
+  var heard=0,offs=0,t=0;
+  function send(o){o.id=1;o.channel='widget';try{f.contentWindow.postMessage(JSON.stringify(o),'*')}catch(e){}}
+  function off(){send({event:'command',func:'unloadModule',args:['captions']});send({event:'command',func:'unloadModule',args:['cc']});send({event:'command',func:'setOption',args:['captions','track',{}]})}
+  function poke(){var n=0;clearInterval(t);send({event:'listening'});t=setInterval(function(){if(heard||++n>25){clearInterval(t);return}send({event:'listening'})},400)}
+  f.addEventListener('load',poke);poke();
+  window.addEventListener('message',function(e){
+    if(!f.contentWindow||e.source!==f.contentWindow)return;
+    if(!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(String(e.origin)))return;
+    var d;try{d=typeof e.data==='string'?JSON.parse(e.data):e.data}catch(x){return}
+    if(!d)return;heard=1;
+    var st=d.event==='onStateChange'?d.info:(d.info&&d.info.playerState);
+    if(st===1&&offs<2){offs++;off();setTimeout(off,1500)}
+  });
+}
 function vOpen(k){var v=VID[k];if(!v)return;if(location.protocol==='file:'){window.open('https://youtu.be/'+v.id,'_blank');return}document.getElementById('vmT').textContent=v.t;
- document.getElementById('vmF').innerHTML='<iframe allow="autoplay; fullscreen" allowfullscreen src="https://www.youtube-nocookie.com/embed/'+v.id+'?autoplay=1&rel=0&cc_load_policy=0&iv_load_policy=3&hl=ko"></iframe>';
+ document.getElementById('vmF').innerHTML='<iframe allow="autoplay; fullscreen" allowfullscreen src="https://www.youtube-nocookie.com/embed/'+v.id+'?autoplay=1&rel=0&cc_load_policy=0&iv_load_policy=3&hl=ko'+(/^https?:$/.test(location.protocol)?'&enablejsapi=1&origin='+encodeURIComponent(location.origin):'')+'"></iframe>';ytNoCC(document.querySelector('#vmF iframe'));
  document.getElementById('vm').classList.add('on');document.documentElement.classList.add('vmon')}
 function vClose(){document.getElementById('vm').classList.remove('on');document.documentElement.classList.remove('vmon');document.getElementById('vmF').innerHTML=''}
 document.querySelectorAll('[data-vid]').forEach(function(a){a.onclick=function(e){e.stopPropagation();vOpen(a.dataset.vid)}});

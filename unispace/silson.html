@@ -103,14 +103,32 @@ body.has-cta .wrap{padding-bottom:84px}
 <script>
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 var VID = '2tK9DYcnJD4';
+/* 유튜브 자막 자동 표시 끄기 (대표 2026-11-16): 재생이 시작되면 자막을 내림. 안 먹혀도 영상은 그대로 */
+function ytNoCC(f){
+  if(!f||f._nocc)return;f._nocc=1;
+  var heard=0,offs=0,t=0;
+  function send(o){o.id=1;o.channel='widget';try{f.contentWindow.postMessage(JSON.stringify(o),'*')}catch(e){}}
+  function off(){send({event:'command',func:'unloadModule',args:['captions']});send({event:'command',func:'unloadModule',args:['cc']});send({event:'command',func:'setOption',args:['captions','track',{}]})}
+  function poke(){var n=0;clearInterval(t);send({event:'listening'});t=setInterval(function(){if(heard||++n>25){clearInterval(t);return}send({event:'listening'})},400)}
+  f.addEventListener('load',poke);poke();
+  window.addEventListener('message',function(e){
+    if(!f.contentWindow||e.source!==f.contentWindow)return;
+    if(!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(String(e.origin)))return;
+    var d;try{d=typeof e.data==='string'?JSON.parse(e.data):e.data}catch(x){return}
+    if(!d)return;heard=1;
+    var st=d.event==='onStateChange'?d.info:(d.info&&d.info.playerState);
+    if(st===1&&offs<2){offs++;off();setTimeout(off,1500)}
+  });
+}
 function playVid(){
   var v = document.getElementById('vid'); if (v.className.indexOf('on') >= 0) return;
   var f = document.createElement('iframe');
-  f.src = 'https://www.youtube-nocookie.com/embed/' + VID + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&cc_load_policy=0&iv_load_policy=3&hl=ko';
+  f.src = 'https://www.youtube-nocookie.com/embed/' + VID + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&cc_load_policy=0&iv_load_policy=3&hl=ko' + (/^https?:$/.test(location.protocol)?'&enablejsapi=1&origin='+encodeURIComponent(location.origin):'');
   f.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen');
   f.setAttribute('allowfullscreen', '');
   f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
   f.title = document.title;
+  ytNoCC(f);
   v.appendChild(f); v.className += ' on';
 }
 function titleOf(t){ t = String(t || '').trim(); return t || 'FP'; }

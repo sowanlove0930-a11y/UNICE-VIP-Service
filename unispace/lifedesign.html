@@ -100,7 +100,7 @@ h2{font-size:21px;font-weight:800;letter-spacing:-.04em;line-height:1.35}
       교육비 전액 무료 · 점심 제공 · 수료지원금 15만원.
     </div>
     <div class="vwrap">
-      <iframe id="ytFrame" src="https://www.youtube.com/embed/_LrViA_Tc20?rel=0&amp;playsinline=1"
+      <iframe id="ytFrame" src="https://www.youtube.com/embed/_LrViA_Tc20?rel=0&amp;playsinline=1&amp;cc_load_policy=0&amp;enablejsapi=1&amp;origin=https%3A%2F%2Funice-vip.co.kr"
         title="유니스 라이프 디자인" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen></iframe>
     </div>
@@ -158,6 +158,25 @@ h2{font-size:21px;font-weight:800;letter-spacing:-.04em;line-height:1.35}
 </div>
 
 <script>
+/* 유튜브 자막 자동 표시 끄기 (대표 2026-11-16): 재생이 시작되면 자막을 내림. 안 먹혀도 영상은 그대로 */
+function ytNoCC(f){
+  if(!f||f._nocc)return;f._nocc=1;
+  var heard=0,offs=0,t=0;
+  function send(o){o.id=1;o.channel='widget';try{f.contentWindow.postMessage(JSON.stringify(o),'*')}catch(e){}}
+  function off(){send({event:'command',func:'unloadModule',args:['captions']});send({event:'command',func:'unloadModule',args:['cc']});send({event:'command',func:'setOption',args:['captions','track',{}]})}
+  function poke(){var n=0;clearInterval(t);send({event:'listening'});t=setInterval(function(){if(heard||++n>25){clearInterval(t);return}send({event:'listening'})},400)}
+  f.addEventListener('load',poke);poke();
+  window.addEventListener('message',function(e){
+    if(!f.contentWindow||e.source!==f.contentWindow)return;
+    if(!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(String(e.origin)))return;
+    var d;try{d=typeof e.data==='string'?JSON.parse(e.data):e.data}catch(x){return}
+    if(!d)return;heard=1;
+    var st=d.event==='onStateChange'?d.info:(d.info&&d.info.playerState);
+    if(st===1&&offs<2){offs++;off();setTimeout(off,1500)}
+  });
+}
+ytNoCC(document.getElementById('ytFrame'));
+
 (function(){
   function qp(k){
     var m = new RegExp('[?&]' + k + '=([^&]*)').exec(location.search);

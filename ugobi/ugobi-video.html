@@ -102,6 +102,23 @@ body.has-tel .bar .tel{display:flex}
 <script>
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnrWP-dLUJQ_PyLfVPGd49YsX28U-Wc6ifM4TxdNBgB14b9bOyvL/exec';
 var VID = 'p7UFh8yI-Qc';
+/* 유튜브 자막 자동 표시 끄기 (대표 2026-11-16): 재생이 시작되면 자막을 내림. 안 먹혀도 영상은 그대로 */
+function ytNoCC(f){
+  if(!f||f._nocc)return;f._nocc=1;
+  var heard=0,offs=0,t=0;
+  function send(o){o.id=1;o.channel='widget';try{f.contentWindow.postMessage(JSON.stringify(o),'*')}catch(e){}}
+  function off(){send({event:'command',func:'unloadModule',args:['captions']});send({event:'command',func:'unloadModule',args:['cc']});send({event:'command',func:'setOption',args:['captions','track',{}]})}
+  function poke(){var n=0;clearInterval(t);send({event:'listening'});t=setInterval(function(){if(heard||++n>25){clearInterval(t);return}send({event:'listening'})},400)}
+  f.addEventListener('load',poke);poke();
+  window.addEventListener('message',function(e){
+    if(!f.contentWindow||e.source!==f.contentWindow)return;
+    if(!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(String(e.origin)))return;
+    var d;try{d=typeof e.data==='string'?JSON.parse(e.data):e.data}catch(x){return}
+    if(!d)return;heard=1;
+    var st=d.event==='onStateChange'?d.info:(d.info&&d.info.playerState);
+    if(st===1&&offs<2){offs++;off();setTimeout(off,1500)}
+  });
+}
 function playVid(){
   var v = document.getElementById('vid'); if (v.className.indexOf('on') >= 0) return;
   var f = document.createElement('iframe');
@@ -111,6 +128,7 @@ function playVid(){
   f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
   f.title = document.title;
   f.onload = function(){ try { f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch (e) {} };
+  ytNoCC(f);
   v.appendChild(f); v.className += ' on';
 }
 // when the video ends, bring the calculator button into view (the video's last line is "아래 버튼을 눌러 보세요")
