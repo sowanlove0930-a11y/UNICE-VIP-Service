@@ -4645,6 +4645,7 @@ window.UNISPACE_FCM = {
     </div>
     <div class="header-right">
       <button type="button" class="checkin-smart-btn state-ready" id="checkinSmartBtn" onclick="doSmartCheckin()">📍 출근 체크인</button>
+      <button type="button" class="tt-btn zero" id="ttBtn" onclick="openTodayTasks()">📢 오늘 할 일<span class="tt-cnt" id="ttCnt"></span></button>
       <button type="button" class="cust-view-btn" id="custViewBtn" onclick="window.location.href='customer.html?tab=list'">🔍 고객 조회</button>
       <button type="button" class="hot-view-btn" id="hotlineBtn" onclick="openHotline()">📞 설계 핫라인</button>
       <button type="button" class="sichaek-view-btn" id="sichaekBtn" onclick="openSichaekModal()">🎁 시책 조회</button>
@@ -6986,6 +6987,7 @@ function _openFromPush(op){
     // 260: 09:00 schedule pushes (GAS 25t) land on today's list
     if(op === 'sched' || op === 'mysched'){ setTimeout(function(){ if(typeof _schedOpenToday==='function') _schedOpenToday(op==='mysched'?'my':'org'); }, 400); return; }
     if(op === 'perf'){ setTimeout(function(){ if(typeof openPerfView==='function') openPerfView(); }, 400); return; }
+    if(op === 'todaytask'){ _tt.fromPush = true; setTimeout(function(){ if(typeof openTodayTasks==='function') openTodayTasks(); }, 500); return; }
     if(op === 'bojtop' || op === 'stdfp'){
       if(typeof _dashForegroundRefresh==='function') _dashForegroundRefresh(true); // 푸시로 들어오면 무조건 최신화
       setTimeout(function(){
@@ -7060,6 +7062,7 @@ function showDashboard() {
   renderSmartCheckinBtn();
   renderAttToday(true);
   renderRecruitStat();
+  if (typeof _ttInit === 'function') _ttInit();
   if (typeof refreshPartnerLeadBadge === 'function') setTimeout(refreshPartnerLeadBadge, 1200);
   if(typeof _ivLoadFromGas==='function') _ivLoadFromGas();
   if (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) {
@@ -27710,6 +27713,9 @@ function doCheckin() { doSmartCheckin(); }
     // 닫기 우선순위 목록 (위에 뜬 것부터). check: 열려있나, close: 닫기 동작
     function _backClosers(){
       return [
+        // 296 오늘 할 일: 추가 창 → 목록
+        { check: function(){ var e=document.getElementById('ttAddOv'); return e && e.classList.contains('open'); }, close: function(){ ttCloseAdd(); } },
+        { check: function(){ var e=document.getElementById('ttOv'); return e && e.classList.contains('open'); }, close: function(){ closeTodayTasks(); } },
         // 286 초회상담 (full-screen iframe): back closes the popup inside it first, then the deck itself. 다이렉트견적 opened from it sits above and closes first.
         { check: function(){ var d=document.getElementById('dqOv'); return d && d.classList.contains('on'); },
           close: function(){ closeDirectQuote(); } },
@@ -29467,7 +29473,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 297;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 298;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -38454,5 +38460,422 @@ function dqRenewQuote(cust){
 }
 function closeDirectQuote(){ var ov=document.getElementById('dqOv'); if(ov) ov.classList.remove('on'); document.body.style.overflow=''; }
 </script>
+<!-- ═══════════════════ 296 오늘 할 일 (tt) ═══════════════════ -->
+<style>
+.tt-btn { display:flex; align-items:center; gap:6px; position:relative; background:rgba(229,72,77,.10); border:1.5px solid rgba(229,72,77,.55);
+  border-radius:20px; padding:7px 14px; color:#D63B40; font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap; transition:all .2s; font-family:'Noto Sans KR',sans-serif; }
+.tt-btn:hover { background:rgba(229,72,77,.18); }
+.tt-btn.zero { background:rgba(150,150,150,.08); border-color:rgba(150,150,150,.4); color:var(--text2); }
+.tt-cnt { position:absolute; top:-7px; right:-7px; min-width:18px; height:18px; border-radius:9px; background:#E5484D; color:#fff; font-size:11px; font-weight:800; display:none; align-items:center; justify-content:center; padding:0 5px; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+.tt-cnt.on { display:flex; }
+.tt-cnt.boss { background:#7B4FD6; }
+.tt-ov { position:fixed; inset:0; z-index:9000; display:none; }
+.tt-ov.open { display:block; }
+.tt-panel { position:fixed; background:var(--bg2); color:var(--text); border:2px solid #E8B94A; border-radius:18px; box-shadow:0 12px 40px rgba(0,0,0,.28); padding:16px 18px 14px; overflow:auto; -webkit-overflow-scrolling:touch; }
+.tt-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+.tt-head .t { font-size:17px; font-weight:800; color:#B07800; }
+body.theme-light .tt-head .t { color:#7A4B00; }
+.tt-head .d { font-size:12.5px; color:var(--text2); }
+.tt-head .sp { flex:1; }
+.tt-hb { border:none; border-radius:10px; padding:7px 12px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; background:var(--surface2); color:var(--text); }
+.tt-hb.add { background:#7B4FD6; color:#fff; }
+.tt-hb.x { padding:7px 10px; }
+.tt-row { display:flex; align-items:flex-start; gap:10px; padding:10px 11px; border-radius:12px; background:rgba(232,185,74,.08); border:1px solid rgba(232,185,74,.3); margin-top:8px; }
+.tt-row.done { background:var(--surface); border-color:var(--border); }
+.tt-row.done .tt-txt { color:var(--text2); text-decoration:line-through; }
+.tt-row.done .tt-badge { opacity:.5; }
+.tt-row.ended { opacity:.6; }
+.tt-cb { flex:none; width:26px; height:26px; border-radius:8px; border:2px solid #C9A04A; background:transparent; color:transparent; font-size:15px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; margin-top:1px; }
+.tt-row.done .tt-cb { background:#1D7A43; border-color:#1D7A43; color:#fff; }
+.tt-badge { flex:none; font-size:11.5px; font-weight:800; padding:3px 8px; border-radius:7px; white-space:nowrap; margin-top:2px; }
+.tt-b-head { background:rgba(229,72,77,.14); color:#D63B40; }
+.tt-b-mgr { background:rgba(44,86,184,.14); color:#3B6FD8; }
+.tt-b-all { background:rgba(29,122,67,.14); color:#1D9A55; }
+.tt-tx { flex:1; min-width:0; font-size:14.5px; font-weight:600; line-height:1.45; word-break:keep-all; overflow-wrap:anywhere; }
+.tt-tx small { display:block; font-size:12px; font-weight:500; color:var(--text2); margin-top:2px; text-decoration:none; }
+.tt-star { color:#E5484D; margin-right:3px; }
+.tt-cnt2 { flex:none; display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+.tt-done-n { font-size:12px; font-weight:700; color:var(--text2); white-space:nowrap; }
+.tt-done-n b { color:#1D9A55; }
+.tt-und { border:none; background:none; color:#E5484D; font-size:12px; font-weight:800; cursor:pointer; padding:0; font-family:inherit; white-space:nowrap; }
+.tt-more { flex:none; border:none; background:var(--surface2); color:var(--text2); width:28px; height:28px; border-radius:8px; cursor:pointer; font-size:15px; font-weight:800; line-height:1; }
+.tt-exp { margin-top:8px; background:rgba(229,72,77,.06); border:1px solid rgba(229,72,77,.25); border-radius:10px; padding:10px 12px; }
+.tt-exp .h { font-size:12.5px; font-weight:800; color:#E5484D; margin-bottom:7px; }
+.tt-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.tt-chip { background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:4px 10px; font-size:12.5px; font-weight:600; }
+.tt-remind { width:100%; border:none; border-radius:10px; padding:10px; background:#E5484D; color:#fff; font-size:13.5px; font-weight:800; cursor:pointer; font-family:inherit; }
+.tt-remind:disabled { opacity:.6; }
+.tt-last { text-align:center; font-size:12.5px; font-weight:600; color:var(--text2); margin-top:7px; }
+.tt-acts { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.tt-acts button { border:1px solid var(--border2); background:var(--bg2); color:var(--text); border-radius:9px; padding:6px 11px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+.tt-acts button.del { color:#E5484D; border-color:rgba(229,72,77,.5); }
+.tt-edit { width:100%; border:1.5px solid #7B4FD6; border-radius:9px; padding:8px 10px; font-size:14px; font-family:inherit; background:var(--bg2); color:var(--text); }
+.tt-empty { font-size:13.5px; color:var(--text2); padding:14px 4px 6px; text-align:center; }
+.tt-sec { font-size:12px; font-weight:800; color:var(--text2); margin:14px 2px 0; }
+/* add form */
+.tt-add-ov { position:fixed; inset:0; z-index:9100; background:rgba(20,16,8,.5); display:none; align-items:flex-start; justify-content:center; padding:24px 12px; overflow:auto; }
+.tt-add-ov.open { display:flex; }
+.tt-add { width:100%; max-width:560px; background:var(--bg2); color:var(--text); border-radius:20px; padding:20px 20px 18px; box-shadow:0 10px 40px rgba(0,0,0,.3); }
+.tt-add h3 { font-size:18px; font-weight:800; color:#7B4FD6; margin:0 0 4px; }
+body:not(.theme-light) .tt-add h3 { color:#A98BF0; }
+.tt-lab { font-size:13.5px; font-weight:800; margin:16px 0 8px; }
+.tt-aud { display:flex; flex-direction:column; gap:8px; }
+.tt-opt { display:flex; align-items:center; gap:10px; border:2px solid var(--border2); border-radius:12px; padding:10px 12px; cursor:pointer; background:none; color:var(--text); font-family:inherit; text-align:left; }
+.tt-opt .r { width:20px; height:20px; border-radius:50%; border:2px solid #aaa; flex:none; box-sizing:border-box; }
+.tt-opt.on { border-color:#7B4FD6; background:rgba(123,79,214,.08); }
+.tt-opt.on .r { border:6px solid #7B4FD6; }
+.tt-opt .who { margin-left:auto; font-size:12px; color:var(--text2); font-weight:600; text-align:right; }
+.tt-irow { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.tt-irow.drag { opacity:.85; }
+.tt-irow.drag .tt-ibox { border-color:#7B4FD6; box-shadow:0 4px 14px rgba(123,79,214,.25); }
+.tt-num { flex:none; width:28px; height:28px; border-radius:50%; background:rgba(123,79,214,.14); color:#7B4FD6; font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+.tt-ibox { flex:1; min-width:0; display:flex; align-items:center; border:1.5px solid var(--border2); border-radius:10px; padding:0 4px 0 12px; height:46px; background:var(--bg2); }
+.tt-ibox input { flex:1; min-width:0; border:none; outline:none; background:transparent; color:var(--text); font-size:15px; font-family:inherit; height:100%; }
+.tt-istar { flex:none; border:none; background:none; font-size:20px; color:#bbb; width:36px; height:40px; cursor:pointer; padding:0; }
+.tt-istar.on { color:#E5484D; }
+.tt-ix { flex:none; border:none; background:none; color:#aaa; font-size:16px; width:24px; cursor:pointer; padding:0; }
+.tt-addrow { border:none; background:none; color:#7B4FD6; font-size:13px; font-weight:800; cursor:pointer; padding:2px 0 0 36px; font-family:inherit; }
+.tt-pills { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.tt-pill { padding:8px 14px; border-radius:18px; border:1.5px solid var(--border2); background:none; color:var(--text2); font-size:13.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+.tt-pill.on { border-color:#7B4FD6; background:#7B4FD6; color:#fff; }
+.tt-pills input[type=date] { border:1.5px solid var(--border2); border-radius:10px; padding:7px 10px; font-size:14px; font-family:inherit; background:var(--bg2); color:var(--text); }
+.tt-tog { display:flex; align-items:center; gap:10px; font-size:13.5px; font-weight:600; margin-top:16px; cursor:pointer; user-select:none; }
+.tt-sw { width:42px; height:24px; border-radius:12px; background:#ccc; position:relative; flex:none; transition:background .2s; }
+.tt-sw::after { content:''; position:absolute; left:3px; top:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .2s; }
+.tt-tog.on .tt-sw { background:#7B4FD6; }
+.tt-tog.on .tt-sw::after { left:21px; }
+.tt-foot { display:flex; gap:10px; margin-top:20px; }
+.tt-foot button { flex:1; border:none; border-radius:12px; padding:13px; font-size:15px; font-weight:800; cursor:pointer; font-family:inherit; }
+.tt-foot .c { background:var(--surface2); color:var(--text); }
+.tt-foot .ok { background:#7B4FD6; color:#fff; }
+.tt-foot .ok:disabled { opacity:.6; }
+@media (max-width: 600px) {
+  .header-right > .tt-btn { grid-column:1 / -1; font-size:13.5px; padding:11px 10px; border-radius:14px; }
+  .tt-cnt { top:-7px; right:8px; }
+  .tt-panel { padding:14px 13px 12px; }
+  .tt-head .t { font-size:16px; }
+  .tt-row { flex-wrap:wrap; }
+  .tt-cnt2 { flex-direction:row; align-items:center; gap:10px; width:100%; justify-content:flex-end; }
+  .tt-add-ov { padding:12px 8px; }
+  .tt-add { padding:18px 14px 16px; }
+  .tt-opt .who { font-size:11px; }
+}
+</style>
+<div class="tt-ov" id="ttOv" onclick="if(event.target===this) closeTodayTasks()"><div class="tt-panel" id="ttPanel"></div></div>
+<div class="tt-add-ov" id="ttAddOv" onclick="if(event.target===this) ttCloseAdd()">
+  <div class="tt-add">
+    <h3>📢 오늘 할 일 추가</h3>
+    <div class="tt-lab">누구에게 보낼까요?</div>
+    <div class="tt-aud" id="ttAud">
+      <button type="button" class="tt-opt" data-a="head" onclick="ttPickAud('head')"><span class="r"></span><span class="tt-badge tt-b-head">지점장</span><span class="who">알파·브라보 지점장 + 교육지점장</span></button>
+      <button type="button" class="tt-opt" data-a="mgr" onclick="ttPickAud('mgr')"><span class="r"></span><span class="tt-badge tt-b-mgr">지점장·매니저</span><span class="who">지점장 + 매니저</span></button>
+      <button type="button" class="tt-opt" data-a="all" onclick="ttPickAud('all')"><span class="r"></span><span class="tt-badge tt-b-all">전체</span><span class="who">지점장 · 매니저 · FP 모두</span></button>
+    </div>
+    <div class="tt-lab">할 일 내용</div>
+    <div id="ttRows"></div>
+    <button type="button" class="tt-addrow" onclick="ttAddRow('', false, true)">＋ 칸 추가</button>
+    <div class="tt-lab">언제까지 보이게 할까요?</div>
+    <div class="tt-pills" id="ttUntil">
+      <button type="button" class="tt-pill" data-u="today" onclick="ttPickUntil('today')">오늘만</button>
+      <button type="button" class="tt-pill" data-u="week" onclick="ttPickUntil('week')">이번 주 (금요일까지)</button>
+      <button type="button" class="tt-pill" data-u="date" onclick="ttPickUntil('date')">날짜 선택</button>
+      <input type="date" id="ttDate" style="display:none">
+    </div>
+    <div class="tt-tog" id="ttPush" onclick="this.classList.toggle('on')"><span class="tt-sw"></span>앱 알림도 보내기</div>
+    <div class="tt-foot"><button type="button" class="c" onclick="ttCloseAdd()">취소</button><button type="button" class="ok" id="ttSave" onclick="ttSave()">입력</button></div>
+  </div>
+</div>
+<script>
+var _tt = { data:null, boss:false, today:'', past:false, open:{}, menu:'', edit:'', busy:false, loadedAt:0, fromPush:false, autoDone:false, aud:'', until:'today' };
+function _ttUid(){ return String((currentUser && currentUser.id) || '').trim().toLowerCase(); }
+function _ttEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _ttYmd(d){ d = d || new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _ttMD(ymd){ var p = String(ymd||'').split('-'); return p.length===3 ? (+p[1])+'/'+(+p[2]) : ''; }
+function _ttPost(body, cb){
+  body.fp = currentUser && currentUser.id;
+  var tryOnce = function(n){
+    fetch(UNISPACE_GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function(r){ return r.json(); })
+      .then(function(res){ if(res && (res.ok || res.msg === '알 수 없는 액션' || n >= 1)) cb(res || { ok:false }); else setTimeout(function(){ tryOnce(n+1); }, 2000); })
+      .catch(function(){ if(n < 1) setTimeout(function(){ tryOnce(n+1); }, 2000); else cb({ ok:false, msg:'네트워크' }); });
+  };
+  tryOnce(0);
+}
+function _ttOldServer(res){ return res && res.msg === '알 수 없는 액션'; }
+function _ttCacheKey(){ return 'unispace_tt_' + _ttUid(); }
+function _ttLoad(cb){
+  if(!currentUser) return;
+  _ttPost({ action:'getTodayTasks', past: _tt.past ? 1 : 0 }, function(res){
+    if(res && res.ok){
+      _tt.data = res.data || []; _tt.boss = !!res.boss; _tt.today = res.today || _ttYmd(); _tt.loadedAt = Date.now(); _tt.err = '';
+      try { if(!_tt.past) localStorage.setItem(_ttCacheKey(), JSON.stringify({ d:_tt.data, b:_tt.boss, t:_tt.today })); } catch(e){}
+    } else _tt.err = _ttOldServer(res) ? 'old' : 'net';
+    _ttBadge(); _ttRender();
+    if(cb) cb(res);
+  });
+}
+function _ttActive(){ return (_tt.data || []).filter(function(t){ return t.active !== false; }); }
+function _ttBadge(){
+  var c = document.getElementById('ttCnt'), b = document.getElementById('ttBtn');
+  if(!c || !b) return;
+  var act = _ttActive(), n = _tt.boss ? act.length : act.filter(function(t){ return !t.done; }).length;
+  c.textContent = n > 99 ? '99+' : String(n);
+  c.classList.toggle('on', n > 0); c.classList.toggle('boss', _tt.boss);
+  b.classList.toggle('zero', n === 0);
+}
+function _ttInit(){
+  _tt.data = null; _tt.past = false; _tt.open = {}; _tt.menu = ''; _tt.edit = ''; _tt.autoDone = false;
+  try { var c = JSON.parse(localStorage.getItem(_ttCacheKey()) || 'null'); if(c && c.t === _ttYmd()){ _tt.data = c.d; _tt.boss = c.b; _tt.today = c.t; } } catch(e){}
+  _ttBadge();
+  _ttLoad(function(res){
+    if(!res || !res.ok || _tt.boss || _tt.fromPush || _tt.autoDone) return;
+    _tt.autoDone = true;
+    var key = 'unispace_tt_auto_' + _ttUid();
+    var left = _ttActive().filter(function(t){ return !t.done; }).length;
+    var seen = ''; try { seen = localStorage.getItem(key) || ''; } catch(e){}
+    if(!left || seen === _tt.today) return;
+    setTimeout(function(){
+      if(document.getElementById('updModalOv') || document.querySelector('.confirm-overlay.open') || (typeof consultMode !== 'undefined' && consultMode)) return;
+      var lo = document.getElementById('loginOverlay'); if(lo && !lo.classList.contains('hidden')) return;
+      try { localStorage.setItem(key, _tt.today); } catch(e){}
+      openTodayTasks();
+    }, 1500);
+  });
+}
+function _ttPlace(){
+  var p = document.getElementById('ttPanel'), b = document.getElementById('ttBtn');
+  if(!p) return;
+  var vw = window.innerWidth, vh = window.innerHeight, r = b ? b.getBoundingClientRect() : { left:16, bottom:70 };
+  var top = Math.max(10, Math.min(r.bottom + 10, vh - 220));
+  if(vw <= 600){ p.style.left = '10px'; p.style.right = '10px'; p.style.width = 'auto'; }
+  else { var w = Math.min(760, vw - 32); p.style.width = w + 'px'; p.style.right = 'auto'; p.style.left = Math.max(16, Math.min(r.left, vw - w - 16)) + 'px'; }
+  p.style.top = top + 'px'; p.style.maxHeight = (vh - top - 16) + 'px';
+}
+function openTodayTasks(){
+  if(!currentUser) return;
+  var ov = document.getElementById('ttOv'); if(!ov) return;
+  _tt.menu = ''; _tt.edit = '';
+  ov.classList.add('open'); _ttPlace(); _ttRender();
+  if(!_tt.data || Date.now() - _tt.loadedAt > 20000) _ttLoad();
+}
+function closeTodayTasks(){ var ov = document.getElementById('ttOv'); if(ov) ov.classList.remove('open'); if(_tt.past){ _tt.past = false; _ttLoad(); } }
+var _TT_AUD = { head:['tt-b-head','지점장'], mgr:['tt-b-mgr','지점장·매니저'], all:['tt-b-all','전체'] };
+function _ttBadgeHtml(a){ var x = _TT_AUD[a] || _TT_AUD.all; return '<span class="tt-badge ' + x[0] + '">' + x[1] + '</span>'; }
+function _ttPeriod(t){
+  if(!t.until) return '';
+  if(t.active === false) return _ttMD(t.from) + (t.until !== t.from ? ' ~ ' + _ttMD(t.until) : '') + ' 끝남';
+  if(t.until === _tt.today && (!t.from || t.from === t.until)) return '오늘만';
+  if(t.until === _tt.today) return _ttMD(t.from) + ' ~ 오늘까지';
+  return (t.from ? _ttMD(t.from) : '') + ' ~ ' + _ttMD(t.until);
+}
+function _ttWhen(iso){
+  if(!iso) return '';
+  var d = new Date(iso); if(isNaN(d)) return '';
+  var hm = ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+  return _ttYmd(d) === _ttYmd() ? hm : (d.getMonth()+1) + '/' + d.getDate() + ' ' + hm;
+}
+function _ttDateLabel(){
+  var d = new Date(), w = '일월화수목금토'.charAt(d.getDay());
+  return (d.getMonth()+1) + '월 ' + d.getDate() + '일 (' + w + ')';
+}
+function _ttRender(){
+  var p = document.getElementById('ttPanel'), ov = document.getElementById('ttOv');
+  if(!p || !ov || !ov.classList.contains('open')) return;
+  var h = '<div class="tt-head"><span class="t">📢 오늘 할 일</span><span class="d">' + _ttDateLabel() + '</span><span class="sp"></span>';
+  if(_tt.boss){
+    h += '<button type="button" class="tt-hb" onclick="ttTogglePast()">' + (_tt.past ? '오늘 할 일만' : '지난 할 일 보기') + '</button>';
+    h += '<button type="button" class="tt-hb add" onclick="ttOpenAdd()">＋ 할 일 추가</button>';
+  }
+  h += '<button type="button" class="tt-hb x" onclick="closeTodayTasks()" aria-label="닫기">✕</button></div>';
+  if(_tt.err === 'old') h += '<div class="tt-empty">⚠️ 서버(GAS)를 새 버전(26j)으로 올려야 오늘 할 일이 보입니다.</div>';
+  else if(!_tt.data) h += '<div class="tt-empty">' + (_tt.err ? '불러오지 못했습니다. 잠시 후 다시 열어 주세요.' : '불러오는 중…') + '</div>';
+  else if(_tt.boss) h += _ttBossHtml();
+  else h += _ttMineHtml();
+  p.innerHTML = h;
+  if(_tt.edit){ var ed = document.getElementById('ttEditIn'); if(ed){ ed.focus(); } }
+}
+function _ttMineHtml(){
+  var list = _ttActive().slice();
+  if(!list.length) return '<div class="tt-empty">오늘 받은 할 일이 없습니다 🙂</div>';
+  list.sort(function(a, b){ return (a.done ? 1 : 0) - (b.done ? 1 : 0); });   // done ones drop to the bottom (server order kept otherwise)
+  return list.map(function(t){
+    return '<div class="tt-row' + (t.done ? ' done' : '') + '">'
+      + '<button type="button" class="tt-cb" onclick="ttToggleDone(\'' + _ttEsc(t.id) + '\')" aria-label="완료">✓</button>'
+      + _ttBadgeHtml(t.audience)
+      + '<div class="tt-tx"><span class="tt-txt">' + (t.star ? '<span class="tt-star">★</span>' : '') + _ttEsc(t.text) + '</span><small>' + _ttEsc(_ttPeriod(t)) + '</small></div></div>';
+  }).join('');
+}
+function _ttBossHtml(){
+  var all = _tt.data || [], act = all.filter(function(t){ return t.active !== false; }), old = all.filter(function(t){ return t.active === false; });
+  var h = act.length ? act.map(_ttBossRow).join('') : '<div class="tt-empty">오늘 올린 할 일이 없습니다. ＋ 할 일 추가로 올려 주세요.</div>';
+  if(_tt.past) h += '<div class="tt-sec">지난 할 일 (30일)</div>' + (old.length ? old.map(_ttBossRow).join('') : '<div class="tt-empty">지난 할 일이 없습니다.</div>');
+  return h;
+}
+function _ttBossRow(t){
+  var id = _ttEsc(t.id), und = (t.undone || []).length, open = !!_tt.open[t.id];
+  var h = '<div class="tt-row' + (t.active === false ? ' ended' : '') + '" style="flex-wrap:wrap">' + _ttBadgeHtml(t.audience);
+  if(_tt.edit === t.id){
+    h += '<div class="tt-tx"><input class="tt-edit" id="ttEditIn" value="' + _ttEsc(t.text) + '" maxlength="300" onkeydown="if(event.key===\'Enter\') ttEditSave(\'' + id + '\')">'
+      + '<div class="tt-acts"><button type="button" onclick="ttEditSave(\'' + id + '\')">저장</button><button type="button" onclick="_tt.edit=\'\';_ttRender()">취소</button></div></div></div>';
+    return h;
+  }
+  h += '<div class="tt-tx">' + (t.star ? '<span class="tt-star">★</span>' : '') + _ttEsc(t.text) + '<small>' + _ttEsc(_ttPeriod(t)) + '</small></div>';
+  h += '<div class="tt-cnt2"><span class="tt-done-n">완료 <b>' + (t.doneCount || 0) + '</b> / ' + (t.total || 0) + '</span>'
+    + (und ? '<button type="button" class="tt-und" onclick="ttToggleUndone(\'' + id + '\')">미완료 ' + und + '명 ' + (open ? '▴' : '▾') + '</button>' : '')
+    + '</div><button type="button" class="tt-more" onclick="ttMenu(\'' + id + '\')" aria-label="더보기">⋯</button>';
+  if(open && und){
+    h += '<div class="tt-exp" style="flex:0 0 100%"><div class="h">미완료 ' + und + '명</div><div class="tt-chips">'
+      + t.undone.map(function(u){ return '<span class="tt-chip">' + _ttEsc(String(u.branch || '').replace('지점', '')) + (u.branch ? ' · ' : '') + _ttEsc(u.name) + ' ' + _ttEsc(u.title || '') + '</span>'; }).join('')
+      + '</div>' + (t.active === false ? '' : '<button type="button" class="tt-remind" id="ttRem_' + id + '" onclick="ttRemind(\'' + id + '\')">🔔 미완료 ' + und + '명에게만 알림 보내기</button>')
+      + (t.lastRemind ? '<div class="tt-last">마지막 알림 ' + _ttEsc(_ttWhen(t.lastRemind)) + '</div>' : '') + '</div>';
+  }
+  if(_tt.menu === t.id){
+    h += '<div class="tt-acts" style="flex:0 0 100%"><button type="button" onclick="ttEditStart(\'' + id + '\')">수정</button>'
+      + '<button type="button" onclick="ttUpd(\'' + id + '\',{star:' + (!t.star) + '})">' + (t.star ? '★ 끄기' : '★ 중요') + '</button>'
+      + '<button type="button" onclick="ttUpd(\'' + id + '\',{extend:1})">하루 연장</button>'
+      + '<button type="button" class="del" onclick="ttDel(\'' + id + '\')">삭제</button></div>';
+  }
+  return h + '</div>';
+}
+function _ttFind(id){ var d = _tt.data || []; for(var i = 0; i < d.length; i++) if(d[i].id === id) return d[i]; return null; }
+function ttToggleDone(id){
+  var t = _ttFind(id); if(!t) return;
+  var on = !t.done; t.done = on; _ttBadge(); _ttRender();
+  _ttPost({ action:'setTodayTaskDone', id:id, done:on }, function(res){
+    if(res && res.ok) return;
+    t.done = !on; _ttBadge(); _ttRender(); showToast('⚠️ 저장하지 못했습니다. 다시 눌러 주세요');
+  });
+}
+function ttToggleUndone(id){ _tt.open[id] = !_tt.open[id]; _ttRender(); }
+function ttMenu(id){ _tt.menu = _tt.menu === id ? '' : id; _tt.edit = ''; _ttRender(); }
+function ttTogglePast(){ _tt.past = !_tt.past; _tt.data = _tt.data || []; _ttRender(); _ttLoad(); }
+function ttEditStart(id){ _tt.edit = id; _tt.menu = ''; _ttRender(); }
+function ttEditSave(id){
+  var el = document.getElementById('ttEditIn'), v = el ? el.value.trim() : '';
+  if(!v){ showToast('⚠️ 내용을 입력해 주세요'); return; }
+  _tt.edit = ''; ttUpd(id, { text:v });
+}
+function ttUpd(id, patch){
+  var body = { action:'updateTodayTask', id:id }; for(var k in patch) body[k] = patch[k];
+  _tt.menu = ''; _ttRender();
+  _ttPost(body, function(res){
+    if(res && res.ok){ showToast(patch.deleted ? '🗑 삭제했습니다' : patch.extend ? '📅 ' + _ttMD(res.until) + '까지 연장했습니다' : '✅ 고쳤습니다'); _ttLoad(); }
+    else showToast('⚠️ ' + ((res && res.msg) || '저장하지 못했습니다'));
+  });
+}
+function ttDel(id){
+  var t = _ttFind(id); if(!t) return;
+  if(!window.confirm('이 할 일을 지울까요?\n' + t.text)) return;
+  ttUpd(id, { deleted:true });
+}
+function ttRemind(id){
+  var b = document.getElementById('ttRem_' + id); if(b){ b.disabled = true; b.textContent = '보내는 중…'; }
+  _ttPost({ action:'remindTodayTask', id:id }, function(res){
+    if(res && res.ok){
+      showToast(res.count ? '🔔 미완료 ' + res.count + '명에게 알림을 보냈습니다' : '✅ 모두 완료했습니다');
+      var t = _ttFind(id); if(t && res.lastRemind) t.lastRemind = res.lastRemind;
+      _ttRender(); _ttLoad();
+    } else { if(b){ b.disabled = false; } _ttRender(); showToast('⚠️ ' + ((res && res.msg) || '알림을 보내지 못했습니다')); }
+  });
+}
+/* ── 추가 창 (대표) ── */
+function ttOpenAdd(){
+  if(!_tt.boss) return;
+  _tt.aud = ''; _tt.until = 'today';
+  var rows = document.getElementById('ttRows'); rows.innerHTML = '';
+  for(var i = 0; i < 3; i++) ttAddRow('', false, false);
+  ttPickAud(''); ttPickUntil('today');
+  var d = document.getElementById('ttDate'); d.value = ''; d.min = _ttYmd();
+  document.getElementById('ttPush').classList.remove('on');
+  var sv = document.getElementById('ttSave'); sv.disabled = false;
+  _ttCount();
+  document.getElementById('ttAddOv').classList.add('open');
+}
+function ttCloseAdd(){ document.getElementById('ttAddOv').classList.remove('open'); }
+function ttPickAud(a){
+  _tt.aud = a;
+  Array.prototype.forEach.call(document.querySelectorAll('#ttAud .tt-opt'), function(b){ b.classList.toggle('on', b.getAttribute('data-a') === a); });
+}
+function ttPickUntil(u){
+  _tt.until = u;
+  Array.prototype.forEach.call(document.querySelectorAll('#ttUntil .tt-pill'), function(b){ b.classList.toggle('on', b.getAttribute('data-u') === u); });
+  var d = document.getElementById('ttDate'); d.style.display = u === 'date' ? '' : 'none';
+  if(u === 'date') setTimeout(function(){ try { d.showPicker ? d.showPicker() : d.focus(); } catch(e){ d.focus(); } }, 50);
+}
+function _ttRenum(){
+  Array.prototype.forEach.call(document.querySelectorAll('#ttRows .tt-irow'), function(r, i){ r.querySelector('.tt-num').textContent = i + 1; });
+  _ttCount();
+}
+function _ttCount(){
+  var n = Array.prototype.filter.call(document.querySelectorAll('#ttRows input'), function(x){ return x.value.trim(); }).length;
+  var b = document.getElementById('ttSave'); if(b && !b.disabled) b.textContent = n ? '입력 (' + n + '건)' : '입력';
+}
+function ttAddRow(text, star, focus){
+  var wrap = document.getElementById('ttRows');
+  if(wrap.children.length >= 30){ showToast('한 번에 30개까지 넣을 수 있어요'); return null; }
+  var r = document.createElement('div'); r.className = 'tt-irow';
+  r.innerHTML = '<span class="tt-num" title="끌어서 순서 바꾸기"></span><div class="tt-ibox"><input type="text" maxlength="300" placeholder="할 일을 입력하세요"><button type="button" class="tt-istar" aria-label="중요">☆</button></div><button type="button" class="tt-ix" aria-label="지우기">✕</button>';
+  var inp = r.querySelector('input'), st = r.querySelector('.tt-istar');
+  inp.value = text || '';
+  if(star){ st.classList.add('on'); st.textContent = '★'; }
+  st.onclick = function(){ var on = !st.classList.contains('on'); st.classList.toggle('on', on); st.textContent = on ? '★' : '☆'; };
+  r.querySelector('.tt-ix').onclick = function(){ if(wrap.children.length > 1) r.remove(); else { inp.value = ''; st.classList.remove('on'); st.textContent = '☆'; } _ttRenum(); };
+  inp.oninput = _ttCount;
+  inp.onkeydown = function(e){
+    if(e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    var nx = r.nextElementSibling; if(nx) nx.querySelector('input').focus(); else { var nr = ttAddRow('', false, true); }
+  };
+  _ttDragInit(r.querySelector('.tt-num'), r);
+  wrap.appendChild(r); _ttRenum();
+  if(focus) setTimeout(function(){ inp.focus(); }, 30);
+  return r;
+}
+// press the number circle and drag the row up / down
+function _ttDragInit(h, row){
+  h.addEventListener('pointerdown', function(e){
+    e.preventDefault();
+    var wrap = row.parentNode; if(!wrap) return;
+    row.classList.add('drag');
+    try { h.setPointerCapture(e.pointerId); } catch(er){}
+    var mv = function(ev){
+      var y = ev.clientY, sibs = Array.prototype.filter.call(wrap.children, function(x){ return x !== row; });
+      var before = null;
+      for(var i = 0; i < sibs.length; i++){ var rc = sibs[i].getBoundingClientRect(); if(y < rc.top + rc.height / 2){ before = sibs[i]; break; } }
+      if(before){ if(row.nextElementSibling !== before) wrap.insertBefore(row, before); }
+      else if(wrap.lastElementChild !== row) wrap.appendChild(row);
+      _ttRenum();
+    };
+    var up = function(){ row.classList.remove('drag'); h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); _ttRenum(); };
+    h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  });
+}
+function ttSave(){
+  var items = Array.prototype.map.call(document.querySelectorAll('#ttRows .tt-irow'), function(r){
+    return { text: r.querySelector('input').value.replace(/^\s*(?:[-•·*]|\d+[.)])\s*/, '').trim(), star: r.querySelector('.tt-istar').classList.contains('on') };
+  }).filter(function(x){ return x.text; });
+  if(!_tt.aud){ showToast('⚠️ 누구에게 보낼지 골라 주세요'); return; }
+  if(!items.length){ showToast('⚠️ 할 일을 입력해 주세요'); return; }
+  var until = _tt.until;
+  if(until === 'date'){ until = document.getElementById('ttDate').value; if(!until){ showToast('⚠️ 날짜를 골라 주세요'); return; } }
+  var push = document.getElementById('ttPush').classList.contains('on');
+  var b = document.getElementById('ttSave'); b.disabled = true; b.textContent = '올리는 중…';
+  _ttPost({ action:'saveTodayTasks', audience:_tt.aud, items:items, until:until, push:push }, function(res){
+    b.disabled = false; _ttCount();
+    if(res && res.ok){
+      ttCloseAdd();
+      showToast('📢 할 일 ' + items.length + '건을 올렸습니다' + (push ? ' · 알림 보냄' : ''));
+      _tt.past = false; openTodayTasks(); _ttLoad();
+    } else showToast('⚠️ ' + (_ttOldServer(res) ? '서버(GAS)를 26j로 올려 주세요' : ((res && res.msg) || '저장하지 못했습니다. 다시 눌러 주세요')));
+  });
+}
+(function(){
+  window.addEventListener('resize', function(){ var ov = document.getElementById('ttOv'); if(ov && ov.classList.contains('open')) _ttPlace(); });
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible' && currentUser && Date.now() - _tt.loadedAt > 60000) _ttLoad();
+  });
+})();
+</script>
+
 </body>
 </html>
