@@ -29530,7 +29530,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 309;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 310;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -39018,6 +39018,9 @@ body.theme-light .cp-btn { color:#5B3CC4; }
 .cp-me.sm { font-size:13px; padding:9px 12px; opacity:.82; margin-left:60px; white-space:normal; }
 .cp-bub { display:block; width:100%; border:none; text-align:left; margin-top:14px; background:#fff; color:#1A2744; border-radius:18px 18px 18px 4px; padding:18px 17px; font-size:20px; font-weight:700; line-height:1.5; word-break:keep-all; overflow-wrap:anywhere; }
 .cp-bub .lab { color:#B8860B; }
+.cp-bub.pre { width:auto; max-width:calc(100% - 60px); padding:10px 14px; font-size:16px; }
+.cp-bub.pre .lab { display:inline; margin:0 7px 0 0; }
+.cp-bub.pre + .cp-me { margin-top:12px; }
 .cp-say { margin-top:18px; text-align:center; font-size:16px; font-weight:700; color:#E6EDFF; }
 .cp-model { margin-top:14px; background:rgba(240,194,75,.12); border:1.5px solid #F0C24B; border-radius:14px; padding:12px 14px; font-size:15px; line-height:1.6; font-weight:600; color:#FFF3D0; word-break:keep-all; overflow-wrap:anywhere; }
 .cp-callbot { flex:none; padding:10px 18px calc(18px + env(safe-area-inset-bottom)); }
@@ -39139,6 +39142,7 @@ body.theme-light .cp-btn { color:#5B3CC4; }
 <script>
 // 303 콜 연습: 대상 고르기 → 통화 (내 멘트 → 그 단계의 고객 반응 → 받아치기) → 끝 (들어보기 · 보내기). 평가는 사람이 한다 (GAS 26l cp*).
 // 테스트 기간: 대표 · 지점장 · 매니저 · 연습 아이디만 버튼이 보인다 (서버가 한 번 더 확인).
+// 310: 고객이 먼저 하는 한마디 — 전화 받을 때(여보세요) · 단계 넘어갈 때 · 끊을 때. cpvoice/lines.json 의 extra 에 문장이 있고 그 목소리의 녹음 파일이 있을 때만.
 // 308: 내 답안 — 내 스크립트 화면에서 고객 반응별 답안을 고쳐 저장 (서버 26p 의 cpInit.ans 가 있을 때만), 통화 화면 💡 는 내 답안 먼저.
 // 307: 베스트 콜 = 첫 화면 버튼 + 전용 화면(모두 듣기) · 「○○○팀장」 자리에 로그인한 이름 · 통화 화면 시간은 녹음 중에만 (녹음 시간).
 // 306: 녹음 삭제 (평가 카드 · 평가 결과의 평가 전 녹음) — 서버가 del:true 를 준 항목에만 버튼, 한 번 더 확인 후 cpDelete.
@@ -39371,7 +39375,7 @@ function _cpVoKey(t){ return String(t == null ? '' : t).replace(/\s+/g, ' ').tri
 function _cpVoLoad(){
   if(_cp.voLoading || (_cp.vo && Date.now() - _cp.voAt < 600000)) return;
   _cp.voLoading = true;
-  var done = function(j){ _cp.voLoading = false; if(j && j.lines){ _cp.vo = j; _cp.voAt = Date.now(); } };
+  var done = function(j){ _cp.voLoading = false; if(j && j.lines){ _cp.vo = j; _cp.voAt = Date.now(); _cpExWarmOpen(); } };
   try {
     fetch(CP_VOICE_DIR + 'lines.json?t=' + Math.floor(Date.now() / 600000), { cache:'no-cache' })
       .then(function(r){ return r.ok ? r.json() : null; }).then(done).catch(function(){ done(null); });
@@ -39393,7 +39397,8 @@ function _cpVoPick(){   // one customer (voice) for the whole call, picked at ra
 }
 function _cpVoWarm(tid, vo){   // fetch this call's lines ahead so the customer answers at once
   var T = _cpTarget(tid); if(!T || !_cp.vo) return;
-  var q = [], i, j;
+  var q = [], i, j, ex = _cpExAll();
+  for(i = 0; vo && i < ex.length; i++){ var m0 = _cpVoMap(ex[i]), f0 = m0 && m0[vo]; if(f0 && !_cp.voBlob[f0] && q.indexOf(f0) < 0) q.push(f0); }
   for(i = 0; i < T.stages.length; i++) for(j = 0; j < T.stages[i].reacts.length; j++){
     var f = _cpVoFile(T.stages[i].reacts[j].text, vo);
     if(f && !_cp.voBlob[f] && q.indexOf(f) < 0) q.push(f);
@@ -39407,6 +39412,42 @@ function _cpVoWarm(tid, vo){   // fetch this call's lines ahead so the customer 
   };
   next(); next();
 }
+// ── 310: what the customer says first — picking up (open), moving to the next stage (next[k]), hanging up (close)
+function _cpArr(a){ return Object.prototype.toString.call(a) === '[object Array]' ? a : []; }
+function _cpExSlot(slot, k){
+  var X = _cp.vo && _cp.vo.extra; if(!X) return [];
+  if(slot !== 'next') return _cpArr(X[slot]);
+  var nx = _cpArr(X.next); return nx.length ? _cpArr(nx[Math.min(k || 0, nx.length - 1)]) : [];
+}
+function _cpExAll(){ var X = _cp.vo && _cp.vo.extra, out = [], nx = X ? _cpArr(X.next) : [], i; if(!X) return out; out = out.concat(_cpArr(X.open)); for(i = 0; i < nx.length; i++) out = out.concat(_cpArr(nx[i])); return out.concat(_cpArr(X.close)); }
+function _cpExList(slot, k){   // only the lines recorded in this call's voice
+  var c = _cp.call, a = _cpExSlot(slot, k), out = [], i;
+  if(!c || !c.vo) return out;
+  for(i = 0; i < a.length; i++){ var m = _cpVoMap(a[i]); if(m && m[c.vo]) out.push(String(a[i])); }
+  return out;
+}
+function _cpExPick(slot, k){   // one of them at random, not the same one twice in a row
+  var a = _cpExList(slot, k); if(!a.length) return '';
+  var key = slot + (slot === 'next' ? (k || 0) : ''), L = _cp.lastEx = _cp.lastEx || {}, i = Math.floor(Math.random() * a.length);
+  if(a.length > 1 && a[i] === L[key]) i = (i + 1) % a.length;
+  L[key] = a[i]; return a[i];
+}
+function _cpExSay(text){   // shown as a small bubble above my line + remembered so it plays at the same place when the recording is heard again (s:0 = not an objection)
+  var c = _cp.call; if(!c) return; c.pre = text || '';
+  if(text) c.marks.push({ t:Math.round(_cpElapsed()), s:0, n:'', x:text, at:Date.now(), v:c.vo });
+}
+function _cpExWarmOpen(){   // the hello must come the moment the call starts: keep those few clips ready
+  var a = _cpExSlot('open'), vs = (_cp.vo && _cp.vo.voices) || [], q = [], i, j;
+  for(i = 0; i < a.length; i++){ var m = _cpVoMap(a[i]); for(j = 0; m && j < vs.length; j++) if(m[vs[j]] && !_cp.voBlob[m[vs[j]]] && q.indexOf(m[vs[j]]) < 0) q.push(m[vs[j]]); }
+  var next = function(){
+    var f = q.shift(); if(!f) return;
+    try { fetch(CP_VOICE_DIR + f).then(function(r){ return r.ok ? r.blob() : null; }).then(function(bl){ if(bl && bl.size && !_cp.voBlob[f]) _cp.voBlob[f] = URL.createObjectURL(bl); next(); }).catch(function(){ next(); }); } catch(e){}
+  };
+  next(); next();
+}
+function _cpObjN(marks){ var n = 0; for(var i = 0; i < (marks || []).length; i++) if(marks[i] && marks[i].s) n++; return n; }   // objections only (the hello · bridge lines are s:0)
+function cpReplayPre(){ var c = _cp.call; if(c && c.pre) _cpSpeak(c.pre); }
+function cpBye(){ var c = _cp.call; if(!c || c.phase !== 'bye' || c.ending) return; _cpFinish(); }
 function _cpReactPool(st, vo){   // a line recorded only in another voice ("남편이랑 상의해 볼게요" for a male customer) is left out of this call
   var out = [], i;
   if(vo) for(i = 0; i < st.reacts.length; i++){ var m = _cpVoMap(st.reacts[i].text); if(!m || m[vo]) out.push(i); }
@@ -39447,10 +39488,12 @@ function cpStart(tid){
   var T = _cpTarget(tid); if(!T || !T.stages.length) return;
   _cpStopAudio(); _cpDropRec(); _cpTtsStop();
   if(_cp.recorder) _cpRecStop(function(){});
-  _cp.call = { tid:tid, i:0, phase:'say', t0:Date.now(), marks:[], heard:0, recOn:false, recBusy:false, recT0:0, mime:'', recFail:false, react:null, model:false, dur:0, ending:false, vo:_cpVoPick() };
+  _cp.call = { tid:tid, i:0, phase:'say', t0:Date.now(), marks:[], heard:0, recOn:false, recBusy:false, recT0:0, mime:'', recFail:false, react:null, model:false, dur:0, ending:false, vo:_cpVoPick(), pre:'' };
+  var hi = _cpExPick('open'); if(hi) _cpExSay(hi);
   _cp.view = 'call'; _cpRender(); _cpWake(true);
   clearInterval(_cp.timer); _cp.timer = setInterval(_cpTick, 500);
   _cpVoWarm(tid, _cp.call.vo);
+  if(hi) _cpSpeak(hi);
 }
 function cpRecOn(){   // 🎙 녹음하기 (call screen): from this moment the FP's own voice is recorded
   var c = _cp.call; if(!c || c.recOn || c.recBusy || c.ending) return;
@@ -39458,7 +39501,10 @@ function cpRecOn(){   // 🎙 녹음하기 (call screen): from this moment the F
   _cpRecStart(function(ok, why){
     c.recBusy = false;
     if(_cp.call !== c || c.ending || !_cpIsOpen() || _cp.view !== 'call'){ if(ok) _cpRecStop(function(){}); return; }
-    if(ok){ c.recOn = true; c.recFail = false; c.mime = _cp.recorder.mime; c.recT0 = Date.now(); _cpToast('🎙 지금부터 녹음돼요'); }
+    if(ok){
+      c.recOn = true; c.recFail = false; c.mime = _cp.recorder.mime; c.recT0 = Date.now(); _cpToast('🎙 지금부터 녹음돼요');
+      if(c.i === 0 && c.phase === 'say' && c.pre && !_cpObjN(c.marks)){ var hi = c.pre; c.marks = []; _cpExSay(hi); _cpSpeak(hi); }
+    }
     else { c.recFail = true; _cpToast(why === 'NotAllowedError' || why === 'SecurityError' ? '🎙 마이크를 허용해야 녹음할 수 있어요' : '🎙 이 기기에서는 마이크를 쓸 수 없어요'); }
     _cpRender();
   });
@@ -39475,9 +39521,14 @@ function _cpCallHtml(){
   var c = _cp.call, T = _cpTarget(c.tid), st = T.stages[c.i], last = c.i >= T.stages.length - 1, sc = _cpScriptOf(c.tid, st), k;
   var h = '<div class="cp-toprow"><span>' + _cpEsc(T.name) + '</span>' + (c.recOn ? '<span class="cp-rectag"><u></u>녹음 중 <span id="cpClock">' + _cpClock(_cpRecSec()) + '</span></span>' : '') + '</div>';
   h += '<div class="cp-steps">';
-  for(k = 0; k < T.stages.length; k++) h += '<span class="' + (k < c.i ? 'done' : (k === c.i ? 'now' : '')) + '">' + (k < c.i ? '✓ ' : (_CP_CIRC[k] || '') + ' ') + _cpEsc(T.stages[k].name) + '</span>';
+  var ci = c.phase === 'bye' ? T.stages.length : c.i;
+  for(k = 0; k < T.stages.length; k++) h += '<span class="' + (k < ci ? 'done' : (k === ci ? 'now' : '')) + '">' + (k < ci ? '✓ ' : (_CP_CIRC[k] || '') + ' ') + _cpEsc(T.stages[k].name) + '</span>';
   h += '</div><div class="cp-callmid">';
-  if(c.phase === 'say'){
+  if(c.phase === 'bye'){
+    h += '<button type="button" class="cp-bub" onclick="cpReplayPre()"><span class="lab">고객 🔊</span>' + _cpEsc(c.pre) + '</button>';
+    h += '<div class="cp-say">🎙 마무리 인사를 하고 끊어 보세요</div>';
+  } else if(c.phase === 'say'){
+    if(c.pre) h += '<button type="button" class="cp-bub pre" onclick="cpReplayPre()"><span class="lab">고객 🔊</span>' + _cpEsc(c.pre) + '</button>';
     h += '<div class="cp-me"><span class="lab">지금 내가 할 말' + (sc.mine ? ' · 내 스크립트' : '') + '</span>' + _cpEsc(sc.text) + '</div>';
     h += '<div class="cp-say">🎙 소리 내어 말해 보세요</div>';
   } else {
@@ -39491,15 +39542,18 @@ function _cpCallHtml(){
   h += '</div><div class="cp-callbot">';
   h += c.recOn ? '<div class="cp-recon">끝나면 들어 보고 ' + _cpSendHint() + '</div>'
        : '<button type="button" class="cp-recbtn" id="cpRecBtn" onclick="cpRecOn()"' + (c.recBusy ? ' disabled' : '') + '>' + (c.recBusy ? '마이크 켜는 중…' : '<u></u>녹음하기<small>끝나고 ' + _cpSendHint() + '</small>') + '</button>';
-  if(c.phase === 'say') h += '<button type="button" class="cp-one" id="cpOne" onclick="cpSaid()">' + (st.reacts.length ? '말했어요 → 고객 반응 듣기' : (last ? '말했어요 → 통화 끝' : '말했어요 → 다음')) + '</button>';
-  else h += '<button type="button" class="cp-one" id="cpOne" onclick="cpNext()">' + (last ? '받아쳤어요 → 통화 끝' : '받아쳤어요 → 다음') + '</button>';
-  h += '<div class="cp-sub2">' + (c.phase === 'react' && (c.react.model || _cpMyAns(c.tid, c.react)) ? '<button type="button" onclick="cpModel()">💡 ' + (_cpMyAns(c.tid, c.react) ? '내 답안' : '모범답안') + (c.model ? ' 닫기' : '') + '</button>' : '<span></span>') + '<button type="button" onclick="cpHang()">📵 끝내기</button></div></div>';
+  var endW = _cpExList('close').length ? '마무리' : '통화 끝';
+  if(c.phase === 'bye') h += '<button type="button" class="cp-one" id="cpOne" onclick="cpBye()">📵 통화 끝</button>';
+  else if(c.phase === 'say') h += '<button type="button" class="cp-one" id="cpOne" onclick="cpSaid()">' + (st.reacts.length ? '말했어요 → 고객 반응 듣기' : (last ? '말했어요 → ' + endW : '말했어요 → 다음')) + '</button>';
+  else h += '<button type="button" class="cp-one" id="cpOne" onclick="cpNext()">' + (last ? '받아쳤어요 → ' + endW : '받아쳤어요 → 다음') + '</button>';
+  h += '<div class="cp-sub2">' + (c.phase === 'react' && (c.react.model || _cpMyAns(c.tid, c.react)) ? '<button type="button" onclick="cpModel()">💡 ' + (_cpMyAns(c.tid, c.react) ? '내 답안' : '모범답안') + (c.model ? ' 닫기' : '') + '</button>' : '<span></span>') + (c.phase === 'bye' ? '<span></span>' : '<button type="button" onclick="cpHang()">📵 끝내기</button>') + '</div></div>';
   return h;
 }
 function cpSaid(){
   var c = _cp.call; if(!c || c.phase !== 'say' || c.ending) return;
   var T = _cpTarget(c.tid), st = T.stages[c.i], n = st.reacts.length;
   if(!n){ _cpAdvance(); return; }
+  _cpVoCut(); c.pre = '';
   if(!c.vo) c.vo = _cpVoPick();
   var pool = _cpReactPool(st, c.vo), key = c.tid + ':' + st.n, pi = Math.floor(Math.random() * pool.length), k = pool[pi];
   if(pool.length > 1 && k === _cp.lastReact[key]) k = pool[(pi + 1) % pool.length];
@@ -39514,18 +39568,26 @@ function cpModel(){ var c = _cp.call; if(!c || c.phase !== 'react') return; c.mo
 function cpNext(){ var c = _cp.call; if(!c || c.phase !== 'react' || c.ending) return; _cpAdvance(); }
 function _cpVoCut(){
   var c = _cp.call, a = _cp.voEl;
-  try { if(c && c.phase === 'react' && c.marks.length && a && !a.paused && !a.ended){ var m = c.marks[c.marks.length - 1]; if(m.v && !m.cut) m.cut = Date.now(); } } catch(e){}
+  try { if(c && c.marks.length && a && !a.paused && !a.ended){ var m = c.marks[c.marks.length - 1]; if(m.v && !m.cut && (c.phase === 'react' || !m.s)) m.cut = Date.now(); } } catch(e){}
 }
 function _cpAdvance(){
   var c = _cp.call, T = _cpTarget(c.tid);
   _cpVoCut(); _cpTtsStop();
-  if(c.i >= T.stages.length - 1){ _cpFinish(); return; }
-  c.i++; c.phase = 'say'; c.react = null; c.model = false; _cpRender();
+  if(c.i >= T.stages.length - 1){
+    var bye = _cpExPick('close');
+    if(!bye){ _cpFinish(); return; }
+    c.phase = 'bye'; c.react = null; c.model = false; _cpExSay(bye); _cpRender(); _cpSpeak(bye);   // the customer says goodbye; I close the call with 「📵 통화 끝」
+    return;
+  }
+  c.i++; c.phase = 'say'; c.react = null; c.model = false; c.pre = '';
+  var br = _cpExPick('next', c.i - 1); if(br) _cpExSay(br);
+  _cpRender();
   var m = document.querySelector('#cpScr .cp-callmid'); if(m) m.scrollTop = 0;
+  if(br) _cpSpeak(br);
 }
 function cpHang(){
   var c = _cp.call; if(!c || c.ending) return;
-  if(!c.marks.length && c.i === 0 && _cpElapsed() < 5){ _cpAbortCall(); _cp.view = 'home'; _cpRender(); return; }
+  if(!_cpObjN(c.marks) && c.i === 0 && _cpElapsed() < 5){ _cpAbortCall(); _cp.view = 'home'; _cpRender(); return; }
   _cpFinish();
 }
 function _cpAbortCall(){
@@ -39537,7 +39599,7 @@ function _cpFinish(){
   var c = _cp.call; if(!c || c.ending) return;
   c.ending = true; _cpVoCut();
   clearInterval(_cp.timer); _cp.timer = 0; _cpTtsStop(); _cpWake(false);
-  c.heard = c.marks.length;
+  c.heard = _cpObjN(c.marks);
   if(c.recOn){   // the recording may have started after the call: times count from the recording, earlier reactions are not in it
     var mk = [];
     for(var i = 0; i < c.marks.length; i++){ var m = c.marks[i]; if((m.at || 0) >= c.recT0 - 500){ var mo = { t:Math.max(0, Math.round((m.at - c.recT0) / 1000)), s:m.s, n:m.n, x:m.x }; if(m.v){ mo.p = Math.max(0, Math.round((m.at - c.recT0) / 10) / 100); mo.v = m.v; if(m.cut) mo.e = Math.max(mo.p, Math.round((m.cut - c.recT0) / 10) / 100); } mk.push(mo); } }
@@ -39553,7 +39615,7 @@ function _cpFinish(){
 // ── end: listen + send
 function _cpEndHtml(){
   var c = _cp.call, T = _cpTarget(c.tid), r = _cp.rec, d = _cp.d, to = (d && d.to) || [];
-  var h = '<div class="cp-done"><div class="ic">' + (_cp.sent ? '✅' : '👏') + '</div><b>' + (_cp.sent ? '보냈어요!' : '연습 끝!') + '</b><small>' + _cpEsc(T ? T.name : '') + ' · ' + _cpDurK(c.dur) + ' · 반론 ' + (c.heard || c.marks.length) + '개</small></div>';
+  var h = '<div class="cp-done"><div class="ic">' + (_cp.sent ? '✅' : '👏') + '</div><b>' + (_cp.sent ? '보냈어요!' : '연습 끝!') + '</b><small>' + _cpEsc(T ? T.name : '') + ' · ' + _cpDurK(c.dur) + ' · 반론 ' + (c.heard || _cpObjN(c.marks)) + '개</small></div>';
   if(r){
     h += _cpPlayerHtml('local', c.dur, c.marks, '들어보기');
     if(_cp.sent) h += '<div class="cp-to2 big">평가가 오면 알림으로 알려 드려요</div>';
@@ -39589,14 +39651,14 @@ function cpSend(){
 // ── player (one shared <audio>; a recording is fetched the first time it is played)
 function _cpPlayerHtml(key, dur, marks, label){
   var u = '';
-  for(var i = 0; i < (marks || []).length; i++) if(dur > 0) u += '<u style="left:' + Math.max(0, Math.min(100, marks[i].t / dur * 100)).toFixed(1) + '%"></u>';
+  for(var i = 0; i < (marks || []).length; i++) if(dur > 0 && marks[i].s) u += '<u style="left:' + Math.max(0, Math.min(100, marks[i].t / dur * 100)).toFixed(1) + '%"></u>';
   return '<div class="cp-player" data-k="' + _cpEsc(key) + '" data-d="' + (Number(dur) || 0) + '" data-l="' + _cpEsc(label) + '"><button type="button" class="pl" onclick="cpPlay(\'' + _cpEsc(key) + '\')" aria-label="재생">▶</button>'
        + '<div class="bar" onclick="cpSeek(event, \'' + _cpEsc(key) + '\')"><i></i>' + u + '<b></b></div><span class="tm">' + _cpEsc(label) + '</span></div>';
 }
 function _cpMarksHtml(key, marks){
-  if(!marks || !marks.length) return '';
+  if(!marks || !_cpObjN(marks)) return '';
   var h = '<div class="cp-marks">';
-  for(var i = 0; i < marks.length; i++) h += '<button type="button" onclick="cpPlay(\'' + _cpEsc(key) + '\', ' + (Number(marks[i].p != null ? marks[i].p : marks[i].t) || 0) + ')"><b>▶ ' + _cpClock(marks[i].t) + '</b><span>' + _cpEsc(marks[i].x) + '</span></button>';
+  for(var i = 0; i < marks.length; i++) if(marks[i].s) h += '<button type="button" onclick="cpPlay(\'' + _cpEsc(key) + '\', ' + (Number(marks[i].p != null ? marks[i].p : marks[i].t) || 0) + ')"><b>▶ ' + _cpClock(marks[i].t) + '</b><span>' + _cpEsc(marks[i].x) + '</span></button>';
   return h + '</div>';
 }
 function _cpB64Blob(b64, mime){
