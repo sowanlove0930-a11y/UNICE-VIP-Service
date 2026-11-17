@@ -29526,7 +29526,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 304;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 305;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -39107,11 +39107,13 @@ body.theme-light .cp-btn { color:#5B3CC4; }
 <script>
 // 303 콜 연습: 대상 고르기 → 통화 (내 멘트 → 그 단계의 고객 반응 → 받아치기) → 끝 (들어보기 · 보내기). 평가는 사람이 한다 (GAS 26l cp*).
 // 테스트 기간: 대표 · 지점장 · 매니저 · 연습 아이디만 버튼이 보인다 (서버가 한 번 더 확인).
+// 305: 녹음을 들을 때 고객 목소리가 제자리에서 같이 나온다 (mark.p 초 · mark.v 목소리 → cpvoice 파일을 겹쳐 재생; 녹음 파일에는 본인 목소리만).
 // 304: 고객 목소리 = 녹음 파일 (cpvoice/lines.json, 파일 없는 줄은 휴대폰 음성) · 녹음하기는 통화 화면에서 누른다 · 단계 없는 대상은 숨김.
 var CP_TEST_IDS = { h20490093:1 };
 var _cp = { d:null, err:'', loading:false, loadedAt:0, view:'home', call:null, rec:null, recorder:null, sent:false, sending:false, timer:0,
             list:null, listAt:0, listErr:false, ev:{ id:'', grade:'', comment:'', best:false, busy:false }, aud:{}, pl:{ key:'', ready:false, loading:'', want:0, fix:false, err:false },
-            sc:null, lastReact:{}, sr:null, wake:null, locked:null, auto:false, uid:'', unlocked:false, vo:null, voAt:0, voLoading:false, voBlob:{}, voEl:null, voTok:0, voPrev:'', voRun:0 };
+            sc:null, lastReact:{}, sr:null, wake:null, locked:null, auto:false, uid:'', unlocked:false, vo:null, voAt:0, voLoading:false, voBlob:{}, voEl:null, voTok:0, voPrev:'', voRun:0,
+            ov:{ el:null, idx:-1, tok:0, off:false, miss:0, unlocked:false, at:0, user:0 }, ovTimer:0 };
 var CP_VOICE_DIR = 'cpvoice/';
 var _CP_CIRC = ['①','②','③','④','⑤','⑥'];
 var _CP_GRADE = { good:'👍 잘했어요', more:'✍️ 조금만 더', again:'🔁 다시 해봐요' };
@@ -39453,15 +39455,20 @@ function cpSaid(){
   if(pool.length > 1 && k === _cp.lastReact[key]) k = pool[(pi + 1) % pool.length];
   _cp.lastReact[key] = k;
   c.react = st.reacts[k]; c.model = false; c.phase = 'react';
-  c.marks.push({ t:Math.round(_cpElapsed()), s:st.n, n:st.name, x:c.react.text, at:Date.now() });
+  var vm = _cpVoMap(c.react.text);
+  c.marks.push({ t:Math.round(_cpElapsed()), s:st.n, n:st.name, x:c.react.text, at:Date.now(), v:(vm && c.vo && vm[c.vo]) ? c.vo : '' });
   _cpRender(); _cpSpeak(c.react.text);
 }
 function cpReplay(){ var c = _cp.call; if(c && c.react) _cpSpeak(c.react.text); }
 function cpModel(){ var c = _cp.call; if(!c || c.phase !== 'react') return; c.model = !c.model; _cpRender(); }
 function cpNext(){ var c = _cp.call; if(!c || c.phase !== 'react' || c.ending) return; _cpAdvance(); }
+function _cpVoCut(){
+  var c = _cp.call, a = _cp.voEl;
+  try { if(c && c.phase === 'react' && c.marks.length && a && !a.paused && !a.ended){ var m = c.marks[c.marks.length - 1]; if(m.v && !m.cut) m.cut = Date.now(); } } catch(e){}
+}
 function _cpAdvance(){
   var c = _cp.call, T = _cpTarget(c.tid);
-  _cpTtsStop();
+  _cpVoCut(); _cpTtsStop();
   if(c.i >= T.stages.length - 1){ _cpFinish(); return; }
   c.i++; c.phase = 'say'; c.react = null; c.model = false; _cpRender();
   var m = document.querySelector('#cpScr .cp-callmid'); if(m) m.scrollTop = 0;
@@ -39478,12 +39485,12 @@ function _cpAbortCall(){
 }
 function _cpFinish(){
   var c = _cp.call; if(!c || c.ending) return;
-  c.ending = true;
+  c.ending = true; _cpVoCut();
   clearInterval(_cp.timer); _cp.timer = 0; _cpTtsStop(); _cpWake(false);
   c.heard = c.marks.length;
   if(c.recOn){   // the recording may have started after the call: times count from the recording, earlier reactions are not in it
     var mk = [];
-    for(var i = 0; i < c.marks.length; i++){ var m = c.marks[i]; if((m.at || 0) >= c.recT0 - 500) mk.push({ t:Math.max(0, Math.round((m.at - c.recT0) / 1000)), s:m.s, n:m.n, x:m.x }); }
+    for(var i = 0; i < c.marks.length; i++){ var m = c.marks[i]; if((m.at || 0) >= c.recT0 - 500){ var mo = { t:Math.max(0, Math.round((m.at - c.recT0) / 1000)), s:m.s, n:m.n, x:m.x }; if(m.v){ mo.p = Math.max(0, Math.round((m.at - c.recT0) / 10) / 100); mo.v = m.v; if(m.cut) mo.e = Math.max(mo.p, Math.round((m.cut - c.recT0) / 10) / 100); } mk.push(mo); } }
     c.marks = mk; c.dur = Math.max(1, Math.round((Date.now() - c.recT0) / 1000));
   } else c.dur = Math.max(1, Math.round(_cpElapsed()));
   var done = function(blob){
@@ -39539,7 +39546,7 @@ function _cpPlayerHtml(key, dur, marks, label){
 function _cpMarksHtml(key, marks){
   if(!marks || !marks.length) return '';
   var h = '<div class="cp-marks">';
-  for(var i = 0; i < marks.length; i++) h += '<button type="button" onclick="cpPlay(\'' + _cpEsc(key) + '\', ' + (Number(marks[i].t) || 0) + ')"><b>▶ ' + _cpClock(marks[i].t) + '</b><span>' + _cpEsc(marks[i].x) + '</span></button>';
+  for(var i = 0; i < marks.length; i++) h += '<button type="button" onclick="cpPlay(\'' + _cpEsc(key) + '\', ' + (Number(marks[i].p != null ? marks[i].p : marks[i].t) || 0) + ')"><b>▶ ' + _cpClock(marks[i].t) + '</b><span>' + _cpEsc(marks[i].x) + '</span></button>';
   return h + '</div>';
 }
 function _cpB64Blob(b64, mime){
@@ -39553,6 +39560,71 @@ function _cpUnlock(a){
   if(_cp.unlocked) return;
   _cp.unlocked = true;
   try { a.src = _CP_SILENT; var p = a.play(); if(p && p.catch) p.catch(function(){}); } catch(e){}
+}
+// ── customer voice over a recording: the file holds the FP's own voice only, so each customer line (mark.v = voice, mark.p = second) is played on top while listening
+function _cpOvMarks(key){
+  var mk = null, out = [], i;
+  if(key === 'local') mk = _cp.call && _cp.call.marks;
+  else if(_cp.list){ var L = _cp.list, all = (L.wait || []).concat(L.done || [], L.others || [], L.mine || [], L.best || []); for(i = 0; i < all.length; i++) if(all[i].id === key){ mk = all[i].marks; break; } }
+  for(i = 0; i < (mk || []).length; i++){
+    var m = mk[i], vm = m && m.v ? _cpVoMap(m.x) : null, p = m ? Number(m.p) : NaN;
+    if(vm && vm[m.v] && isFinite(p) && p >= 0) out.push({ p:p, f:vm[m.v], e:(m.e != null && isFinite(Number(m.e))) ? Number(m.e) : null });
+  }
+  return out;
+}
+function _cpOvEl(){ var o = _cp.ov; if(!o.el){ try { o.el = new Audio(); o.el.preload = 'auto'; } catch(e){} } return o.el; }
+function _cpOvArm(key){   // inside the ▶ tap: phones let a sound start by itself only if its player was started once from a tap; fetch this recording's lines ahead
+  var o = _cp.ov; if(o.off) return;
+  var mk = _cpOvMarks(key); if(!mk.length) return;
+  var el = _cpOvEl(); if(!el) return;
+  if(!o.unlocked){ o.unlocked = true; try { el.src = _CP_SILENT; var p = el.play(); if(p && p.catch) p.catch(function(){}); } catch(e){} }
+  var q = []; for(var i = 0; i < mk.length; i++) if(!_cp.voBlob[mk[i].f] && q.indexOf(mk[i].f) < 0) q.push(mk[i].f);
+  var next = function(){
+    var f = q.shift(); if(!f) return;
+    try {
+      fetch(CP_VOICE_DIR + f).then(function(r){ return r.ok ? r.blob() : null; })
+        .then(function(bl){ if(bl && bl.size && !_cp.voBlob[f]) _cp.voBlob[f] = URL.createObjectURL(bl); next(); }).catch(function(){ next(); });
+    } catch(e){}
+  };
+  next(); next();
+}
+function _cpOvStop(){
+  var o = _cp.ov; o.idx = -1; o.tok++;
+  try { if(o.el){ o.el.onloadedmetadata = null; if(!o.el.paused) o.el.pause(); } } catch(e){}
+}
+function _cpOvTimer(on){
+  if(on){ if(!_cp.ovTimer) _cp.ovTimer = setInterval(_cpOvTick, 50); }
+  else if(_cp.ovTimer){ clearInterval(_cp.ovTimer); _cp.ovTimer = 0; }
+}
+function _cpOvTick(){
+  var a = document.getElementById('cpAudio'), o = _cp.ov;
+  if(!a || !_cp.pl.key || !_cp.pl.ready || _cp.pl.err || a.paused || a.ended || a.seeking || o.off){ if(o.idx !== -1) _cpOvStop(); return; }
+  var mk = _cpOvMarks(_cp.pl.key), cur = a.currentTime || 0, idx = -1;
+  for(var i = 0; i < mk.length; i++) if(mk[i].p <= cur + 0.06) idx = i;
+  var cut = idx >= 0 && mk[idx].e != null && cur >= mk[idx].e - 0.03;   // the FP moved on here during the call
+  if(idx === o.idx){ if(cut && o.el && !o.el.paused){ _cpOvStop(); o.idx = idx; } return; }
+  _cpOvStop(); o.idx = idx;
+  var el = _cpOvEl(); if(idx < 0 || !el || cut) return;
+  var off = cur - mk[idx].p, tok = o.tok; if(off < 0.15) off = 0;
+  var go = function(){
+    if(tok !== o.tok) return;
+    try {
+      if(off > 0){ if(isFinite(el.duration) && off >= el.duration - 0.05) return; el.currentTime = off; }
+      o.at = Date.now(); var p = el.play(); if(p && p.catch) p.catch(function(){});
+    } catch(e){}
+  };
+  try {
+    el.src = _cp.voBlob[mk[idx].f] || (CP_VOICE_DIR + mk[idx].f);
+    if(off > 0){ el.onloadedmetadata = go; el.load(); } else go();
+  } catch(e2){}
+}
+function _cpOvOnPause(){   // a phone that cannot play two sounds at once pauses the recording when the customer's line starts: give that line up and keep the recording playing (twice = no customer voice until the app is reopened)
+  var a = document.getElementById('cpAudio'), o = _cp.ov, now = Date.now();
+  if(a && !a.ended && _cp.pl.key && _cp.pl.ready && o.idx >= 0 && !o.off && now - o.at < 500 && now - o.user > 400 && document.visibilityState !== 'hidden'){
+    var keep = o.idx; if(++o.miss >= 2) o.off = true;
+    _cpOvStop(); o.idx = keep; _cp.pl.quiet = true; _cpDoPlay(); return;
+  }
+  _cpOvTimer(false); _cpOvStop();
 }
 function _cpDoPlay(){
   var a = document.getElementById('cpAudio'); if(!a) return;
@@ -39568,17 +39640,18 @@ function _cpAudioReady(){
 }
 function cpPlay(key, at){
   var a = document.getElementById('cpAudio'); if(!a) return;
+  _cpOvArm(key);
   if(_cp.pl.key === key && _cp.pl.ready && !_cp.pl.err){
     if(at != null){ try { a.currentTime = at; } catch(e){} if(a.paused) _cpDoPlay(); }
     else if(a.paused){ if(a.ended){ try { a.currentTime = 0; } catch(e2){} } _cpDoPlay(); }
-    else a.pause();
+    else { _cp.ov.user = Date.now(); a.pause(); }
     _cpPlayerSync(); return;
   }
   if(_cp.pl.key === key && !_cp.pl.err){ if(at != null) _cp.pl.want = at; return; }   // still loading
   var src = key === 'local' ? (_cp.rec ? { url:_cp.rec.url } : null) : _cp.aud[key];
   if(!src){
     if(key === 'local' || _cp.pl.loading === key) return;
-    try { a.pause(); } catch(e3){}
+    _cp.ov.user = Date.now(); try { a.pause(); } catch(e3){}
     _cp.pl = { key:'', ready:false, loading:key, want:0, fix:false, err:false }; _cpPlayerSync();
     _cpUnlock(a);
     _cpPost({ action:'cpAudio', id:key }, function(res){
@@ -39589,7 +39662,8 @@ function cpPlay(key, at){
     });
     return;
   }
-  try { a.pause(); } catch(e5){}
+  _cp.ov.user = Date.now(); try { a.pause(); } catch(e5){}
+  _cpOvStop();
   _cp.pl = { key:key, ready:false, loading:'', want:at == null ? 0 : at, fix:false, err:false };
   a.src = src.url; try { a.load(); } catch(e6){}
   _cp.unlocked = true; _cp.pl.quiet = true; _cpDoPlay();
@@ -39603,6 +39677,7 @@ function cpSeek(ev, key){
 }
 function _cpStopAudio(){
   var a = document.getElementById('cpAudio');
+  _cp.ov.user = Date.now(); _cpOvTimer(false); _cpOvStop();
   try { if(a && !a.paused) a.pause(); } catch(e){}
   _cp.pl = { key:'', ready:false, loading:'', want:0, fix:false, err:false };
 }
@@ -39828,6 +39903,12 @@ function cpDictate(id, btn){
     _cpPlayerSync();
   });
   ['play', 'pause', 'ended', 'seeked'].forEach(function(n){ a.addEventListener(n, _cpPlayerSync); });
+  a.addEventListener('play', function(){ _cpOvTimer(true); _cpOvTick(); });
+  a.addEventListener('pause', _cpOvOnPause);
+  a.addEventListener('ended', function(){ if(a.ended || a.paused){ _cpOvTimer(false); _cpOvStop(); } });
+  a.addEventListener('timeupdate', function(){ if(_cp.pl.key && _cp.pl.ready && !a.paused && !a.ended && !_cp.ovTimer){ _cpOvTimer(true); _cpOvTick(); } });
+  a.addEventListener('seeking', function(){ if(_cp.ov.idx !== -1) _cpOvStop(); _cp.ov.idx = -9; });
+  a.addEventListener('seeked', function(){ _cp.ov.idx = -9; _cpOvTick(); });
   a.addEventListener('error', function(){
     if(!_cp.pl.key) return;
     _cp.pl.err = true; _cp.pl.ready = false;
