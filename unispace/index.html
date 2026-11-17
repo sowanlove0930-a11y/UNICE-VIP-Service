@@ -29526,7 +29526,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 305;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 306;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -39082,6 +39082,12 @@ body.theme-light .cp-btn { color:#5B3CC4; }
 .cp-waitchip { display:inline-block; margin-top:12px; font-size:13px; font-weight:700; color:#B8860B; background:#FFF9EC; border-radius:12px; padding:5px 11px; }
 .cp-from { font-size:12.5px; font-weight:800; color:#6C4BD8; margin-top:11px; }
 .cp-say2 { background:#F3EFFD; border-radius:4px 14px 14px 14px; padding:10px 12px; font-size:15px; line-height:1.55; font-weight:600; color:#33271B; margin-top:4px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.cp-delb { display:block; margin:14px auto 0; border:none; background:none; font-size:13px; font-weight:700; color:#A79A88; padding:7px 12px; text-decoration:underline; text-underline-offset:3px; }
+.cp-delq { display:flex; align-items:center; gap:8px; margin-top:12px; background:#FDF1EF; border:1.5px solid #F1C7C0; border-radius:14px; padding:9px 10px 9px 13px; }
+.cp-delq span { flex:1; font-size:13px; font-weight:700; color:#B3402F; line-height:1.4; }
+.cp-delq button { border:1.5px solid #D9CDB8; background:#fff; color:#5A3A12; border-radius:11px; font-size:14px; font-weight:800; padding:9px 14px; white-space:nowrap; }
+.cp-delq button.y { background:#D64533; border-color:#D64533; color:#fff; }
+.cp-delq button:disabled { opacity:.6; }
 .cp-gone { font-size:12.5px; font-weight:600; color:#A79A88; background:#F3EEE4; border-radius:11px; padding:10px 12px; margin-top:12px; text-align:center; }
 /* my script */
 .cp-seg { display:flex; background:#EDE6D8; border-radius:12px; padding:4px; margin:8px 0 4px; }
@@ -39107,13 +39113,15 @@ body.theme-light .cp-btn { color:#5B3CC4; }
 <script>
 // 303 콜 연습: 대상 고르기 → 통화 (내 멘트 → 그 단계의 고객 반응 → 받아치기) → 끝 (들어보기 · 보내기). 평가는 사람이 한다 (GAS 26l cp*).
 // 테스트 기간: 대표 · 지점장 · 매니저 · 연습 아이디만 버튼이 보인다 (서버가 한 번 더 확인).
+// 306: 녹음 삭제 (평가 카드 · 평가 결과의 평가 전 녹음) — 서버가 del:true 를 준 항목에만 버튼, 한 번 더 확인 후 cpDelete.
 // 305: 녹음을 들을 때 고객 목소리가 제자리에서 같이 나온다 (mark.p 초 · mark.v 목소리 → cpvoice 파일을 겹쳐 재생; 녹음 파일에는 본인 목소리만).
 // 304: 고객 목소리 = 녹음 파일 (cpvoice/lines.json, 파일 없는 줄은 휴대폰 음성) · 녹음하기는 통화 화면에서 누른다 · 단계 없는 대상은 숨김.
 var CP_TEST_IDS = { h20490093:1 };
 var _cp = { d:null, err:'', loading:false, loadedAt:0, view:'home', call:null, rec:null, recorder:null, sent:false, sending:false, timer:0,
             list:null, listAt:0, listErr:false, ev:{ id:'', grade:'', comment:'', best:false, busy:false }, aud:{}, pl:{ key:'', ready:false, loading:'', want:0, fix:false, err:false },
             sc:null, lastReact:{}, sr:null, wake:null, locked:null, auto:false, uid:'', unlocked:false, vo:null, voAt:0, voLoading:false, voBlob:{}, voEl:null, voTok:0, voPrev:'', voRun:0,
-            ov:{ el:null, idx:-1, tok:0, off:false, miss:0, unlocked:false, at:0, user:0 }, ovTimer:0 };
+            ov:{ el:null, idx:-1, tok:0, off:false, miss:0, unlocked:false, at:0, user:0 }, ovTimer:0,
+            del:{ id:'', busy:false } };
 var CP_VOICE_DIR = 'cpvoice/';
 var _CP_CIRC = ['①','②','③','④','⑤','⑥'];
 var _CP_GRADE = { good:'👍 잘했어요', more:'✍️ 조금만 더', again:'🔁 다시 해봐요' };
@@ -39249,6 +39257,7 @@ function _cpRender(){
 }
 function _cpGo(v){
   _cpStopAudio(); _cpSrStop();
+  if(!_cp.del.busy) _cp.del = { id:'', busy:false };
   if((v === 'eval' || v === 'result' || v === 'script') && !_cp.d) return;
   _cp.view = v;
   if(v === 'eval' || v === 'result'){
@@ -39743,7 +39752,7 @@ function _cpEvalHtml(){
     h += '</div><div class="cp-cm"><div class="cmh"><small>한 줄 코멘트 (안 써도 됩니다)</small><button type="button" class="cp-mic" onclick="cpDictate(\'cpEvCm\', this)">🎤 말로 입력</button></div>'
        + '<textarea id="cpEvCm" rows="2" maxlength="300" oninput="_cp.ev.comment=this.value">' + _cpEsc(e.comment) + '</textarea></div>';
     if(d.me.canBest) h += '<button type="button" class="cp-ck' + (e.best ? ' on' : '') + '" id="cpEvBest" onclick="cpEvBest()"><i>✓</i>🏅 베스트로 뽑기</button>';
-    h += '<button type="button" class="cp-big p" id="cpEvSend" onclick="cpEvSend()"' + (e.busy ? ' disabled' : '') + '>' + (e.busy ? '보내는 중…' : (cur.status === 'done' ? '다시 보내기' : '보내기')) + '</button></div>';
+    h += '<button type="button" class="cp-big p" id="cpEvSend" onclick="cpEvSend()"' + (e.busy ? ' disabled' : '') + '>' + (e.busy ? '보내는 중…' : (cur.status === 'done' ? '다시 보내기' : '보내기')) + '</button>' + _cpDelHtml(cur) + '</div>';
   }
   for(i = 0; i < L.wait.length; i++){
     x = L.wait[i]; if(cur && x.id === cur.id) continue;
@@ -39771,6 +39780,7 @@ function _cpEvalHtml(){
 function cpEvOpen(id){
   var x = _cpListItem(id); if(!x) return;
   _cpStopAudio(); _cpSrStop();
+  if(!_cp.del.busy) _cp.del = { id:'', busy:false };
   _cp.ev = { id:id, grade:x.status === 'done' ? x.grade : '', comment:x.status === 'done' ? (x.comment || '') : '', best:!!x.best, busy:false };
   _cpRender(); var el = document.getElementById('cpScr'); if(el) el.scrollTop = 0;
 }
@@ -39806,6 +39816,40 @@ function cpEvSend(){
     }
   });
 }
+// ── delete a recording (the server says who may: x.del)
+function _cpDelHtml(x){
+  if(!x || !x.del) return '';
+  var D = _cp.del;
+  if(D.id !== x.id) return '<button type="button" class="cp-delb" data-id="' + _cpEsc(x.id) + '" onclick="cpDelAsk(\'' + _cpEsc(x.id) + '\')">🗑 이 녹음 삭제</button>';
+  return '<div class="cp-delq"><span>삭제하면 되돌릴 수 없어요</span><button type="button" id="cpDelNo" onclick="cpDelAsk(\'\')"' + (D.busy ? ' disabled' : '') + '>취소</button>'
+       + '<button type="button" class="y" id="cpDelYes" onclick="cpDelGo()"' + (D.busy ? ' disabled' : '') + '>' + (D.busy ? '삭제 중…' : '삭제') + '</button></div>';
+}
+function cpDelAsk(id){
+  if(_cp.del.busy) return;
+  _cp.del = { id:id || '', busy:false };
+  var ta = document.getElementById('cpEvCm'); if(ta) _cp.ev.comment = ta.value;
+  _cpSrStop(); _cpRender();
+}
+function cpDelGo(){
+  var D = _cp.del; if(!D.id || D.busy) return;
+  var id = D.id; D.busy = true; _cpRender();
+  _cpPost({ action:'cpDelete', id:id }, function(res){
+    _cp.del = { id:'', busy:false };
+    if(res && res.ok){
+      showToast('🗑 삭제했어요');
+      var L = _cp.list, f = function(y){ return y.id !== id; };
+      if(L){
+        L.wait = L.wait.filter(f); L.done = L.done.filter(f); L.mine = L.mine.filter(f); L.best = L.best.filter(f); L.others = (L.others || []).filter(f);
+        if(_cp.d){ _cp.d.wait = L.wait.length; _cpBtnSync(); }
+      }
+      if(_cp.pl.key === id || _cp.pl.loading === id) _cpStopAudio();
+      if(_cp.aud[id]){ try { URL.revokeObjectURL(_cp.aud[id].url); } catch(e){} delete _cp.aud[id]; }
+      if(_cp.ev.id === id) _cp.ev = { id:'', grade:'', comment:'', best:false, busy:false };
+      _cp.listAt = 0;
+    } else _cpToast('⚠️ ' + _cpMsg(res, '삭제하지 못했습니다. 다시 눌러 주세요'));
+    if(_cpIsOpen() && (_cp.view === 'eval' || _cp.view === 'result')) _cpRender();
+  });
+}
 // ── my results + best calls
 function _cpResultHtml(){
   var L = _cp.list, h = _cpHd('📬 평가 결과', ''), i, x;
@@ -39819,7 +39863,7 @@ function _cpResultHtml(){
       h += '<div class="cp-from">' + _cpEsc(x.evalName) + '</div>' + (x.comment ? '<div class="cp-say2">' + _cpEsc(x.comment) + '</div>' : '');
     } else h += '<span class="cp-waitchip">평가 기다리는 중</span>';
     h += x.audio ? _cpPlayerHtml(x.id, x.dur, x.marks, '내 녹음 듣기') : '<div class="cp-gone">보관 기간이 지나 지워진 녹음입니다</div>';
-    h += '</div>';
+    h += _cpDelHtml(x) + '</div>';
   }
   if(L.best.length){
     h += '<div class="cp-lab">🏅 베스트 콜 듣기</div>';
