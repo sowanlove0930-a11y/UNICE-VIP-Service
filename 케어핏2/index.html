@@ -918,6 +918,13 @@ table.rc-t tr.rc-sm td { font-weight:800; color:#000; border-top:2px solid #3340
   .rc-fl .rc-cmp .rc-cr { grid-template-columns:168px 1fr 84px; margin-top:3px; font-size:13px; }
   .rc-fl .fr.yr { padding:6px 12px; margin-top:6px; } .rc-fl .fr.yr b { font-size:20px; }
 }
+
+/* 빈 공간만큼 크게: rcFit 이 열마다 --rz (글자) · --rh (표 줄 높이) 를 정함 */
+.rc-bd > .rc-col > .rc-fl, .rc-bd3 > .rc-col > *, .rc-bd > .rc-col > .rc-card > .rc-ct, .rc-bd > .rc-col > .rc-card > .rc-src, .rc-bd > .rc-col > .rc-card > .rc-lb, .rc-bd > .rc-col > .rc-card > .rc-gc, .rc-bd > .rc-col > .rc-card > .rc-gd { zoom:var(--rz, 1); }
+table.rc-t { font-size:calc(11.5px * var(--rz, 1)); }
+table.rc-t th, table.rc-t td { height:calc(23px * var(--rh, var(--rz, 1))); }
+table.rc-t tr.rc-cv th { font-size:calc(10.5px * var(--rz, 1)); height:calc(20px * var(--rh, var(--rz, 1))); }
+@media (max-width:1100px) { table.rc-t { font-size:calc(10.5px * var(--rz, 1)); } }
 </style>
 </head>
 <body>
@@ -3463,6 +3470,48 @@ function rcDrugTabHtml() {
     '<div class="rc-src">급여 약이어도 쓰는 조건에 맞지 않으면 건강보험이 안 되어 약값 전부가 내 돈이 됩니다.<br>엔허투는 2024년 4월부터 HER2 양성 전이성 유방암 2차 치료에 건강보험이 됩니다. HER2 저발현 유방암은 아직 건강보험이 안 됩니다 (2026년 5월 기준).</div></div>' +
     '<div class="rc-ft" style="margin-top:0"><div class="rc-q"><small>QUESTION</small>이 약값, 통원으로 맞으면 실손은 하루 한도까지만 나옵니다. 내 보장에는 있나요?</div>' + rcNextBtn() + '</div>';
 }
+/* 빈 공간만큼 표 · 상자를 키움: 열마다 --rz (글자 크기) · --rh (표 줄 높이) 를 넘치지 않는 가장 큰 값으로 정함 */
+var RC_ZMAX = 1.3, RC_HMAX = 1.7, RC_ZMIN = 0.84;
+function rcFitH(c) { return c.scrollHeight <= c.clientHeight; }
+function rcFitW(c) {
+  var t = c.querySelectorAll('table.rc-t td, table.rc-t th'), i, r;
+  if (!document.createRange) { return false; }
+  r = document.createRange();
+  for (i = 0; i < t.length; i++) {
+    if (!t[i].firstChild) { continue; }
+    r.selectNodeContents(t[i]);
+    if (r.getBoundingClientRect().width > t[i].clientWidth - 8) { return false; }
+  }
+  return rcFitH(c);
+}
+function rcFitVar(c, name, lo, hi, ok) {
+  var i, m;
+  if (hi <= lo) { return lo; }
+  c.style.setProperty(name, String(hi));
+  if (ok(c)) { return hi; }
+  for (i = 0; i < 6; i++) { m = (lo + hi) / 2; c.style.setProperty(name, m.toFixed(3)); if (ok(c)) { lo = m; } else { hi = m; } }
+  c.style.setProperty(name, lo.toFixed(3));
+  return lo;
+}
+function rcFit() {
+  var bd = document.querySelector('#rcOv .rc-bd'), cols, i, z = [], m, tb;
+  if (!bd) { return; }
+  cols = bd.children;
+  for (i = 0; i < cols.length; i++) { cols[i].style.removeProperty('--rz'); cols[i].style.removeProperty('--rh'); }
+  if (window.innerWidth <= 820) { return; }
+  for (i = 0; i < cols.length; i++) {
+    tb = cols[i].querySelector('table.rc-t');
+    /* 자리가 남으면 키우고, 넘치면 스크롤 대신 조금 줄임 */
+    z.push(rcFitH(cols[i]) ? rcFitVar(cols[i], '--rz', 1, RC_ZMAX, tb ? rcFitW : rcFitH) : rcFitVar(cols[i], '--rz', RC_ZMIN, 1, rcFitH));
+    if (tb && z[i] >= 1 && rcFitH(cols[i])) { rcFitVar(cols[i], '--rh', z[i], RC_HMAX, rcFitH); }
+  }
+  if (bd.className.indexOf('rc-bd3') >= 0) {
+    m = Math.min.apply(null, z);
+    for (i = 0; i < cols.length; i++) { cols[i].style.setProperty('--rz', m.toFixed(3)); }
+  }
+}
+window.addEventListener('resize', function () { if (rcLive()) { rcFit(); } });
+if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function () { if (rcLive()) { rcFit(); } }); }
 function rcRender() {
   var i, st = rcSteps(), cur = rcStepIdx(), tabs = '<div class="rc-tabs">', scL = 0, scR = 0;
   var cols = document.querySelectorAll('#rcOv .rc-col');
@@ -3477,6 +3526,7 @@ function rcRender() {
   ov.innerHTML = '<div class="rc-md"><div class="rc-mh"><span class="rc-ey">' + (curDz === 'breast' ? 'REAL RECEIPT' : 'EXAMPLE') + '</span><h2>' + title + '</h2>' + tabs +
     '<button type="button" class="rc-x" onclick="rcClose()" aria-label="닫기">✕</button></div>' + body + '</div>';
   ov.setAttribute('data-v', rcTab + rcCur);
+  rcFit();
   if (keep) {
     cols = document.querySelectorAll('#rcOv .rc-col');
     for (i = 0; i < cols.length && i < sc.length; i++) { cols[i].scrollTop = sc[i]; }
