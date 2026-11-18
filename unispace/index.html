@@ -29530,7 +29530,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 313;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 314;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -39127,6 +39127,10 @@ body.theme-light .cp-btn { color:#5B3CC4; }
 .cp-an .stf { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-top:6px; }
 .cp-an .stf > span button { border:none; background:none; font-size:12px; font-weight:700; color:#8A7B69; padding:5px 0 5px 12px; text-decoration:underline; text-underline-offset:3px; }
 .cp-st .sth b { font-size:14px; font-weight:800; color:#5A3A12; }
+.cp-docb { display:flex; gap:8px; margin:8px 0 2px; }
+.cp-docb button { flex:1; border:1.5px solid #E3D9C6; background:#fff; border-radius:12px; padding:11px 4px; font-size:14px; font-weight:700; color:#5A3A12; text-align:center; }
+.cp-docb button:active { background:#F3ECDD; }
+#cpPrint { display:none; }
 @media (max-width:768px) {
   .cp-btn { font-size:12.5px; padding:11px 10px; border-radius:14px; }
 }
@@ -39145,6 +39149,7 @@ body.theme-light .cp-btn { color:#5B3CC4; }
 <script>
 // 303 콜 연습: 대상 고르기 → 통화 (내 멘트 → 그 단계의 고객 반응 → 받아치기) → 끝 (들어보기 · 보내기). 평가는 사람이 한다 (GAS 26l cp*).
 // 테스트 기간: 대표 · 지점장 · 매니저 · 연습 아이디만 버튼이 보인다 (서버가 한 번 더 확인).
+// 314: 내 스크립트 화면 「🖨 A4로 인쇄」「📄 워드로 받기」 — 지금 보이는 대상의 스크립트 + 고객 반응별 답안 (cpDocPrint · cpDocWord).
 // 313: 이름 「여보세요」 (버튼 · 첫 화면 제목, 작은 글씨로 콜 연습).
 // 312: 전체 FP 공개 (서버 26q 가 열어 줌).
 // 312: 「여보세요?」는 두 번 — 통화에 들어갈 때(0.5초 뒤) + 🎙 녹음하기를 눌러 녹음이 시작될 때(0.8초 뒤). 첫 멘트를 말한 뒤에는 안 나온다.
@@ -40016,6 +40021,7 @@ function _cpScriptHtml(){
   h += '</div>';
   var T = _cpTarget(S.tid), mine = S.draft[S.tid] || {}, tc = S.touch[S.tid] || {};
   h += '<div class="cp-note">' + (d.ans ? '기본 스크립트와 모범답안이 들어 있어요. 고쳐서 저장하면 나에게만 바뀌어요.' : '기본 스크립트가 들어 있어요. 고쳐서 저장하면 내 스크립트가 돼요.') + '</div>';
+  h += '<div class="cp-docb"><button type="button" id="cpDocP" onclick="cpDocPrint()">🖨 A4로 인쇄</button><button type="button" id="cpDocW" onclick="cpDocWord()">📄 워드로 받기</button></div>';
   for(i = 0; T && i < T.stages.length; i++){
     var st = T.stages[i], own = String(mine[st.n] || ''), isOwn = !!own.trim() && !_cpScSame(own, st), show = (own || tc[st.n]) ? own : (st.script ? _cpFill(st.script) : '');
     h += '<div class="cp-st"><div class="sth"><b>' + (_CP_CIRC[i] || '') + ' ' + _cpEsc(st.name) + '</b><button type="button" class="cp-mic" onclick="cpDictate(\'cpSc' + st.n + '\', this)">🎤 말로 입력</button></div>'
@@ -40119,6 +40125,181 @@ function cpScBack(){
   var S = _cp.sc;
   if(S && S.dirty && !S.busy){ cpScSave(function(ok){ if(ok && _cp.view === 'script') _cpGo('home'); }); return; }
   _cpGo('home');
+}
+// ── 314: 스크립트 인쇄 (A4) · 워드 파일 — 내 스크립트 화면에 지금 보이는 대상(탭)의 내용 그대로 (아직 저장하지 않은 고친 글 포함)
+function _cpDocData(){
+  var d = _cp.d, S = _cp.sc, T = S ? _cpTarget(S.tid) : null; if(!d || !S || !T) return null;
+  var mine = S.draft[S.tid] || {}, A = (mine.ans && typeof mine.ans === 'object') ? mine.ans : {}, nm = '', i, j;
+  try { nm = String((currentUser && currentUser.name) || '').replace(/\s+/g, ' ').trim(); } catch(e){}
+  var now = new Date(), out = { target:String(T.name || ''), sub:String(T.sub || ''), name:nm, date:now.getFullYear() + '. ' + (now.getMonth() + 1) + '. ' + now.getDate() + '.', stages:[] };
+  for(i = 0; i < T.stages.length; i++){
+    var st = T.stages[i], own = String(mine[st.n] || '').trim(), isOwn = !!own && !_cpScSame(own, st);   // an emptied box = the default is used in the call, so the default is printed
+    var o = { no:_CP_CIRC[i] || (i + 1) + '.', name:String(st.name || ''), text:own || (st.script ? _cpFill(st.script).trim() : ''), own:isOwn, reacts:[] };
+    for(j = 0; j < (st.reacts || []).length; j++){
+      var r = st.reacts[j], av = String(A[r.text] || '').trim();
+      o.reacts.push({ q:String(r.text || ''), a:av || (r.model ? _cpFill(r.model).trim() : ''), own:!!av && !_cpAnSame(av, r) });
+    }
+    out.stages.push(o);
+  }
+  return out;
+}
+function _cpDocName(D){ return ('여보세요_' + D.target + '_스크립트' + (D.name ? '_' + D.name : '')).replace(/[\\\/:*?"<>|\s]+/g, '_'); }
+var _CP_PRINT_CSS = '@page{size:A4;margin:13mm}#cpPrint{display:none}'
+  + '@media print{html.cp-printing,html.cp-printing body{background:#fff!important;overflow:visible!important;height:auto!important;min-height:0!important;position:static!important;margin:0!important;padding:0!important}'
+  + 'html.cp-printing body::before,html.cp-printing body::after{display:none!important}html.cp-printing body>*{display:none!important}html.cp-printing body>#cpPrint{display:block!important}}'
+  + '.cpp{font-family:"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#111;font-size:11pt;line-height:1.6;-webkit-print-color-adjust:exact;print-color-adjust:exact;word-break:keep-all;overflow-wrap:anywhere;text-align:left}'
+  + '.cpp-top{display:flex;justify-content:space-between;font-size:9.5pt;color:#555;font-weight:600}'
+  + '.cpp h1{font-size:20pt;font-weight:800;margin:3pt 0 0;padding:0;line-height:1.3;color:#000;letter-spacing:0}'
+  + '.cpp-sub{font-size:10.5pt;color:#555;padding-bottom:6pt;border-bottom:1.5pt solid #222;min-height:12pt}'
+  + '.cpp-st{margin-top:11pt}.cpp-hs{break-inside:avoid;page-break-inside:avoid}'
+  + '.cpp-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4pt}.cpp-h b{font-size:13pt;font-weight:800;color:#000}.cpp-h em{font-style:normal;font-size:9pt;color:#666;font-weight:600}'
+  + '.cpp-say{border:1pt solid #555;border-radius:6pt;padding:6pt 10pt;font-size:12pt;line-height:1.6;white-space:pre-wrap;min-height:20pt}'
+  + '.cpp-tb{width:100%;border-collapse:collapse;margin-top:5pt;font-size:10pt;line-height:1.45;table-layout:fixed}'
+  + '.cpp-tb th{background:#EEE;font-weight:700;font-size:9pt;text-align:left;padding:2.5pt 6pt;border:.75pt solid #888;color:#222}'
+  + '.cpp-tb td{padding:4pt 6pt;border:.75pt solid #888;vertical-align:top;white-space:pre-wrap;color:#111}'
+  + '.cpp-tb th:first-child,.cpp-tb td:first-child{width:24%}.cpp-tb td:first-child{font-weight:700}'
+  + '.cpp-tb tr{break-inside:avoid;page-break-inside:avoid}.cpp-tb thead{display:table-header-group}'
+  + '.cpp-tb i{font-style:normal;font-size:8.5pt;color:#666;font-weight:600;white-space:nowrap}';
+function _cpDocHtml(D){
+  var h = '<div class="cpp"><div class="cpp-top"><span>여보세요 · 콜 연습</span><span>' + _cpEsc((D.name ? D.name + ' · ' : '') + D.date) + '</span></div>'
+        + '<h1>' + _cpEsc(D.target) + ' 콜 스크립트</h1><div class="cpp-sub">' + _cpEsc(D.sub) + '</div>', i, j;
+  for(i = 0; i < D.stages.length; i++){
+    var s = D.stages[i];
+    h += '<div class="cpp-st"><div class="cpp-hs"><div class="cpp-h"><b>' + _cpEsc(s.no + ' ' + s.name) + '</b><em>' + (s.own ? '내 스크립트' : '기본 스크립트') + '</em></div><div class="cpp-say">' + _cpEsc(s.text) + '</div></div>';
+    if(s.reacts.length){
+      h += '<table class="cpp-tb"><thead><tr><th>고객이 이렇게 말하면</th><th>이렇게 받아칩니다</th></tr></thead><tbody>';
+      for(j = 0; j < s.reacts.length; j++) h += '<tr><td>' + _cpEsc(s.reacts[j].q) + '</td><td>' + _cpEsc(s.reacts[j].a) + (s.reacts[j].own ? ' <i>(내 답안)</i>' : '') + '</td></tr>';
+      h += '</tbody></table>';
+    }
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+function _cpDocPrep(){   // the A4 sheet exists only for the printer: nothing changes on the screen
+  var D = _cpDocData(); if(!D) return false;
+  var p = document.getElementById('cpPrint'), st = document.getElementById('cpPrintCss');
+  if(!p){ p = document.createElement('div'); p.id = 'cpPrint'; document.body.appendChild(p); }
+  if(!st){ st = document.createElement('style'); st.id = 'cpPrintCss'; document.head.appendChild(st); }
+  p.innerHTML = _cpDocHtml(D); st.textContent = _CP_PRINT_CSS;
+  document.documentElement.classList.add('cp-printing');
+  if(_cp.prTitle == null) _cp.prTitle = document.title;
+  document.title = _cpDocName(D);   // the file name when the print window saves a PDF
+  clearTimeout(_cp.prTm); _cp.prTm = setTimeout(_cpDocDone, 300000);
+  return true;
+}
+function _cpDocDone(){
+  clearTimeout(_cp.prTm); _cp.prTm = 0;
+  if(!document.documentElement.classList.contains('cp-printing')) return;
+  document.documentElement.classList.remove('cp-printing');
+  if(_cp.prTitle != null){ document.title = _cp.prTitle; _cp.prTitle = null; }
+  var p = document.getElementById('cpPrint'), st = document.getElementById('cpPrintCss');
+  if(p) p.innerHTML = '';
+  if(st) st.textContent = '';
+}
+function cpDocPrint(){
+  if(typeof window.print !== 'function'){ _cpToast('이 기기에서는 바로 인쇄할 수 없어요. 「워드로 받기」를 눌러 주세요'); return; }
+  _cpSrStop();
+  if(!_cpDocPrep()) return;
+  setTimeout(function(){ try { window.print(); } catch(e){ _cpDocDone(); _cpToast('인쇄 창을 열지 못했어요. 「워드로 받기」를 눌러 주세요'); } }, 80);
+}
+try {   // the browser's own print (Ctrl+P · 메뉴의 인쇄) on the 내 스크립트 screen gives the same A4 sheet
+  window.addEventListener('beforeprint', function(){ try { if(_cpIsOpen() && _cp.view === 'script' && !document.documentElement.classList.contains('cp-printing')) _cpDocPrep(); } catch(e){} });
+  window.addEventListener('afterprint', function(){ try { _cpDocDone(); } catch(e){} });
+} catch(e){}
+function _cpUtf8(s){
+  s = String(s);
+  if(typeof TextEncoder !== 'undefined') return new TextEncoder().encode(s);
+  var b = unescape(encodeURIComponent(s)), u = new Uint8Array(b.length); for(var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u;
+}
+function _cpZip(files){   // [[name, Uint8Array]] → Blob parts of a zip without compression (stored) — all a .docx needs
+  var T = [], n, k, c, i, j;
+  for(n = 0; n < 256; n++){ c = n; for(k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); T[n] = c >>> 0; }
+  var now = new Date(), dt = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate(), tm = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  function u16(a, v){ a.push(v & 255, (v >>> 8) & 255); }
+  function u32(a, v){ a.push(v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255); }
+  var parts = [], cen = [], off = 0, cs = 0;
+  for(i = 0; i < files.length; i++){
+    var nm = _cpUtf8(files[i][0]), data = files[i][1], crc = 0xFFFFFFFF;
+    for(j = 0; j < data.length; j++) crc = T[(crc ^ data[j]) & 255] ^ (crc >>> 8);
+    crc = (crc ^ 0xFFFFFFFF) >>> 0;
+    var lh = [], ch = [];
+    u32(lh, 0x04034b50); u16(lh, 20); u16(lh, 0); u16(lh, 0); u16(lh, tm); u16(lh, dt); u32(lh, crc); u32(lh, data.length); u32(lh, data.length); u16(lh, nm.length); u16(lh, 0);
+    u32(ch, 0x02014b50); u16(ch, 20); u16(ch, 20); u16(ch, 0); u16(ch, 0); u16(ch, tm); u16(ch, dt); u32(ch, crc); u32(ch, data.length); u32(ch, data.length); u16(ch, nm.length); u16(ch, 0); u16(ch, 0); u16(ch, 0); u16(ch, 0); u32(ch, 0); u32(ch, off);
+    parts.push(new Uint8Array(lh), nm, data); cen.push(new Uint8Array(ch), nm);
+    off += lh.length + nm.length + data.length; cs += ch.length + nm.length;
+  }
+  var e = []; u32(e, 0x06054b50); u16(e, 0); u16(e, 0); u16(e, files.length); u16(e, files.length); u32(e, cs); u32(e, off); u16(e, 0);
+  return parts.concat(cen, [new Uint8Array(e)]);
+}
+function _cpDocxFiles(D){   // WordprocessingML by hand: A4, 13 mm margins, 맑은 고딕. Element order inside pPr / rPr / tblPr / tcPr follows the schema (Word is strict)
+  var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"', HD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  var W = 10432, C1 = 2500, C2 = W - C1;
+  function X(v){ return String(v == null ? '' : v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function RP(o){ o = o || {}; var pr = (o.b ? '<w:b/><w:bCs/>' : '') + (o.c ? '<w:color w:val="' + o.c + '"/>' : '') + (o.z ? '<w:sz w:val="' + o.z + '"/><w:szCs w:val="' + o.z + '"/>' : ''); return pr ? '<w:rPr>' + pr + '</w:rPr>' : ''; }
+  function R(t, o){   // one run; line breaks are kept
+    var ls = String(t == null ? '' : t).replace(/\r\n?/g, '\n').split('\n'), x = '', i;
+    for(i = 0; i < ls.length; i++) x += (i ? '<w:br/>' : '') + '<w:t xml:space="preserve">' + X(ls[i]) + '</w:t>';
+    return '<w:r>' + RP(o) + x + '</w:r>';
+  }
+  function P(runs, pr){ return '<w:p>' + (pr ? '<w:pPr>' + pr + '</w:pPr>' : '') + runs + '</w:p>'; }
+  function TC(w, inner, fill){ return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + (fill ? '<w:shd w:val="clear" w:color="auto" w:fill="' + fill + '"/>' : '') + '</w:tcPr>' + inner + '</w:tc>'; }
+  function TB(grid, rows, bsz, bcol, mv, mh){
+    var g = '', bd = '', i, K = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'];
+    for(i = 0; i < grid.length; i++) g += '<w:gridCol w:w="' + grid[i] + '"/>';
+    for(i = 0; i < K.length; i++) bd += '<w:' + K[i] + ' w:val="single" w:sz="' + bsz + '" w:space="0" w:color="' + bcol + '"/>';
+    return '<w:tbl><w:tblPr><w:tblW w:w="' + W + '" w:type="dxa"/><w:tblBorders>' + bd + '</w:tblBorders><w:tblLayout w:type="fixed"/>'
+         + '<w:tblCellMar><w:top w:w="' + mv + '" w:type="dxa"/><w:left w:w="' + mh + '" w:type="dxa"/><w:bottom w:w="' + mv + '" w:type="dxa"/><w:right w:w="' + mh + '" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>' + g + '</w:tblGrid>' + rows + '</w:tbl>';
+  }
+  var TAB = '<w:r><w:tab/></w:r>', RT = '<w:tabs><w:tab w:val="right" w:pos="' + W + '"/></w:tabs>', G = { c:'666666', z:19 }, LH = '<w:spacing w:line="260" w:lineRule="exact"/>', LT = '<w:spacing w:line="290" w:lineRule="exact"/>', i, j;   // fixed line heights: 맑은 고딕 is a tall font, Word's "single" would make the file a page longer than the printed sheet
+  var b = P(R('여보세요 · 콜 연습', G) + TAB + R((D.name ? D.name + ' · ' : '') + D.date, G), RT)
+        + P(R(D.target + ' 콜 스크립트', { b:1, z:40 }), '<w:spacing w:before="60" w:after="0"/>')
+        + P(R(D.sub, { c:'555555', z:21 }), '<w:pBdr><w:bottom w:val="single" w:sz="12" w:space="6" w:color="222222"/></w:pBdr><w:spacing w:after="40"/>');
+  for(i = 0; i < D.stages.length; i++){
+    var s = D.stages[i];
+    b += P(R(s.no + ' ' + s.name, { b:1, z:26 }) + TAB + R(s.own ? '내 스크립트' : '기본 스크립트', { c:'666666', z:18 }), '<w:keepNext/>' + RT + '<w:spacing w:before="220" w:after="70"/>');
+    b += TB([W], '<w:tr>' + TC(W, P(R(s.text, { z:24 }), '<w:spacing w:line="384" w:lineRule="exact"/>')) + '</w:tr>', 8, '555555', 110, 190);
+    if(s.reacts.length){
+      var rows = '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>' + TC(C1, P(R('고객이 이렇게 말하면', { b:1, z:18 }), LH), 'EEEEEE') + TC(C2, P(R('이렇게 받아칩니다', { b:1, z:18 }), LH), 'EEEEEE') + '</w:tr>';
+      for(j = 0; j < s.reacts.length; j++){
+        var r = s.reacts[j];
+        rows += '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + TC(C1, P(R(r.q, { b:1, z:20 }), LT)) + TC(C2, P(R(r.a, { z:20 }) + (r.own ? R('  (내 답안)', { c:'666666', z:17 }) : ''), LT)) + '</w:tr>';
+      }
+      b += P('', '<w:spacing w:before="0" w:after="0" w:line="140" w:lineRule="exact"/>') + TB([C1, C2], rows, 6, '888888', 55, 110);
+    }
+  }
+  b += P('', '<w:spacing w:before="0" w:after="0" w:line="120" w:lineRule="exact"/>');   // a table may not be the last thing in the body
+  var doc = HD + '<w:document ' + NS + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>' + b
+          + '<w:sectPr><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="737" w:right="737" w:bottom="850" w:left="737" w:header="397" w:footer="340" w:gutter="0"/></w:sectPr></w:body></w:document>';
+  var F = { c:'777777', z:17 };
+  var ftr = HD + '<w:ftr ' + NS + '>' + P(R('여보세요 · ' + D.target + ' 콜 스크립트' + (D.name ? ' · ' + D.name : ''), F) + TAB
+          + '<w:fldSimple w:instr=" PAGE "><w:r>' + RP(F) + '<w:t>1</w:t></w:r></w:fldSimple>' + R(' / ', F) + '<w:fldSimple w:instr=" NUMPAGES "><w:r>' + RP(F) + '<w:t>1</w:t></w:r></w:fldSimple>', RT) + '</w:ftr>';
+  var sty = HD + '<w:styles ' + NS + '><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="맑은 고딕" w:eastAsia="맑은 고딕" w:hAnsi="맑은 고딕" w:cs="맑은 고딕"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="en-US" w:eastAsia="ko-KR"/></w:rPr></w:rPrDefault>'
+          + '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="a"><w:name w:val="Normal"/><w:qFormat/></w:style></w:styles>';
+  var RL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships', CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.';
+  return [
+    ['[Content_Types].xml', HD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/word/document.xml" ContentType="' + CT + 'document.main+xml"/><Override PartName="/word/styles.xml" ContentType="' + CT + 'styles+xml"/><Override PartName="/word/footer1.xml" ContentType="' + CT + 'footer+xml"/></Types>'],
+    ['_rels/.rels', HD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + RL + '/officeDocument" Target="word/document.xml"/></Relationships>'],
+    ['word/document.xml', doc],
+    ['word/_rels/document.xml.rels', HD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + RL + '/styles" Target="styles.xml"/><Relationship Id="rId2" Type="' + RL + '/footer" Target="footer1.xml"/></Relationships>'],
+    ['word/styles.xml', sty],
+    ['word/footer1.xml', ftr]
+  ];
+}
+function _cpDocxBlob(D){
+  var f = _cpDocxFiles(D), z = [], i;
+  for(i = 0; i < f.length; i++) z.push([f[i][0], _cpUtf8(f[i][1])]);
+  return new Blob(_cpZip(z), { type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+function cpDocWord(){
+  var D = _cpDocData(); if(!D) return;
+  _cpSrStop();
+  try {
+    var url = URL.createObjectURL(_cpDocxBlob(D)), a = document.createElement('a');
+    a.href = url; a.download = _cpDocName(D) + '.docx'; a.style.display = 'none'; document.body.appendChild(a); a.click();
+    setTimeout(function(){ try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch(e){} }, 60000);
+    _cpToast('📄 워드 파일을 받았어요. 내려받은 파일을 열어 보세요');
+  } catch(e){ _cpToast('⚠️ 워드 파일을 만들지 못했어요. 다시 눌러 주세요'); }
 }
 // ── speech to text (script boxes · comment). No recognition on this phone → the keyboard's own 🎤
 function _cpSrStop(){ try { if(_cp.sr) _cp.sr.stop(); } catch(e){} }
