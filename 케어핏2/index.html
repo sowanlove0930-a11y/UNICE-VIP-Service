@@ -1040,6 +1040,230 @@ table.rc-t tr.rc-cv th { font-size:calc(10.5px * var(--rz, 1)); height:calc(20px
 #track[data-ln="2"] .ln-btns, #track[data-ln="3"] .ln-btns { margin-top:10px; }
 /* 3 = 아주 낮은 화면에서만: 작은 글씨 계산 근거는 "자세히" 에서 */
 #track[data-ln="3"] .ln-it div small { display:none; }
+
+/* ---- 새 그림 + 움직임 (2026-11-18): 그림 21가지를 입체 그림으로, 부분마다 움직임. 지금 단계 (.stage.cur) 에서만 움직임.
+       그림 = art/*.webp 를 SVG (560 x 560) 안에 겹침 (mg_art.js, scenes.py 가 만듦). 클래스 mg3-* = 수술 · 멈춘 수입, mq-* = 나머지 ---- */
+.art svg { position:relative; z-index:1; }
+.art .stage-chip, .art .art-cap { z-index:2; }
+.mg-amb { position:absolute; left:0; top:0; right:0; bottom:0; overflow:hidden; border-radius:inherit; z-index:0; pointer-events:none; }
+.mg-amb i { position:absolute; display:block; border-radius:50%; background:rgba(255,255,255,.4); animation:mgDrift 9s ease-in-out infinite alternate; animation-play-state:paused; }
+.stage.cur .mg-amb i { animation-play-state:running; }
+.mg-amb i:nth-child(1) { width:36%; aspect-ratio:1; left:-9%; top:7%; }
+.mg-amb i:nth-child(2) { width:22%; aspect-ratio:1; right:-5%; top:20%; animation-duration:7s; animation-delay:-2s; background:rgba(255,255,255,.3); }
+.mg-amb i:nth-child(3) { width:50%; aspect-ratio:1; right:-16%; bottom:-12%; animation-duration:11s; animation-delay:-4s; background:rgba(255,255,255,.28); }
+.mg-amb i:nth-child(4) { width:12%; aspect-ratio:1; left:15%; bottom:13%; animation-duration:6s; animation-delay:-1s; background:none; border:3px solid rgba(255,255,255,.65); }
+.mg-amb i:nth-child(5) { width:6%; aspect-ratio:1; left:64%; top:9%; animation-duration:5s; background:rgba(255,255,255,.75); }
+@keyframes mgDrift { from { transform:translate(0,0) scale(1); } to { transform:translate(7%,-16%) scale(1.14); } }
+@keyframes mgIn { from { opacity:0; transform:translateY(16px) scale(.88); } to { opacity:1; transform:none; } }
+@keyframes mgFade { from { opacity:0; } to { opacity:1; } }
+
+/* 그림 자리. 위 = 단계 이름 (42px), 아래 = 짧은 말 (있을 때 42px) 을 비우고 그 사이에 가장 크게 */
+#track .art .mg-img { position:absolute; left:5%; right:5%; top:42px; bottom:8px; z-index:1; }
+#track .art .mg-img.nt { bottom:42px; }
+#track .art .mg-img svg { position:absolute; left:0; top:0; width:100%; height:100%; max-height:none; animation:none; overflow:visible; }
+#track .stage.cur .art .mg-img { animation:mgIn .7s cubic-bezier(.2,.8,.25,1.15) both, mgFloat3 3.6s .7s ease-in-out infinite alternate; }
+@keyframes mgFloat3 { from { transform:translateY(0); } to { transform:translateY(-6px); } }
+/* 그림에 붙는 짧은 말 (원래 그림 안에 있던 글자). 화면이 작아도 글자 크기는 그대로 */
+#track .art .mg-note { position:absolute; left:8px; right:8px; bottom:8px; z-index:2; display:flex; justify-content:center; gap:6px; pointer-events:none; }
+#track .art .mg-note span { background:rgba(255,255,255,.95); color:#000; font-size:13px; font-weight:700; letter-spacing:-0.02em; line-height:1; padding:7px 12px; border-radius:999px; white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.07); }
+#track .stage.cur .art .mg-note span { animation:mgNote .5s 1s cubic-bezier(.2,.8,.3,1.5) both; }
+#track .stage.cur .art .mg-note span + span { animation-delay:1.25s; }
+@keyframes mgNote { from { opacity:0; transform:scale(.6); } to { opacity:1; transform:none; } }
+/* 자세히 화면: 그림은 오른쪽에 (왼쪽 위 단계 이름과 겹치지 않게), 아래 설명 상자 위로. 짧은 말은 숨김 (설명 글이 있음) */
+#track .stage-card.full .art .mg-img, #track .stage-card.full .art .mg-img.nt { left:auto; right:10px; top:8px; bottom:66px; min-height:96px; aspect-ratio:1 / 1; max-width:calc(100% - 20px); }
+#track .stage-card.full .art .mg-note { display:none; }
+/* 낮은 화면 (그림 상자가 납작함): 그림은 오른쪽에 크게, 말은 왼쪽 단계 이름 아래에 */
+@media (max-height:700px) {
+  #track .stage-card.lean .art .mg-img, #track .stage-card.lean .art .mg-img.nt { left:auto; right:10px; top:8px; bottom:8px; aspect-ratio:1 / 1; max-width:calc(100% - 134px); }
+  #track .stage-card.lean .art .mg-note { left:12px; right:auto; top:48px; bottom:auto; flex-direction:column; align-items:flex-start; gap:5px; }
+  #track .stage-card.lean .art .mg-note span { font-size:12px; padding:6px 10px; }
+}
+/* 상자 크기를 직접 잴 수 있는 브라우저 (container query): 상자 모양에 꼭 맞게. 위 규칙은 옛 브라우저용 */
+@supports (width:1cqw) {
+  #track .art { container-type:size; }
+  #track .stage-card.lean .art .mg-img { --nb:8px; --s:min(90cqw, calc(100cqh - 42px - var(--nb))); left:calc(50cqw - var(--s) / 2); right:auto; top:calc(42px + (100cqh - 42px - var(--nb) - var(--s)) / 2); bottom:auto; width:var(--s); height:var(--s); aspect-ratio:auto; max-width:none; }
+  #track .stage-card.lean .art .mg-img.nt { --nb:42px; }
+  #track .stage-card.lean .art .mg-note { --s:min(90cqw, calc(100cqh - 84px)); left:8px; right:8px; top:calc(42px + (100cqh - 84px - var(--s)) / 2 + var(--s) + 7px); bottom:auto; flex-direction:row; align-items:center; gap:6px; }
+  #track .stage-card.lean .art .mg-note span { font-size:13px; padding:7px 12px; }
+  /* 자세히 화면 (cqh 는 아래 여백 56px 를 뺀 높이): 낮은 상자는 단계 이름 옆 오른쪽에, 높은 상자는 단계 이름 아래 가운데에 */
+  #track .stage-card.full .art .mg-img, #track .stage-card.full .art .mg-img.nt { --s:max(96px, min(calc(100cqh - 18px), calc(100cqw - 170px))); left:auto; right:10px; top:max(8px, calc(100cqh - 10px - var(--s))); bottom:auto; width:var(--s); height:var(--s); min-height:0; max-width:none; aspect-ratio:auto; }
+  @container (min-height:194px) {
+    #track .stage-card.full .art .mg-img, #track .stage-card.full .art .mg-img.nt { --s:min(calc(100cqh - 52px), calc(100cqw - 20px)); left:calc(50cqw - var(--s) / 2); right:auto; top:42px; }
+  }
+  /* 납작한 상자: 그림은 오른쪽, 말은 왼쪽 단계 이름 아래 (말이 있는 그림은 조금 더 높은 상자부터) */
+  @container (max-height:240px) {
+    #track .stage-card.lean .art .mg-img { --s:min(calc(100cqh - 16px), calc(100cqw - 134px)); left:auto; right:10px; top:min(max(42px, calc((100cqh - var(--s)) / 2)), calc(100cqh - 8px - var(--s))); }
+  }
+  @container (max-height:274px) {
+    #track .stage-card.lean .art .mg-img.nt { --s:min(calc(100cqh - 16px), calc(100cqw - 134px)); left:auto; right:10px; top:min(max(42px, calc((100cqh - var(--s)) / 2)), calc(100cqh - 8px - var(--s))); }
+    #track .stage-card.lean .art .mg-note { left:12px; right:auto; top:48px; flex-direction:column; align-items:flex-start; gap:5px; }
+    #track .stage-card.lean .art .mg-note span { font-size:12px; padding:6px 10px; }
+  }
+}
+
+/* 두루 쓰는 움직임 */
+@keyframes mqSpin { to { transform:rotate(360deg); } }
+@keyframes mqPulse { from { transform:scale(1); } to { transform:scale(var(--s,1.05)); } }
+@keyframes mqSway { from { transform:rotate(var(--r0,-5deg)); } to { transform:rotate(var(--r1,5deg)); } }
+@keyframes mqBob { from { transform:translate(0,0); } to { transform:translate(var(--dx,0px),var(--dy,-10px)); } }
+@keyframes mqBlink { from { opacity:var(--o,.2); } to { opacity:1; } }
+@keyframes mqBeat { 0%, 56%, 100% { transform:scale(1); } 14% { transform:scale(var(--b,1.07)); } 28% { transform:scale(1); } 42% { transform:scale(var(--b2,1.04)); } }
+@keyframes mqPopIn { from { opacity:0; transform:scale(.45); } to { opacity:1; transform:none; } }
+.stage.cur .mq-beat { transform-box:fill-box; transform-origin:center; animation:mqBeat 1.3s ease-in-out infinite; }
+.stage.cur .mq-pulse { transform-box:fill-box; transform-origin:center; animation:mqPulse 1.5s ease-in-out infinite alternate; --s:1.1; }
+.stage.cur .mq-float { animation:mqBob 3s ease-in-out infinite alternate; }
+.stage.cur .mq-float.f1 { --dx:6px; --dy:-12px; } .stage.cur .mq-float.f2 { --dx:-5px; --dy:10px; animation-duration:3.8s; }
+.stage.cur .mq-spin { transform-origin:400px 333px; animation:mqSpin 7s linear infinite; }
+.stage.cur .mq-spin.s2 { transform-origin:418px 303px; animation-duration:6s; }
+
+/* 수술 (유방): 로봇 팔이 내려왔다 올라가고, 하트가 뛰고, 꼬리표가 흔들림 */
+.stage.cur .mg3-fore { transform-origin:232px 66px; animation:mg3Fore 2.4s ease-in-out infinite alternate; }
+@keyframes mg3Fore { from { transform:rotate(-7deg); } to { transform:rotate(2deg); } }
+.stage.cur .mg3-heart { transform-origin:376px 392px; animation:mg3Beat 1.2s ease-in-out infinite; }
+@keyframes mg3Beat { 0%, 56%, 100% { transform:scale(1); } 14% { transform:scale(1.06); } 28% { transform:scale(1); } 42% { transform:scale(1.035); } }
+.stage.cur .mg3-tag { transform-origin:152px 92px; animation:mg3Swing 2s ease-in-out infinite alternate; }
+@keyframes mg3Swing { from { transform:rotate(-5deg); } to { transform:rotate(6deg); } }
+/* 멈춘 수입: 지갑에서 동전이 계속 빠져나가고, 멈춤 단추가 두근거림 */
+.stage.cur .mg3-coin { transform-origin:490px 224px; animation:mg3Coin 3.3s linear infinite both; }
+.stage.cur .mg3-coin.c2 { animation-delay:1.1s; } .stage.cur .mg3-coin.c3 { animation-delay:2.2s; }
+@keyframes mg3Coin {
+  0% { transform:translate(-140px,176px) scale(.62) rotate(-30deg); opacity:0; animation-timing-function:cubic-bezier(.2,.6,.4,1); }
+  6% { opacity:1; }
+  38% { transform:translate(-88px,52px) scale(.82) rotate(-12deg); animation-timing-function:ease-in-out; }
+  70% { transform:translate(0,0) scale(1) rotate(0deg); opacity:1; animation-timing-function:ease-in; }
+  100% { transform:translate(44px,-80px) scale(1.06) rotate(22deg); opacity:0; }
+}
+.stage.cur .mg3-wallet { transform-origin:363px 547px; animation:mg3Squash 1.1s ease-in-out infinite; }
+@keyframes mg3Squash { 0%, 30%, 100% { transform:scale(1,1); } 12% { transform:scale(1.035,.965); } }
+.stage.cur .mg3-pause { transform-origin:170px 422px; animation:mqPulse 0.8s ease-in-out infinite alternate; --s:1.07; }
+.stage.cur .mg3-sp { transform-origin:518px 160px; animation:mg3Tw 1.1s ease-in-out infinite alternate; }
+@keyframes mg3Tw { from { opacity:.15; transform:scale(.8); } to { opacity:1; transform:scale(1.08); } }
+.stage.cur .mg3-cal { transform-origin:224px 470px; animation:mqSway 4.2s ease-in-out infinite alternate; --r0:-1deg; --r1:1deg; }
+
+/* 검사 청구서: 줄이 하나씩 나오고, 돋보기가 줄을 따라 내려감 */
+.stage.cur .mq-row { animation:mgFade .4s .5s both; } .stage.cur .mq-row.r2 { animation-delay:.8s; } .stage.cur .mq-row.r3 { animation-delay:1.1s; }
+.stage.cur .mq-tot { transform-box:fill-box; transform-origin:right center; animation:mqPopIn .5s 1.5s cubic-bezier(.2,.8,.3,1.5) both; }
+.stage.cur .mq-scan { animation:mqScan 6.5s 1.2s ease-in-out infinite; }
+@keyframes mqScan { 0%, 100% { transform:translate(0,0); } 20% { transform:translate(0,58px); } 40% { transform:translate(0,116px); } 62%, 86% { transform:translate(-52px,222px); } }
+/* 폐: 숨 쉬고, 돋보기가 점을 비춤 */
+.stage.cur .mq-breathe { transform-origin:260px 300px; animation:mqPulse 2.6s ease-in-out infinite alternate; --s:1.035; }
+.stage.cur .mq-breathe.b2 { transform-origin:387px 392px; --s:1.03; }
+.mq-rip { transform-origin:382px 292px; } .mq-rip.r2 { opacity:0; }
+.stage.cur .mq-rip { animation:mqRip 2s ease-out infinite; } .stage.cur .mq-rip.r2 { animation-delay:1s; }
+@keyframes mqRip { from { transform:scale(.7); opacity:.95; } to { transform:scale(2.2); opacity:0; } }
+.stage.cur .mq-hover { animation:mqHover 4s ease-in-out infinite; }
+@keyframes mqHover { 0%, 100% { transform:translate(0,0); } 25% { transform:translate(7px,-6px); } 50% { transform:translate(0,-10px); } 75% { transform:translate(-7px,-4px); } }
+/* 선행 항암: 주사가 들어가면 덩어리가 줄고, 그다음 칼이 다가옴 */
+.stage.cur .mq-shrink { transform-origin:315px 297px; animation:mqShrink 6s ease-in-out infinite; }
+@keyframes mqShrink { 0%, 18% { transform:scale(1); opacity:1; } 50%, 86% { transform:scale(.6); opacity:1; } 92% { transform:scale(.6); opacity:0; } 93% { transform:scale(1); opacity:0; } 100% { transform:scale(1); opacity:1; } }
+.stage.cur .mq-inject { animation:mqInject 6s ease-in-out infinite; }
+@keyframes mqInject { 0% { transform:translateX(-46px); opacity:0; } 6% { opacity:1; } 15%, 46% { transform:translateX(24px); opacity:1; } 56% { transform:translateX(-46px); opacity:1; } 62%, 100% { transform:translateX(-46px); opacity:0; } }
+.stage.cur .mq-cut { animation:mqCut 6s ease-in-out infinite; }
+@keyframes mqCut { 0%, 54% { transform:translate(0,0); opacity:.35; } 62% { transform:translate(0,0); opacity:1; } 72%, 84% { transform:translate(-30px,-108px); opacity:1; } 92%, 100% { transform:translate(0,0); opacity:.35; } }
+/* 폐 로봇수술: 구멍 3개가 차례로 */
+.stage.cur .mq-port { transform-box:fill-box; transform-origin:center; animation:mqPort 3.2s ease-in-out infinite both; }
+.stage.cur .mq-port.p2 { animation-delay:.45s; } .stage.cur .mq-port.p3 { animation-delay:.9s; }
+@keyframes mqPort { 0% { transform:scale(0); } 12% { transform:scale(1.4); } 20%, 82% { transform:scale(1); } 94%, 100% { transform:scale(0); } }
+/* 유전자검사: DNA 를 훑고, 바늘이 오르내림 */
+.stage.cur .mq-dna { transform-origin:140px 270px; animation:mqSway 3.4s ease-in-out infinite alternate; --r0:-4deg; --r1:4deg; }
+.mq-scanbar { opacity:0; }
+.stage.cur .mq-scanbar { animation:mqScanbar 2.4s ease-in-out infinite alternate; }
+@keyframes mqScanbar { from { transform:translateY(0); opacity:.9; } to { transform:translateY(362px); opacity:.9; } }
+.mq-needle { transform-origin:390px 436px; transform:rotate(38deg); }
+.stage.cur .mq-needle { animation:mqNeedle 4.4s ease-in-out infinite; }
+@keyframes mqNeedle { 0%, 100% { transform:rotate(-58deg); } 28% { transform:rotate(22deg); } 42% { transform:rotate(-8deg); } 68% { transform:rotate(60deg); } 82% { transform:rotate(42deg); } }
+/* 표적치료: 다트가 날아와 꽂힘 */
+.stage.cur .mq-board { transform-origin:206px 314px; animation:mqBoard 3.6s infinite; }
+@keyframes mqBoard { 0%, 18%, 38%, 100% { transform:scale(1); } 23% { transform:scale(1.06); } 30% { transform:scale(.98); } }
+.mq-hitring { opacity:0; transform-origin:206px 314px; }
+.stage.cur .mq-hitring { animation:mqHitring 3.6s infinite; }
+@keyframes mqHitring { 0%, 19% { opacity:0; transform:scale(1); } 21% { opacity:.9; } 48%, 100% { opacity:0; transform:scale(3.4); } }
+.stage.cur .mq-dart { animation:mqDart 3.6s infinite; }
+@keyframes mqDart { 0% { transform:translate(200px,-200px); opacity:0; animation-timing-function:cubic-bezier(.6,0,1,.75); } 5% { opacity:1; } 19% { transform:translate(0,0); } 22% { transform:translate(-6px,6px); } 26%, 88% { transform:translate(0,0); opacity:1; } 100% { transform:translate(0,0); opacity:0; } }
+/* 방사선: 빛이 내려옴 */
+.stage.cur .mq-beam { animation:mqBlink 1.1s ease-in-out infinite alternate; --o:.25; }
+.stage.cur .mq-beam.b2 { animation:mqDash .8s linear infinite; }
+@keyframes mqDash { to { stroke-dashoffset:-17; } }
+.stage.cur .mq-spot { transform-box:fill-box; transform-origin:center; animation:mqPulse 1.1s ease-in-out infinite alternate; --s:1.25; }
+.stage.cur .mq-star { transform-box:fill-box; transform-origin:center; animation:mqTwk 1.8s ease-in-out infinite alternate; } .stage.cur .mq-star.s2 { animation-delay:-.9s; }
+@keyframes mqTwk { from { transform:scale(.55) rotate(-12deg); opacity:.5; } to { transform:scale(1.1) rotate(10deg); opacity:1; } }
+/* 재발: 끝났다는 표시 뒤에 다시 */
+.stage.cur .mq-done { transform-origin:140px 261px; animation:mqPopIn .6s .4s cubic-bezier(.2,.8,.3,1.5) both; }
+.stage.cur .mq-flash { transform-origin:400px 325px; animation:mqFlash 1.8s ease-in-out infinite; }
+@keyframes mqFlash { 0%, 100% { transform:scale(1); opacity:1; } 40% { transform:scale(1.24); opacity:1; } 55% { opacity:.5; } 70% { transform:scale(1); opacity:1; } }
+/* 수액 방울 */
+.stage.cur .mq-drop { animation:mqDrop 1.3s ease-in infinite; }
+@keyframes mqDrop { 0% { transform:translateY(-8px); opacity:0; } 20% { opacity:1; } 85% { transform:translateY(14px); opacity:1; } 100% { transform:translateY(18px); opacity:0; } }
+.stage.cur .mq-drop.d2 { animation:mqDrop2 1.3s .4s ease-in infinite; }
+@keyframes mqDrop2 { 0% { transform:translateY(0); opacity:0; } 15% { opacity:1; } 85% { transform:translateY(64px); opacity:1; } 100% { transform:translateY(74px); opacity:0; } }
+.stage.cur .mq-drop.d3 { animation-duration:1.6s; }
+/* 간병: 손이 받치고, 하트가 뛰고, 작은 하트가 올라감 */
+.stage.cur .mq-handbob { animation:mqBob 2.8s ease-in-out infinite alternate; --dy:8px; }
+.stage.cur .mq-heartfloat { animation:mqBob 2.8s ease-in-out infinite alternate; --dy:-12px; }
+.mq-rise { opacity:0; }
+.stage.cur .mq-rise { transform-box:fill-box; transform-origin:center; animation:mqRise 3.3s ease-out infinite; --x:8px; }
+.stage.cur .mq-rise.h2 { animation-delay:1.1s; --x:86px; } .stage.cur .mq-rise.h3 { animation-delay:2.2s; --x:-86px; }
+@keyframes mqRise { 0% { transform:translate(0,50px) scale(.4); opacity:0; } 18% { opacity:.95; } 100% { transform:translate(var(--x),-150px) scale(1.15); opacity:0; } }
+/* 뇌: 번개가 치고, 시계가 돌아감 */
+.stage.cur .mq-brainhit { transform-origin:218px 336px; animation:mqBrainHit 2.8s ease-in-out infinite; }
+@keyframes mqBrainHit { 0%, 8%, 26%, 100% { transform:scale(1); } 13% { transform:scale(1.05); } 19% { transform:scale(.985); } }
+.stage.cur .mq-strike { transform-origin:366px 220px; animation:mqStrike 2.8s infinite; }
+@keyframes mqStrike { 0% { opacity:0; transform:translate(16px,-46px) scale(.9); animation-timing-function:cubic-bezier(.6,0,1,.8); } 9% { opacity:1; transform:translate(0,0) scale(1.1); } 15% { opacity:1; transform:scale(1); } 21% { opacity:.5; } 27%, 60% { opacity:1; transform:scale(1); } 74%, 100% { opacity:0; transform:scale(1); } }
+.mq-mh, .mq-hh { transform-origin:447px 435px; } .mq-mh.g, .mq-hh.g { transform-origin:214px 213px; }
+.stage.cur .mq-mh { animation:mqSpin 4s linear infinite; } .stage.cur .mq-hh { animation:mqSpin 48s linear infinite; }
+.stage.cur .mq-mh.g { animation-duration:6s; } .stage.cur .mq-hh.g { animation-duration:72s; }
+/* 머리 수술: 덩어리가 빠져나가고 확인 표시 */
+.stage.cur .mq-tw { animation:mqBlink .9s ease-in-out infinite alternate; --o:.15; }
+.mq-out { opacity:0; }
+.stage.cur .mq-out { transform-box:fill-box; transform-origin:center; animation:mqOut 4s ease-in-out infinite; }
+@keyframes mqOut { 0% { opacity:0; transform:scale(.4); } 10%, 20% { opacity:1; transform:scale(1); } 46% { transform:translate(-92px,-58px) scale(.75); opacity:1; } 56%, 100% { transform:translate(-110px,-70px) scale(.5); opacity:0; } }
+.stage.cur .mq-ok { transform-origin:447px 162px; animation:mqOk 4s ease-in-out infinite; }
+@keyframes mqOk { 0%, 46% { opacity:0; transform:scale(.4); } 56% { opacity:1; transform:scale(1.15); } 62%, 90% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(1); } }
+/* 중환자실: 모니터 선, 침대 */
+.mq-ecg { stroke-dasharray:240; --len:240; } .mq-ecg.e2 { stroke-dasharray:320; --len:320; }
+.stage.cur .mq-ecg { animation:mqEcg 2s linear infinite; } .stage.cur .mq-ecg.e2 { animation-duration:1.7s; }
+@keyframes mqEcg { 0% { stroke-dashoffset:var(--len); opacity:1; } 62%, 84% { stroke-dashoffset:0; opacity:1; } 100% { stroke-dashoffset:0; opacity:0; } }
+.stage.cur .mq-beep { animation:mqBlink 1s steps(2, jump-none) infinite; --o:.1; }
+.stage.cur .mq-bed { transform-origin:280px 548px; animation:mqBedBreath 3.2s ease-in-out infinite alternate; }
+@keyframes mqBedBreath { from { transform:scale(1,1); } to { transform:scale(1.006,1.022); } }
+/* 재활: 한 발씩 */
+.stage.cur .mq-step { transform-box:fill-box; transform-origin:20% 90%; animation:mqStep 1.8s ease-in-out infinite; } .stage.cur .mq-step.s2 { animation-delay:-.9s; }
+@keyframes mqStep { 0%, 50%, 100% { transform:translate(0,0) rotate(0deg); } 22% { transform:translate(14px,-38px) rotate(-12deg); } 40% { transform:translate(22px,-4px) rotate(4deg); } }
+/* 후유장해: 말이 나오다 멈추고, 지팡이가 흔들림 */
+.stage.cur .mq-bubble { transform-origin:90px 380px; animation:mqPulse 2.6s ease-in-out infinite alternate; --s:1.03; }
+.stage.cur .mq-dot { animation:mqDots 1.8s ease-in-out infinite; } .stage.cur .mq-dot.d2 { animation-delay:.3s; } .stage.cur .mq-dot.d3 { animation-delay:.6s; }
+@keyframes mqDots { 0%, 60%, 100% { opacity:.25; transform:translateY(0); } 30% { opacity:1; transform:translateY(-9px); } }
+.stage.cur .mq-cane { transform-origin:458px 532px; animation:mqSway 2.4s ease-in-out infinite alternate; --r0:-4deg; --r1:5deg; }
+/* 응급 120분: 시계가 차오르고, 심장이 빨리 뜀 */
+.stage.cur .mq-arc { animation:mqArc 6s linear infinite; }
+@keyframes mqArc { from { stroke-dashoffset:603; } to { stroke-dashoffset:0; } }
+.stage.cur .mq-fastbeat { transform-origin:419px 417px; animation:mqBeat .85s ease-in-out infinite; --b:1.08; --b2:1.045; }
+/* 스텐트: 좁아진 혈관에 그물망이 들어가 펴짐 */
+.mq-plq { transform-origin:282px 340px; transform:scaleY(.3); } .mq-plq.p2 { transform-origin:290px 472px; }
+.stage.cur .mq-plq { animation:mqPlq 5s ease-in-out infinite; }
+@keyframes mqPlq { 0%, 40% { transform:scaleY(1); } 54%, 92% { transform:scaleY(.3); } 100% { transform:scaleY(1); } }
+.stage.cur .mq-stent { transform-origin:280px 406px; animation:mqStent 5s ease-in-out infinite; }
+@keyframes mqStent { 0% { transform:translateX(-250px) scale(.82,.5); opacity:0; } 7% { opacity:1; } 38%, 42% { transform:translateX(0) scale(.82,.5); opacity:1; } 54%, 88% { transform:translateX(0) scale(1,1); opacity:1; } 96%, 100% { transform:translateX(0) scale(1,1); opacity:0; } }
+/* 평생 먹는 약: 알약이 하나씩 들어감 */
+.stage.cur .mq-inf { animation:mqDash2 2.4s linear infinite; }
+@keyframes mqDash2 { to { stroke-dashoffset:-100; } }
+.stage.cur .mq-pdrop { transform-box:fill-box; transform-origin:center; animation:mqPdrop 3.6s infinite both; }
+.stage.cur .mq-pdrop.p2 { animation-delay:1.2s; } .stage.cur .mq-pdrop.p3 { animation-delay:2.4s; }
+@keyframes mqPdrop { 0% { transform:translateY(-250px) rotate(-40deg); opacity:0; animation-timing-function:cubic-bezier(.5,0,1,.7); } 8% { opacity:1; } 46% { transform:translateY(0) rotate(14deg); opacity:1; } 52% { transform:translateY(-12px) rotate(8deg); opacity:1; } 58% { transform:translateY(0) rotate(14deg) scale(1); opacity:1; } 72%, 100% { transform:translateY(16px) rotate(14deg) scale(.7); opacity:0; } }
+/* 심부전: 힘없이 뛰는 심장, 깜빡이는 배터리 */
+.stage.cur .mq-weak { transform-origin:210px 372px; animation:mqWeak 2.6s ease-in-out infinite; }
+@keyframes mqWeak { 0%, 100% { transform:scale(1,1) rotate(0deg); } 18% { transform:scale(1.03,1.03); } 36% { transform:scale(1,1); } 70% { transform:scale(1.012,.972) rotate(-1.5deg); } }
+.stage.cur .mq-low { animation:mqBlink .7s ease-in-out infinite alternate; --o:.15; }
+
+/* 돈 상자: 항목 → 합계 → 실손 → 내가 내는 돈 순서로 */
+.mg-run .ln-it div { opacity:0; transform:translateX(-10px); }  /* 아래쪽으로 옮기면 상자가 넘친 것으로 재어지므로 왼쪽에서 */
+.mg-run .ln-it div.in { opacity:1; transform:none; transition:opacity .35s, transform .35s; }
+.mg-run .ln-bar .g, .mg-run .ln-bar .k { transition:width .8s cubic-bezier(.2,.7,.2,1); }
+.mg-run .ln-b.g, .mg-run .ln-b.r { opacity:0; transform:scale(.94); }
+.mg-run .ln-b.g.in, .mg-run .ln-b.r.in { opacity:1; transform:none; transition:opacity .4s, transform .4s cubic-bezier(.2,.8,.3,1.3); }
+.mg-pop { display:inline-block; animation:mgPop .55s cubic-bezier(.2,.8,.3,1.6); transform-origin:right center; }
+@keyframes mgPop { from { transform:scale(.82); } to { transform:scale(1); } }
+@media (prefers-reduced-motion:reduce) { #track .stage.cur .art .mg-img, #track .stage.cur .art .mg-img *, #track .stage.cur .art .mg-note span, .mg-amb i { animation:none !important; } }
 </style>
 </head>
 <body>
@@ -3770,6 +3994,111 @@ function lnFit() {
 }
 window.addEventListener('resize', lnFit);
 if (document.fonts && document.fonts.ready) { document.fonts.ready.then(lnFit); }
+/* ---- 새 그림 21가지 (scenes.py 가 만든 파일. 직접 고치지 말 것) ---- */
+ART.discover =
+'<div class="mg-img mg-ly"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="270" cy="540" rx="170" ry="27" fill="url(#mqSh)"/><g class="mq-rcp"><image x="120" y="22" width="300" height="512" href="art/receipt.webp"/><text x="270" y="104" text-anchor="middle" font-size="31" font-weight="800" fill="#000" font-family="Pretendard" letter-spacing="-0.5">검사 청구서</text><line x1="158" y1="130" x2="382" y2="130" stroke="#000" stroke-opacity=".28" stroke-width="3" stroke-dasharray="7 7"/><g font-size="28" font-weight="600" fill="#333" font-family="Pretendard" letter-spacing="-0.5"><g class="mq-row"><text x="160" y="190">조직검사</text><text x="374" y="190" text-anchor="end" font-weight="800">40</text></g><g class="mq-row r2"><text x="160" y="248">MRI</text><text x="374" y="248" text-anchor="end" font-weight="800">60</text></g><g class="mq-row r3"><text x="160" y="306">PET-CT</text><text x="374" y="306" text-anchor="end" font-weight="800">80</text></g></g><line x1="158" y1="340" x2="382" y2="340" stroke="#000" stroke-opacity=".5" stroke-width="3"/><text class="mq-tot" x="376" y="420" text-anchor="end" font-size="60" font-weight="800" fill="#e0186c" font-family="Pretendard" letter-spacing="-0.5">180만</text></g><image class="mq-scan" x="268" y="80" width="240" height="250" href="art/magnifier.webp"/></svg></div>';
+ART.lung =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="260" cy="512" rx="190" ry="30" fill="url(#mqSh)"/><g class="mq-breathe"><image x="50" y="80" width="420" height="416" href="art/lungs.webp"/><circle class="mq-rip" cx="382" cy="292" r="26" fill="none" stroke="#e0186c" stroke-width="6"/><circle class="mq-rip r2" cx="382" cy="292" r="26" fill="none" stroke="#e0186c" stroke-width="6"/></g><image class="mq-hover" x="285" y="191" width="250" height="261" href="art/magnifier.webp"/></svg></div><div class="mg-note"><span>비소세포 85%</span></div>';
+ART.brain =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="220" cy="500" rx="180" ry="29" fill="url(#mqSh)"/><image class="mq-brainhit" x="28" y="176" width="380" height="320" href="art/brain.webp"/><image class="mq-strike" x="300" y="26" width="132" height="194" href="art/bolt.webp"/><image x="346" y="334" width="200" height="203" href="art/clock.webp"/><g stroke="#3b3b3f" stroke-linecap="round"><g transform="rotate(-62 447 435)"><line class="mq-hh" x1="447" y1="435" x2="447" y2="394" stroke-width="11"/></g><line class="mq-mh" x1="447" y1="435" x2="447" y2="374" stroke-width="8"/></g><circle cx="447" cy="435" r="9" fill="#3b3b3f"/></svg></div><div class="mg-note"><span>골든타임</span></div>';
+ART.shrink =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="315" cy="452" rx="120" ry="19" fill="url(#mqSh)"/><image class="mq-shrink" x="190" y="170" width="250" height="255" href="art/sphere.webp"/><g transform="translate(20 120) rotate(24)"><image class="mq-inject" x="0" y="0" width="240" height="99" href="art/syringe.webp"/></g><image class="mq-cut" x="400" y="322" width="150" height="146" href="art/scalpel.webp"/></svg></div><div class="mg-note"><span>먼저 줄이고</span><span>그다음 수술</span></div>';
+ART.chestrobot =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><defs><clipPath id="mgC1"><path d="M0 0H232V290H560V560H0Z"/></clipPath><clipPath id="mgC2"><rect x="232" y="0" width="328" height="290"/></clipPath><clipPath id="mgC3"><circle cx="232" cy="66" r="55"/></clipPath></defs><ellipse cx="385" cy="540" rx="150" ry="24" fill="url(#mqSh)"/><image clip-path="url(#mgC1)" x="0" y="10" width="434" height="540" href="art/a_robot.webp"/><g class="mg3-fore"><image clip-path="url(#mgC2)" x="0" y="10" width="434" height="540" href="art/a_robot.webp"/></g><image clip-path="url(#mgC3)" x="0" y="10" width="434" height="540" href="art/a_robot.webp"/><g class="mq-breathe b2"><image x="222" y="226" width="330" height="327" href="art/lungs.webp"/></g><g fill="#3a2a66" stroke="#fff" stroke-width="5"><circle class="mq-port" cx="292" cy="392" r="12"/><circle class="mq-port p2" cx="322" cy="452" r="12"/><circle class="mq-port p3" cx="286" cy="506" r="12"/></g></svg></div><div class="mg-note"><span>구멍 3개로 끝</span></div>';
+ART.craniotomy =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="280" cy="528" rx="150" ry="24" fill="url(#mqSh)"/><image x="118" y="96" width="300" height="426" href="art/head.webp"/><g class="mq-tw" stroke="#e0186c" stroke-width="7" stroke-linecap="round"><line x1="196" y1="96" x2="186" y2="76"/><line x1="230" y1="88" x2="232" y2="66"/><line x1="262" y1="96" x2="274" y2="78"/></g><image class="mq-out" style="filter:saturate(1.5) brightness(.72) hue-rotate(-12deg)" x="196" y="108" width="60" height="61" href="art/sphere.webp"/><image class="mq-ok" x="372" y="86" width="150" height="151" href="art/check.webp"/></svg></div><div class="mg-note"><span>혈종 제거</span></div>';
+ART.golden =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="215" cy="404" rx="160" ry="26" fill="url(#mqSh)"/><image x="40" y="40" width="344" height="350" href="art/clock.webp"/><circle class="mq-arc" cx="214" cy="213" r="96" fill="none" stroke="#e0186c" stroke-opacity=".85" stroke-width="13" stroke-linecap="round" stroke-dasharray="603" transform="rotate(-90 214 213)"/><g stroke="#3b3b3f" stroke-linecap="round"><g transform="rotate(-62 214 213)"><line class="mq-hh g" x1="214" y1="213" x2="214" y2="152" stroke-width="15"/></g><line class="mq-mh g" x1="214" y1="213" x2="214" y2="124" stroke-width="11"/></g><circle cx="214" cy="213" r="14" fill="#3b3b3f"/><g class="mq-fastbeat"><image x="296" y="306" width="246" height="223" href="art/heartp.webp"/><polyline class="mq-ecg e2" points="330,418 372,418 386,384 404,452 420,396 430,418 506,418" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></g></svg></div><div class="mg-note"><span>120분 안에</span></div>';
+ART.stent =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="280" cy="250" rx="120" ry="19" fill="url(#mqSh)"/><image class="mq-beat" x="156" y="22" width="248" height="224" href="art/heartp.webp"/><path d="M-30 432 Q280 380 590 432" fill="none" stroke="#ee8f93" stroke-width="158" stroke-linecap="round"/><path d="M-30 432 Q280 380 590 432" fill="none" stroke="#ffd5d3" stroke-width="116" stroke-linecap="round"/><g fill="#f2d48a"><ellipse class="mq-plq" cx="282" cy="356" rx="112" ry="30"/><ellipse class="mq-plq p2" cx="288" cy="458" rx="104" ry="28"/></g><image class="mq-stent" x="180" y="349" width="200" height="114" href="art/stent.webp"/></svg></div><div class="mg-note"><span>그물망</span></div>';
+ART.rehab =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="280" cy="520" rx="230" ry="37" fill="url(#mqSh)"/><image x="36" y="96" width="488" height="314" href="art/bars.webp"/><image class="mq-step" x="132" y="380" width="176" height="124" href="art/sneaker.webp"/><image class="mq-step s2" x="300" y="404" width="176" height="124" href="art/sneaker.webp"/></svg></div><div class="mg-note"><span>한 걸음씩, 다시</span></div>';
+ART.icu =
+'<div class="mg-img mg-ly"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="275" cy="540" rx="230" ry="37" fill="url(#mqSh)"/><image x="34" y="34" width="124" height="281" href="art/iv.webp"/><circle class="mq-drop d3" cx="129" cy="162" r="4.5" fill="#a98be8"/><image x="336" y="26" width="196" height="222" href="art/monitor.webp"/><polyline class="mq-ecg" points="358,126 392,126 404,104 418,150 432,112 442,126 506,126" fill="none" stroke="#6ef0ae" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><circle class="mq-beep" cx="366" cy="92" r="6" fill="#ff5f93"/><g class="mq-bed"><image x="40" y="248" width="480" height="305" href="art/bed.webp"/></g></svg></div>';
+ART.aftereffect =
+'<div class="mg-img mg-ly"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="458" cy="536" rx="60" ry="10" fill="url(#mqSh)"/><g class="mq-bubble"><image x="22" y="96" width="366" height="309" href="art/bubble.webp"/><g fill="#b58a55"><circle class="mq-dot" cx="131" cy="228" r="18"/><circle class="mq-dot d2" cx="205" cy="228" r="18"/><circle class="mq-dot d3" cx="279" cy="228" r="18"/></g></g><g class="mq-cane"><image x="398" y="168" width="120" height="367" href="art/cane.webp"/></g></svg></div>';
+ART.pills =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="280" cy="532" rx="230" ry="37" fill="url(#mqSh)"/><path class="mq-inf" d="M280 112 C246 66 180 70 180 112 C180 154 246 158 280 112 C314 66 380 70 380 112 C380 154 314 158 280 112Z" fill="none" stroke="#e0186c" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="88 12"/><image x="40" y="248" width="480" height="284" href="art/organizer.webp"/><image class="mq-pdrop" x="96" y="252" width="88" height="95" href="art/capsule.webp"/><image class="mq-pdrop p2" x="250" y="244" width="88" height="95" href="art/capsule.webp"/><image class="mq-pdrop p3" x="404" y="232" width="88" height="95" href="art/capsule.webp"/></svg></div><div class="mg-note"><span>매일, 평생</span></div>';
+ART.weakheart =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="210" cy="392" rx="150" ry="24" fill="url(#mqSh)"/><ellipse cx="405" cy="520" rx="130" ry="21" fill="url(#mqSh)"/><g class="mq-weak"><image style="filter:saturate(.62)" x="46" y="84" width="328" height="297" href="art/heartp.webp"/></g><image x="280" y="384" width="250" height="128" href="art/battery.webp"/><rect class="mq-low" x="309" y="415" width="36" height="66" rx="9" fill="#e0186c"/></svg></div><div class="mg-note"><span>힘이 빠진 펌프</span></div>';
+ART.relapse =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="140" cy="420" rx="110" ry="18" fill="url(#mqSh)"/><ellipse cx="400" cy="500" rx="120" ry="19" fill="url(#mqSh)"/><image class="mq-done" x="30" y="150" width="220" height="222" href="art/check.webp"/><g class="mq-spin"><image x="262" y="190" width="276" height="287" href="art/loop.webp"/></g><image class="mq-flash" x="357" y="262" width="86" height="127" href="art/bolt.webp"/></svg></div><div class="mg-note"><span>치료 종료</span><span>다시</span></div>';
+ART.longchemo =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="165" cy="528" rx="110" ry="18" fill="url(#mqSh)"/><image x="60" y="50" width="205" height="465" href="art/iv.webp"/><circle class="mq-drop" cx="216" cy="262" r="6" fill="#a98be8"/><circle class="mq-drop d2" cx="214" cy="428" r="7" fill="#f3d9b5"/><g class="mq-spin s2"><image x="296" y="176" width="244" height="254" href="art/loop.webp"/></g><image class="mq-pulse" x="372" y="252" width="92" height="99" href="art/capsule.webp"/></svg></div><div class="mg-note"><span>끝이 없는 반복</span></div>';
+ART.gene =
+'<div class="mg-img mg-ly"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="140" cy="492" rx="80" ry="13" fill="url(#mqSh)"/><ellipse cx="390" cy="478" rx="150" ry="24" fill="url(#mqSh)"/><g class="mq-dna"><image x="60" y="70" width="160" height="400" href="art/dna.webp"/></g><rect class="mq-scanbar" x="42" y="86" width="196" height="9" rx="4.5" fill="#e0186c"/><image x="240" y="270" width="300" height="199" href="art/gauge.webp"/><g class="mq-needle"><line x1="390" y1="436" x2="390" y2="330" stroke="#3b3b3f" stroke-width="11" stroke-linecap="round"/></g><circle cx="390" cy="436" r="17" fill="#3b3b3f"/><circle cx="386" cy="431" r="5" fill="#fff" fill-opacity=".35"/></svg></div>';
+ART.surgery =
+'<div class="mg-img mg-ly nt"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><defs><clipPath id="mgC1"><path d="M0 0H232V290H560V560H0Z"/></clipPath><clipPath id="mgC2"><rect x="232" y="0" width="328" height="290"/></clipPath><clipPath id="mgC3"><circle cx="232" cy="66" r="55"/></clipPath></defs><image clip-path="url(#mgC1)" x="0" y="10" width="434" height="540" href="art/a_robot.webp"/><g class="mg3-fore"><image clip-path="url(#mgC2)" x="0" y="10" width="434" height="540" href="art/a_robot.webp"/></g><image clip-path="url(#mgC3)" x="0" y="10" width="434" height="540" href="art/a_robot.webp"/><image class="mg3-heart" x="192" y="231" width="368" height="316" href="art/a_heart.webp"/><g class="mg3-tag"><image x="125" y="78" width="96" height="234" href="art/a_tag.webp"/><text class="mg-lb" x="175" y="266" text-anchor="middle" font-size="26" font-weight="800" fill="#3a2a66" font-family="Pretendard" letter-spacing="-0.5">비급여</text></g></svg></div><div class="mg-note"><span>입원하면 보상</span></div>';
+ART.target =
+'<div class="mg-img mg-ly"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="230" cy="520" rx="170" ry="27" fill="url(#mqSh)"/><g class="mq-board"><image x="40" y="110" width="380" height="398" href="art/target.webp"/></g><circle class="mq-hitring" cx="206" cy="314" r="34" fill="none" stroke="#fff" stroke-width="7"/><image class="mq-dart" x="203" y="92" width="230" height="227" href="art/dart.webp"/><image class="mq-float f1" x="420" y="380" width="96" height="104" href="art/capsule.webp"/><image class="mq-float f2" x="440" y="60" width="64" height="69" href="art/capsule.webp"/></svg></div>';
+ART.radiation =
+'<div class="mg-img mg-ly"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="290" cy="512" rx="220" ry="35" fill="url(#mqSh)"/><polygon class="mq-beam" points="298,246 370,246 398,346 270,346" fill="#e0186c" fill-opacity=".3"/><g class="mq-beam b2" stroke="#e0186c" stroke-width="5" stroke-linecap="round" stroke-dasharray="4 13"><line x1="316" y1="250" x2="300" y2="342"/><line x1="334" y1="250" x2="334" y2="342"/><line x1="352" y1="250" x2="368" y2="342"/></g><image x="40" y="60" width="480" height="444" href="art/radiomachine.webp"/><ellipse class="mq-spot" cx="334" cy="350" rx="52" ry="11" fill="#e0186c" fill-opacity=".55"/><path class="mq-star" d="M92 96 L100 124 L128 132 L100 140 L92 168 L84 140 L56 132 L84 124Z" fill="#e0186c" fill-opacity=".55"/><path class="mq-star s2" d="M496 196 L502 216 L522 222 L502 228 L496 248 L490 228 L470 222 L490 216Z" fill="#e0186c" fill-opacity=".55"/></svg></div>';
+ART.recover =
+'<div class="mg-img mg-ly"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><image class="mg3-cal" x="0" y="15" width="447" height="455" href="art/b_cal.webp"/><g class="mg3-sp" stroke="#e0186c" stroke-width="8" stroke-linecap="round"><line x1="489" y1="164" x2="483" y2="151"/><line x1="519" y1="156" x2="522" y2="141"/><line x1="545" y1="177" x2="556" y2="168"/></g><image class="mg3-coin" x="445" y="181" width="90" height="87" href="art/b_coin.webp"/><image class="mg3-coin c2" x="445" y="181" width="90" height="87" href="art/b_coin.webp"/><image class="mg3-coin c3" x="445" y="181" width="90" height="87" href="art/b_coin.webp"/><image class="mg3-wallet" x="247" y="328" width="232" height="219" href="art/b_wallet.webp"/><image class="mg3-pause" x="56" y="303" width="229" height="239" href="art/b_pause.webp"/></svg></div>';
+ART.care =
+'<div class="mg-img mg-ly"><svg viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="mqSh"><stop offset="0" stop-color="#000" stop-opacity=".17"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs><ellipse cx="280" cy="540" rx="190" ry="30" fill="url(#mqSh)"/><g class="mq-handbob"><image x="70" y="232" width="420" height="337" href="art/hand.webp"/></g><image class="mq-rise" x="232" y="150" width="46" height="42" href="art/heartp.webp"/><image class="mq-rise h2" x="232" y="150" width="46" height="42" href="art/heartp.webp"/><image class="mq-rise h3" x="232" y="150" width="46" height="42" href="art/heartp.webp"/><g class="mq-heartfloat"><image class="mq-beat" x="150" y="86" width="220" height="199" href="art/heartp.webp"/></g></svg></div>';
+var MG_FILES = ["a_heart", "a_robot", "a_tag", "b_cal", "b_coin", "b_pause", "b_wallet", "bars", "battery", "bed", "bolt", "brain", "bubble", "cane", "capsule", "check", "clock", "dart", "dna", "gauge", "hand", "head", "heartp", "iv", "loop", "lungs", "magnifier", "monitor", "organizer", "radiomachine", "receipt", "scalpel", "sneaker", "sphere", "stent", "syringe", "target"];
+
+/* ---- 새 그림 + 움직임 (2026-11-18): 그림 뒤 은은한 무늬, 단계가 처음 열릴 때 돈 상자 숫자가 차례로 올라감 ---- */
+var mgReduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+function mgDecorate() {
+  var a = document.querySelectorAll('#track .art'), i, d;
+  for (i = 0; i < a.length; i++) {
+    if (a[i].querySelector('.mg-amb')) { continue; }
+    d = document.createElement('div'); d.className = 'mg-amb'; d.innerHTML = '<i></i><i></i><i></i><i></i><i></i>';
+    a[i].insertBefore(d, a[i].firstChild);
+  }
+}
+function mgCount(b, to, pre, t0, dur, done) {
+  var st = null;
+  function step(ts) {
+    if (st === null) { st = ts; }
+    var k = Math.min(1, (ts - st) / dur), e = 1 - Math.pow(1 - k, 3);
+    b.firstChild.nodeValue = pre + fmt(Math.round(to * e));
+    if (k < 1) { requestAnimationFrame(step); } else { b.firstChild.nodeValue = pre + fmt(to); if (done) { done(); } }
+  }
+  b.firstChild.nodeValue = pre + '0';
+  setTimeout(function () { requestAnimationFrame(step); }, t0);
+}
+/* 단계가 처음 열릴 때: 항목 → 합계 → 막대 → 실손이 준 돈 → 내가 내는 돈 */
+function mgPlay(idx) {
+  var st = document.getElementById('st' + idx), fl, s, sil, my, rows, tot, g, r, gb, rb, bg, bk, wg, wk, i;
+  if (!st || mgReduce) { return; }
+  fl = st.querySelector('.ln-flow'); s = stages[idx];
+  if (!fl || !s) { return; }
+  sil = parseInt(st.getAttribute('data-sil'), 10) || 0; my = s.cost - sil;
+  rows = fl.querySelectorAll('.ln-it div'); tot = fl.querySelector('.ln-tot b');
+  g = fl.querySelector('.ln-b.g'); r = fl.querySelector('.ln-b.r'); gb = g.querySelector('b'); rb = r.querySelector('b');
+  bg = fl.querySelector('.ln-bar .g'); bk = fl.querySelector('.ln-bar .k'); wg = bg.style.width; wk = bk.style.width;
+  fl.className = 'ln-flow mg-run'; bg.style.width = '0%'; bk.style.width = '0%';
+  function show(el, t) { setTimeout(function () { el.className += ' in'; }, t); }
+  for (i = 0; i < rows.length; i++) { show(rows[i], 250 + i * 120); }
+  mgCount(tot, s.cost, '', 350, 750);
+  setTimeout(function () { bg.style.width = wg; bk.style.width = wk; }, 950);
+  show(g, 1300);
+  if (sil > 0) { mgCount(gb, sil, '− ', 1300, 550); }
+  show(r, 1850);
+  mgCount(rb, my, '', 1850, 750, function () { rb.className = 'mg-pop'; });
+  setTimeout(function () {
+    fl.className = 'ln-flow'; rb.className = '';
+    for (i = 0; i < rows.length; i++) { rows[i].className = ''; }
+    g.className = 'ln-b g'; r.className = 'ln-b r';
+  }, 3400);
+}
+var mgUnlock0 = unlock;
+unlock = function (idx) {
+  var el = document.getElementById('st' + idx), was = el && el.className.indexOf('locked') >= 0;
+  mgUnlock0(idx);
+  if (was) { mgPlay(idx); }
+};
+/* 그림 파일 (art/*.webp) 을 미리 받아 둠: 여정을 시작할 때 그림이 늦게 뜨지 않게 */
+function mgPreload() {
+  var i, im;
+  for (i = 0; i < MG_FILES.length; i++) { im = new Image(); im.src = 'art/' + MG_FILES[i] + '.webp'; }
+}
+if (document.readyState === 'complete') { setTimeout(mgPreload, 600); } else { window.addEventListener('load', function () { setTimeout(mgPreload, 600); }); }
+var mgStart0 = startJourney;
+startJourney = function () { mgStart0(); mgDecorate(); };
 </script>
 </body>
 </html>
