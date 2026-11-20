@@ -238,6 +238,7 @@ body.emb{padding-bottom:0;background:#fff}
       <div class="row2"><div class="w35"><label class="f" for="fBank">은행 <span class="r">*</span></label>
         <select class="in" id="fBank"><option value="">선택</option><option>KB국민</option><option>신한</option><option>우리</option><option>하나</option><option>NH농협</option><option>IBK기업</option><option>BNK부산</option><option>BNK경남</option><option>카카오뱅크</option><option>토스뱅크</option><option>케이뱅크</option><option>새마을금고</option><option>신협</option><option>우체국</option><option>SC제일</option><option>iM뱅크(대구)</option><option>수협</option><option>기타</option></select></div>
         <div><label class="f" for="fAcct">계좌번호 <span class="r">*</span></label><input class="in" id="fAcct" inputmode="numeric" maxlength="20" placeholder="숫자만"></div></div>
+      <div id="bankEtcW" style="display:none"><label class="f" for="fBankEtc">금융기관 이름 <span class="r">*</span></label><input class="in" id="fBankEtc" maxlength="20" placeholder="예) 광주은행, ○○저축은행, ○○증권"></div>
       <label class="f" for="fHolder">예금주 <span class="r">*</span></label><input class="in" id="fHolder" maxlength="20" placeholder="본인 이름">
     </div>
     <div class="grp">
@@ -327,6 +328,7 @@ function renderKids(a){var h='';for(var i=0;i<a.length;i++)h+='<div class="kid">
 $('fPhone').addEventListener('input',function(){var el=this,d=el.value.replace(/[^0-9]/g,'').substring(0,11),o=d;if(d.length>7)o=d.substring(0,3)+'-'+d.substring(3,7)+'-'+d.substring(7);else if(d.length>3)o=d.substring(0,3)+'-'+d.substring(3);el.value=o});
 $('fBirth').addEventListener('input',function(){var el=this,d=el.value.replace(/[^0-9]/g,'').substring(0,8),o=d;if(d.length>6)o=d.substring(0,4)+'-'+d.substring(4,6)+'-'+d.substring(6);else if(d.length>4)o=d.substring(0,4)+'-'+d.substring(4);el.value=o});
 $('fAcct').addEventListener('input',function(){this.value=this.value.replace(/[^0-9-]/g,'')});
+$('fBank').addEventListener('change',function(){var etc=this.value==='기타';$('bankEtcW').style.display=etc?'block':'none';this.classList.remove('bad');clearEr();if(etc)setTimeout(function(){$('fBankEtc').focus()},30)});
 $('fName').addEventListener('change',function(){if(!$('fHolder').value)$('fHolder').value=this.value.replace(/^\s+|\s+$/g,'')});
 var ins=document.querySelectorAll('.in');for(var i=0;i<ins.length;i++)ins[i].addEventListener('input',function(){this.classList.remove('bad');clearEr()});
 function clearEr(){$('er').textContent=''}
@@ -351,6 +353,7 @@ function check(){var v=function(id){return $(id).value.replace(/^\s+|\s+$/g,'')}
   if(st.mar==='기혼'&&!st.kid){$('er').textContent='자녀가 있는지 골라 주세요';return false}
   if(st.mar==='기혼'&&st.kid==='있음'){var a=kidAges();for(var i=0;i<a.length;i++)if(!/^\d{1,2}$/.test(a[i])){var e=$('kidList').getElementsByTagName('input')[i];e.classList.add('bad');e.focus();$('er').textContent='자녀 나이를 적어 주세요';return false}}
   if(!v('fBank'))return need('fBank','은행을 골라 주세요');
+  if(v('fBank')==='기타'&&!v('fBankEtc'))return need('fBankEtc','금융기관 이름을 적어 주세요');
   if(v('fAcct').replace(/[^0-9]/g,'').length<8)return need('fAcct','계좌번호를 확인해 주세요');
   if(!v('fHolder'))return need('fHolder','예금주를 적어 주세요');
   if(!st.agreed){$('er').textContent='개인정보 수집·이용에 동의해 주세요';return false}
@@ -360,7 +363,7 @@ $('go').onclick=function(){if(st.busy||!check())return;st.busy=true;var g=$('go'
   var kids=st.mar==='기혼'?(st.kid==='있음'?kidAges().map(function(x,i){return (['첫째','둘째','셋째','넷째','다섯째'][i]||(i+1)+'째')+' '+x+'세'}).join(', '):'없음'):'';
   var body={action:'lifeLead',fpCode:fpCode(),name:v('fName'),phone:ph.substring(0,3)+'-'+ph.substring(3,ph.length-4)+'-'+ph.substring(ph.length-4),
     birth:b.substring(0,4)+'-'+b.substring(4,6)+'-'+b.substring(6),addr:v('fAddr'),married:st.mar,kids:kids,
-    bank:v('fBank'),account:v('fAcct'),holder:v('fHolder'),career:v('fCareer'),photo:st.photo,via:VIA,page:EMB?'story':'lifedesign'};
+    bank:v('fBank')==='기타'?v('fBankEtc'):v('fBank'),account:v('fAcct'),holder:v('fHolder'),career:v('fCareer'),photo:st.photo,via:VIA,page:EMB?'story':'lifedesign'};
   fetch(MOMDEUN_GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(r){
     if(!r||!r.ok)throw new Error(r&&r.msg||'fail');$('apply').className='sec apply ok';$('cta').className='cta hide';toParent({t:'ld:done'});$('apply').scrollIntoView({behavior:'smooth',block:'start'})})
   ['catch'](function(){$('er').textContent='전송이 안 됐어요. 잠시 후 다시 눌러 주세요'})
