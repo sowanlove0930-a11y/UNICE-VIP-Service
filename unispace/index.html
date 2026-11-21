@@ -7015,6 +7015,8 @@ function _openFromPush(op){
     if(op === 'perf'){ setTimeout(function(){ if(typeof openPerfView==='function') openPerfView(); }, 400); return; }
     if(op === 'todaytask'){ _tt.fromPush = true; setTimeout(function(){ if(typeof openTodayTasks==='function') openTodayTasks(); }, 500); return; }
     if(op === 'callpractice'){ setTimeout(function(){ if(typeof openCallPractice==='function') openCallPractice('auto'); }, 600); return; }
+    // 324: a customer sent 건강 질문 from the 고지노트 link (GAS 26v push) → 고지노트 with its list open
+    if(op === 'goji'){ _gj.list = true; setTimeout(function(){ if(typeof openGojiNote==='function') openGojiNote(); }, 600); return; }
     if(op === 'bojtop' || op === 'stdfp'){
       if(typeof _dashForegroundRefresh==='function') _dashForegroundRefresh(true); // 푸시로 들어오면 무조건 최신화
       setTimeout(function(){
@@ -29555,7 +29557,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 322;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 324;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -40481,6 +40483,7 @@ function cpDictate(id, btn){
 // 설계 핫라인 창 맨 위 버튼으로 열어요 (홈 버튼은 그대로, 핫라인 칸에 NEW). 초회상담처럼 전체 화면 iframe, 열 때마다 새로.
 // goji.html: gj:ready → 앱이 gj:data { me:{ 사번·이름·직함·지점·내 번호(나에게 보내기) }, hl:{ list, kind } } (명단을 새로 받으면 다시 보냄) · 닫기 gj:close { kept } · 뒤로가기 gj:back.
 // 서버에 저장하지 않아요. 쓰는 중인 내용은 goji.html 이 이 기기(localStorage unispace_gojinote_<사번>)에 하루만 둬요.
+// 324: 고객 링크 = gj:api lmake (GAS 26v gojiLinkMake) + gj:kakao 카톡 카드. 고객이 보내면 푸시 ?open=goji → 목록이 바로 떠요.
 var _gj = { ready:false };
 var GJ_SEEN = 'unispace_goji_seen';
 function _gjNewOff(){ var b = document.getElementById('gjNew'); if (b && b.parentNode) b.parentNode.removeChild(b); }
@@ -40489,7 +40492,8 @@ function _gjSend(){
   var f = document.getElementById('gjFrame');
   if (!f || !f.contentWindow || !_gj.ready || !currentUser) return;
   var me = { id:String(currentUser.id), name:String(currentUser.name || ''), title:String(currentUser.title || currentUser.role || 'FP'), branch:String(currentUser.branch || ''), phone:String(currentUser.phone || '') };
-  try { f.contentWindow.postMessage({ t:'gj:data', me:me, hl:{ list:_hl.data, kind:_hl.kind }, api:1 }, _gjOrigin()); } catch (e) {}
+  var lst = !!_gj.list; _gj.list = false;
+  try { f.contentWindow.postMessage({ t:'gj:data', me:me, hl:{ list:_hl.data, kind:_hl.kind }, api:1, list:lst }, _gjOrigin()); } catch (e) {}
 }
 function openGojiNote(e) {
   if (e && e.preventDefault) e.preventDefault();
@@ -40543,7 +40547,7 @@ function _gjApi(m){
     }, function(){ _gjReply(rid, _GJ_NET); });
     return;
   }
-  var act = { list:'gojiList', load:'gojiLoad', save:'gojiSave', del:'gojiDelete' }[m.act];
+  var act = { list:'gojiList', load:'gojiLoad', save:'gojiSave', del:'gojiDelete', lmake:'gojiLinkMake' }[m.act];   // 324 lmake = 고객 링크
   if (!act) return;
   var tok = ''; try { tok = localStorage.getItem(_gjTokKey()) || ''; } catch (e) {}
   if (!tok) { _gjReply(rid, { ok:false, auth:false }); return; }
@@ -40561,7 +40565,31 @@ window.addEventListener('message', function (ev) {
   if (m.t === 'gj:ready') { _gj.ready = true; _gjSend(); }
   else if (m.t === 'gj:close') closeGojiNote(!!m.kept);
   else if (m.t === 'gj:api') _gjApi(m);
+  else if (m.t === 'gj:kakaoPrep') { if (typeof _ckpKakaoReady === 'function') _ckpKakaoReady(function(){}); }
+  else if (m.t === 'gj:kakao') _gjKakao(m);
 });
+// 324 고지노트 고객 링크 → 카톡 카드 (라이프 디자인 신청 카드처럼). 링크는 unispace/health.html#<32자> 만 보내요.
+var GJ_CARD_IMG = 'https://unice-vip.co.kr/unispace/health_og.jpg';
+function _gjKakao(m){
+  var f = document.getElementById('gjFrame');
+  function res(ok){ if (f && f.contentWindow) { try { f.contentWindow.postMessage({ t:'gj:kakaoRes', ok:!!ok }, _gjOrigin()); } catch (e) {} } }
+  var url = String(m.url || '');
+  if (!/^https:\/\/unice-vip\.co\.kr\/unispace\/health\.html#[0-9a-f]{32}$/.test(url)) { res(false); return; }
+  function go(){
+    try {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: { title:String(m.title || '').slice(0, 200), description:String(m.desc || '').slice(0, 400), imageUrl:GJ_CARD_IMG, imageWidth:800, imageHeight:400,
+                   link:{ mobileWebUrl:url, webUrl:url } },
+        buttons: [ { title:String(m.btn || '건강 질문 적기').slice(0, 14), link:{ mobileWebUrl:url, webUrl:url } } ]
+      });
+      res(true);
+    } catch (e) { res(false); }
+  }
+  if (window.Kakao && window.Kakao.isInitialized && window.Kakao.isInitialized()) { go(); return; }
+  if (typeof _ckpKakaoReady !== 'function') { res(false); return; }
+  _ckpKakaoReady(function(ok){ if (ok) go(); else res(false); });
+}
 </script>
 </body>
 </html>
