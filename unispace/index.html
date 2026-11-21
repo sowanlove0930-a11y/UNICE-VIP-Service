@@ -6450,6 +6450,7 @@ function doLogin(fromBio) {
     }
     var _newUser = _adaptGasUser(res);
     try { if (typeof _myClearDevice === 'function') _myClearDevice(); if (res.mySchedTok && res.id) localStorage.setItem('unispace_myschedtok_' + String(res.id).trim().toLowerCase(), res.mySchedTok); } catch(eMy) {}
+    try { if (res.gojiTok && res.id) localStorage.setItem('unispace_gojitok_' + String(res.id).trim().toLowerCase(), res.gojiTok); } catch(eGj) {}   // 320 고지노트 저장
     // 이전 로그인 사용자와 다르면 데이터 캐시 초기화 (FP 전환 시 데이터 섞임 방지)
     try {
       var _prev = JSON.parse(localStorage.getItem('unispace_user') || 'null');
@@ -14589,7 +14590,7 @@ function saveMySchedDB(a){ try{ localStorage.setItem(_myKey(), JSON.stringify(a|
 function _myClearDevice(){
   try{
     var ks=[];
-    for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && (k.indexOf('unispace_mysched_')===0 || k.indexOf('unispace_myschedtok_')===0)) ks.push(k); }
+    for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && (k.indexOf('unispace_mysched_')===0 || k.indexOf('unispace_myschedtok_')===0 || k.indexOf('unispace_gojitok_')===0)) ks.push(k); }
     ks.forEach(function(k){ localStorage.removeItem(k); });
   }catch(e){}
 }
@@ -29554,7 +29555,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 318;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 320;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -40467,7 +40468,7 @@ function _gjSend(){
   var f = document.getElementById('gjFrame');
   if (!f || !f.contentWindow || !_gj.ready || !currentUser) return;
   var me = { id:String(currentUser.id), name:String(currentUser.name || ''), title:String(currentUser.title || currentUser.role || 'FP'), branch:String(currentUser.branch || ''), phone:String(currentUser.phone || '') };
-  try { f.contentWindow.postMessage({ t:'gj:data', me:me, hl:{ list:_hl.data, kind:_hl.kind } }, '*'); } catch (e) {}
+  try { f.contentWindow.postMessage({ t:'gj:data', me:me, hl:{ list:_hl.data, kind:_hl.kind }, api:1 }, _gjOrigin()); } catch (e) {}
 }
 function openGojiNote(e) {
   if (e && e.preventDefault) e.preventDefault();
@@ -40492,11 +40493,53 @@ function closeGojiNote(kept) {
   ov.innerHTML = '';
   if (kept) showToast('📝 쓰던 고지노트는 이 기기에 하루 동안 남아 있어요');
 }
+// 320 고지노트 저장 (GAS 26u): 저장 · 목록 · 불러오기 · 삭제는 앱이 대신 서버에 물어봐요. 본인 것만 (fp + gojiTok).
+function _gjOrigin(){ return (location.origin && location.origin !== 'null') ? location.origin : '*'; }
+function _gjTokKey(){ return 'unispace_gojitok_' + String((currentUser && currentUser.id) || '').trim().toLowerCase(); }
+function _gjReply(rid, res){
+  var f = document.getElementById('gjFrame');
+  if (f && f.contentWindow) { try { f.contentWindow.postMessage({ t:'gj:res', rid:rid, res:res }, _gjOrigin()); } catch (e) {} }
+}
+function _gjPost(body){
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var timer = setTimeout(function(){ if (ctrl) ctrl.abort(); }, 30000);
+  var opt = { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body:JSON.stringify(body) };
+  if (ctrl) opt.signal = ctrl.signal;
+  return fetch(UNISPACE_GAS_URL, opt).then(function(r){ clearTimeout(timer); return r.json(); }, function(e){ clearTimeout(timer); throw e; });
+}
+var _GJ_NET = { ok:false, net:true, msg:'인터넷 연결을 확인하고 다시 눌러 주세요' };
+var _GJ_OLD = { ok:false, old:true, msg:'서버 업데이트가 필요해요. 대표님께 알려 주세요' };
+function _gjApi(m){
+  var rid = String(m.rid || ''), uid = String((currentUser && currentUser.id) || '').trim();
+  if (!uid) { _gjReply(rid, { ok:false, msg:'로그인 정보를 찾을 수 없어요' }); return; }
+  if (m.act === 'unlock') {
+    _gjPost({ action:'login', fp:uid, pw:String(m.pw || '') }).then(function(res){
+      if (!res || !res.ok) { _gjReply(rid, { ok:false, msg:(res && res.msg) || '비밀번호를 확인해 주세요' }); return; }
+      if (!res.gojiTok) { _gjReply(rid, _GJ_OLD); return; }
+      if (String(res.id || '').trim().toLowerCase() !== uid.toLowerCase()) { _gjReply(rid, { ok:false, msg:'로그인 정보를 찾을 수 없어요' }); return; }
+      try { localStorage.setItem(_gjTokKey(), res.gojiTok); } catch (e) {}
+      _gjReply(rid, { ok:true });
+    }, function(){ _gjReply(rid, _GJ_NET); });
+    return;
+  }
+  var act = { list:'gojiList', load:'gojiLoad', save:'gojiSave', del:'gojiDelete' }[m.act];
+  if (!act) return;
+  var tok = ''; try { tok = localStorage.getItem(_gjTokKey()) || ''; } catch (e) {}
+  if (!tok) { _gjReply(rid, { ok:false, auth:false }); return; }
+  var body = { action:act, fp:uid, tok:tok };
+  ['id', 'name', 'birth', 'sex', 'n', 'sum', 'data'].forEach(function(k){ if (m[k] != null) body[k] = m[k]; });
+  _gjPost(body).then(function(res){
+    if (res && res.auth === false) { try { localStorage.removeItem(_gjTokKey()); } catch (e) {} }
+    else if (res && res.ok === false && /알 수 없는 액션/.test(String(res.msg || ''))) res = _GJ_OLD;
+    _gjReply(rid, res || { ok:false });
+  }, function(){ _gjReply(rid, _GJ_NET); });
+}
 window.addEventListener('message', function (ev) {
   var f = document.getElementById('gjFrame'), m = ev.data;
   if (!f || ev.source !== f.contentWindow || !m || typeof m !== 'object') return;
   if (m.t === 'gj:ready') { _gj.ready = true; _gjSend(); }
   else if (m.t === 'gj:close') closeGojiNote(!!m.kept);
+  else if (m.t === 'gj:api') _gjApi(m);
 });
 </script>
 </body>
