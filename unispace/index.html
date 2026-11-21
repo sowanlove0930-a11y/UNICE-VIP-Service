@@ -29557,7 +29557,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 325;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 328;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -33402,10 +33402,14 @@ function _rulesNewest(list){
   }
   function camp(r){ return String(r.campaignId || ''); }
   function img(r){ var v = (r.data || {}).img; return (v === undefined || v === null) ? '' : String(v); }
+  // 319: rules per sheet of a card: of two sheets repeating one reward, the one with fewer rules is printed for it
+  var perCI = {};
+  for(i=0;i<list.length;i++){ var kci = camp(list[i]) + '|' + img(list[i]); perCI[kci] = (perCI[kci] || 0) + 1; }
+  function foc(r){ return perCI[camp(r) + '|' + img(r)] || 0; }
   cmp(function(p, q){
     var a = list[p], b = list[q];
     if(_rulesSame(a, b, lb[p], lb[q]) !== 'same') return;
-    if(camp(a) === camp(b)){ if(img(a) !== '' && img(b) !== '' && img(a) !== img(b)){ if(_rulesItemIn(a.data, b.data)) gone[p] = { w:q, why:'same' }; else gone[q] = { w:p, why:'same' }; } return; }
+    if(camp(a) === camp(b)){ if(img(a) !== '' && img(b) !== '' && img(a) !== img(b)){ if(_rulesItemIn(a.data, b.data) || (!_rulesItemIn(b.data, a.data) && foc(b) < foc(a))) gone[p] = { w:q, why:'same' }; else gone[q] = { w:p, why:'same' }; } return; }
     if(_cmRuleAge(b) >= _cmRuleAge(a)) gone[p] = { w:q, why:'same' }; else gone[q] = { w:p, why:'same' };
   });
   cmp(function(p, q){
@@ -33448,7 +33452,7 @@ function _rulesCardName(r){
 }
 // the purple line under a rule of card campId that another rule stands for
 function _rulesGoneTxt(g, campId){
-  if(String(g.by.campaignId || '') === String(campId || '')) return '↪ 이 카드의 다른 장표에 같은 시상이 있어서 한 번만 계산';
+  if(String(g.by.campaignId || '') === String(campId || '')) return '↪ 이 카드의 다른 장표에 같은 시상' + (g.by.title ? '(\u300C' + g.by.title + '\u300D)' : '') + '이 있어서 그것으로 한 번만 계산';
   var nm = _rulesCardName(g.by);
   if(g.why === 'changed') return '↪ ' + nm + '에 기간·금액이 바뀐 같은 시상이 있어서 그 카드 것으로 계산';
   return '↪ 같은 시상이 ' + nm + '에도 있어서 그 카드 것으로 한 번만 계산';
@@ -33514,9 +33518,36 @@ function _cmRuleInRange(rule, dateStr){
 }
 // keyword inside a normalized product name. The rate table writes names like "하나로H종신보험" while
 // 장표 say "하나로종신": up to 3 non-Hangul characters (letters, digits, _ / -) may sit between keyword characters.
+// 327: names a sheet gives a product the rate table names otherwise (대표 2026-11-21: 한화 「홈앤라이프」 = 「가정생활종합보험」):
+// [the sheet's name, a piece of the rate-table name], both normalized
+var _CM_NICK = [['홈앤라이프', '가정생활종합']];
+function _cmNickHit(np, kw){
+  for(var i=0;i<_CM_NICK.length;i++){ if(kw.indexOf(_CM_NICK[i][0]) >= 0 && np.indexOf(_CM_NICK[i][1]) >= 0) return true; }
+  return false;
+}
+// a text that names a product by the sheet's name names it by the rate table's name too
+function _cmNickTxt(t){
+  var o = String(t || '');
+  for(var i=0;i<_CM_NICK.length;i++){ if(o.indexOf(_CM_NICK[i][0]) >= 0) o += ' ' + _CM_NICK[i][1]; }
+  return o;
+}
+// the first linked row of the rules that a name (one the reading found missing from the rate table) names by its
+// other name; '' when none
+function _cmNickRow(rules, name){
+  var nk = _cmNormKw(name), i, j, q;
+  for(i=0;i<_CM_NICK.length;i++){ if(nk.indexOf(_CM_NICK[i][0]) >= 0) break; }
+  if(!nk || i >= _CM_NICK.length) return '';
+  for(q=0;q<(rules || []).length;q++){
+    var pr = (rules[q] && rules[q].prods) || [];
+    for(j=0;j<pr.length;j++){ if(_cmNickHit(_cmNormKw(pr[j]), nk)) return pr[j]; }
+  }
+  return '';
+}
 function _cmKwHit(np, kw){
   if(!kw) return 0;
   if(np.indexOf(kw) >= 0) return kw.length * 2;
+  // 327: the sheet's other name of the product
+  if(_cmNickHit(np, kw)) return kw.length * 2;
   var starts = [], i;
   for(i=0;i<np.length;i++){ if(np.charAt(i) === kw.charAt(0)) starts.push(i); }
   for(var s0=0;s0<starts.length;s0++){
@@ -33561,9 +33592,44 @@ function _cmKwAny(np, keywords, broad){
 }
 function _cmNpEx(np){ return String(np||'').replace(/\(?간편가입포함\)?/g, ''); }
 // rate-table rows a reading linked to the rule (prods) or left out of an all-products rule (except)
+// 319: the rows a reading linked in place of products missing from the rate table: the reading names them (missing) yet
+// linked rows found only by a word the sheet does not print, or by a piece of a missing name (어린이 of 건강쑥쑥 어린이).
+// null when there are none; never every linked row
+function _cmGuessSet(d){
+  var ms = (d && d.missing) || [], pr = (d && d.prods) || [], kw = (d && d.keywords) || [], i, j;
+  if(!ms.length || !pr.length || !kw.length) return null;
+  // 327: a name the sheet prints also prints the rate table's name of that product (홈앤라이프 → 가정생활종합)
+  var txt = _cmNickTxt(_cmNormKw(String(d.label || '') + ' ' + String(d.note || ''))), mk = [], listed = false;
+  for(i=0;i<ms.length;i++){ var m0 = _cmNormKw(ms[i]); if(m0){ mk.push(m0); if(txt.indexOf(m0) >= 0) listed = true; } }
+  // 328: the sheet's words outside the missing names: a word printed there names a listed product as well (M케어 of
+  // "M케어 건강보험 · M케어 0세부터 건강보험"), so it is not only a piece of a missing name
+  var rest = txt;
+  for(i=0;i<mk.length;i++) rest = rest.split(mk[i]).join(' ');
+  var ok = [], bad = [];
+  for(i=0;i<kw.length;i++){
+    var k = _cmNormKw(kw[i]); if(!k) continue;
+    var frag = false;
+    for(j=0;j<mk.length;j++){ if(mk[j] !== k && mk[j].indexOf(k) >= 0 && rest.indexOf(k) < 0) frag = true; }
+    if(frag || (listed && txt.indexOf(k) < 0)) bad.push(k); else ok.push(k);
+  }
+  if(!bad.length) return null;
+  var m = {}, n = 0, sus = {};
+  for(i=0;i<pr.length;i++){
+    var np = _cmNormKw(pr[i]), hitOk = false, hitBad = [];
+    for(j=0;j<ok.length;j++){ if(np.indexOf(ok[j]) >= 0) hitOk = true; }
+    // 328: a row carrying a whole missing name is that product (메리츠 The좋은 내Mom대로 보장보험 = 내Mom대로 보장보험)
+    for(j=0;j<mk.length;j++){ if(np.indexOf(mk[j]) >= 0) hitOk = true; }
+    if(hitOk) continue;
+    for(j=0;j<bad.length;j++){ if(np.indexOf(bad[j]) >= 0) hitBad.push(bad[j]); }
+    if(hitBad.length){ m[_cmNorm(pr[i])] = 1; n++; for(j=0;j<hitBad.length;j++) sus[hitBad[j]] = 1; }
+  }
+  if(!n || n >= pr.length) return null;
+  // sus: only the words that brought a cut row (dropped from the rule's words at save time)
+  return { m:m, sus:sus, n:n };
+}
 function _cmInSet(d, key, np){
   var mk = '_m' + key;
-  if(!d[mk]){ var m = {}, a = d[key] || []; for(var i=0;i<a.length;i++) m[_cmNorm(a[i])] = 1; d[mk] = m; }
+  if(!d[mk]){ var m = {}, a = d[key] || [], gs = (key === 'prods') ? _cmGuessSet(d) : null; for(var i=0;i<a.length;i++){ var k0 = _cmNorm(a[i]); if(gs && gs.m[k0]) continue; m[k0] = 1; } d[mk] = m; }
   if(d[mk][np]) return true;
   // 279: a product whose name changed in a later month's table counts under either name
   var al = np ? _cmAkaOf(np) : null;
@@ -33609,6 +33675,10 @@ function _cmScopeOk(d, p, needProd){
     if(!_cmKwAny(np, d.keywords, !needProd)) return false;
   } else if(needProd && !np){ return false; }
   if(!linked && d.prodsAll && d.except && d.except.length && np && _cmInSet(d, 'except', np)) return false;
+  // 319: a product a 재물·단체·펫 rule of the insurer links is not 인보험
+  if(!linked && d.prodsAll && np && p.co && _cmCapFits(d) && _cmNonInsProd(p.co, np)) return false;
+  // 327: a 재물·단체·펫 reward does not count a product the 인보험 cap table names (홈앤라이프 = 가정생활종합보험)
+  if(np && p.co && !_cmCapFits(d) && _cmInsNamed(p.co, np)) return false;
   if(np && _cmAllScope(d) && _cmNlSaving(p)) return false;
   // a row whose name says it includes simplified underwriting covers both types: an exclude on that word still fits it
   var npx = _cmNpEx(np);
@@ -33645,6 +33715,8 @@ function _cmScopeWhy(d, p){
   if(d.prods && d.prods.length){ if(!np || !_cmInSet(d, 'prods', np)) return '연결된 상품이 아님 (' + d.prods.length + '개 상품에만 적용)'; }
   else if(d.keywords && d.keywords.length && !_cmKwAny(np, d.keywords)) return '상품 키워드 (' + d.keywords.join(', ') + ')';
   if(d.prodsAll && d.except && d.except.length && np && _cmInSet(d, 'except', np)) return '제외 상품';
+  if(d.prodsAll && np && p.co && _cmCapFits(d) && _cmNonInsProd(p.co, np)) return '재물·단체·펫 상품 (인보험 시책 제외)';
+  if(np && p.co && !_cmCapFits(d) && _cmInsNamed(p.co, np)) return '인보험 상품 (장표의 인보험 한도표에 있음)';
   if(np && _cmAllScope(d) && _cmNlSaving(p)) return _CM_NL_SAV_WHY;
   if(d.exclude && d.exclude.length && np){ var npx = _cmNpEx(np); for(i=0;i<d.exclude.length;i++){ var ex = _cmNorm(d.exclude[i]); if(ex && npx.indexOf(ex) >= 0) return '제외어 "' + d.exclude[i] + '" 포함'; } }
   if(d.must && d.must.length){ for(i=0;i<d.must.length;i++){ var mu = _cmNorm(d.must[i]); if(mu && np.indexOf(mu) < 0) return '"' + d.must[i] + '" 없음'; } }
@@ -34201,6 +34273,17 @@ function _reSummary(r){
   if(r.group) sub.push('택1 (' + r.group + ' 중 큰 것)');
   if(r.prods && r.prods.length) sub.push('상품 ' + r.prods.length + '개: ' + String(r.prods[0]).slice(0, 22) + (r.prods.length > 1 ? '… 외 ' + (r.prods.length - 1) : ''));
   else if(r.prodsAll) sub.push('전 상품' + (r.except && r.except.length ? ' (제외 ' + r.except.length + '개)' : ''));
+  var gs0 = _cmGuessSet(r), ms0 = [], nk0 = [];
+  // 327: a name missing from the rate table that a linked row carries under the rate table's name is not missing
+  for(var mq=0;mq<(r.missing || []).length;mq++){ var nr0 = _cmNickRow([r], r.missing[mq]); if(nr0) nk0.push(r.missing[mq] + ' = ' + _reProdFam(nr0)); else ms0.push(r.missing[mq]); }
+  if(gs0) sub.push('비슷한 이름이라 계산에서 뺀 상품 ' + gs0.n + '개 (요율표에 없는 ' + ms0.join('\u00B7') + ' 대신 붙은 것)');
+  if(nk0.length) sub.push(nk0.join(', ') + ' (요율표 이름)');
+  // 327: rows of a 재물·단체·펫 reward that a 인보험 cap table names are left out of it
+  if(!_cmCapFits(r) && r.prods && r.prods.length){
+    var inN = 0, inF = [];
+    for(var iq=0;iq<r.prods.length;iq++){ var nq = _cmNorm(r.prods[iq]); if(_cmInsNamedIn(_re.rules, nq) || _cmInsNamed(_re.insurer, nq)){ inN++; var fq0 = _reProdFam(r.prods[iq]); if(inF.indexOf(fq0) < 0) inF.push(fq0); } }
+    if(inN) sub.push('인보험 상품이라 계산에서 뺀 상품 ' + inN + '개 (' + inF.join('\u00B7') + ': 장표의 인보험 한도표에 있음)');
+  }
   if(r.needFps) sub.push('대상 FP 지정 필요');
   var siR = _cmSiRule(r), siT = _cmSiTxt(siR);
   if(siT) sub.push('✅ 계산 반영: ' + siT);
@@ -34500,10 +34583,14 @@ function _reFamilyWiden(rules){
 function _reCheckMake(rules, insurer, checks, imgs, failed, secs, campId){
   var wd = _reFamilyWiden(rules || []);
   var seen = {}, kept = [], dup = 0, q;
+  // 319: rules per sheet: a sheet giving few rules is printed for those rewards (a poster or a detail sheet)
+  var perImg = {};
+  for(q=0;q<rules.length;q++){ var iv0 = rules[q] ? rules[q].img : ''; if(iv0 !== undefined && iv0 !== null && iv0 !== '') perImg[String(iv0)] = (perImg[String(iv0)] || 0) + 1; }
   for(q=0;q<rules.length;q++){
     var rq = rules[q], sg = _rulesSig({ insurer:insurer, type:rq.type, from:rq.from, to:rq.to, data:rq });
-    if(seen[sg]){ dup++; continue; }
-    seen[sg] = 1; kept.push(rq);
+    // 319: the copy kept takes the exclusions and payment month another sheet printed for the same reward
+    if(seen[sg]){ dup++; _reJoin(kept[seen[sg] - 1], rq); continue; }
+    seen[sg] = kept.length + 1; kept.push(rq);
   }
   // 265: a 택1 gift read on two sheets in different granularity (one rule per option on one sheet, one rule per step with
   // "A or B or C 중 택1" on the other) is one reward: the rule listing the options is kept, its exclusions joined
@@ -34522,6 +34609,26 @@ function _reCheckMake(rules, insurer, checks, imgs, failed, secs, campId){
     }
   }
   if(gm){ kept = kept.filter(function(x){ return !!x; }); dup += gm; }
+  // 319: one reward on two sheets under other names, or read a little differently (the amount basis of a linked reward,
+  // the payment month): same type, periods, minimums and money -> one rule, the reading of the focused sheet
+  var sm = 0, smTxt = [];
+  for(q=0;q<kept.length;q++){
+    var sa = kept[q]; if(!sa || !sa.type || sa.type === 'rate' || sa.type === 'gift') continue;
+    for(var q3=q+1;q3<kept.length;q3++){
+      var sb = kept[q3]; if(!sb || sb.type !== sa.type) continue;
+      var ia = (sa.img === undefined || sa.img === null) ? '' : String(sa.img), ib = (sb.img === undefined || sb.img === null) ? '' : String(sb.img);
+      if(ia === '' || ib === '' || ia === ib) continue;
+      var xa = { insurer:insurer, type:sa.type, title:sa.label, from:sa.from||'', to:sa.to||'', data:sa }, xb = { insurer:insurer, type:sb.type, title:sb.label, from:sb.from||'', to:sb.to||'', data:sb };
+      if(_rulesSame(xa, xb) !== 'same') continue;
+      var useB = (perImg[ib] || 99) < (perImg[ia] || 99), kp2 = useB ? sb : sa, dr2 = useB ? sa : sb;
+      var rbDiff = (sa.type === 'cond') && String(sa.rewardBy) !== String(sb.rewardBy);
+      _reJoin(kp2, dr2);
+      smTxt.push('\u300C' + (dr2.label || '') + '\u300D' + (dr2.label !== kp2.label ? ' = \u300C' + (kp2.label || '') + '\u300D' : '') + (rbDiff ? ' \u00B7 금액 기준은 이 시상만 크게 실린 ' + (parseInt(kp2.img, 10) + 1) + '번째 장표대로 ' + _reRbTxt(kp2) : ''));
+      if(useB){ kept[q] = sb; sa = sb; }
+      kept[q3] = null; sm++;
+    }
+  }
+  if(sm) kept = kept.filter(function(x){ return !!x; });
   var ck = { imgs:imgs, secs:secs, listN:0, total:kept.length, linked:0, agreeN:0, agreeOf:0, fixes:[], warns:[], errors:[] };
   for(q=0;q<checks.length;q++){
     var c = checks[q]; if(!c) continue;
@@ -34531,6 +34638,7 @@ function _reCheckMake(rules, insurer, checks, imgs, failed, secs, campId){
   }
   for(q=0;q<kept.length;q++){ if((kept[q].prods && kept[q].prods.length) || kept[q].prodsAll) ck.linked++; }
   if(dup) ck.fixes.unshift('장표 여러 장에 반복된 같은 시상 ' + dup + '개 → 1개로 합침');
+  if(sm) ck.fixes.splice(dup ? 1 : 0, 0, '이름만 다른 같은 시상 ' + sm + '개 → 1개로 합침: ' + smTxt.join(' / '));
   // 265: a per-contract cap table printed on one sheet (인보험 기본 30만 · 덴탈 파트너 10만 · 무·저해지 한도 없음) applies to
   // the card's 인보험 rewards: every rule not about 재물·단체·펫 that has no cap of its own
   var caps = null;
@@ -34546,6 +34654,24 @@ function _reCheckMake(rules, insurer, checks, imgs, failed, secs, campId){
     }
     if(cn) ck.fixes.push('장표의 인보험 건당 한도(' + _cmSiTxt(_cmSiRule({ capPer:caps.def, capList:caps.list })) + ') → 시상 ' + cn + '개의 수수료 예상 계산에 반영 (재물·단체·펫 제외)');
   }
+  // 327: rows of a 재물·단체·펫 reward that the card's 인보험 cap table names with a cap of its own (홈앤라이프 =
+  // 가정생활종합보험) are 인보험: that reward loses them (never all its rows), the 인보험 rewards keep them
+  var inMax = 0, inF2 = [], inR2 = [];
+  for(q=0;q<kept.length;q++){
+    var ir = kept[q]; if(_cmCapFits(ir) || !(ir.prods && ir.prods.length)) continue;
+    var ik = [], ic = 0, icF = [];
+    for(var ip=0;ip<ir.prods.length;ip++){
+      if(_cmInsNamedIn(kept, _cmNorm(ir.prods[ip]))){ ic++; var iff = _reProdFam(ir.prods[ip]); if(icF.indexOf(iff) < 0) icF.push(iff); }
+      else ik.push(ir.prods[ip]);
+    }
+    if(!ic || !ik.length) continue;
+    ir.prods = ik; delete ir._mprods;
+    // its recognition shares (3년납 3년만기 50%) lose them too
+    (ir.recog || []).forEach(function(e){ if(!e || !e.prods || !e.prods.length) return; var ek = e.prods.filter(function(p){ return !_cmInsNamedIn(kept, _cmNorm(p)); }); if(ek.length && ek.length < e.prods.length){ e.prods = ek; delete e._mprods; } });
+    inMax = Math.max(inMax, ic); inR2.push(ir.label || '');
+    for(var ifq=0;ifq<icF.length;ifq++){ if(inF2.indexOf(icF[ifq]) < 0) inF2.push(icF[ifq]); }
+  }
+  if(inR2.length) ck.fixes.push('장표의 인보험 한도표에 있는 상품(' + inF2.join('\u00B7') + ', ' + inMax + '개) → \u300C' + inR2.join('\u300D\u00B7\u300C') + '\u300D에서 뺌 (인보험 상품)');
   // 265: the products of the card's 재물·단체·펫 rewards are not 인보험: an all-products 인보험 rule leaves them out
   var oth = [], othSeen = {};
   for(q=0;q<kept.length;q++){ var orr = kept[q]; if(_cmCapFits(orr)) continue; for(var op=0;op<(orr.prods||[]).length;op++){ var ok0 = _cmNorm(orr.prods[op]); if(ok0 && !othSeen[ok0]){ othSeen[ok0] = 1; oth.push(orr.prods[op]); } } }
@@ -34575,6 +34701,80 @@ function _reCheckMake(rules, insurer, checks, imgs, failed, secs, campId){
     }
     if(fn) ck.fixes.push('"' + fpAll.map(function(x){ return x.t; }).join(' · ') + '" 제외 조건 → 다른 장표의 시상 ' + fn + '개에도 FP 체크(제외) 추가');
   }
+  // 319: rows a reading linked in place of the sheet's products missing from the rate table (only a look-alike name:
+  // a word the sheet does not print, or a piece of a missing name) are not linked
+  var gsN = 0, gsP = [], gsR = [];
+  for(q=0;q<kept.length;q++){
+    var gr = kept[q], gset = _cmGuessSet(gr);
+    if(!gset) continue;
+    var keepP = [], cut = [];
+    for(var gp=0;gp<gr.prods.length;gp++){ if(gset.m[_cmNorm(gr.prods[gp])]) cut.push(gr.prods[gp]); else keepP.push(gr.prods[gp]); }
+    if(!cut.length) continue;
+    gr.prods = keepP;
+    gr.keywords = (gr.keywords || []).filter(function(k){ return !gset.sus[_cmNormKw(k)]; });
+    delete gr._mprods;
+    gsN += cut.length; if(gsR.indexOf(gr.label || '') < 0) gsR.push(gr.label || '');
+    for(var gc=0;gc<cut.length;gc++){ var gf = _reProdFam(cut[gc]); if(gsP.indexOf(gf) < 0) gsP.push(gf); }
+  }
+  if(gsN) ck.fixes.push('\u300C' + gsR.join('\u300D\u00B7\u300C') + '\u300D 요율표에 없는 상품 대신 비슷한 이름으로 붙은 상품(' + gsP.slice(0, 4).join('\u00B7') + (gsP.length > 4 ? ' 외' : '') + ', ' + gsN + '개) → 연결 안 함');
+  // 327: a product the reading found missing that a rule links under the rate table's name (홈앤라이프 = 가정생활종합보험)
+  // is not missing
+  var nkF = [];
+  ck.warns = ck.warns.map(function(w){
+    var wm = String(w).match(/^(.* — 일부 상품이 요율표에 없음: )(.+)$/);
+    if(!wm) return w;
+    var wr0 = kept.filter(function(x){ return x && x.label && wm[1].indexOf('"' + x.label + '"') >= 0; });
+    var ns = wm[2].split(/\s*,\s*/), left = [];
+    for(var ni=0;ni<ns.length;ni++){
+      var nkr = _cmNickRow(wr0.length ? wr0 : kept, ns[ni]);
+      if(!nkr){ left.push(ns[ni]); continue; }
+      var nt0 = '\u300C' + ns[ni] + '\u300D = 요율표의 \u300C' + _reProdFam(nkr) + '\u300D';
+      if(nkF.indexOf(nt0) < 0) nkF.push(nt0);
+    }
+    return left.length ? wm[1] + left.join(', ') : '';
+  }).filter(function(w){ return !!w; });
+  if(nkF.length) ck.fixes.push('장표와 요율표의 이름이 다른 같은 상품: ' + nkF.join(', ') + ' → 같은 상품으로 계산');
+  // 319 (GAS 26t): the 인보험 common rules a 세부규정 sheet states for every reward of the card: excluded kinds (words)
+  // and rows, the real payment month of the 2nd-year rewards, conditions the app cannot judge
+  var com = { ex:[], rows:[], when:'', uns:[], at:-1 };
+  for(q=0;q<checks.length;q++){
+    var cmn = checks[q] && checks[q].common; if(!cmn) continue;
+    if(com.at < 0) com.at = q;
+    (cmn.exclude || []).forEach(function(w){ w = String(w || '').trim(); if(w && com.ex.indexOf(w) < 0) com.ex.push(w); });
+    (cmn.except || []).forEach(function(p0){ p0 = String(p0 || ''); if(p0 && com.rows.indexOf(p0) < 0) com.rows.push(p0); });
+    if(cmn.when && !com.when) com.when = String(cmn.when);
+    (cmn.unsupported || []).forEach(function(u){ u = String(u || '').trim(); if(u && com.uns.indexOf(u) < 0) com.uns.push(u); });
+  }
+  if(com.ex.length || com.rows.length){
+    var cxN = 0;
+    for(q=0;q<kept.length;q++){
+      var cr2 = kept[q]; if(!_cmCapFits(cr2)) continue;
+      // a reward about one of those kinds (its own name, words or rows say it) keeps it
+      var own = _cmNormKw(String(cr2.label || '') + ' ' + (cr2.keywords || []).join(' ') + ' ' + (cr2.prods || []).join(' ')), chg = false;
+      cr2.exclude = cr2.exclude || [];
+      for(var ce=0;ce<com.ex.length;ce++){ var cw0 = _cmNormKw(com.ex[ce]); if(cw0 && own.indexOf(cw0) < 0 && cr2.exclude.indexOf(com.ex[ce]) < 0){ cr2.exclude.push(com.ex[ce]); chg = true; } }
+      if(com.rows.length && cr2.prodsAll){
+        cr2.except = cr2.except || [];
+        var hv = {}; for(var hx=0;hx<cr2.except.length;hx++) hv[_cmNorm(cr2.except[hx])] = 1;
+        for(var cw=0;cw<com.rows.length;cw++){ if(!hv[_cmNorm(com.rows[cw])]){ cr2.except.push(com.rows[cw]); hv[_cmNorm(com.rows[cw])] = 1; chg = true; } }
+        delete cr2._mexcept;
+      }
+      if(chg) cxN++;
+    }
+    if(cxN) ck.fixes.push('세부규정 장표(' + (com.at + 1) + '번째)의 인보험 공통 제외(' + com.ex.concat(_reRowsTxt(com.rows, com.ex)).join('\u00B7') + ') → 인보험 시상 ' + cxN + '개에 적용');
+  }
+  if(com.when){
+    var cwN = 0;
+    for(q=0;q<kept.length;q++){
+      var wr = kept[q]; if(!_cmCapFits(wr) || wr.type === 'gift') continue;
+      if(wr.type === 'rate'){ if(parseFloat(wr.pct2) && wr.when2 === '13차월' && com.when !== '13차월'){ wr.when2 = com.when; cwN++; } continue; }
+      var wtx = String(wr.cond || '') + ' ' + String(wr.note || '');
+      if((wr.when === '13차월' || (!wr.when && /13\s*회차/.test(wtx))) && wr.when !== com.when){ wr.when = com.when; cwN++; }
+    }
+    if(cwN) ck.fixes.push('2차년도 지급 시점: 세부규정대로 13회차 유지 후 ' + com.when + ' → 시상 ' + cwN + '개 (13차월 → ' + com.when + ')');
+  }
+  // not saved with any rule: said so
+  if(com.uns.length) ck.warns.push('세부규정 — 앱이 계산 못 하는 조건: ' + com.uns.join(', ') + ' (계산에서 빠짐 · 해당 계약은 직접 확인)');
   // the same rewards already saved on another card of this insurer (a weekly sheet reprinting the month's rewards)
   var rpN = 0, chN = 0, mine = String(campId || '');
   if(_rules && _rules.length){
@@ -34600,8 +34800,48 @@ function _reCheckMake(rules, insurer, checks, imgs, failed, secs, campId){
   var any = false; for(q=0;q<checks.length;q++){ if(checks[q]) any = true; }
   return { rules:kept, check:(any || dup || failed || wd.n || rpN || chN) ? ck : null };
 }
-// 265: a rule a 인보험 cap table reaches: not a 재물·단체·펫·캣 reward (by its name and keywords)
-function _cmCapFits(r){ return !/재물|단체|펫|캣|라이프업|화재|배상|자동차/.test(String((r && r.label) || '') + ' ' + ((r && r.keywords) || []).join(' ')); }
+// 265: a rule a 인보험 cap table reaches: not a 재물·단체·펫·캣 reward (by its name and keywords). 319: 物보험 / 물보험 too
+function _cmCapFits(r){ return !/재물|物|물보험|단체|펫|캣|라이프업|화재|배상|자동차/.test(String((r && r.label) || '') + ' ' + ((r && r.keywords) || []).join(' ')); }
+// 319: one reward kept from two readings: the exclusions, payment month, conditions and notes either reading has
+function _reJoin(kp, dr){
+  if(!kp || !dr || kp === dr) return;
+  var i;
+  if(dr.exclude && dr.exclude.length){ kp.exclude = kp.exclude || []; for(i=0;i<dr.exclude.length;i++){ if(kp.exclude.indexOf(dr.exclude[i]) < 0) kp.exclude.push(dr.exclude[i]); } }
+  if(kp.prodsAll && dr.prodsAll && dr.except && dr.except.length){
+    kp.except = kp.except || [];
+    var hv = {}; for(i=0;i<kp.except.length;i++) hv[_cmNorm(kp.except[i])] = 1;
+    for(i=0;i<dr.except.length;i++){ if(!hv[_cmNorm(dr.except[i])]){ kp.except.push(dr.except[i]); hv[_cmNorm(dr.except[i])] = 1; } }
+    delete kp._mexcept;
+  }
+  if(!kp.when && dr.when) kp.when = dr.when;
+  if(!kp.cond && dr.cond) kp.cond = dr.cond;
+  if(dr.unsupported && dr.unsupported.length){ kp.unsupported = kp.unsupported || []; for(i=0;i<dr.unsupported.length;i++){ if(kp.unsupported.indexOf(dr.unsupported[i]) < 0) kp.unsupported.push(dr.unsupported[i]); } }
+}
+// 319: a linked reward's amount basis in words: "10/19~10/30 금액 (11/1~11/15는 10만↑ 조건)"
+function _reRbTxt(r){
+  var cs = (r && r.conds) || [];
+  if(!cs.length) return '';
+  if(String(r.rewardBy) === 'min' || String(r.rewardBy) === '-1') return '모든 기간 중 낮은 금액';
+  var k = Math.min(cs.length - 1, Math.max(0, parseInt(r.rewardBy, 10) || 0)), o = [];
+  function md(s){ var m = String(s || '').match(/^\d{4}-(\d{2})-(\d{2})/); return m ? (parseInt(m[1], 10) + '/' + parseInt(m[2], 10)) : String(s || ''); }
+  for(var i=0;i<cs.length;i++){ if(i !== k) o.push(md(cs[i].from) + '~' + md(cs[i].to) + '는 ' + _cmMan(cs[i].min) + '\u2191'); }
+  return md(cs[k].from) + '~' + md(cs[k].to) + ' 금액' + (o.length ? ' (' + o.join(', ') + ' 조건)' : '');
+}
+// 319: a rate-table row as its product's name ("무배당 한화 치매간병보험_2,4종_10년납" -> "한화 치매간병보험")
+function _reProdFam(s){ return String(s || '').split('_')[0].replace(/^\s*(무배당|\(무\))\s*/, '').trim(); }
+// 319: rows in short: "한화 치매간병보험 5/10년납"; rows already named by an excluded word (RICH) are left out
+function _reRowsTxt(rows, words){
+  var fam = [], yrs = {}, i, j, ws = (words || []).map(_cmNormKw).filter(function(x){ return x; });
+  for(i=0;i<(rows || []).length;i++){
+    var f = _reProdFam(rows[i]), nf = _cmNormKw(f), skip = false;
+    for(j=0;j<ws.length;j++){ if(nf.indexOf(ws[j]) >= 0) skip = true; }
+    if(skip || !f) continue;
+    if(fam.indexOf(f) < 0){ fam.push(f); yrs[f] = []; }
+    var m = String(rows[i]).match(/(\d+)\s*년납/);
+    if(m && yrs[f].indexOf(m[1]) < 0) yrs[f].push(m[1]);
+  }
+  return fam.map(function(f){ return f + (yrs[f].length ? ' ' + yrs[f].sort(function(a, b){ return a - b; }).join('/') + '년납' : ''); });
+}
 function _reCheckHtml(){
   var c = _re.check; if(!c) return '';
   var ok = !c.errors.length;
@@ -35431,11 +35671,16 @@ function _cmScAmt(co, prod, amt){
 // capPer / stdPct on the rule (GAS 25v), or still said in an older rule's unsupported list
 function _cmSiRule(d){
   d = d || {};
-  var cap = parseInt(d.capPer, 10) || 0, std = parseFloat(d.stdPct) || 0, rest = [], uns = d.unsupported || [];
+  // 319: a 재물·단체·펫 rule never takes the 인보험 cap table (a copy that came with the table's product list is dropped);
+  // its own "건당 1천만 限 인정" is read from its note as well
+  var nonIns = !_cmCapFits(d), copied = !!(nonIns && d.capList && d.capList.length);
+  var cap = copied ? 0 : (parseInt(d.capPer, 10) || 0), std = parseFloat(d.stdPct) || 0, rest = [], uns = d.unsupported || [];
+  var CAPRX = /건당[^0-9]{0,8}(\d+(?:\.\d+)?)\s*(억|천만|백만|만)/, CAPU = { '억':100000000, '천만':10000000, '백만':1000000, '만':10000 };
+  if(nonIns && !cap){ var nt = String(d.note || ''), mn = nt.match(CAPRX); if(mn && /한도|限|까지|인정/.test(nt)) cap = Math.round(parseFloat(mn[1]) * CAPU[mn[2]]); }
   for(var i=0;i<uns.length;i++){
-    var ut = String(uns[i] || ''), mc = ut.match(/건당[^0-9]{0,8}(\d+(?:\.\d+)?)\s*만/), ms = ut.match(/표준형[^0-9%]{0,14}(\d+)\s*%/);
-    var isCap = !!(mc && /한도|까지|인정/.test(ut));
-    if(isCap && !cap) cap = Math.round(parseFloat(mc[1]) * 10000);
+    var ut = String(uns[i] || ''), mc = ut.match(CAPRX), ms = ut.match(/표준형[^0-9%]{0,14}(\d+)\s*%/);
+    var isCap = !!(mc && /한도|限|까지|인정/.test(ut));
+    if(isCap && !cap) cap = Math.round(parseFloat(mc[1]) * CAPU[mc[2]]);
     if(ms && !std) std = parseInt(ms[1], 10);
     if(!isCap && !ms) rest.push(ut);
   }
@@ -35444,7 +35689,7 @@ function _cmSiRule(d){
   var recog = [], rl = d.recog || [];
   for(var j=0;j<rl.length;j++){ var e = rl[j] || {}, pc = parseFloat(e.pct) || 0; if(pc > 0 && pc < 100 && ((e.prods && e.prods.length) || (e.kw && e.kw.length))) recog.push(e); }
   // 265: product groups with a cap of their own: [{kw:[words], cap (won, 0 = none), label}]
-  var capList = [], cl = d.capList || [];
+  var capList = [], cl = copied ? [] : (d.capList || []);
   for(var c=0;c<cl.length;c++){ var ce = cl[c] || {}; if(ce.kw && ce.kw.length) capList.push({ kw:ce.kw, cap:parseInt(ce.cap, 10) || 0, label:String(ce.label || '') }); }
   return { cap:cap, std:std, rest:rest, recog:recog, capList:capList };
 }
@@ -35475,22 +35720,71 @@ function _cmRecogHit(e, prod){
 // a rate-table row that is a 표준형 on its own (a row joined as "미지급형&표준형" cannot be told apart: whole premium)
 function _cmIsStdProd(prod){ var t = String(prod || ''); return /표준형/.test(t) && !/[&＆]/.test(t) && !/미지급형|일부지급형/.test(t); }
 // the cap and 표준형 share this insurer's rules set for a contract of that day (the strictest of them)
-function _cmSiOf(co, dateStr){
+// 319: a product a 재물·단체·펫 rule of the insurer links (by row, or by its words when it links none) is not 인보험
+// 327: unless a 인보험 cap table of the insurer names it
+var _cmNonInsMemo = { src:null, n:0, rates:null, m:{} };
+function _cmNonInsFresh(){ if(_cmNonInsMemo.src !== _rules || _cmNonInsMemo.n !== _rules.length || _cmNonInsMemo.rates !== _rates) _cmNonInsMemo = { src:_rules, n:_rules.length, rates:_rates, m:{} }; }
+function _cmRuleCovers(d, np){
+  if(d.prods && d.prods.length) return _cmInSet(d, 'prods', np);
+  if(d.keywords && d.keywords.length) return _cmKwAny(np, d.keywords) > 0;
+  return false;
+}
+// 327: a product a 인보험 cap table names with a cap of its own (홈앤라이프·치아보험 건당 10만) is 인보험, whatever a
+// 재물·단체·펫 reading linked. datas = rule data (a card's rules, or the insurer's saved ones)
+function _cmInsNamedIn(datas, np){
+  if(!np) return false;
+  var npk = _cmNormKw(np);
+  for(var i=0;i<(datas || []).length;i++){
+    var d = datas[i] || {}, cl = d.capList || [];
+    if(!cl.length || !_cmCapFits(d)) continue;
+    for(var c=0;c<cl.length;c++){
+      var ce = cl[c] || {};
+      if(!(parseInt(ce.cap, 10) > 0)) continue;
+      for(var w=0;w<(ce.kw || []).length;w++){ var kk = _cmNormKw(ce.kw[w]); if(kk && _cmKwHit(npk, kk)) return true; }
+    }
+  }
+  return false;
+}
+function _cmInsNamed(co, np){
+  if(!np || !co || !_rules) return false;
+  _cmNonInsFresh();
+  var k = 'n|' + _cmInsKey(co) + '|' + np;
+  if(_cmNonInsMemo.m[k] === undefined) _cmNonInsMemo.m[k] = _cmInsNamedIn(_cmRulesOf(co).map(function(r){ return r.data || {}; }), np);
+  return _cmNonInsMemo.m[k];
+}
+function _cmNonInsProd(co, np){
+  if(!np || !co || !_rules) return false;
+  _cmNonInsFresh();
+  var k = _cmInsKey(co) + '|' + np;
+  if(_cmNonInsMemo.m[k] === undefined){
+    var list = _cmRulesOf(co), hit = false;
+    if(!_cmInsNamed(co, np)){ for(var i=0;i<list.length && !hit;i++){ var d = list[i].data || {}; if(!_cmCapFits(d) && _cmRuleCovers(d, np)) hit = true; } }
+    _cmNonInsMemo.m[k] = hit;
+  }
+  return _cmNonInsMemo.m[k];
+}
+// 319: prod given: the 인보험 caps are for 인보험 contracts; a 재물·단체·펫 contract takes only the caps of the
+// 재물·단체·펫 rules that cover it
+function _cmSiOf(co, dateStr, prod){
   var si = { cap:0, std:0, recog:[], caps:[] }, list = _cmRulesOf(co);
+  var np = prod ? _cmNorm(prod) : '', non = !!(np && _cmNonInsProd(co, np)), ins = !!(np && _cmInsNamed(co, np));
   for(var i=0;i<list.length;i++){
     var r = list[i];
     if(dateStr && !_cmFpInDate(r, dateStr)) continue;
-    var x = _cmSiRule(r.data);
-    if(x.cap && (!si.cap || x.cap < si.cap)) si.cap = x.cap;
-    if(x.cap || x.capList.length) si.caps.push({ cap:x.cap, list:x.capList });
+    var x = _cmSiRule(r.data), rd = r.data || {};
+    var capOk = !np || (non ? (!_cmCapFits(rd) && _cmRuleCovers(rd, np)) : _cmCapFits(rd));
+    if(capOk && x.cap && (!si.cap || x.cap < si.cap)) si.cap = x.cap;
+    if(capOk && (x.cap || x.capList.length)) si.caps.push({ cap:x.cap, list:x.capList });
     if(x.std && (!si.std || x.std < si.std)) si.std = x.std;
+    // 327: a 재물·단체·펫 rule's recognition share (3년납 3년만기 50%) is not for a product the 인보험 cap table names
+    if(ins && !_cmCapFits(rd)) continue;
     for(var k=0;k<x.recog.length;k++) si.recog.push(x.recog[k]);
   }
   return si;
 }
 // the premium one contract brings to the 시책 of its insurer on that day: 표준형 share first, then the per-contract cap
 function _cmSiInfo(co, prod, amt, dateStr){
-  var si = _cmSiOf(co, dateStr), a = amt, why = [];
+  var si = _cmSiOf(co, dateStr, prod), a = amt, why = [];
   // the share of a named product (the smallest share among the entries that name it)
   var rpct = 0, rlab = '';
   for(var ri=0;ri<si.recog.length;ri++){ var re = si.recog[ri]; if(_cmRecogHit(re, prod) && (!rpct || re.pct < rpct)){ rpct = re.pct; rlab = re.label || ''; } }
