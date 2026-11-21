@@ -1685,6 +1685,13 @@ body.pension-off .sa-pension, body.pension-off .sag .ps-on { display: none; }
   .sa-row .sa-sbtn { padding: 6px 10px; font-size: 10.5px; }
 }
 
+/* 329: 라이프 디자인 줄 = ▶ 영상 · 복사 · 보내기. 폰 링크 전송 창(버튼 2칸)에서는 ▶ 영상을 글씨 밑 작은 링크로 */
+.sa-life .sa-vlink { display: none; }
+@media (max-width: 480px) {
+  .lsm-body .sa-life .sa-acts .sa-vid { display: none; }
+  .lsm-body .sa-life .sa-vlink { display: inline-block; margin-top: 5px; padding: 3px 9px; border-radius: 99px; border: 1px solid #D8CFB9;
+    background: #ffffff; color: #4A5568; font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer; }
+}
 /* 289: 링크 전송 창 행 정렬 — 버튼 폭 통일, 버튼 칸 고정 폭(PC 3칸 / 폰 2칸), 보내기는 항상 맨 오른쪽 같은 줄 */
 .lsm-body .sa-row .sa-acts { width: 240px; justify-content: flex-end; }
 .lsm-body .sa-row .sa-acts button { width: 76px; padding-left: 0; padding-right: 0; text-align: center; }
@@ -16898,6 +16905,23 @@ function _lifeShareFallback(url) {
   _uniceCopy(msg + '\n' + url);
 }
 
+/* 329: 라이프 디자인 문구 + 링크 복사 (대표 2026-11-21: 문자 → 복사) — 문자 · 카톡 어디든 붙여넣기 */
+function _lifeShareText() {
+  var nm = (currentUser && currentUser.name) ? String(currentUser.name) : '';
+  var t = (currentUser && SHARE_TITLES[String(currentUser.id)]) || ((currentUser && currentUser.role && currentUser.role !== 'FP') ? String(currentUser.role) : '팀장');
+  var hi = nm ? '안녕하세요, 유니스 ' + nm + ' ' + t + '입니다 :)' : '안녕하세요, 유니스입니다 :)';
+  return hi + '\n\n[유니스 라이프 디자인 · 교육생 모집]\n암부터 노후까지, 인생에서 꼭 알아야 할 다섯 번의 경험\n· 교육비 전액 무료\n· 수료지원금 15만원\n\n아래 링크에서 일정을 보고 바로 신청하실 수 있어요.\n' + _lifeCustLink();
+}
+function copyLifeDesign(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var msg = _lifeShareText();
+  var done = function() { showToast('📋 문구와 링크가 복사되었습니다. 문자나 카톡에 붙여넣어 보내세요'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).then(done).catch(function() { _uniceCopyLegacy(msg); });
+  } else { _uniceCopyLegacy(msg); }
+  return false;
+}
+
 /* 파도타기 이벤트 공유 (FP 링크 포함) */
 function shareWaveEvent(ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
@@ -28835,9 +28859,10 @@ function doCheckin() { doSmartCheckin(); }
       </div>
       <div class="sa-row sa-recruit sa-life">
         <div class="sa-ic">🎓</div>
-        <div class="sa-tx"><div class="a">라이프 디자인</div><div class="b">5회 체험 교육 · 교육생 모집</div></div>
+        <div class="sa-tx"><div class="a">라이프 디자인</div><div class="b">5회 체험 교육 · 교육생 모집</div><button type="button" class="sa-vlink" onclick="return openToolVideo('lifedesign',event)">▶ 영상 보기</button></div>
         <div class="sa-acts">
-          <button type="button" class="sa-vbtn" onclick="return openToolVideo('lifedesign',event)">▶ 영상</button>
+          <button type="button" class="sa-vbtn sa-vid" onclick="return openToolVideo('lifedesign',event)">▶ 영상</button>
+          <button type="button" class="sa-vbtn sa-copy" onclick="return copyLifeDesign(event)">복사</button>
           <button type="button" class="sa-sbtn" onclick="return shareLifeDesign(event)">보내기</button>
         </div>
       </div>
@@ -29557,7 +29582,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 328;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 329;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
