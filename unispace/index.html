@@ -3397,6 +3397,17 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
 .ral-selbar { position:sticky; bottom:0; background:#1A2744; color:#fff; border-radius:14px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:800; margin-top:6px; }
 .ral-selbar button { font-family:inherit; font-size:13px; font-weight:900; border:none; border-radius:10px; padding:8px 14px; background:#2E9E6B; color:#fff; cursor:pointer; }
 .ral-selbar button[disabled] { opacity:.4; }
+.ral-dbh { display:flex; justify-content:space-between; align-items:center; gap:8px; padding-right:40px; min-height:30px; }
+.ral-srch { position:relative; margin-bottom:8px; }
+.ral-srch input { width:100%; box-sizing:border-box; border:1.5px solid var(--border); border-radius:12px; padding:10px 38px 10px 36px; background:#FCFBF8; font-size:16px; color:var(--text); font-family:inherit; outline:none; }
+.ral-srch input::-webkit-search-cancel-button, .ral-srch input::-webkit-search-decoration { -webkit-appearance:none; appearance:none; display:none; }
+.ral-srch input:focus { border-color:#2E9E6B; background:#fff; }
+.ral-srch .ic { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; opacity:.55; pointer-events:none; }
+.ral-srch .clr { position:absolute; right:7px; top:50%; transform:translateY(-50%); width:26px; height:26px; border-radius:50%; border:none; background:#E4E7EC; color:#4A5568; font-size:12px; font-weight:900; cursor:pointer; display:none; }
+.ral-srch.has .clr { display:block; }
+.ral-srhit { font-size:11.5px; font-weight:800; color:#1F7A4D; margin:-3px 2px 7px; display:none; }
+.ral-srhit.show { display:block; }
+.ral-srhit.zero { color:#B5473D; }
 .ral-none2 { text-align:center; color:var(--text3); font-size:12.5px; padding:18px 6px; }
 .ral-note2 { font-size:11px; color:var(--text3); background:var(--bg3); border-radius:9px; padding:8px 10px; margin-top:6px; }
 .ral-telbtn { display:block; text-align:center; text-decoration:none; background:#1A6FB5; color:#fff; font-weight:900; font-size:15px; border-radius:12px; padding:12px; margin:8px 0 10px; }
@@ -21470,7 +21481,7 @@ function rcAlOpenDB(){
   if(!rcAl.data){ showToast('잠시 후 다시 눌러 주세요'); return; }
   var brs=rcAl.data.dbBranches||[];
   if(!rcAlDB.br || brs.indexOf(rcAlDB.br)<0){ var mb=_alMyBranch(); rcAlDB.br = brs.indexOf(mb)>=0 ? mb : (brs[0]||mb); }
-  rcAlDB.sel={};
+  rcAlDB.sel={}; rcAlDB.q='';
   rcAlRenderDB();
 }
 function rcAlRenderDB(){
@@ -21480,9 +21491,11 @@ function rcAlRenderDB(){
   function srt(a,b){ var d=(parseInt(a.miss,10)||0)-(parseInt(b.miss,10)||0); if(d) return d; return String(a.lastAt).localeCompare(String(b.lastAt)); }
   pool.sort(srt); mine.sort(srt); taken.sort(srt);
   var tab=rcAlDB.tab;
-  var h='<div class="ral-shh" style="display:flex;justify-content:space-between;align-items:center">📒 '+_alBrKo(br)+' 부재 DB <span class="ral-cnt">'+rows.length+'건</span></div>';
+  var h='<div class="ral-shh ral-dbh"><span>📒 '+_alBrKo(br)+' 부재 DB</span><span class="ral-cnt">'+rows.length+'건</span></div>';
   var brs=(rcAl.data.dbBranches||[]);
   if(brs.length>1) h+='<div class="ral-tabs" style="margin-bottom:6px">'+brs.map(function(b){ return '<span class="'+(b===br?'on':'')+'" onclick="rcAlDB.br=\''+b+'\';rcAlDB.sel={};rcAlRenderDB()">'+_alBrIcon(b)+' '+_alBrKo(b)+'</span>'; }).join('')+'</div>';
+  var _q=rcAlDB.q||'';
+  h+='<div class="ral-srch'+(_q?' has':'')+'" id="ralDbSrch"><span class="ic">🔍</span><input type="search" id="ralDbQ" placeholder="이름 또는 전화번호로 찾기" autocomplete="off" enterkeyhint="search" value="'+rc2Esc(_q)+'" oninput="rcAlDbSearch(this.value)" onkeydown="if(event.key===\'Enter\')this.blur()"><button type="button" class="clr" onclick="rcAlDbSearch(\'\',1)">✕</button></div><div class="ral-srhit" id="ralDbHit"></div>';
   h+='<div class="ral-tabs">'
     +'<span class="'+(tab==='pool'?'on':'')+'" onclick="rcAlDB.tab=\'pool\';rcAlRenderDB()">남은 것 '+pool.length+'</span>'
     +'<span class="'+(tab==='taken'?'on':'')+'" onclick="rcAlDB.tab=\'taken\';rcAlRenderDB()">가져간 것 '+(taken.length+mine.length)+'</span>'
@@ -21496,7 +21509,7 @@ function rcAlRenderDB(){
     if(pool.length) list+='<div class="ral-quick"><button type="button" onclick="rcAlDbQuick(5)">＋ 앞에서 5개</button><button type="button" onclick="rcAlDbQuick(10)">＋ 10개</button><button type="button" onclick="rcAlDbQuick(0)">선택 해제</button></div>';
     for(var a=0;a<pool.length;a++){
       var p=pool[a], on=!!rcAlDB.sel[p.id];
-      list+='<div class="ral-row'+(on?' sel':'')+'" onclick="rcAlDbToggle(\''+p.id+'\')"><span class="ck">'+(on?'✓':'')+'</span><div class="m"><div class="nm">'+(p.name?rc2Esc(p.name):'(이름 없음)')+_alAgeTx(p)+' '+cnt(p.miss, p)+'</div><div class="tel">'+rc2Esc(_alPhFmt(p.phone))+'</div><div class="h">'+lastTx(p)+'</div></div>'
+      list+='<div class="ral-row'+(on?' sel':'')+'"'+_alDbKeyAttr(p,true)+' onclick="rcAlDbToggle(\''+p.id+'\')"><span class="ck">'+(on?'✓':'')+'</span><div class="m"><div class="nm">'+(p.name?rc2Esc(p.name):'(이름 없음)')+_alAgeTx(p)+' '+cnt(p.miss, p)+'</div><div class="tel">'+rc2Esc(_alPhFmt(p.phone))+'</div><div class="h">'+lastTx(p)+'</div></div>'
         +'<div class="ral-acts2"><button type="button" class="ral-mini" onclick="event.stopPropagation();rcAlNumEdit(\'db\',\''+p.id+'\')">✏️ 수정</button>'
         +(mgr?('<button type="button" class="ral-mini r" onclick="event.stopPropagation();rcAlDbDelete(\''+p.id+'\')">삭제</button>'):'')+'</div></div>';
     }
@@ -21506,14 +21519,14 @@ function rcAlRenderDB(){
     var all=mine.concat(taken);
     for(var b=0;b<all.length;b++){
       var t=all[b], isMe=String(t.owner).toLowerCase()===me;
-      list+='<div class="ral-row taken"><span class="ck"></span><div class="m"><div class="nm">'+(t.name?rc2Esc(t.name):'(이름 없음)')+_alAgeTx(t)+' <span class="ral-own'+(isMe?' me':'')+'">🔒 '+rc2Esc(t.ownerName||'')+'</span></div><div class="tel">'+rc2Esc((isMe||mgr)?_alPhFmt(t.phone):_alPhMask(t.phone))+'</div></div>'
+      list+='<div class="ral-row taken"'+_alDbKeyAttr(t,isMe||mgr)+'><span class="ck"></span><div class="m"><div class="nm">'+(t.name?rc2Esc(t.name):'(이름 없음)')+_alAgeTx(t)+' <span class="ral-own'+(isMe?' me':'')+'">🔒 '+rc2Esc(t.ownerName||'')+'</span></div><div class="tel">'+rc2Esc((isMe||mgr)?_alPhFmt(t.phone):_alPhMask(t.phone))+'</div></div>'
         +((mgr||isMe)?('<button type="button" class="ral-mini" onclick="rcAlDbRelease(\''+t.id+'\')">반납</button>'):'')+'</div>';
     }
     if(!all.length) list+='<div class="ral-none2">가져간 번호가 없어요</div>';
   } else {
     for(var c=0;c<mine.length;c++){
       var m2=mine[c];
-      list+='<div class="ral-row"><div class="m"><div class="nm">'+(m2.name?rc2Esc(m2.name):'(이름 없음)')+_alAgeTx(m2)+' '+cnt(m2.miss, m2)+'</div><div class="tel">'+rc2Esc(_alPhFmt(m2.phone))+'</div><div class="h">'+lastTx(m2)+'</div></div>'
+      list+='<div class="ral-row"'+_alDbKeyAttr(m2,true)+'><div class="m"><div class="nm">'+(m2.name?rc2Esc(m2.name):'(이름 없음)')+_alAgeTx(m2)+' '+cnt(m2.miss, m2)+'</div><div class="tel">'+rc2Esc(_alPhFmt(m2.phone))+'</div><div class="h">'+lastTx(m2)+'</div></div>'
         +'<div class="ral-acts2"><button type="button" class="ral-call" onclick="rcAlNumCall(\'db\',\''+m2.id+'\')">📞 걸기</button><button type="button" class="ral-mini" onclick="rcAlNumEdit(\'db\',\''+m2.id+'\')">✏️ 수정</button><button type="button" class="ral-mini" onclick="rcAlDbRelease(\''+m2.id+'\')">돌려놓기</button></div></div>';
     }
     if(!mine.length) list+='<div class="ral-none2">"남은 것"에서 골라 가져가세요</div>';
@@ -21522,11 +21535,43 @@ function rcAlRenderDB(){
   h+='<div class="ral-list">'+list+'</div>';
   h+='<div class="ral-btns"><button type="button" class="ral-bt g" onclick="_alSheetClose()">닫기</button></div>';
   _alSheetOpen(h);
+  _alDbApplyQ();
+}
+function _alDbKeyAttr(r, phOk){
+  var k=String(r.name||'').replace(/\s+/g,'').toLowerCase();
+  return ' data-q="'+rc2Esc(k)+'"'+(phOk?(' data-p="'+_alPhKey(r.phone)+'"'):'');
+}
+function _alDbMatch(name, ph, q){
+  q=String(q||'').trim(); if(!q) return true;
+  var qn=q.replace(/\s+/g,'').toLowerCase();
+  if(qn && String(name||'').replace(/\s+/g,'').toLowerCase().indexOf(qn)>=0) return true;
+  var qd=q.replace(/\D/g,'');
+  return qd.length>=3 && qd.length===q.replace(/[\s-]/g,'').length && String(ph||'').indexOf(qd)>=0;
+}
+function _alDbApplyQ(){
+  var box=document.getElementById('ralNumBox'); if(!box) return;
+  var q=rcAlDB.q||'', rows=box.querySelectorAll('.ral-list .ral-row'), n=0;
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i], ok=_alDbMatch(r.getAttribute('data-q'), r.getAttribute('data-p'), q);
+    r.style.display=ok?'':'none'; if(ok) n++;
+  }
+  var none=box.querySelector('.ral-list .ral-none2'); if(none && rows.length) none.style.display='none';
+  var hit=document.getElementById('ralDbHit'), sb=document.getElementById('ralDbSrch');
+  if(sb) sb.classList.toggle('has', !!q);
+  if(hit){
+    hit.className='ral-srhit'+(q?(' show'+(n?'':' zero')):'');
+    hit.textContent=q?(n?('🔍 「'+q.trim()+'」 '+n+'건 찾았어요'):('🔍 「'+q.trim()+'」 이 탭에는 없어요 — 다른 탭도 확인해 보세요')):'';
+  }
+}
+function rcAlDbSearch(v, clear){
+  rcAlDB.q=String(v||'');
+  if(clear){ var inp=document.getElementById('ralDbQ'); if(inp){ inp.value=''; inp.focus(); } }
+  _alDbApplyQ();
 }
 function rcAlDbToggle(id){ rcAlDB.sel[id]=!rcAlDB.sel[id]; rcAlRenderDB(); }
 function rcAlDbQuick(n){
   rcAlDB.sel={}; if(!n){ rcAlRenderDB(); return; }
-  var rows=_alDbRows(rcAlDB.br).filter(function(r){ return !r.owner; });
+  var rows=_alDbRows(rcAlDB.br).filter(function(r){ return !r.owner && _alDbMatch(String(r.name||''), _alPhKey(r.phone), rcAlDB.q); });
   rows.sort(function(a,b){ var d=(parseInt(a.miss,10)||0)-(parseInt(b.miss,10)||0); if(d) return d; return String(a.lastAt).localeCompare(String(b.lastAt)); });
   for(var i=0;i<rows.length && i<n;i++) rcAlDB.sel[rows[i].id]=true;
   rcAlRenderDB();
@@ -29582,7 +29627,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 329;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 330;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
