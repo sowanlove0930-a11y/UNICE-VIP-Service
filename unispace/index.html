@@ -29627,7 +29627,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 330;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 331;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -39796,46 +39796,134 @@ function _cpHomeHtml(){
   return h;
 }
 // ── recording (the FP's own practice voice only)
+// 331: a recording = one or more pieces (segs). If the phone stops the recorder by itself (iPhone: playing a sound, a phone
+// notice, the screen going off …) a new piece starts at once on the same microphone (or a fresh one); at the end several
+// pieces are put back on one time line (gaps = silence, so the reaction marks stay in place) and sent as one WAV file.
+var CP_REC_WAIT = 10000, CP_REC_RESTARTS = 8, CP_WAV_RATE = 16000;
 function _cpRecStart(cb){
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined'){ cb(false, 'nosupport'); return; }
-  navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } }).then(function(stream){
-    var cand = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'], mime = '', mr = null;
-    for(var i = 0; i < cand.length; i++){ try { if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cand[i])){ mime = cand[i]; break; } } catch(e){} }
-    try { mr = new MediaRecorder(stream, mime ? { mimeType:mime, audioBitsPerSecond:40000 } : { audioBitsPerSecond:40000 }); }
-    catch(e1){ try { mr = new MediaRecorder(stream); } catch(e2){ mr = null; } }
-    if(!mr){ try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e3){} cb(false, 'nosupport'); return; }
-    var R = { stream:stream, mr:mr, chunks:[], mime:String(mr.mimeType || mime || 'audio/webm').split(';')[0] || 'audio/webm', slice:_cpApple() ? 1000 : 0, endAt:0, stopping:false };
-    mr.ondataavailable = function(e){ if(e.data && e.data.size) R.chunks.push(e.data); };
-    // 322: the mic stopped by itself (iPhone screen lock, another app, call): keep what was recorded
-    var gone = function(){ if(R.stopping || R.endAt) return; R.endAt = Date.now(); _cpRecLost(R); };
-    mr.onerror = gone; mr.onstop = gone;
-    try { stream.getAudioTracks().forEach(function(t){ t.addEventListener('ended', gone); }); } catch(e6){}
-    try { if(R.slice) mr.start(R.slice); else mr.start(); } catch(e4){ try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e5){} cb(false, 'nosupport'); return; }
+  _cpMic(function(stream, err){
+    if(!stream){ cb(false, err || 'denied'); return; }
+    var R = { stream:stream, segs:[], mime:'', slice:_cpApple() ? 1000 : 0, endAt:0, stopping:false, restarts:0, log:[] };
+    if(!_cpSegStart(R)){ _cpTracksOff(stream); cb(false, 'nosupport'); return; }
+    R.mime = R.segs[0].mime;
     _cp.recorder = R; cb(true);
-  }).catch(function(err){ cb(false, (err && err.name) || 'denied'); });
+  });
 }
-function _cpRecStop(cb){
+function _cpMic(cb){
+  try {
+    navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } })
+      .then(function(s){ cb(s); }).catch(function(err){ cb(null, (err && err.name) || 'denied'); });
+  } catch(e){ cb(null, 'nosupport'); }
+}
+function _cpTracksOff(stream){ try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e){} }
+function _cpLive(stream){ try { var t = stream.getAudioTracks(); return !!t.length && t[0].readyState === 'live'; } catch(e){ return false; } }
+function _cpSegStart(R){   // one MediaRecorder on R.stream → R.segs gets a new piece; false = could not start
+  var cand = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'], mime = '', mr = null;
+  for(var i = 0; i < cand.length; i++){ try { if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cand[i])){ mime = cand[i]; break; } } catch(e){} }
+  try { mr = new MediaRecorder(R.stream, mime ? { mimeType:mime, audioBitsPerSecond:40000 } : { audioBitsPerSecond:40000 }); }
+  catch(e1){ try { mr = new MediaRecorder(R.stream); } catch(e2){ mr = null; } }
+  if(!mr) return false;
+  var seg = { mr:mr, chunks:[], t0:Date.now(), end:0, dead:false, mime:String(mr.mimeType || mime || 'audio/webm').split(';')[0] || 'audio/webm' };
+  mr.ondataavailable = function(e){ if(e.data && e.data.size) seg.chunks.push(e.data); };
+  var gone = function(why){ return function(ev){ _cpSegGone(R, seg, why + (ev && ev.error && ev.error.name ? ':' + ev.error.name : '')); }; };
+  mr.onerror = gone('error'); mr.onstop = gone('stop');
+  try { R.stream.getAudioTracks().forEach(function(t){ t.addEventListener('ended', gone('ended')); }); } catch(e6){}
+  try { if(R.slice) mr.start(R.slice); else mr.start(); } catch(e4){ return false; }
+  seg.t0 = Date.now(); R.segs.push(seg);
+  return true;
+}
+function _cpSegGone(R, seg, why){   // the phone stopped this piece by itself
+  if(R.stopping || seg.dead || R.endAt) return;
+  seg.dead = true; seg.end = Date.now(); R.log.push(why + '@' + Math.round((seg.end - R.segs[0].t0) / 1000));
+  if(seg !== R.segs[R.segs.length - 1]) return;
+  if(R.restarts >= CP_REC_RESTARTS){ R.endAt = seg.end; _cpRecLost(R); return; }
+  R.restarts++;
+  setTimeout(function(){
+    if(R.stopping || R.endAt || _cp.recorder !== R) return;
+    if(_cpLive(R.stream) && _cpSegStart(R)){ _cpRecResumed(R); return; }
+    _cpMic(function(stream){
+      if(R.stopping || R.endAt || _cp.recorder !== R){ if(stream) _cpTracksOff(stream); return; }
+      if(stream){ var old = R.stream; R.stream = stream; if(_cpSegStart(R)){ _cpTracksOff(old); _cpRecResumed(R); return; } R.stream = old; _cpTracksOff(stream); }
+      R.endAt = seg.end; _cpRecLost(R);
+    });
+  }, 250);
+}
+function _cpRecResumed(R){
+  var c = _cp.call; if(!c || !c.recOn || c.ending) return;
+  if(!R.toldResume){ R.toldResume = true; _cpToast('🎙 녹음이 잠깐 끊겨서 이어서 녹음하고 있어요'); }
+}
+function _cpRecStop(cb, drop){
   var R = _cp.recorder; _cp.recorder = null;
   if(!R){ cb(null); return; }
-  // 322: iPhone may give the last piece late or never fire stop: wait up to 10 s, use what came (3 s is enough once a piece is in)
+  // iPhone may give the last piece late or never fire stop: wait up to 10 s, use what came (3 s is enough once a piece is in)
   R.stopping = true;
-  var fired = false, t0 = Date.now(), iv = 0, slow = 0, fin = function(){
+  var seg = R.segs[R.segs.length - 1], fired = false, t0 = Date.now(), iv = 0, slow = 0, fin = function(){
     if(fired) return; fired = true; clearInterval(iv); clearTimeout(slow);
-    try { R.stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e){}
-    var blob = null; try { blob = new Blob(R.chunks, { type:R.mime }); } catch(e2){}
-    cb(blob && blob.size > 300 ? blob : null, R);
+    _cpTracksOff(R.stream);
+    if(drop){ cb(null, R); return; }
+    _cpRecBlob(R, function(blob){ cb(blob && blob.size > 300 ? blob : null, R); });
   };
-  iv = setInterval(function(){ var w = Date.now() - t0; if(w >= CP_REC_WAIT || (w >= 3000 && R.chunks.length)) fin(); }, 250);
-  slow = setTimeout(function(){ if(!fired) _cpToast('🎙 녹음을 정리하고 있어요…'); }, 900);
-  try { R.mr.onstop = function(){ setTimeout(fin, 60); }; if(R.mr.state !== 'inactive') R.mr.stop(); else if(R.chunks.length) setTimeout(fin, 60); } catch(e){ if(R.chunks.length) fin(); }
+  if(!seg.end) seg.end = Date.now();
+  iv = setInterval(function(){ var w = Date.now() - t0; if(w >= CP_REC_WAIT || (w >= 3000 && seg.chunks.length) || (seg.dead && seg.chunks.length && w >= 300)) fin(); }, 250);
+  slow = setTimeout(function(){ if(!fired && !drop) _cpToast('🎙 녹음을 정리하고 있어요…'); }, 900);
+  try { seg.mr.onstop = function(){ setTimeout(fin, 60); }; if(seg.mr.state !== 'inactive') seg.mr.stop(); else if(seg.chunks.length) setTimeout(fin, 60); } catch(e){ if(seg.chunks.length) fin(); }
 }
-var CP_REC_WAIT = 10000;
+function _cpRecBlob(R, cb){   // one piece → that file as it is; several → one WAV on the recording's time line
+  var segs = R.segs.filter(function(s){ return s.chunks.length; }), mk = function(s){ try { return new Blob(s.chunks, { type:s.mime }); } catch(e){ return null; } };
+  if(!segs.length){ cb(null); return; }
+  if(segs.length === 1){ R.outMime = segs[0].mime; cb(mk(segs[0])); return; }
+  _cpWavJoin(R.segs[0].t0, segs.map(function(s){ return { blob:mk(s), at:s.t0, end:s.end }; }), function(wav){
+    if(wav){ R.outMime = 'audio/wav'; cb(wav); return; }
+    R.outMime = segs[0].mime; cb(mk(segs[0]));   // the phone could not read its own pieces: send the first one
+  });
+}
+function _cpWavJoin(base, parts, cb){
+  var Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext, out = [], left = parts.length, done = false;
+  if(!Ctx){ cb(null); return; }
+  var finish = function(){
+    if(done) return; done = true;
+    var ok = out.filter(Boolean); if(!ok.length){ cb(null); return; }
+    var len = 0; ok.forEach(function(p){ len = Math.max(len, p.off + p.pcm.length); });
+    len = Math.min(len, CP_WAV_RATE * 200);
+    var pcm = new Float32Array(len);
+    ok.forEach(function(p){ var a = p.pcm, o = p.off; for(var i = 0; i < a.length && o + i < len; i++) pcm[o + i] = a[i]; });
+    cb(_cpWav(pcm, CP_WAV_RATE));
+  };
+  var one = function(k){
+    var p = parts[k], next = function(r){ out[k] = r; if(--left <= 0) finish(); };
+    if(!p.blob){ next(null); return; }
+    var rd = new FileReader();
+    rd.onerror = function(){ next(null); };
+    rd.onload = function(){
+      try {
+        var ctx = new Ctx(1, CP_WAV_RATE, CP_WAV_RATE), fired = false;
+        var okF = function(buf){ if(fired) return; fired = true; var n = buf.numberOfChannels, a = new Float32Array(buf.length), ch, i;
+          for(ch = 0; ch < n; ch++){ var d = buf.getChannelData(ch); for(i = 0; i < a.length; i++) a[i] += d[i] / n; }
+          var room = p.end ? Math.round((p.end - p.at) / 1000 * CP_WAV_RATE) + CP_WAV_RATE : a.length;   // a piece cannot be longer than it ran (+1 s)
+          next({ off:Math.max(0, Math.round((p.at - base) / 1000 * CP_WAV_RATE)), pcm:a.length > room ? a.subarray(0, room) : a }); };
+        var bad = function(){ if(fired) return; fired = true; next(null); };
+        var pr = ctx.decodeAudioData(rd.result, okF, bad); if(pr && pr.then) pr.then(okF, bad);
+      } catch(e){ next(null); }
+    };
+    rd.readAsArrayBuffer(p.blob);
+  };
+  for(var k = 0; k < parts.length; k++) one(k);
+  setTimeout(function(){ if(!done){ finish(); } }, 15000);
+}
+function _cpWav(pcm, rate){   // 16-bit mono PCM WAV
+  var n = pcm.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf), w = function(o, s){ for(var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+  for(var i = 0, o = 44; i < n; i++, o += 2){ var s = Math.max(-1, Math.min(1, pcm[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); }
+  return new Blob([buf], { type:'audio/wav' });
+}
 function _cpApple(){   // iPhone · iPad · Safari: WebKit recorder
   try { var u = navigator.userAgent || ''; return /iP(hone|ad|od)/.test(u) || (/Macintosh/.test(u) && navigator.maxTouchPoints > 1) || (/Safari\//.test(u) && !/(Chrome|Chromium|Android|Edg|OPR|SamsungBrowser|Firefox)/.test(u)); } catch(e){ return false; }
 }
-function _cpRecLost(R){   // the mic stopped during the call: say so once; the end screen keeps the part up to here
+function _cpRecLost(R){   // the mic stopped during the call and could not start again: say so once; the end screen keeps the part up to here
   var c = _cp.call; if(!c || !c.recOn || c.ending || _cp.recorder !== R) return;
-  c.recCut = true; _cpToast('🎙 화면이 꺼지거나 다른 앱으로 가서 녹음이 멈췄어요. 여기까지는 보낼 수 있어요');
+  c.recCut = true; _cpToast('🎙 녹음이 멈췄어요. 여기까지는 보낼 수 있어요');
   if(_cp.view === 'call') _cpRender();
 }
 function _cpDropRec(){
@@ -39959,7 +40047,7 @@ function _cpTtsStop(){
 function cpStart(tid){
   var T = _cpTarget(tid); if(!T || !T.stages.length) return;
   _cpStopAudio(); _cpDropRec(); _cpTtsStop();
-  if(_cp.recorder) _cpRecStop(function(){});
+  if(_cp.recorder) _cpRecStop(function(){}, true);
   _cp.call = { tid:tid, i:0, phase:'say', t0:Date.now(), marks:[], heard:0, recOn:false, recBusy:false, recT0:0, mime:'', recFail:false, react:null, model:false, dur:0, ending:false, vo:_cpVoPick(), pre:'' };
   _cp.view = 'call'; _cpRender(); _cpWake(true);
   clearInterval(_cp.timer); _cp.timer = setInterval(_cpTick, 500);
@@ -39991,7 +40079,7 @@ function cpRecOn(){   // 🎙 녹음하기 (call screen): from this moment the F
   c.recBusy = true; _cpRender();
   _cpRecStart(function(ok, why){
     c.recBusy = false;
-    if(_cp.call !== c || c.ending || !_cpIsOpen() || _cp.view !== 'call'){ if(ok) _cpRecStop(function(){}); return; }
+    if(_cp.call !== c || c.ending || !_cpIsOpen() || _cp.view !== 'call'){ if(ok) _cpRecStop(function(){}, true); return; }
     if(ok){
       c.recOn = true; c.recFail = false; c.mime = _cp.recorder.mime; c.recT0 = Date.now(); _cpToast('🎙 지금부터 녹음돼요');
       if(_cpHiDue(c)) _cpHiSoon(CP_HI_REC);   // 312: 여보세요 once more, now inside the recording
@@ -40107,7 +40195,7 @@ function cpHang(){
 }
 function _cpAbortCall(){
   clearInterval(_cp.timer); _cp.timer = 0; _cpTtsStop(); _cpWake(false);
-  if(_cp.recorder) _cpRecStop(function(){});
+  if(_cp.recorder) _cpRecStop(function(){}, true);
   _cp.call = null;
 }
 function _cpFinish(){
@@ -40122,7 +40210,7 @@ function _cpFinish(){
   } else c.dur = Math.max(1, Math.round(_cpElapsed()));
   var done = function(blob, R){
     if(blob && R && R.endAt && c.recOn){ var lim = Math.max(1, Math.round((R.endAt - c.recT0) / 1000)); if(c.dur > lim){ c.dur = lim; c.marks = c.marks.filter(function(m){ return m.t <= lim; }); c.heard = _cpObjN(c.marks); } c.recCut = true; }
-    _cp.rec = blob ? { blob:blob, url:URL.createObjectURL(blob), mime:c.mime || blob.type || 'audio/webm', cid:'cp_' + Date.now().toString(36) + Math.floor(Math.random() * 1e8).toString(36) } : null;
+    _cp.rec = blob ? { blob:blob, url:URL.createObjectURL(blob), mime:(R && R.outMime) || c.mime || blob.type || 'audio/webm', cid:'cp_' + Date.now().toString(36) + Math.floor(Math.random() * 1e8).toString(36) } : null;
     _cp.sent = false; _cp.sending = false; _cp.view = 'end'; _cpRender();
     var el = document.getElementById('cpScr'); if(el) el.scrollTop = 0;
   };
