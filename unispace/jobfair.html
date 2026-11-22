@@ -301,6 +301,7 @@ button.u{font-size:inherit;color:var(--wine-600);font-weight:600;text-decoration
 .j9 .s3 button.b{background:#fff;color:#6b5a62;box-shadow:var(--sh-1)}
 .j9.need{background:#fff4f4;border-radius:10px;padding-left:8px;padding-right:8px}
 .box.need{border-color:var(--danger)}
+.care-q{font-size:14.5px;font-weight:600;color:var(--ink-2);margin-top:8px;line-height:1.5}
 .kid{display:flex;align-items:center;gap:12px;margin-top:14px;padding:14px 16px;border-radius:16px;background:#fff;border:1px solid var(--line);font-size:15px;font-weight:600;color:var(--ink-2)}
 .restart{font-size:13px;font-weight:700;color:var(--mute);display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:10px}
 .restart:hover{background:var(--cream-2)}
@@ -362,8 +363,8 @@ var ref=String(qs.get('r')||'').toLowerCase(); if(!/^[a-f0-9]{12}$/.test(ref)) r
 var SRC=kiosk?'kiosk':(/^(qr|kakao)$/.test(qs.get('src')||'')?qs.get('src'):'link');
 var KEY='jf_state_v1', sender=null, busy=false, lockQ=false, kTimer=null;
 function cid(){var s='';for(var i=0;i<16;i++)s+='abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random()*36));return s;}
-function fresh(){return {s:'start',i:0,name:'',tel:'',age:'',agree:false,call:false,ans:[],j9:[-1,-1,-1,-1,-1,-1,-1,-1,-1],mentor:[],kid:false,tags:[],when:'',from:10,to:15,no:'',cid:cid()};}
-function load(){if(kiosk)return null;try{var x=JSON.parse(sessionStorage.getItem(KEY)||'null');if(x&&x.s&&Array.isArray(x.ans)&&Array.isArray(x.j9))return x;}catch(e){}return null;}
+function fresh(){return {s:'start',i:0,name:'',tel:'',age:'',agree:false,call:false,ans:[],j9:[-1,-1,-1,-1,-1,-1,-1,-1,-1],mentor:[],kid:false,care:-1,tags:[],when:'',from:10,to:15,no:'',cid:cid()};}
+function load(){if(kiosk)return null;try{var x=JSON.parse(sessionStorage.getItem(KEY)||'null');if(x&&x.s&&Array.isArray(x.ans)&&Array.isArray(x.j9)){if(typeof x.care!=='number')x.care=-1;return x;}}catch(e){}return null;}
 function save(){if(kiosk)return;try{sessionStorage.setItem(KEY,JSON.stringify(st.s==='done'?{s:'done',no:st.no,mentor:st.mentor,ans:[],j9:[]}:st));}catch(e){}}
 var st=load()||fresh();
 
@@ -423,8 +424,7 @@ function vMentor(){
   var n=st.mentor.length;
   return '<div class="fadein"><div class="head-row"><div><h1 class="q-title">멘토링 받고 싶은 분야를<br>골라 주세요</h1><p class="lead">최대 3개까지 골라요. 고른 순서가 순위예요. 다시 누르면 빠져요.</p></div><span class="count">'+I('check')+n+' / 3 골랐어요</span></div>'+
   '<div class="mg">'+FIELDS.map(function(f,i){var o=st.mentor.indexOf(i)+1;return '<button class="mt'+(o?' sel':'')+'" data-m="'+i+'" aria-pressed="'+(o>0)+'">'+(o?'<span class="ord">'+o+'</span>':'')+'<span class="ti">'+I(f[0])+'</span><span><b>'+f[1]+'</b><small>'+f[2]+'</small></span></button>';}).join('')+'</div>'+
-  (n?'<div class="picked"><b>내가 고른 순서</b>'+st.mentor.map(function(m,k){return '<span class="pk"><i>'+(k+1)+'</i>'+FIELDS[m][1]+'</span>';}).join('')+'</div>':'')+
-  '<label class="cb kid"><input type="checkbox" id="iKid"'+(st.kid?' checked':'')+'><span class="bx'+(st.kid?'':' off')+'">'+(st.kid?I('check'):'')+'</span><span>아이 키우며 일하는 현직자 이야기도 듣고 싶어요</span></label></div>'+
+  (n?'<div class="picked"><b>내가 고른 순서</b>'+st.mentor.map(function(m,k){return '<span class="pk"><i>'+(k+1)+'</i>'+FIELDS[m][1]+'</span>';}).join('')+'</div>':'')+'</div>'+
   '<div class="foot-nav"><button class="btn btn-ghost" data-act="prev">'+I('arrow-left')+'이전</button><button class="btn btn-primary" data-act="next"'+(n?'':' disabled')+'>다음'+I('arrow-right')+'</button></div>';
 }
 function hourOpts(lo,hi,v){var o='';for(var h=lo;h<=hi;h++)o+='<option value="'+h+'"'+(h===v?' selected':'')+'>'+h+'시</option>';return o;}
@@ -436,6 +436,7 @@ function vCond(){
    '<div class="box" id="bWhen"><h3>'+I('calendar-heart')+'일할 수 있는 시간</h3><div class="seg">'+['평일','주말','상관없어요'].map(function(w){return '<button class="'+(st.when===w?'on':'')+'" data-w="'+w+'">'+w+'</button>';}).join('')+'</div>'+
    (any?'':'<div class="time"><div class="sel-box"><select id="sFrom" aria-label="시작 시간">'+hourOpts(6,22,st.from)+'</select>'+I('chevron-down')+'</div><em>~</em><div class="sel-box"><select id="sTo" aria-label="끝나는 시간">'+hourOpts(7,23,st.to)+'</select>'+I('chevron-down')+'</div></div>'+
    '<div class="hours" id="hrs">'+hoursTxt()+'</div>')+'</div>'+
+   '<div class="box" id="bCare"><h3>'+I('heart')+'육아와 일</h3><p class="care-q">일을 고를 때 아이 돌봄과 함께할 수 있는지가 중요한가요?</p><div class="seg">'+['아주 중요해요','조금 중요해요','해당 없어요'].map(function(w,k){return '<button class="'+(st.care===k?'on':'')+'" data-c="'+k+'">'+w+'</button>';}).join('')+'</div></div>'+
   '</div><div class="box" id="bJ9"><h3>'+I('lightbulb')+'이런 일은 어떻게 생각하세요?</h3><div class="jobs9">'+JOBS9.map(function(j,i){var s=st.j9[i];return '<div class="j9" id="j9_'+i+'"><span>'+j+'</span><span class="s3">'+['좋아요','글쎄요','별로예요'].map(function(t,k){return '<button class="'+(s===k?['g','m','b'][k]:'')+'" data-j="'+i+'" data-k="'+k+'" aria-pressed="'+(s===k)+'">'+t+'</button>';}).join('')+'</span></div>';}).join('')+'</div></div></div></div>'+
   '<div class="foot-nav"><button class="btn btn-ghost" data-act="prev">'+I('arrow-left')+'이전</button><button class="btn btn-primary" data-act="submit">'+I('circle-check-big')+(busy?'보내는 중…':'결과 제출하기')+'</button></div>';
 }
@@ -504,10 +505,11 @@ function submit(){
   for(var i=0;i<50;i++)if(!(st.ans[i]>=1&&st.ans[i]<=5)){toast('Q '+(i+1)+' 답이 빠졌어요');go('q',i);return;}
   if(!st.when){var w=document.getElementById('bWhen');w.classList.add('need');w.scrollIntoView({behavior:'smooth',block:'center'});toast('일할 수 있는 시간을 골라 주세요');return;}
   if(st.when!=='상관없어요'&&!(st.to>st.from)){document.getElementById('bWhen').classList.add('need');toast('끝나는 시간을 시작 시간보다 늦게 골라 주세요');return;}
+  if(!(st.care>=0&&st.care<=2)){var c=document.getElementById('bCare');c.classList.add('need');c.scrollIntoView({behavior:'smooth',block:'center'});toast('「육아와 일」을 골라 주세요');return;}
   var miss=st.j9.indexOf(-1);
   if(miss>=0){st.j9.forEach(function(v,k){if(v<0)document.getElementById('j9_'+k).classList.add('need');});document.getElementById('j9_'+miss).scrollIntoView({behavior:'smooth',block:'center'});toast('「이런 일은 어떻게 생각하세요?」를 모두 골라 주세요');return;}
   busy=true;render(false);
-  var d={name:st.name.trim(),tel:st.tel,age:parseInt(st.age,10),agree:st.agree===true,call:st.call===true,ans:st.ans.slice(0,50),j9:st.j9,mentor:st.mentor,kid:st.kid===true,
+  var d={name:st.name.trim(),tel:st.tel,age:parseInt(st.age,10),agree:st.agree===true,call:st.call===true,ans:st.ans.slice(0,50),j9:st.j9,mentor:st.mentor,care:st.care,
          tags:st.tags,when:st.when,from:st.from,to:st.to,src:SRC,cid:st.cid};
   fetch(GAS,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'jobfairSubmit',r:ref,d:JSON.stringify(d)})})
    .then(function(r){return r.json();})
@@ -536,6 +538,7 @@ document.addEventListener('click',function(e){
     if(k>=0)st.mentor.splice(k,1);else if(st.mentor.length>=3){toast('3개까지 고를 수 있어요. 고른 것을 다시 누르면 빠져요');return;}else st.mentor.push(m);
     save();render(false);return;}
   if(b.hasAttribute('data-t')){var t=+b.getAttribute('data-t'),q=st.tags.indexOf(t);if(q>=0)st.tags.splice(q,1);else st.tags.push(t);save();render(false);return;}
+  if(b.hasAttribute('data-c')){st.care=+b.getAttribute('data-c');save();render(false);return;}
   if(b.hasAttribute('data-w')){st.when=b.getAttribute('data-w');save();render(false);return;}
   if(b.hasAttribute('data-j')){st.j9[+b.getAttribute('data-j')]=+b.getAttribute('data-k');save();render(false);return;}
 });
