@@ -3634,6 +3634,13 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
   .jf-staff .bars { grid-template-columns:1fr 1fr; width:100%; }
 }
 
+.jf-prpick button { position:relative; padding-left:50px !important; }
+.jf-prpick .cb { position:absolute; left:16px; top:15px; width:22px; height:22px; border-radius:7px; border:2px solid #e5cfc5; background:#fff; display:flex; align-items:center; justify-content:center; color:transparent; font-style:normal; }
+.jf-prpick .cb .ic { font-size:14px; }
+.jf-prpick button.on { border-color:#9e2f62; background:#fcf2f6; }
+.jf-prpick button.on .cb { background:#9e2f62; border-color:#9e2f62; color:#fff; }
+.jf-prgo { margin-top:14px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border:0; border-radius:15px; background:linear-gradient(135deg,#9e2f62,#6d1740); color:#fff; font-family:inherit; font-size:16px; font-weight:900; cursor:pointer; }
+.jf-prgo:disabled { background:#e9dfda; color:#9b8a91; cursor:default; }
 .rc2-view { display:none; }
 .rc2-view.active { display:block; }
 .rc2-summary { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
@@ -29839,7 +29846,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 334;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 335;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -41380,17 +41387,23 @@ function jfResultHtml(it){   // 334: 보완하면 좋은 점 · 육아와 일 ·
 }
 
 // ── 334 인쇄: 참가자용 (FP 적합 점수·연락처 없이 1장) · 관리자용 (FP 적합 · 메모 · 50문항 답까지)
-function jfPrintAsk(){
+function jfPrintAsk(){   // 335: 체크 두 개 · 둘 다면 한 번에
   var it = _jf.item; if (!it) return;
   var ov = document.createElement('div'); ov.className = 'jf-ov'; ov.id = 'jfPrOv';
-  ov.innerHTML = '<div class="jf-md" role="dialog" aria-modal="true"><button type="button" class="x" aria-label="닫기">✕</button><div class="ti">' + _jfI('printer') + '</div><h3>어떤 결과지를 인쇄할까요?</h3><p>A4 용지로 나와요</p>' +
-    '<div class="jf-prpick"><button type="button" data-k="p"><b>👤 참가자용</b><span>참가자에게 드리는 결과지 · FP 적합 점수·연락처 없이 · 50문항 답까지 2장</span></button>' +
-    '<button type="button" data-k="a"><b>🔒 관리자용</b><span>FP 적합 점수 · 메모 · 50문항 답까지 · 2장</span></button></div></div>';
+  ov.innerHTML = '<div class="jf-md" role="dialog" aria-modal="true"><button type="button" class="x" aria-label="닫기">✕</button><div class="ti">' + _jfI('printer') + '</div><h3>어떤 결과지를 인쇄할까요?</h3><p>둘 다 고르면 한 번에 인쇄돼요 · A4</p>' +
+    '<div class="jf-prpick"><button type="button" data-k="p" class="on" aria-pressed="true"><i class="cb">' + _jfI('check') + '</i><b>👤 참가자용</b><span>참가자에게 드리는 결과지 · FP 적합 점수·연락처 없이 · 50문항 답까지 2장</span></button>' +
+    '<button type="button" data-k="a" class="on" aria-pressed="true"><i class="cb">' + _jfI('check') + '</i><b>🔒 관리자용</b><span>FP 적합 점수 · 메모 · 50문항 답까지 · 2장</span></button></div>' +
+    '<button type="button" class="jf-prgo" id="jfPrGo"></button></div>';
   document.body.appendChild(ov);
+  var sync = function(){ var p = ov.querySelector('[data-k="p"]').classList.contains('on'), a = ov.querySelector('[data-k="a"]').classList.contains('on'), go = ov.querySelector('#jfPrGo');
+    go.disabled = !p && !a; go.innerHTML = _jfI('printer') + (p && a ? '둘 다 인쇄하기 · 4장' : p ? '참가자용 인쇄하기 · 2장' : a ? '관리자용 인쇄하기 · 2장' : '하나 이상 골라 주세요'); };
+  sync();
   ov.addEventListener('click', function(e){
     if (e.target === ov || e.target.closest('.x')) { ov.remove(); return; }
-    var b = e.target.closest('button[data-k]'); if (!b) return;
-    ov.remove(); jfPrint(b.getAttribute('data-k') === 'a');
+    var b = e.target.closest('button[data-k]');
+    if (b) { b.classList.toggle('on'); b.setAttribute('aria-pressed', b.classList.contains('on') ? 'true' : 'false'); sync(); return; }
+    if (e.target.closest('#jfPrGo')) { var p = ov.querySelector('[data-k="p"]').classList.contains('on'), a = ov.querySelector('[data-k="a"]').classList.contains('on');
+      if (!p && !a) return; ov.remove(); jfPrint(p && a ? 'both' : a); }
   });
 }
 function jfPrintHtml(it, admin){
@@ -41448,8 +41461,8 @@ function jfPrint(admin){
   var old = document.getElementById('jfPrint'); if (old) old.remove();
   var css = document.getElementById('jfPrintCss');
   if (!css) { css = document.createElement('style'); css.id = 'jfPrintCss'; css.textContent = JF_PRINT_CSS; document.head.appendChild(css); }
-  var box = document.createElement('div'); box.id = 'jfPrint'; box.innerHTML = jfPrintHtml(it, admin); document.body.appendChild(box);
-  var t0 = document.title; document.title = '일자리박람회_적성검사_' + it.no + '_' + it.name + (admin ? '_관리자용' : '_참가자용');
+  var box = document.createElement('div'); box.id = 'jfPrint'; box.innerHTML = admin === 'both' ? jfPrintHtml(it, false) + jfPrintHtml(it, true) : jfPrintHtml(it, admin); document.body.appendChild(box);
+  var t0 = document.title; document.title = '일자리박람회_적성검사_' + it.no + '_' + it.name + (admin === 'both' ? '_참가자용_관리자용' : admin ? '_관리자용' : '_참가자용');
   var done = function(){ document.title = t0; var b = document.getElementById('jfPrint'); if (b) b.remove(); window.removeEventListener('afterprint', done); };
   window.addEventListener('afterprint', done);
   setTimeout(function(){ try { window.print(); } catch (e) { done(); showToast('인쇄 창을 열지 못했어요'); } }, 80);
