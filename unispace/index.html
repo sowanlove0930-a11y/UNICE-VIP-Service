@@ -2652,6 +2652,20 @@ body.theme-light .cc-partners .cc-name{ color: #9A7418; }
   display: none; align-items: center; justify-content: center;
 }
 .mgmt-overlay.open { display: flex; }
+/* 업적 속도 비교 (가볍게) */
+.mgmt-box.pc-box{max-width:380px;width:92vw;padding:18px 16px 14px;max-height:90vh}
+.pc-title{font-size:16px;font-weight:800;color:var(--text)}
+.pc-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.pc-hd{display:grid;grid-template-columns:62px 1fr 1fr;gap:6px;font-size:11px;font-weight:700;color:var(--text2);margin:14px 0 2px;text-align:right}
+.pc-row{display:grid;grid-template-columns:62px 1fr 1fr;gap:6px;align-items:center;padding:11px 0;border-top:1px solid var(--border2);text-align:right}
+.pc-row .n{text-align:left;font-size:14px;font-weight:800}
+.pc-row .l{font-size:15px;font-weight:800;color:var(--text);white-space:nowrap}
+.pc-row .t{font-size:13px;font-weight:700;color:var(--text2);white-space:nowrap}
+.pc-row .t i{font-style:normal;display:block;font-size:11.5px;font-weight:800;margin-top:1px}
+.pc-row.tot{background:rgba(201,168,76,.10);border-radius:10px;border-top:none;padding:11px 8px;margin:0 -8px 2px}
+.pc-up{color:#0F7A57}.pc-dn{color:#B23E1C}
+.pc-foot{font-size:10.5px;color:var(--text2);margin-top:8px;line-height:1.5}
+
 /* 모달 열림 중 모바일 당겨서 새로고침(pull-to-refresh) 차단 */
 @media (max-width:600px){
   body.modal-open { overscroll-behavior-y: contain; }
@@ -5048,7 +5062,7 @@ window.UNISPACE_FCM = {
     <div class="stat s-gold" id="st1-card" onclick="onBojangCardClick()" style="cursor:pointer;position:relative">
       <div id="st1-lblrow" style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
         <div class="stat-lbl" id="st1-lbl" style="flex:1;min-width:0;margin-bottom:0">이번 달 보장월초 및 건수</div>
-        <div id="st1-goal-hint" style="display:none;flex-shrink:0;font-size:11px;font-weight:700;color:var(--gold2);opacity:.8;white-space:nowrap">🎯 목표 설정</div>
+        <div id="st1-goal-hint" onclick="event.stopPropagation();_openGoalAdjFromCard()" style="display:none;cursor:pointer;padding:2px 0 6px 8px;flex-shrink:0;font-size:11px;font-weight:700;color:var(--gold2);opacity:.8;white-space:nowrap">🎯 목표 설정</div>
       </div>
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:nowrap;white-space:nowrap">
         <div class="stat-val" id="st1" style="white-space:nowrap;min-width:0">—</div>
@@ -7121,7 +7135,7 @@ function renderBojangCard() {
   var _hint = document.getElementById('st1-goal-hint');
   if(_hint) _hint.style.display = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? '' : 'none';
   var _card = document.getElementById('st1-card');
-  if(_card) _card.style.cursor = (typeof _isManagerUser==='function' && _isManagerUser(currentUser)) ? 'pointer' : 'default';
+  if(_card) _card.style.cursor = 'pointer';
 }
 
 // FP 화면: getMyPerfSummary 결과로 알파/브라보 막대 렌더 (지점 전체)
@@ -15315,8 +15329,9 @@ function openGoalAdj(){
   _gaUpdateSum();
   document.getElementById('goalAdjOverlay').classList.add('open');
 }
-// 보장월초 카드 클릭 -> 대표/지점장이면 목표 설정 모달 열기
-function onBojangCardClick(){
+// 보장월초 카드 클릭 -> 업적 속도 비교 (전월 같은 날 대비). 🎯 목표 설정 글자 -> 목표 설정 (대표/지점장)
+function onBojangCardClick(){ openPaceCompare(); }
+function _openGoalAdjFromCard(){
   if(!_isManagerUser(currentUser)) return; // FP는 목표 설정 권한 없음
   openGoalAdj();
   if(typeof loadGoalAdjFromGas === 'function'){
@@ -15330,6 +15345,41 @@ function onBojangCardClick(){
     });
   }
 }
+
+// ── 업적 속도 비교 (가볍게): 지난달 1일~같은 날 업적 (유니스 전체·알파·브라보) + 이번 달 오늘까지 나란히 ──
+// 보장월초 = r.total (일시납·자동차 제외), 계약일 기준. FP 는 본인 업적만
+function _pcPad(n){ return ('0'+n).slice(-2); }
+function _pcSum(ym, upto, mine){
+  var log=getPerfLog(), uid=currentUser&&currentUser.id, o={ tot:{amt:0,cnt:0}, al:{amt:0,cnt:0}, br:{amt:0,cnt:0} };
+  for(var i=0;i<log.length;i++){
+    var r=log[i]; if(!r) continue;
+    var d=String(r.date||''); if(d.indexOf(ym)!==0 || (parseInt(d.slice(8,10),10)||1)>upto) continue;
+    var br=String(r.branch||''), k=br.indexOf('알파')>=0?'al':(br.indexOf('브라보')>=0?'br':'');
+    if(mine){ if(String(r.fpId||'')!==String(uid)) continue; } else if(!k) continue;
+    var a=_perfRecOf(r).amt, c=_perfCntOf(r);
+    o.tot.amt+=a; o.tot.cnt+=c; if(k){ o[k].amt+=a; o[k].cnt+=c; }
+  }
+  return o;
+}
+function openPaceCompare(){
+  var now=new Date(), y=now.getFullYear(), m=now.getMonth(), today=now.getDate();
+  var py=m?y:y-1, pm=m?m-1:11, dimL=new Date(py,pm+1,0).getDate(), same=Math.min(today,dimL), mN=m+1, mL=pm+1;
+  var mine=!(typeof _bojangShowsTotal==='function' && _bojangShowsTotal(currentUser));
+  var P=_pcSum(py+'-'+_pcPad(mL), same, mine), N=_pcSum(y+'-'+_pcPad(mN), today, mine);
+  document.getElementById('pcSub').textContent=mL+'월 '+same+'일'+(same<today?'(말일)':'')+'까지  vs  '+mN+'월 '+today+'일(오늘)까지';
+  var h='<div class="pc-hd"><span></span><span>'+mL+'/'+same+' 지난달</span><span>'+mN+'/'+today+' 이번 달</span></div>';
+  var rows=mine?[['tot','내 업적','var(--text)']]:[['tot','유니스','var(--gold2)'],['al','알파','var(--alpha-deep)'],['br','브라보','var(--bravo-deep)']];
+  rows.forEach(function(t){
+    var p=P[t[0]], n=N[t[0]], pc=p.amt?Math.round((n.amt-p.amt)/p.amt*100):null;
+    h+='<div class="pc-row'+(t[0]==='tot'&&!mine?' tot':'')+'"><span class="n" style="color:'+t[2]+'">'+t[1]+'</span>'+
+      '<span class="l">'+p.amt.toLocaleString()+'원</span>'+
+      '<span class="t">'+n.amt.toLocaleString()+'원'+(pc===null?'':'<i class="'+(pc>=0?'pc-up':'pc-dn')+'">'+(pc>=0?'▲ +':'▼ ')+pc+'%</i>')+'</span></div>';
+  });
+  h+='<div class="pc-foot">실제 보장월초 기준 (종신 적용 전) · 일시납·🚗자동차 제외 · 계약일 기준</div>';
+  document.getElementById('pcBody').innerHTML=h;
+  document.getElementById('paceOverlay').classList.add('open');
+}
+function closePaceCompare(){ document.getElementById('paceOverlay').classList.remove('open'); }
 function closeGoalAdj(){ document.getElementById('goalAdjOverlay').classList.remove('open'); _scrollToSubmenu(); }
 function _gaSetBranch(b){ _gaBranch=b; _gaRenderTabs(); _gaRenderBranchGoal(); _gaRenderFpList(); _gaUpdateSum(); }
 function _gaRenderTabs(){
@@ -28871,6 +28921,20 @@ function doCheckin() { doSmartCheckin(); }
 </div>
 
 <!-- 목표 조정 모달 (대표/지점장 전용) -->
+
+<!-- 업적 속도 비교 (전월 같은 날 대비) -->
+<div class="mgmt-overlay" id="paceOverlay" style="z-index:666" onclick="if(event.target===this)closePaceCompare()">
+  <div class="mgmt-box pc-box">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+      <div style="min-width:0">
+        <div class="pc-title">📈 지난달 같은 날 업적</div>
+        <div class="pc-sub" id="pcSub"></div>
+      </div>
+      <button type="button" onclick="closePaceCompare()" class="modal-close-x" aria-label="닫기">✕</button>
+    </div>
+    <div id="pcBody"></div>
+  </div>
+</div>
 <div class="mgmt-overlay" id="goalAdjOverlay" style="z-index:666">
   <div class="mgmt-box" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -29846,7 +29910,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 335;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 336;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
