@@ -373,6 +373,9 @@
 .film-frame{grid-area:frame;position:relative;width:340px;aspect-ratio:9/16;border-radius:36px;padding:7px;background:linear-gradient(160deg,rgba(255,255,255,.24),rgba(255,255,255,.05));box-shadow:0 0 0 1px rgba(243,209,132,.4),0 44px 80px -34px rgba(0,0,0,.8)}
 .film-frame:before{content:"";position:absolute;inset:-70px;z-index:-1;border-radius:50%;background:radial-gradient(closest-side,rgba(243,209,132,.26),rgba(243,209,132,0));pointer-events:none}
 .film-frame video{display:block;width:100%;height:100%;object-fit:cover;border-radius:29px;background:#4a0d2c}
+/* 전체 화면 = 영상 전체가 보이게 (대표 2026-11-23) */
+.film-frame video:fullscreen{object-fit:contain;border-radius:0;background:#000}
+.film-frame video:-webkit-full-screen{object-fit:contain;border-radius:0;background:#000}
 .film-play{position:absolute;inset:7px;border-radius:29px;border:0;padding:0 0 9%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:12px;background:linear-gradient(180deg,rgba(40,6,24,0) 55%,rgba(40,6,24,.42));color:#fff;cursor:pointer;font:inherit}
 .film-play .pc{width:78px;height:78px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 10px rgba(255,255,255,.2),0 18px 34px -12px rgba(0,0,0,.65);transition:transform .2s ease}
 .film-play:hover .pc{transform:scale(1.06)}
@@ -761,6 +764,22 @@ section[id]{scroll-margin-top:72px}
     document.getElementById('pvAgain').onclick=function(){try{pv.currentTime=0;}catch(e){}play();};
     pv.addEventListener('play',function(){fr.classList.add('playing');fr.classList.remove('ended');});
     pv.addEventListener('ended',function(){fr.classList.remove('playing');fr.classList.add('ended');pv.controls=false;});
+    /* 340: 가로 화면(PC·태블릿) 전체 화면이면 가로판 영상으로, 나오면 세로판으로 — 보던 곳 그대로 이어서 */
+    var V_PORT='jobfair/video/jobfair-video.mp4',V_LAND='jobfair/video/jobfair-video-land.mp4';
+    var swapTo=function(src){
+      if(pv.getAttribute('src')===src)return;
+      var t=pv.currentTime||0,go=!pv.paused&&!pv.ended;
+      pv.setAttribute('src',src);
+      pv.addEventListener('loadedmetadata',function f(){pv.removeEventListener('loadedmetadata',f);try{pv.currentTime=t;}catch(e){}if(go){var r=pv.play();if(r&&r.catch)r.catch(function(){});}});
+      pv.load();
+    };
+    var onFs=function(){
+      var fe=document.fullscreenElement||document.webkitFullscreenElement;
+      if(fe===pv&&window.screen&&screen.width>screen.height)swapTo(V_LAND);
+      else if(!fe)swapTo(V_PORT);
+    };
+    document.addEventListener('fullscreenchange',onFs);
+    document.addEventListener('webkitfullscreenchange',onFs);
   }
 
   /* 스크롤하면 부드럽게 나타나기 */
