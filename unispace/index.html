@@ -30085,7 +30085,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 344;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 345;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -40351,7 +40351,10 @@ function _cpHomeHtml(){
 // 344: on some iPhones the microphone goes dead ~0.4 s after the customer voice starts to play and nothing tells the page for
 // ~40 s (seen in the WAV files of 2026-11-22/23). iPhone records in 1 s pieces, so "no piece for 2 s" = dead → the microphone is
 // opened again at once (also checked the moment the customer voice ends).
-var CP_REC_WAIT = 10000, CP_REC_RESTARTS = 60, CP_WAV_RATE = 16000, CP_REC_STALL = 2000, CP_SESS_KEY = 'unispace_cp_sessfix';
+// 345: an iPhone gives the FIRST 1 s piece of a new recorder only after 2–3 s, so 344 took healthy recorders for dead and
+// reopened the microphone again and again (1.3 s sound / 1.5 s hole for 10–20 s after each customer line, seen in the files of
+// 2026-11-24). Now a new recorder gets CP_REC_FIRST to deliver its first piece; a stopped piece keeps all the sound it has.
+var CP_REC_WAIT = 10000, CP_REC_RESTARTS = 60, CP_WAV_RATE = 16000, CP_REC_STALL = 2500, CP_REC_FIRST = 6000, CP_SESS_KEY = 'unispace_cp_sessfix';
 function _cpRecStart(cb){
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined'){ cb(false, 'nosupport'); return; }
   _cpMic(function(stream, err){
@@ -40369,7 +40372,7 @@ function _cpSess(on){   // iPhone 16.4+: tell the phone this page plays AND reco
 function _cpRecPoke(ms){   // is the newest piece still getting sound? (iPhone only: it records in 1 s pieces)
   var R = _cp.recorder; if(!R || !R.slice || R.stopping || R.endAt || R.busy) return;
   var seg = R.segs[R.segs.length - 1]; if(!seg || seg.dead) return;
-  if(Date.now() - (seg.last || seg.t0) > ms) _cpSegGone(R, seg, 'stall');
+  if(seg.last ? Date.now() - seg.last > ms : Date.now() - seg.t0 > CP_REC_FIRST) _cpSegGone(R, seg, 'stall');
 }
 function _cpMic(cb){
   _cpSess(true);
@@ -40398,7 +40401,7 @@ function _cpSegStart(R){   // one MediaRecorder on R.stream → R.segs gets a ne
 function _cpSegGone(R, seg, why){   // the phone stopped this piece by itself, or it stopped getting sound ('stall')
   if(R.stopping || seg.dead || R.endAt) return;
   var stall = why === 'stall';
-  seg.dead = true; seg.end = stall ? (seg.last || seg.t0) + 300 : Date.now(); R.log.push(why + '@' + Math.round((seg.end - R.segs[0].t0) / 1000));
+  seg.dead = true; seg.end = Date.now(); R.log.push(why + '@' + Math.round((seg.end - R.segs[0].t0) / 1000));
   if(seg !== R.segs[R.segs.length - 1]) return;
   if(stall){ try { localStorage.setItem(CP_SESS_KEY, '1'); } catch(e){} try { seg.mr.stop(); } catch(e2){} }
   if(R.restarts >= CP_REC_RESTARTS){ R.endAt = seg.end; _cpRecLost(R); return; }
@@ -40603,7 +40606,7 @@ function _cpSpeak(text){
     if(!_cp.voEl){ _cp.voEl = new Audio(); _cp.voEl.preload = 'auto'; }
     var a = _cp.voEl;
     a.onerror = fall;
-    a.onended = function(){ setTimeout(function(){ _cpRecPoke(1200); }, 150); };   // 344: the customer line is over: is the microphone still alive?
+    a.onended = function(){ setTimeout(function(){ _cpRecPoke(1500); }, 150); };   // 344: the customer line is over: is the microphone still alive?
     a.src = _cp.voBlob[f] || (CP_VOICE_DIR + f);
     var p = a.play();
     if(p && p.catch) p.catch(function(e){ if(!e || e.name !== 'AbortError') fall(); });
