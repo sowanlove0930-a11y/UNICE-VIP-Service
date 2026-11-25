@@ -51,7 +51,7 @@ body.t-s .gwrap,body.t-r .gwrap{padding-bottom:28px}
 .cust .ch b{font-size:13px;color:var(--gold);font-weight:800}
 .cust .ch .new{font-size:12.5px;font-weight:800;color:var(--sub);background:#F3EEE4;border-radius:8px;padding:5px 9px}
 .cf>label{display:block;font-size:12.5px;font-weight:700;color:var(--sub);margin:10px 0 6px}
-.cf-name{grid-column:1/-1}
+.cf-name,.cf-addr{grid-column:1/-1}
 .agebar{grid-column:1/-1;display:flex;align-items:center;background:#FFF3D6;border-radius:12px;padding:10px 13px;margin-top:12px;min-height:58px}
 .agebar>div{flex:1}
 .agebar>div:first-child{flex:0 0 auto}
@@ -308,6 +308,7 @@ body.t-s .gbb,body.t-r .gbb,body.kb .gbb{display:none}
   .cf>label{margin:0 0 6px}
   .cf .inp{width:170px}
   .cf-sex .seg{width:130px}
+  .cf-addr .inp{width:320px}
   .agebar{margin:0;flex:0 0 300px}
   .cust{flex-wrap:wrap}
   .clk{width:auto;flex:none;margin:0;padding:10px 14px;font-size:14.5px;box-shadow:none;border-radius:10px}
@@ -353,6 +354,9 @@ body.t-s .gbb,body.t-r .gbb,body.kb .gbb{display:none}
   <button type="button" class="clk" data-a="link">📨 <span class="mo">이름만 적고 </span>고객에게 링크 보내기</button>
   <div class="cf cf-birth"><label for="cBd">생년월일</label><input class="inp" id="cBd" data-f="cbd" inputmode="numeric" autocomplete="off" placeholder="예: 19790610" maxlength="10"></div>
   <div class="cf cf-sex"><label>성별</label><div class="seg sx" id="cSx"><button data-a="sex" data-v="여">여</button><button data-a="sex" data-v="남">남</button></div></div>
+  <div class="cf cf-tel"><label for="cTel">연락처</label><input class="inp" id="cTel" data-f="ctel" type="tel" inputmode="tel" autocomplete="off" placeholder="예: 010-1234-5678" maxlength="13"></div>
+  <div class="cf cf-job"><label for="cJob">직업</label><input class="inp" id="cJob" data-f="cjob" autocomplete="off" placeholder="예: 사무직" maxlength="30"></div>
+  <div class="cf cf-addr"><label for="cAd">주소</label><input class="inp" id="cAd" data-f="caddr" autocomplete="off" placeholder="예: 대구 수성구 범어동" maxlength="80"></div>
   <div class="agebar empty" id="ageBar"></div>
   <div class="agenote" id="ageNote"></div>
 </section>
@@ -425,7 +429,7 @@ var TXD = {
 var TYPES = [ { k:'3.10.5', n:10 }, { k:'3.5.5', n:5 }, { k:'3.3.5', n:3 }, { k:'3.2.5', n:2 } ];
 
 // ── 상태 ──
-function blank(){ return { v:1, cust:{ name:'', birth:'', sex:'' }, ans:{ 1:'', 2:'', 3:'', 4:'', 5:'' }, dz:[], seq:0, pick:[], memo:'', kind:'', sentAt:0, gid:'', cn:null }; }
+function blank(){ return { v:1, cust:{ name:'', birth:'', sex:'', tel:'', job:'', addr:'' }, ans:{ 1:'', 2:'', 3:'', 4:'', 5:'' }, dz:[], seq:0, pick:[], memo:'', kind:'', sentAt:0, gid:'', cn:null }; }
 var S = blank();
 var UI = { tab:'q', open:'', pv:false, meSent:'', cpSent:'', sh:null, shNo:null, unl:null, lst:false, bdDone:false, gsig:'', saving:false };
 var ME = { id:'', name:'', title:'', branch:'', tel:'' };
@@ -620,8 +624,11 @@ function predict(){
 function smsText(){
   var L = [], c = S.cust, b = parseBirth(c.birth), a = b ? insAge(b) : null;
   L.push('[설계 의뢰] 한금서 유니스지사 ' + trim(ME.name || '') + ' ' + trim(ME.title || 'FP'));
-  L.push('고객: ' + maskName(c.name) + '님' + (c.sex ? ' / ' + c.sex : '') + (b ? ' / ' + fmtBirth(b) : ''));
+  L.push('고객: ' + (trim(c.name).replace(/\s+/g, ' ') || '○○○') + '님' + (c.sex ? ' / ' + c.sex : '') + (b ? ' / ' + fmtBirth(b) : ''));
   if (a) L.push('(보험나이 ' + a.age + '세 · 상령일 ' + a.nm + '.' + pad(a.nd) + (a.dd <= 30 ? ', D-' + a.dd : '') + ')');
+  var cx = [trim(c.tel || '') ? '연락처 ' + trim(c.tel) : '', trim(c.job || '') ? '직업 ' + trim(c.job) : ''].filter(Boolean);
+  if (cx.length) L.push(cx.join(' / '));
+  if (trim(c.addr || '')) L.push('주소 ' + trim(c.addr).replace(/\s+/g, ' '));
   L.push('');
   L.push('▶ 고지');
   var i = 0;
@@ -845,7 +852,7 @@ function renderSide(){
   $('cnt').textContent = live().filter(function(c){ return trim(c.name); }).length;
 }
 function renderAll(){
-  $('cNm').value = S.cust.name; $('cBd').value = S.cust.birth; $('memo').value = S.memo;
+  $('cNm').value = S.cust.name; $('cBd').value = S.cust.birth; $('cTel').value = S.cust.tel || ''; $('cJob').value = S.cust.job || ''; $('cAd').value = S.cust.addr || ''; $('memo').value = S.memo;
   renderCust(); renderQs(); renderMgr(); renderSide();
   var w = $('pvw'); w.classList.toggle('open', UI.pv); w.querySelector('.pvh span').textContent = UI.pv ? '접기 ▴' : '펼치기 ▾';
 }
@@ -984,7 +991,7 @@ function purge(){
 function norm(x){
   if (!x || typeof x !== 'object' || x.v !== 1) return null;
   var s = blank(), mx = 0;
-  s.cust = { name:String(x.cust && x.cust.name || ''), birth:String(x.cust && x.cust.birth || ''), sex:/^(여|남)$/.test(x.cust && x.cust.sex) ? x.cust.sex : '' };
+  s.cust = { name:String(x.cust && x.cust.name || ''), birth:String(x.cust && x.cust.birth || ''), sex:/^(여|남)$/.test(x.cust && x.cust.sex) ? x.cust.sex : '', tel:String(x.cust && x.cust.tel || ''), job:String(x.cust && x.cust.job || ''), addr:String(x.cust && x.cust.addr || '') };
   for (var q = 1; q <= 5; q++) s.ans[q] = /^(예|아니오|모름)$/.test(x.ans && x.ans[q]) ? x.ans[q] : '';
   s.dz = (Array.isArray(x.dz) ? x.dz : []).filter(function(c){ return c && c.id && Q[+c.q]; }).map(function(c){
     var tx = {}, k;
@@ -1311,6 +1318,14 @@ D.addEventListener('input', function(e){
     if (d !== t.value) t.value = d;
     S.cust.birth = d; UI.bdDone = false; renderCust();
   }
+  else if (f === 'ctel') {
+    var tl = t.value.replace(/[^\d]/g, '').slice(0, 11);
+    tl = /^02/.test(tl) ? tl.replace(/^(02)(\d{3,4})(\d{4})$/, '$1-$2-$3') : tl.replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
+    if (/^\d{10,11}$/.test(t.value.replace(/[^\d]/g, '')) && tl !== t.value) t.value = tl;
+    S.cust.tel = t.value;
+  }
+  else if (f === 'cjob') S.cust.job = t.value;
+  else if (f === 'caddr') S.cust.addr = t.value;
   else if (f === 'memo') S.memo = t.value;
   else if (f === 'name' && c) c.name = t.value;
   else if (f === 'tx' && c) c.tx[t.getAttribute('data-k')] = t.value;
