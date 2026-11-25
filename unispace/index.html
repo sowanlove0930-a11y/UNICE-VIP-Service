@@ -3809,6 +3809,13 @@ body.theme-light .wac-done { background: rgba(22,163,74,.15); color: #15803D; }
   .jf-apgrid { grid-template-columns:1fr; }
   .jf-rh.ap .who b em { font-size:12px; padding:1px 9px; vertical-align:3px; }
 }
+/* 348: 링크 보내기 › 고객 안내 자료 「법인파트너스 소개 영상」 줄 = ▶ 영상 · 복사 · 보내기 (폰은 ▶ 영상을 글씨 밑 작은 버튼으로) */
+.sa-corp .sa-vlink { display: none; }
+@media (max-width: 480px) {
+  .lsm-body .sa-corp .sa-acts .sa-vid { display: none; }
+  .lsm-body .sa-corp .sa-vlink { display: inline-block; margin-top: 5px; padding: 3px 9px; border-radius: 99px; border: 1px solid #D8CFB9;
+    background: #ffffff; color: #4A5568; font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer; }
+}
 /* 338: 링크 보내기 › 리크루팅 「일자리박람회」 줄 = ▶ 영상 · 복사 · 보내기 (라이프 디자인 줄과 같은 모양, 폰은 ▶ 영상을 글씨 밑 작은 버튼으로) */
 .sa-jf .sa-vlink { display: none; }
 @media (max-width: 480px) {
@@ -18556,6 +18563,70 @@ function _silsonShareFallback(url) {
       .catch(function() { shareVipApplyLegacyCopy(full); });
   } else { shareVipApplyLegacyCopy(full); }
 }
+// 348: 법인파트너스 소개 영상 + 상담 신청 페이지 (unispace/corp.html?fp=사번) — 링크 보내기 › 고객 안내 자료 「법인파트너스 소개 영상」 줄
+//  ▶ 영상 = 페이지 열기 · 복사 = 인사 + 안내 + 링크 (문자용, src=copy) · 보내기 = 카톡 카드 (src=kakao, 안 되면 공유/복사)
+//  고객이 페이지 맨 아래에서 상담 신청 → GAS 27c corpLead (예전 GAS 면 vipLead) → 보낸 FP 고객(관리) 등록 + 푸시
+var CORP_CARD = { url: 'https://unice-vip.co.kr/unispace/corp.html', title: '법인파트너스 · 대표님 회사의 다음 길',
+  desc: '세금·노무·승계, 분야별 전문가가 한 팀으로 진단부터 실행까지 함께합니다.',
+  img: 'https://unice-vip.co.kr/unispace/corp/img/og.jpg' };
+function _corpLink(extra) {
+  var q = [];
+  if (typeof currentUser !== 'undefined' && currentUser && currentUser.id) q.push('fp=' + encodeURIComponent(String(currentUser.id)));
+  if (extra) q.push(extra);
+  return CORP_CARD.url + (q.length ? '?' + q.join('&') : '');
+}
+function _corpSender() {   // 「이름 직함」 — FP 는 팀장 (고객 페이지의 「이 영상을 보내 드린 분」과 같은 표기)
+  if (typeof currentUser === 'undefined' || !currentUser || !currentUser.name) return '';
+  var t = SHARE_TITLES[String(currentUser.id)] || ((currentUser.role && currentUser.role !== 'FP') ? String(currentUser.role) : '팀장');
+  return String(currentUser.name) + ' ' + t;
+}
+function _corpText(url) {
+  var who = _corpSender();
+  return (who ? '안녕하세요 대표님, 유니스 ' + who + '입니다.\n\n' : '안녕하세요 대표님.\n\n')
+    + '[법인파트너스 · 대표님 회사의 다음 길]\n'
+    + '세금·노무·승계, 분야별 전문가가 한 팀으로\n진단부터 실행까지 함께합니다.\n\n'
+    + '1분 28초 영상을 보시고, 맨 아래에서 바로 상담 신청하실 수 있습니다.' + (url ? '\n' + url : '');
+}
+function openCorpPage(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  window.open(_corpLink(), '_blank');
+  return false;
+}
+function copyCorpLink(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  var msg = _corpText(_corpLink('src=copy'));
+  var done = function() { showToast('📋 문구와 링크가 복사되었습니다. 문자나 카톡에 붙여넣어 보내세요'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg).then(done).catch(function() { _uniceCopyLegacy(msg); });
+  else _uniceCopyLegacy(msg);
+  return false;
+}
+function shareCorpVideo(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!currentUser || !currentUser.id) { showToast('⚠️ 로그인 정보를 찾을 수 없습니다'); return false; }
+  var c = CORP_CARD, url = _corpLink('src=kakao');
+  _ckpKakaoReady(function(ok) {
+    if (!ok) { _corpShareFallback(url); return; }
+    try {
+      window.Kakao.Share.sendDefault({
+        objectType: 'feed',
+        content: { title: c.title, description: c.desc, imageUrl: c.img, imageWidth: 1200, imageHeight: 600,
+                   link: { mobileWebUrl: url, webUrl: url } },
+        buttons: [ { title: '▶ 영상 보기', link: { mobileWebUrl: url, webUrl: url } } ]
+      });
+    } catch (e) { _corpShareFallback(url); }
+  });
+  return false;
+}
+function _corpShareFallback(url) {
+  var msg = _corpText('');
+  var isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev && navigator.share) { navigator.share({ text: msg, url: url }).catch(function(e){}); return; }
+  var full = msg + '\n' + url;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(full).then(function() { showToast('📋 링크가 복사되었습니다. 카톡에 붙여넣어 보내세요'); })
+      .catch(function() { shareVipApplyLegacyCopy(full); });
+  } else { shareVipApplyLegacyCopy(full); }
+}
 function _recruitShareFallback(key, url) {
   var c = RECRUIT_CARDS[key];
   var sender = _shareSender().replace(/ FP(이|가)$/, ' 팀장이');   // 리크루팅: FP 직함은 팀장으로
@@ -19711,7 +19782,7 @@ function _applyMomdeunLock() {
   // 평생든든 follows the 노후파이2.0 permission (the 유동화 consult tool): no 평생든든 row when it is blocked
   var psOff = !!(currentUser && currentUser.nohupai2 === false);
   if (document.body) document.body.classList.toggle('pension-off', psOff);
-  var n = 3 + (off ? 0 : 1) + (ugOff ? 0 : 1) + (psOff ? 0 : 1);   // 293: + 실손 인상 안내 영상 · 295: 라이프 디자인은 리크루팅 묶음으로
+  var n = 4 + (off ? 0 : 1) + (ugOff ? 0 : 1) + (psOff ? 0 : 1);   // 293: + 실손 인상 안내 영상 · 295: 라이프 디자인은 리크루팅 묶음으로 · 348: + 법인파트너스
   var els = document.querySelectorAll('.sa-info-n');
   for (var i = 0; i < els.length; i++) els[i].textContent = n;
 }
@@ -29249,7 +29320,7 @@ function doCheckin() { doSmartCheckin(); }
           <div class="sag-ic">🎬</div>
           <div class="sag-tx">
             <div class="a">고객 안내 자료</div>
-            <div class="b">실손 인상 영상 · 친구추가 · VIP 서비스<span class="md-on"> · 맘든든</span><span class="ug-on"> · U고비</span><span class="ps-on"> · 평생든든</span> (<span class="sa-info-n">6</span>)</div>
+            <div class="b">실손 인상 영상 · 친구추가 · VIP 서비스 · 법인파트너스<span class="md-on"> · 맘든든</span><span class="ug-on"> · U고비</span><span class="ps-on"> · 평생든든</span> (<span class="sa-info-n">7</span>)</div>
           </div>
           <div class="sag-chev">▾</div>
         </div>
@@ -29277,6 +29348,15 @@ function doCheckin() { doSmartCheckin(); }
           <button type="button" class="sa-vbtn" onclick="return openToolVideo('vip',event)">▶ 영상</button>
           <button type="button" class="sa-vbtn sa-pv" onclick="return openVipApplyPreview(event)">미리보기</button>
           <button type="button" class="sa-sbtn" onclick="return shareVipApply(event)">보내기</button>
+        </div>
+      </div>
+      <div class="sa-row sa-corp">
+        <div class="sa-ic">🏛️</div>
+        <div class="sa-tx"><div class="a">법인파트너스 소개 영상<span class="sa-new" data-until="2026-12-31">NEW</span></div><div class="b">법인 대표님께 · 상담 신청하면 담당 FP 푸시</div><button type="button" class="sa-vlink" onclick="return openCorpPage(event)">▶ 영상 보기</button></div>
+        <div class="sa-acts">
+          <button type="button" class="sa-vbtn sa-vid" onclick="return openCorpPage(event)">▶ 영상</button>
+          <button type="button" class="sa-vbtn sa-copy" onclick="return copyCorpLink(event)">복사</button>
+          <button type="button" class="sa-sbtn" onclick="return shareCorpVideo(event)">보내기</button>
         </div>
       </div>
       <!-- 295: 라이프 디자인 줄은 리크루팅 영상 묶음으로 옮김 (대표 2026-11-16) -->
@@ -30085,7 +30165,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 347;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 348;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
