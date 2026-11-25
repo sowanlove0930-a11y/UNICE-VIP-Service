@@ -30085,7 +30085,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 346;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 347;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
@@ -40367,7 +40367,7 @@ function _cpRecStart(cb){
   });
 }
 function _cpSess(on){   // iPhone 16.4+: tell the phone this page plays AND records, so starting a sound does not take the microphone away. Only on phones where the microphone died once.
-  try { var S = navigator.audioSession; if(!S || !('type' in S)) return; if(on){ if(localStorage.getItem(CP_SESS_KEY) === '1') S.type = 'play-and-record'; } else if(S.type === 'play-and-record') S.type = 'auto'; } catch(e){}
+  try { var S = navigator.audioSession; if(!S || !('type' in S)) return; if(S.type === 'play-and-record') S.type = 'auto';   /* 347: no longer set (the microphone died with it too); only put back */ } catch(e){}
 }
 function _cpRecPoke(ms){   // is the newest piece still getting sound? (iPhone only: it records in 1 s pieces)
   var R = _cp.recorder; if(!R || !R.slice || R.stopping || R.endAt || R.busy) return;
@@ -40433,7 +40433,7 @@ function _cpRecStop(cb, drop){
   R.stopping = true; clearInterval(R.wd); _cpSess(false);
   var seg = R.segs[R.segs.length - 1], fired = false, t0 = Date.now(), iv = 0, slow = 0, fin = function(){
     if(fired) return; fired = true; clearInterval(iv); clearTimeout(slow);
-    _cpTracksOff(R.stream);
+    _cpTracksOff(R.stream); _cpWaOff();
     if(drop){ cb(null, R); return; }
     _cpRecBlob(R, function(blob){ cb(blob && blob.size > 300 ? blob : null, R); });
   };
@@ -40597,23 +40597,80 @@ function _cpTts(text){
     window.speechSynthesis.speak(u);
   } catch(e){}
 }
+// ── 347 iPhone, while recording, on a phone whose microphone died once: the customer voice through Web Audio
+function _cpWaFlag(){ try { return localStorage.getItem(CP_SESS_KEY) === '1' && _cpApple() && !!(window.AudioContext || window.webkitAudioContext); } catch(e){ return false; } }
+function _cpWaWanted(){ var R = _cp.recorder; return !!(R && R.slice && !R.stopping && !R.endAt && _cpWaFlag()); }
+function _cpWaOn(){   // make / wake the one context of this recording (best inside a tap)
+  try {
+    var C = window.AudioContext || window.webkitAudioContext; if(!C) return null;
+    if(!_cp.wa || _cp.wa.state === 'closed'){
+      var x = new C(); _cp.wa = x; _cp.waBuf = {};
+      var o = x.createOscillator(), g = x.createGain(); o.frequency.value = 20; g.gain.value = 0.0004; o.connect(g); g.connect(x.destination); o.start();   // too low and too soft to hear: keeps the context busy so the phone does not put the sound to sleep between two lines
+      setTimeout(_cpWaWarm, 300);
+    }
+    if(_cp.wa.state !== 'running' && _cp.wa.resume){ var p = _cp.wa.resume(); if(p && p.catch) p.catch(function(){}); }
+    return _cp.wa;
+  } catch(e){ return null; }
+}
+function _cpWaStop(){ var s = _cp.waSrc; _cp.waSrc = null; if(s){ try { s.onended = null; s.stop(); } catch(e){} } }
+function _cpWaOff(){ _cpWaStop(); try { if(_cp.wa && _cp.wa.state !== 'closed') _cp.wa.close(); } catch(e){} _cp.wa = null; _cp.waBuf = {}; }
+function _cpWaLoad(f, cb){   // the clip, decoded (kept while the context lives)
+  var x = _cp.wa; if(!x){ cb(null); return; }
+  if(_cp.waBuf[f]){ cb(_cp.waBuf[f]); return; }
+  var done = false, fin = function(b){ if(done) return; done = true; if(b && _cp.wa === x) _cp.waBuf[f] = b; cb(b && b.length ? b : null); };
+  try {
+    fetch(_cp.voBlob[f] || (CP_VOICE_DIR + f)).then(function(r){ return r.arrayBuffer(); }).then(function(ab){
+      var pr = x.decodeAudioData(ab, function(b){ fin(b); }, function(){ fin(null); }); if(pr && pr.then) pr.then(fin, function(){ fin(null); });
+    }).catch(function(){ fin(null); });
+  } catch(e){ fin(null); }
+  setTimeout(function(){ fin(null); }, 2500);
+}
+function _cpWaWarm(){   // decode this call's lines ahead, one after another
+  var c = _cp.call, x = _cp.wa; if(!c || !x || !c.vo) return;
+  var q = []; for(var f in _cp.voBlob) if(_cp.voBlob.hasOwnProperty(f) && f.indexOf(c.vo + '_') === 0 && !_cp.waBuf[f]) q.push(f);
+  var next = function(){ var f = q.shift(); if(!f || _cp.wa !== x) return; _cpWaLoad(f, function(){ setTimeout(next, 30); }); };
+  next();
+}
+function _cpWaPlay(f, tok, viaEl){   // true = Web Audio takes this line (falls back to the <audio> player by itself when it cannot)
+  var x = _cpWaOn(); if(!x) return false;
+  var go = function(buf){
+    if(tok !== _cp.voTok) return;
+    if(!buf || _cp.wa !== x || x.state !== 'running'){ viaEl(); return; }
+    try {
+      var s = x.createBufferSource(); s.buffer = buf; s.connect(x.destination); _cp.waSrc = s;
+      s.onended = function(){ if(_cp.waSrc === s) _cp.waSrc = null; setTimeout(function(){ _cpRecPoke(1500); }, 150); };
+      s.start();
+    } catch(e){ _cp.waSrc = null; viaEl(); }
+  };
+  _cpWaLoad(f, function(buf){
+    if(!buf || x.state === 'running' || !x.resume){ go(buf); return; }
+    var fired = false, once = function(){ if(fired) return; fired = true; go(buf); };   // just made: give it a moment to start
+    try { var p = x.resume(); if(p && p.then) p.then(once, once); } catch(e){}
+    setTimeout(once, 400);
+  });
+  return true;
+}
 function _cpSpeak(text){
   _cpTtsStop();
   var f = _cpVoFile(text, _cp.call && _cp.call.vo);
   if(!f){ _cpTts(text); return; }
   var tok = _cp.voTok, fall = function(){ if(tok !== _cp.voTok) return; _cp.voTok++; _cpTts(text); };
-  try {
-    if(!_cp.voEl){ _cp.voEl = new Audio(); _cp.voEl.preload = 'auto'; }
-    var a = _cp.voEl;
-    a.onerror = fall;
-    a.onended = function(){ setTimeout(function(){ _cpRecPoke(1500); }, 150); };   // 344: the customer line is over: is the microphone still alive?
-    a.src = _cp.voBlob[f] || (CP_VOICE_DIR + f);
-    var p = a.play();
-    if(p && p.catch) p.catch(function(e){ if(!e || e.name !== 'AbortError') fall(); });
-  } catch(e){ fall(); }
+  var viaEl = function(){
+    try {
+      if(!_cp.voEl){ _cp.voEl = new Audio(); _cp.voEl.preload = 'auto'; }
+      var a = _cp.voEl;
+      a.onerror = fall;
+      a.onended = function(){ setTimeout(function(){ _cpRecPoke(1500); }, 150); };   // 344: the customer line is over: is the microphone still alive?
+      a.src = _cp.voBlob[f] || (CP_VOICE_DIR + f);
+      var p = a.play();
+      if(p && p.catch) p.catch(function(e){ if(!e || e.name !== 'AbortError') fall(); });
+    } catch(e){ fall(); }
+  };
+  if(_cpWaWanted() && _cpWaPlay(f, tok, viaEl)) return;
+  viaEl();
 }
 function _cpTtsStop(){
-  _cp.voTok++;
+  _cp.voTok++; _cpWaStop();
   try { if(_cp.voEl){ _cp.voEl.onerror = null; _cp.voEl.pause(); } } catch(e){}
   try { if('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch(e2){}
 }
@@ -40649,7 +40706,8 @@ function _cpVoUnlock(){   // 311: a phone lets a sound start only from inside a 
 function _cpHiDue(c){ return !!c && c.i === 0 && c.phase === 'say' && !_cpObjN(c.marks); }   // 311: the hello belongs before my first line only
 function cpRecOn(){   // 🎙 녹음하기 (call screen): from this moment the FP's own voice is recorded
   var c = _cp.call; if(!c || c.recOn || c.recBusy || c.ending) return;
-  if(_cpHiDue(c) && _cpExList('open').length) _cpVoUnlock();
+  if(_cpWaFlag()) _cpWaOn();   // 347: this phone's microphone died before — the customer voice goes through Web Audio from the start (made here, inside the tap, before the microphone opens)
+  else if(_cpHiDue(c) && _cpExList('open').length) _cpVoUnlock();
   c.recBusy = true; _cpRender();
   _cpRecStart(function(ok, why){
     c.recBusy = false;
@@ -40745,7 +40803,7 @@ function cpJump(k){   // 315: tap a stage → that stage, from my own line (back
 function cpNext(){ var c = _cp.call; if(!c || c.phase !== 'react' || c.ending) return; _cpAdvance(); }
 function _cpVoCut(){
   var c = _cp.call, a = _cp.voEl;
-  try { if(c && c.marks.length && a && !a.paused && !a.ended){ var m = c.marks[c.marks.length - 1]; if(m.v && !m.cut && (c.phase === 'react' || !m.s)) m.cut = Date.now(); } } catch(e){}
+  try { if(c && c.marks.length && (_cp.waSrc || (a && !a.paused && !a.ended))){ var m = c.marks[c.marks.length - 1]; if(m.v && !m.cut && (c.phase === 'react' || !m.s)) m.cut = Date.now(); } } catch(e){}
 }
 function _cpAdvance(){
   var c = _cp.call, T = _cpTarget(c.tid);
