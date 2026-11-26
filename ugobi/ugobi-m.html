@@ -627,6 +627,8 @@ var UNISPACE_GAS_URL='https://script.google.com/macros/s/AKfycbx3dE8zn0pkrjsklnr
 var UGOBI_GAS_URL='https://script.google.com/macros/s/AKfycbxbGSSVpU-ljBcHPbFfHQbKjmQjQKmZ6OO6N9FWMKVruguaQpZ_N2zeqV41E49Zg3aO8A/exec';
 var FP_KEY='ugobim_fp';
 var CUST=/[?&]c=1(&|$)/.test(location.search);  /* 유니스페이스에서 보낸 고객 링크 */
+/* 들어온 길 표시: ?src=ad 인스타 광고 · ?src=ig 인스타 프로필 링크. 신청 메모 · 신청 시트 · FP 푸시에 찍힘 (화면은 같음) */
+var SRC=(function(){try{var s=String(new URLSearchParams(location.search).get('src')||'').toLowerCase();return s==='ad'?'인스타 광고':s==='ig'?'인스타 프로필':''}catch(e){return ''}})();
 
 /* 회사 이니셜: 이니셜만 쓰면 현대·한화·흥국·하나가 모두 H사가 되어서 회사 종류(생명·손보·화재·해상·라이프)를 붙여요 */
 var LB={'하나손보':'H손보','농협손보':'N손보','DB손보':'D손보','흥국화재':'H화재','롯데손보':'L손보','삼성화재':'S화재','현대해상':'H해상','메리츠화재':'M화재','한화손보':'H손보','KB손보':'K손보',
@@ -818,11 +820,11 @@ function renderResult(){
   $('r20').textContent=man(c.y20);
   $('rNh').textContent='보험사 '+c.n+'곳 한눈에';
 
-  function bar(cls,nm,tag,v){return '<div class="bar '+cls+'"><div class="h"><span class="nm">'+nm+'<small>'+tag+'</small></span><span class="p num">'+won(v)+'</span></div><div class="tr"><i data-w="'+Math.round(v/mx*100)+'%"></i></div></div>'}
+  function bar(cls,nm,tag,v){return '<div class="bar '+cls+'"><div class="h"><span class="nm">'+nm+(tag?'<small>'+tag+'</small>':'')+'</span><span class="p num">'+won(v)+'</span></div><div class="tr"><i data-w="'+Math.round(v/mx*100)+'%"></i></div></div>'}
   $('bars').innerHTML=
     bar('w',L(c.mx.co),'가장 비쌈',c.mx.t)+
     bar('b',L(c.mn.co),'한 회사 최저',c.mn.t)+
-    bar('u','유니스','골라 담기',c.combo);
+    bar('u','보장마다 골라 담기','',c.combo);   /* 대표 2026-11-26: 「유니스 골라 담기」는 뜻을 모름 → 첫 화면 · 광고와 같은 말 */
 
   $('rc').innerHTML=c.parts.map(function(x,j){
     return '<div class="ln"><span class="em">'+COV[j].em+'</span><span class="k">'+COV[j].k+'</span><span class="co">'+L(x.co)+'</span><span class="v num">'+won(x.v)+'</span></div>';
@@ -908,8 +910,8 @@ function submitLead(){
   if(!$('agree').classList.contains('on')){toast('개인정보 수집·이용에 동의해 주세요');return}
   if(!R)R=calc(40,'F','normal','std');
   syncFam();
-  var code=fpCode(),phone=ph.slice(0,3)+'-'+ph.slice(3,ph.length-4)+'-'+ph.slice(-4),via=CUST?'고객 링크':'직접 접속';
-  var memo=[CUST?'U고비 고객 링크로 신청 (보험료 절감액 알아보기)':'U고비 모바일에서 신청 (보험료 절감액 알아보기)',
+  var code=fpCode(),phone=ph.slice(0,3)+'-'+ph.slice(3,ph.length-4)+'-'+ph.slice(-4),via=SRC||(CUST?'고객 링크':'직접 접속');
+  var memo=[SRC?'U고비 '+SRC+'로 신청 (보험료 절감액 알아보기)':CUST?'U고비 고객 링크로 신청 (보험료 절감액 알아보기)':'U고비 모바일에서 신청 (보험료 절감액 알아보기)',
     '본인: '+resultLine(R),st.fam.length?'같이 알아볼 가족: '+st.fam.join(', '):'','전화 희망: '+st.when].filter(Boolean).join('\n');
   var btn=$('fBtn');SENDING=true;btn.disabled=true;btn.textContent='보내는 중…';
   var jobs=[];
@@ -919,7 +921,7 @@ function submitLead(){
     .then(function(){return 'ok'},function(){return 'fail'}));
   /* 유니스페이스: 담당 FP의 고객(관리)으로 등록 + 담당 FP에게 푸시 (GAS 25l ugobiLead). 예전 GAS면 고객 등록만 */
   var uni=function(b){return fetch(UNISPACE_GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(b)}).then(function(r){return r.json()})};
-  jobs.push(code?uni({action:'ugobiLead',fpCode:code,name:nm,phone:phone,memo:memo,who:whoText(R),save:won(R.save),spouse:false,when:st.when,via:via})
+  jobs.push(code?uni({action:'ugobiLead',fpCode:code,name:nm,phone:phone,memo:memo,who:whoText(R)+(SRC?' · '+SRC:''),save:won(R.save),spouse:false,when:st.when,via:via})
     .then(function(d){return d&&!d.ok&&d.msg==='알 수 없는 액션'?uni({action:'bulkAddCustomers',customers:[{fpCode:code,name:nm,phone:phone,customerType:'관리',memo:memo}]}):d})
     .then(function(d){return d&&d.ok?'ok':'fail'},function(){return 'fail'}):Promise.resolve('nofp'));
   var slow=new Promise(function(res){setTimeout(function(){res('slow')},12000)});
@@ -930,7 +932,7 @@ function submitLead(){
   });
 }
 function fillDone(){
-  var who=FP?FP.name+' '+(FP.title||'FP'):'담당 FP';
+  var who=SRC?'담당자':FP?FP.name+' '+(FP.title||'FP'):'담당 FP';
   $('dWho').textContent=who;$('dJ').textContent=josa(who,'이','가');
   $('dWhen').textContent=st.when||'편하신 시간';
 }
@@ -963,7 +965,7 @@ function loadFp(){
   fetch(UNISPACE_GAS_URL+'?action=getFpInfo&fp='+encodeURIComponent(code)+'&_='+Date.now()).then(function(r){return r.json()}).then(function(res){
     if(res&&res.ok&&res.ugobi===false){fpBlock();return;}
     if(res&&res.ok===false&&res.msg&&res.msg.indexOf('중지')>=0){fpBlock();return;}
-    if(res&&res.ok){FP=res;paintFp();}
+    if(res&&res.ok){FP=res;if(!SRC)paintFp();}
   }).catch(function(){});
 }
 
@@ -973,6 +975,8 @@ function toast(m){var t=$('toast');t.textContent=m;t.classList.add('on');clearTi
 renderLanding();
 try{history.replaceState({s:0},'')}catch(e){}
 requestAnimationFrame(checkHow);
+/* 광고 · 인스타 프로필로 들어온 분 (대표 2026-11-26): 담당 FP 이름표 없음, 「U고비」 대신 「유니스」, 완료 화면 「담당자가 전화드릴게요」, 증권 안내 없음 */
+if(SRC){[].forEach.call(document.querySelectorAll('.wm'),function(x){x.textContent='유니스'});try{document.title=document.title.replace('U고비','유니스')}catch(e){}var tp=document.querySelector('#s8 .tip');if(tp)tp.style.display='none';var fc=document.querySelector('.fpcard');if(fc){fc.innerHTML='<div class="av">유</div><div><b>보험료 절감 안내 특화팀</b><small>한화생명금융서비스<br>VIP금융사업부 유니스</small></div>';fc.style.display='flex';}}
 loadFp();
 </script>
 </body>
