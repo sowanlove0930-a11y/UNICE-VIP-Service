@@ -77,7 +77,7 @@ h1.q-title{font-size:40px;font-weight:800;letter-spacing:-.04em;line-height:1.3}
 .trio b{display:block;font-size:15.5px;font-weight:700;line-height:1.3}
 .trio small{display:block;font-size:13px;color:var(--mute)}
 .form{padding:26px;border-radius:24px;background:#fff;border:1px solid var(--line);box-shadow:var(--sh-1)}
-.fields3{display:grid;grid-template-columns:1.1fr 1.3fr .8fr;gap:14px}
+.fields3{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:14px}
 .fld label{display:block;font-size:14px;font-weight:700;color:var(--ink-2);margin-bottom:8px}
 .fld label em{font-style:normal;color:var(--wine-500)}
 .inp{height:56px;border-radius:14px;border:1.5px solid var(--line-2);background:var(--cream);display:flex;align-items:center;padding:0 16px;font-size:17px;font-weight:600;color:var(--ink)}
@@ -371,7 +371,7 @@ var FIELDS=[['chef-hat','외식·식음료','창업·운영 컨설팅','외식·
  ['clipboard-plus','병원코디네이터','환자 응대·예약·진료연계','병원코디네이터'],['croissant','제과제빵','제과·제빵 기술 및 창업','제과제빵'],['spray-can','입주청소','입주·이사청소·홈케어','입주청소'],['book-open','학습지교사','아동 교육·학습관리','학습지교사']];
 var CONDS=[['wallet','고정급·급여 예측 가능성'],['trending-up','성과에 따른 보상'],['clock-3','시간제·유연근무'],['map-pin','출퇴근 거리 (가까운 곳)'],['timer','단기 근무'],['graduation-cap','교육·자격 준비'],['store','창업·프리랜서'],['laptop','내근 중심 업무']];
 var JOBS9=['사람을 대하는 서비스업','몸을 움직이는 현장 일','컴퓨터로 하는 사무·내근 일','손기술을 배워서 하는 일','어르신·아이를 돌보는 일','내 가게를 여는 창업','전화·카톡으로 하는 상담 일','교육받고 자격을 따서 하는 일','노력한 만큼 보수가 달라지는 일'];
-var STEPS=[['시작 · 동의','이름·연락처·나이'],['일의 흥미','30문항'],['나를 더 알아보기','20문항'],['멘토링 분야 · 근무조건','고르기'],['결과 제출하기','담당자와 함께 보기']];
+var STEPS=[['시작 · 동의','이름·연락처·생년월일'],['일의 흥미','30문항'],['나를 더 알아보기','20문항'],['멘토링 분야 · 근무조건','고르기'],['결과 제출하기','담당자와 함께 보기']];
 
 var qs=new URLSearchParams(location.search);
 var kiosk=qs.get('mode')==='kiosk';
@@ -379,7 +379,11 @@ var ref=String(qs.get('r')||'').toLowerCase(); if(!/^[a-f0-9]{12}$/.test(ref)) r
 var SRC=kiosk?'kiosk':(/^(qr|kakao)$/.test(qs.get('src')||'')?qs.get('src'):'link');
 var KEY='jf_state_v1', sender=null, busy=false, lockQ=false, kTimer=null;
 function cid(){var s='';for(var i=0;i<16;i++)s+='abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random()*36));return s;}
-function fresh(){return {s:'start',i:0,name:'',tel:'',age:'',agree:false,call:false,ans:[],j9:[-1,-1,-1,-1,-1,-1,-1,-1,-1],mentor:[],kid:false,care:-1,tags:[],when:'',from:10,to:15,no:'',cid:cid()};}
+function bFmt(v){var d=String(v||'').replace(/\D/g,'').slice(0,8);return d.length<5?d:d.length<7?d.slice(0,4)+'.'+d.slice(4):d.slice(0,4)+'.'+d.slice(4,6)+'.'+d.slice(6);}
+function bParse(v){var m=String(v||'').replace(/\D/g,'').match(/^(\d{4})(\d{2})(\d{2})$/);if(!m)return null;var y=+m[1],mo=+m[2],d=+m[3];
+  if(mo<1||mo>12||d<1||d>[31,(y%4===0&&y%100!==0)||y%400===0?29:28,31,30,31,30,31,31,30,31,30,31][mo-1])return null;
+  var t=new Date(),age=t.getFullYear()-y-((t.getMonth()+1)*100+t.getDate()<mo*100+d?1:0);if(!(age>=15&&age<=99))return null;return {birth:m[1]+'-'+m[2]+'-'+m[3],age:age};}
+function fresh(){return {s:'start',i:0,name:'',tel:'',age:'',birth:'',agree:false,call:false,ans:[],j9:[-1,-1,-1,-1,-1,-1,-1,-1,-1],mentor:[],kid:false,care:-1,tags:[],when:'',from:10,to:15,no:'',cid:cid()};}
 function load(){if(kiosk)return null;try{var x=JSON.parse(sessionStorage.getItem(KEY)||'null');if(x&&x.s&&Array.isArray(x.ans)&&Array.isArray(x.j9)){if(typeof x.care!=='number')x.care=-1;return x;}}catch(e){}return null;}
 function save(){if(kiosk)return;try{sessionStorage.setItem(KEY,JSON.stringify(st.s==='done'?{s:'done',no:st.no,mentor:st.mentor,ans:[],j9:[]}:st));}catch(e){}}
 var st=load()||fresh();
@@ -421,9 +425,9 @@ function vStart(){
   '<form class="form" id="f" novalidate autocomplete="off"><div class="fields3">'+
    '<div class="fld" id="fName"><label for="iName">이름 <em>*</em></label><input class="inp" id="iName" maxlength="20" placeholder="홍길순" value="'+E(st.name)+'"><div class="err">이름을 적어 주세요</div></div>'+
    '<div class="fld" id="fTel"><label for="iTel">연락처 <em>*</em></label><input class="inp" id="iTel" type="tel" inputmode="numeric" maxlength="13" placeholder="010-0000-0000" value="'+E(st.tel)+'"><div class="err">휴대전화 번호를 확인해 주세요</div></div>'+
-   '<div class="fld" id="fAge"><label for="iAge">나이 <em>*</em></label><div class="inpw"><input class="inp" id="iAge" type="text" inputmode="numeric" maxlength="2" placeholder="42" value="'+E(st.age)+'"><small>만 나이</small></div><div class="err">만 나이를 숫자로 적어 주세요</div></div></div>'+
-   '<div class="consent"><label class="cb" id="cbAgree"><input type="checkbox" id="iAgree"'+(st.agree?' checked':'')+'><span class="bx'+(st.agree?'':' off')+'">'+(st.agree?I('check'):'')+'</span><div><b><i>[필수]</i> 개인정보 수집·이용 동의</b><p>목적: 진로·취업 상담, 멘토링 연결 · 항목: 이름·연락처·나이·응답 · 보관: 6개월 뒤 삭제<br>결과는 한화생명금융서비스 상담 담당자(대표·지점장)에게 전달돼요. <button type="button" class="u" data-act="full">전문 보기</button></p></div></label>'+
-    '<div class="full" id="full"><b>개인정보 수집·이용 동의 (필수)</b><br>1. 수집·이용 목적: 직업 적성검사 결과 안내, 진로·취업 상담, 현직자 멘토링 연결<br>2. 수집 항목: 이름, 연락처, 나이, 적성검사 응답(50문항), 멘토링 희망 분야, 근무조건<br>3. 보관 기간: 제출일부터 6개월 (그 뒤 바로 삭제)<br>4. 결과를 보는 사람: 한화생명금융서비스 VIP금융사업부 상담 담당자(대표·지점장)<br>5. 동의하지 않으셔도 돼요. 다만 동의하지 않으면 적성검사에 참여할 수 없어요.</div>'+
+   '<div class="fld" id="fAge"><label for="iAge">생년월일 <em>*</em></label><input class="inp" id="iAge" type="text" inputmode="numeric" maxlength="10" placeholder="예: 19840315" value="'+E(st.birth||'')+'"><div class="err">생년월일을 숫자 8자리로 적어 주세요 (예: 19840315)</div></div></div>'+
+   '<div class="consent"><label class="cb" id="cbAgree"><input type="checkbox" id="iAgree"'+(st.agree?' checked':'')+'><span class="bx'+(st.agree?'':' off')+'">'+(st.agree?I('check'):'')+'</span><div><b><i>[필수]</i> 개인정보 수집·이용 동의</b><p>목적: 진로·취업 상담, 멘토링 연결 · 항목: 이름·연락처·생년월일·응답 · 보관: 6개월 뒤 삭제<br>결과는 한화생명금융서비스 상담 담당자(대표·지점장)에게 전달돼요. <button type="button" class="u" data-act="full">전문 보기</button></p></div></label>'+
+    '<div class="full" id="full"><b>개인정보 수집·이용 동의 (필수)</b><br>1. 수집·이용 목적: 직업 적성검사 결과 안내, 진로·취업 상담, 현직자 멘토링 연결<br>2. 수집 항목: 이름, 연락처, 생년월일, 적성검사 응답(50문항), 멘토링 희망 분야, 근무조건<br>3. 보관 기간: 제출일부터 6개월 (그 뒤 바로 삭제)<br>4. 결과를 보는 사람: 한화생명금융서비스 VIP금융사업부 상담 담당자(대표·지점장)<br>5. 동의하지 않으셔도 돼요. 다만 동의하지 않으면 적성검사에 참여할 수 없어요.</div>'+
    '<label class="cb"><input type="checkbox" id="iCall"'+(st.call?' checked':'')+'><span class="bx'+(st.call?'':' off')+'">'+(st.call?I('check'):'')+'</span><div><b><i>[선택]</i> 직무 안내 연락 동의</b><p>관심 분야의 직무·교육 안내를 전화·문자로 받아요.</p></div></label></div>'+
    '<div class="start-row"><button type="submit" class="btn btn-primary">적성검사 시작하기'+I('arrow-right')+'</button><span>'+I('info')+'채용 합격·불합격을 정하는 검사가 아니에요</span></div></form>';
 }
@@ -484,7 +488,7 @@ function bindStart(){
   var n=document.getElementById('iName'),t=document.getElementById('iTel'),a=document.getElementById('iAge');
   n.oninput=function(){st.name=n.value;document.getElementById('fName').classList.remove('bad');save();};
   t.oninput=function(){var p=t.value.length;t.value=fmtTel(t.value);st.tel=t.value;document.getElementById('fTel').classList.remove('bad');save();};
-  a.oninput=function(){a.value=a.value.replace(/\D/g,'').slice(0,2);st.age=a.value;document.getElementById('fAge').classList.remove('bad');save();};
+  a.oninput=function(){a.value=bFmt(a.value);st.birth=a.value;document.getElementById('fAge').classList.remove('bad');save();};
   function cb(id,key){var el=document.getElementById(id);el.onchange=function(){st[key]=el.checked;var bx=el.nextElementSibling;bx.className='bx'+(el.checked?'':' off');bx.innerHTML=el.checked?I('check'):'';if(key==='agree')document.getElementById('cbAgree').classList.remove('bad');save();};}
   cb('iAgree','agree');cb('iCall','call');
   document.getElementById('f').onsubmit=function(e){
@@ -493,7 +497,7 @@ function bindStart(){
     function bad(id,el){document.getElementById(id).classList.add('bad');ok=false;if(!first)first=el;}
     if(!st.name.trim())bad('fName',n);
     if(!/^01\d{8,9}$/.test(st.tel.replace(/\D/g,'')))bad('fTel',t);
-    var ag=parseInt(st.age,10);if(!(ag>=15&&ag<=99))bad('fAge',a);
+    if(!bParse(st.birth))bad('fAge',a);
     if(!ok){first.focus();toast('빠진 칸을 채워 주세요');return;}
     if(!st.agree){document.getElementById('cbAgree').classList.add('bad');toast('[필수] 개인정보 수집·이용에 동의해 주세요');return;}
     st.name=st.name.trim();go('q',st.ans.length>=50?49:Math.min(st.ans.filter(Boolean).length,49));
@@ -526,7 +530,8 @@ function submit(){
   var miss=st.j9.indexOf(-1);
   if(miss>=0){st.j9.forEach(function(v,k){if(v<0)document.getElementById('j9_'+k).classList.add('need');});document.getElementById('j9_'+miss).scrollIntoView({behavior:'smooth',block:'center'});toast('「이런 일은 어떻게 생각하세요?」를 모두 골라 주세요');return;}
   busy=true;render(false);
-  var d={name:st.name.trim(),tel:st.tel,age:parseInt(st.age,10),agree:st.agree===true,call:st.call===true,ans:st.ans.slice(0,50),j9:st.j9,mentor:st.mentor,care:st.care,
+  var bd=bParse(st.birth)||{birth:'',age:parseInt(st.age,10)};
+  var d={name:st.name.trim(),tel:st.tel,age:bd.age,birth:bd.birth,agree:st.agree===true,call:st.call===true,ans:st.ans.slice(0,50),j9:st.j9,mentor:st.mentor,care:st.care,
          tags:st.tags,when:st.when,from:st.from,to:st.to,src:SRC,cid:st.cid};
   fetch(GAS,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'jobfairSubmit',r:ref,d:JSON.stringify(d)})})
    .then(function(r){return r.json();})
