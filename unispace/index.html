@@ -1125,6 +1125,9 @@ body.theme-light .pv-bf.on { background:#FAEEDA; border-color:#B8860B; color:#85
 .pv-pm.ok { background:rgba(31,146,104,.14); color:#1F9268; }
 .pv-pm.no { background:rgba(224,122,46,.14); color:#C4621B; }
 body:not(.theme-light) .pv-pm.no { color:#F0A060; }
+.pv-pn { display:block; max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; line-height:16px; color:var(--text3); font-weight:600; }
+.pv-co-pn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:480px){ .pv-pn { max-width:150px; font-size:10.5px; } }
 .pv-pmsum { margin-top:6px; padding:0 4px; font-size:11px; color:var(--text3); text-align:right; }
 .pv-pmsum b { color:#1F9268; }
 .pv-pmsum span { color:#C4621B; font-weight:700; }
@@ -12238,9 +12241,11 @@ function renderPerfView(){
         var kind=(typeof _perfClassify==='function')?_perfClassify(p.co):'etc';
         var badge = kind==='life' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#2E6E8E;color:#fff;margin-right:4px">생</span>' : (kind==='non' ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#A85532;color:#fff;margin-right:4px">손</span>' : '');
         var lumpB = _perfIsCar(p) ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#B5D4F4;color:#042C53;margin-right:4px">🚗자동차</span>' : (_perfIsLump(p) ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FAC775;color:#412402;margin-right:4px">일시납</span>' : '');
-        if(_perfIsCar(p)) return '<span style="display:inline-block;white-space:nowrap;color:#185FA5">'+lumpB+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원</span>';
-        var pm = p.prod ? '<span class="pv-pm ok" title="' + String(p.prod).replace(/"/g,'&quot;') + '">✓</span>' : '<span class="pv-pm no">미입력</span>';
-        return '<span style="display:inline-block;white-space:nowrap'+(_perfIsLump(p)?';color:#854F0B':'')+'">'+lumpB+badge+(p.co?p.co+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원'+pm+_pvRecTag(p, r)+'</span>';
+        if(_perfIsCar(p)) return '<span style="display:inline-block;white-space:nowrap;color:#185FA5">'+lumpB+(p.co?_pvCoShort(p.co)+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원</span>';
+        var _pnE = String(p.prod||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+        var pm = p.prod ? '' : '<span class="pv-pm no">미입력</span>';
+        var pn = p.prod ? '<span class="pv-pn" title="' + _pnE + '">' + String(_pvProdShort(p.prod, p.co)).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '';
+        return '<span style="display:inline-block;white-space:nowrap'+(_perfIsLump(p)?';color:#854F0B':'')+'">'+lumpB+badge+(p.co?_pvCoShort(p.co)+' ':'')+(parseInt(p.amount)||0).toLocaleString()+'원'+pm+_pvRecTag(p, r)+pn+'</span>';
       }).join('<br>');
       var dateCol = (_pvRange!=='today') ? '<td style="white-space:nowrap;color:var(--text3)">'+(r.date?r.date.slice(5):'')+'</td>' : '';
       var delCol = canDel ? '<td class="pv-edit-col" style="text-align:center;width:46px;white-space:nowrap;padding-left:2px;padding-right:2px"><span onclick="event.stopPropagation();openPerfEdit(\''+r.id+'\')" style="color:#2563EB;font-size:13px;cursor:pointer;padding:2px" title="수정">✏️</span><span onclick="event.stopPropagation();deletePerfRec(\''+r.id+'\')" style="color:#C0392B;font-size:13px;cursor:pointer;padding:2px" title="삭제">🗑️</span></td>' : '';
@@ -12249,7 +12254,9 @@ function renderPerfView(){
       var rowClick = canDel ? ' onclick="openPerfEdit(\''+r.id+'\')" style="cursor:pointer"' : '';
       var _pLen = _perfCntOf(r);
       var _nums = [];
-      for(var _nk=0; _nk<_pLen; _nk++) _nums.push(_numAcc + 1 + _nk);
+      var _prs = r.products||[];
+      if(!_prs.length){ for(var _nk=0; _nk<_pLen; _nk++) _nums.push(_numAcc + 1 + _nk); }
+      else { var _nn=0; _prs.forEach(function(p){ var ln = _perfIsLump(p) ? '&nbsp;' : String(_numAcc + 1 + (_nn++)); if(p.prod && !_perfIsCar(p)) ln += '<br>&nbsp;'; _nums.push(ln); }); }
       _numAcc += _pLen;
       var numCol = '<td class="pv-numcol">'+_nums.join('<br>')+'</td>';
       rows+='<tr'+rowClick+'>'+numCol+dateCol+'<td style="white-space:nowrap"><span style="display:inline-flex;align-items:center;white-space:nowrap">'+chip+'<span style="white-space:nowrap">'+(r.fpName||'')+'</span>'+meBadge+'</span></td><td class="pv-prodcol">'+cats+'</td><td class="pv-amt">'+(_perfHasNonCar(r) ? (parseInt(r.total)||0).toLocaleString()+'원'+_pvRecAmt(r) : '<span style="font-size:11px;color:#185FA5">🚗 집계 제외</span>')+'</td>'+delCol+'</tr>';
@@ -12264,6 +12271,23 @@ function renderPerfView(){
   // 일자별 추이 (지점 필터 반영)
   renderPerfTrend(log, now);
 }
+// 356: 업적 조회에 보일 짧은 상품 이름 (무배당 · 괄호 · _납기/옵션 · 회사 이름 · 2501 같은 개정 번호 빼기); 풀네임은 title
+function _pvProdShort(prod, co){
+  var s=String(prod||'').trim(); if(!s) return '';
+  s=s.split('_')[0];
+  var prev; do{ prev=s; s=s.replace(/\([^()]*\)|\[[^\[\]]*\]|【[^】]*】|（[^（）]*）/g,''); }while(s!==prev);
+  s=s.replace(/[\(\[（<][^\)\]）>]*$/,' ').replace(/<[^<>]*>/g,' ').replace(/[<>]/g,' ');
+  s=s.replace(/무배당|\(무\)/g,' ');
+  s=s.replace(/(\D)2[0-9](0[1-9]|1[0-2])(?=\D|$)/g,'$1');   // 2501 같은 개정 번호
+  s=s.replace(/\s+/g,' ').trim();
+  var c=String(co||'').replace(/\s/g,''), brands=[c];
+  var b=c.replace(/(생명보험|생명|화재|손해보험|손보|라이프|해상)$/,''); if(b) brands.push(b+'생명', b+'화재', b+'손보', b);
+  brands.forEach(function(x){ if(x && s.indexOf(x+' ')===0) s=s.slice(x.length+1); });
+  s=s.replace(/^[\s,·\-]+|[\s,·\-]+$/g,'');
+  return s || String(prod);
+}
+// 356: 업적 조회 FP별 줄의 짧은 회사 이름 (대표: 한화생명 → 한화, 메리츠화재 → 메리츠; 생/손 배지가 구분)
+function _pvCoShort(co){ var c=String(co||'').trim(); var b=c.replace(/(생명보험|손해보험|생명|화재|손보|해상)$/,''); return b||c; }
 // 255: tag on a 종신 product line from 11/1: "종신 5년납 30%" (cut), "종신 10년납" (100%), "납기 미입력" (counts 100%)
 function _pvRecTag(p, r){
   if(!p || _perfIsLump(p) || String(p.cat||'')!=='종신' || !_perfRecOn(r && r.date)) return '';
@@ -12611,7 +12635,7 @@ function _pvCoFpRows(coName){
       if(kind==='life') map[r.fpId].life+=amt; else map[r.fpId].non+=amt;
       map[r.fpId].cnt++;
       if(r.date) map[r.fpId].dates[r.date]=true;
-      map[r.fpId].items.push({ date:r.date||'', co:String(p.co||''), kind:kind, amount:amt, cat:p.cat||'' });
+      map[r.fpId].items.push({ date:r.date||'', co:String(p.co||''), kind:kind, amount:amt, cat:p.cat||'', prod:String(p.prod||'') });
     });
   });
   var arr=Object.keys(map).map(function(k){
@@ -12657,7 +12681,7 @@ function _pvCoItems(coName){
     (r.products||[]).forEach(function(p){
       if(_perfIsLump(p)) return;
       if(_pvCoKey(p.co)!==ck) return;
-      items.push({ date:r.date||'', fpName:r.fpName||'', bk:_pvBranchKey(r.branch), kind:_perfClassify(p.co), amount:parseInt(p.amount)||0, cat:p.cat||'', co:String(p.co||'') });
+      items.push({ date:r.date||'', fpName:r.fpName||'', bk:_pvBranchKey(r.branch), kind:_perfClassify(p.co), amount:parseInt(p.amount)||0, cat:p.cat||'', co:String(p.co||''), prod:String(p.prod||'') });
     });
   });
   items.sort(function(a,b){ return (b.amount-a.amount); });
@@ -12753,9 +12777,11 @@ function _renderPvCompanyView(){
       g.list.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).forEach(function(it){
         var kindTxt=it.kind==='life'?'<span style="color:#2E6E8E;font-weight:700">생</span>':it.kind==='non'?'<span style="color:#A85532;font-weight:700">손</span>':'-';
         var dd=(it.date||'').slice(5).replace('-','/');
-        h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px 8px 22px;border-bottom:1px solid #F2EEE4;font-size:13px">'+
-          '<span style="color:var(--text2)"><span style="color:var(--text3);font-size:12px;margin-right:8px">'+dd+'</span>'+kindTxt+' '+it.co+'</span>'+
-          '<span style="font-weight:700">'+(it.amount).toLocaleString()+'원</span>'+
+        var _pnEsc=String(it.prod||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+        var _pnTxt=it.prod ? '<span class="pv-co-pn" title="'+_pnEsc+'">'+String(_pvProdShort(it.prod, it.co)).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>' : '<span class="pv-co-pn"><span class="pv-pm no" style="margin-left:0">상품 미입력</span></span>';
+        h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px 8px 22px;border-bottom:1px solid #F2EEE4;font-size:13px">'+
+          '<span style="color:var(--text2);display:flex;align-items:center;gap:5px;min-width:0;flex:1"><span style="color:var(--text3);font-size:12px;margin-right:3px;flex:none">'+dd+'</span><span style="flex:none">'+kindTxt+'</span>'+_pnTxt+'</span>'+
+          '<span style="font-weight:700;flex:none">'+(it.amount).toLocaleString()+'원</span>'+
         '</div>';
       });
     });
@@ -30184,7 +30210,7 @@ function doCheckin() { doSmartCheckin(); }
 // ═══════════ 자동 업데이트 감지 ═══════════
 // 깃허브의 version.json 을 30분마다 + 화면 복귀 시 확인.
 // 버전이 다르면: 로그인 화면이면 즉시 새로고침, 사용 중이면 상단 배너로 안내.
-var APP_BUILD = 355;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
+var APP_BUILD = 356;   // ← 배포할 때 version.json 의 v 와 같은 숫자로
 (function(){
   // 로그인 화면에 빌드 번호 표시 — 폰마다 어떤 버전이 실려 있는지 눈으로 확인
   try {
